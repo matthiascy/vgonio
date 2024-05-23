@@ -1,12 +1,19 @@
 //! BRDF from the VGonio simulator.
-use crate::brdf::{
-    measured::{BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind},
-    Bxdf,
+use crate::{
+    brdf::{
+        measured::{
+            AnalyticalFit, BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin,
+            ParametrisationKind,
+        },
+        Bxdf,
+    },
+    Scattering,
 };
 use base::{
     error::VgonioError,
     math::{Sph2, Vec3},
     medium::Medium,
+    optics::ior::RefractiveIndexRegistry,
     partition::SphericalPartition,
     units::Nanometres,
 };
@@ -41,6 +48,12 @@ impl VgonioBrdfParameterisation {
                 .map(|patch| patch.center().to_cartesian()),
         )
     }
+
+    /// Returns the number of outgoing directions.
+    pub fn n_wo(&self) -> usize { self.outgoing.patches.len() }
+
+    /// Returns the number of incoming directions.
+    pub fn n_wi(&self) -> usize { self.incoming.len() }
 }
 
 /// BRDF from the VGonio simulator.
@@ -58,23 +71,6 @@ impl VgonioBrdf {
         params: VgonioBrdfParameterisation,
         spectrum: DyArr<Nanometres>,
         samples: DyArr<f32, 3>,
-    ) -> Self {
-        Self {
-            origin,
-            incident_medium,
-            transmitted_medium,
-            params: Box::new(params),
-            spectrum,
-            samples,
-        }
-    }
-
-    /// Creates a new VGonio BRDF witn the same parameterisation as the given
-    /// BRDF except the BRDF samples are generated from an analytical model.
-    pub fn new_analytical(
-        &self,
-        target: &dyn Bxdf<Params = [f64; 2]>,
-        iors: &RefractiveIndexRegistry,
     ) -> Self {
         Self {
             origin,
@@ -212,6 +208,57 @@ impl VgonioBrdf {
         })?;
 
         Ok(())
+    }
+}
+
+#[cfg(feature = "fitting")]
+impl AnalyticalFit for VgonioBrdf {
+    type Params = VgonioBrdfParameterisation;
+
+    impl_analytical_fit_trait!(self);
+
+    #[inline]
+    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Vgonio }
+
+    /// Creates a new VGonio BRDF with the same parameterisation as the given
+    /// BRDF except the BRDF samples are generated from an analytical model.
+    fn new_analytical(
+        medium_i: Medium,
+        medium_t: Medium,
+        spectrum: &[Nanometres],
+        params: &Self::Params,
+        model: &dyn Bxdf<Params = [f64; 2]>,
+        iors: &RefractiveIndexRegistry,
+    ) -> Self {
+        let iors_i = iors.ior_of_spectrum(medium_i, spectrum).unwrap();
+        let iors_t = iors.ior_of_spectrum(medium_t, spectrum).unwrap();
+        let n_spectrum = spectrum.len();
+        let n_wi = params.n_wi();
+        let n_wo = params.n_wo();
+        let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
+        for (i, wi_sph) in params.incoming.iter().enumerate() {
+            let wi = wi_sph.to_cartesian();
+            for (j, wo) in params.outgoing_cartesian().iter().enumerate() {
+                let spectral_samples =
+                    Scattering::eval_reflectance_spectrum(model, &wi, &wo, &iors_i, &iors_t)
+                        .iter()
+                        .map(|&x| x as f32)
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice();
+                let offset = i * n_wo * n_spectrum + j * n_spectrum;
+                samples.as_mut_slice()[offset..offset + n_spectrum]
+                    .copy_from_slice(&spectral_samples);
+            }
+        }
+
+        Self {
+            origin: Origin::Analytical,
+            incident_medium: medium_i,
+            transmitted_medium: medium_t,
+            params: Box::new(params.clone()),
+            spectrum: DyArr::from_slice([n_spectrum], spectrum),
+            samples,
+        }
     }
 }
 

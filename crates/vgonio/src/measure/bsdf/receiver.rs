@@ -198,7 +198,7 @@ impl Receiver {
         result: SimulationResultPoint,
         // collected: &mut CollectedData<'_>,
         out_trajs: *mut Vec<RayTrajectory>,
-        out_hpnts: *mut Box<[Vec3]>,
+        out_hpnts: *mut Vec<Vec3>,
         out_stats: *mut BsdfMeasurementStatsPoint,
         out_records: &mut [MaybeUninit<BounceAndEnergy>],
         orbit_radius: f32,
@@ -361,7 +361,7 @@ impl Receiver {
 
         // Compute the vertex positions of the outgoing rays.
         #[cfg(any(feature = "visu-dbg", debug_assertions))]
-        let mut hit_points = vec![Vec3::ZERO; dirs.len()].into_boxed_slice();
+        let mut hit_points = vec![Vec3::ZERO; dirs.len()];
 
         for (i, dir) in dirs.iter().enumerate() {
             #[cfg(any(feature = "visu-dbg", debug_assertions))]

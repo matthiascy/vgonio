@@ -1,12 +1,20 @@
 //! BRDF measured in the paper "Investigation and Simulation of Diffraction on
 //! Rough Surfaces" by O. Clausen, Y. Chen, A. Fuhrmann and R. Marroquim.
-use crate::brdf::measured::{
-    BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind,
+use crate::{
+    brdf::{
+        measured::{
+            AnalyticalFit, BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin,
+            ParametrisationKind,
+        },
+        Bxdf,
+    },
+    Scattering,
 };
 use base::{
     error::VgonioError,
     math::Sph2,
     medium::Medium,
+    optics::ior::RefractiveIndexRegistry,
     units::{nm, Nanometres, Radians},
     MeasuredData, MeasurementKind,
 };
@@ -31,7 +39,7 @@ pub struct ClausenBrdfParameterisation {
     /// Directions are stored in a 2D array with dimensions: ωi, ωo.
     pub outgoing: DyArr<Sph2, 2>,
     /// The number of outgoing directions per incident direction.
-    pub num_outgoing_per_incoming: usize,
+    pub n_wo: usize,
 }
 
 impl BrdfParameterisation for ClausenBrdfParameterisation {
@@ -45,7 +53,7 @@ impl ClausenBrdfParameterisation {
         Self {
             incoming,
             outgoing,
-            num_outgoing_per_incoming,
+            n_wo: num_outgoing_per_incoming,
         }
     }
 
@@ -55,11 +63,7 @@ impl ClausenBrdfParameterisation {
         self.incoming
             .as_slice()
             .iter()
-            .zip(
-                self.outgoing
-                    .as_slice()
-                    .chunks(self.num_outgoing_per_incoming),
-            )
+            .zip(self.outgoing.as_slice().chunks(self.n_wo))
             .enumerate()
     }
 
@@ -115,7 +119,7 @@ impl ClausenBrdf {
     pub fn n_wi(&self) -> usize { self.params.incoming.len() }
 
     /// Return the number of outgoing directions for each incident direction.
-    pub fn n_wo(&self) -> usize { self.params.num_outgoing_per_incoming }
+    pub fn n_wo(&self) -> usize { self.params.n_wo }
 
     /// Computes the local BRDF maximum values for each snapshot, i.e., for each
     /// incident direction (per wavelength).
@@ -285,7 +289,7 @@ impl ClausenBrdf {
                     .collect::<Vec<_>>(),
             ),
             outgoing,
-            num_outgoing_per_incoming: 0,
+            n_wo: 0,
         });
 
         Ok(Self {
@@ -296,5 +300,59 @@ impl ClausenBrdf {
             spectrum,
             samples,
         })
+    }
+}
+
+#[cfg(feature = "fitting")]
+impl AnalyticalFit for ClausenBrdf {
+    type Params = ClausenBrdfParameterisation;
+
+    impl_analytical_fit_trait!(self);
+
+    #[inline]
+    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Clausen }
+
+    /// Creates a new Clausen BRDF with the same parameterisation as the given
+    /// BRDF, but with new analytical samples.
+    fn new_analytical(
+        medium_i: Medium,
+        medium_t: Medium,
+        spectrum: &[Nanometres],
+        params: &Self::Params,
+        model: &dyn Bxdf<Params = [f64; 2]>,
+        iors: &RefractiveIndexRegistry,
+    ) -> Self {
+        let iors_i = iors.ior_of_spectrum(medium_i, spectrum).unwrap();
+        let iors_t = iors.ior_of_spectrum(medium_t, spectrum).unwrap();
+        let n_wo = params.n_wo;
+        let n_wi = params.incoming.len();
+        let n_spectrum = spectrum.len();
+        let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
+        params
+            .incoming
+            .as_slice()
+            .iter()
+            .enumerate()
+            .zip(params.outgoing.as_slice().chunks(n_wo))
+            .for_each(|((i, wi), wos)| {
+                let wi = wi.to_cartesian();
+                wos.iter().enumerate().for_each(|(j, wo)| {
+                    let wo = wo.to_cartesian();
+                    let spectral_samples =
+                        Scattering::eval_reflectance_spectrum(model, &wi, &wo, &iors_i, &iors_t);
+                    for (k, sample) in spectral_samples.iter().enumerate() {
+                        samples[[i, j, k]] = *sample as f32;
+                    }
+                });
+            });
+
+        Self {
+            origin: Origin::Analytical,
+            incident_medium: medium_i,
+            transmitted_medium: medium_t,
+            params: Box::new(params.clone()),
+            spectrum: DyArr::from_slice([n_spectrum], spectrum),
+            samples,
+        }
     }
 }

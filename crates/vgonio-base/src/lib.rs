@@ -184,6 +184,7 @@ pub trait MeasuredData: Debug {
 }
 
 impl dyn MeasuredData {
+    /// Downcasts the measurement data to the concrete type.
     pub fn downcast<T>(&self) -> Option<&T>
     where
         T: MeasuredData + 'static,
@@ -191,6 +192,7 @@ impl dyn MeasuredData {
         self.as_any().downcast_ref()
     }
 
+    /// Downcasts the measurement data to the mutable concrete type.
     pub fn downcast_mut<T>(&mut self) -> Option<&mut T>
     where
         T: MeasuredData + 'static,

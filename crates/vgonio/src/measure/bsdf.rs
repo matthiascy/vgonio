@@ -268,6 +268,9 @@ impl MeasuredBsdfData {
     //     )
     // }
 
+    #[inline]
+    pub fn n_spectrum(&self) -> usize { self.raw.n_spectrum() }
+
     pub fn brdf_at(&self, level: MeasuredBrdfLevel) -> Option<&VgonioBrdf> {
         self.bsdfs.get(&level)
     }
@@ -555,13 +558,14 @@ impl MeasuredBsdfData {
     pub fn resample(
         &self,
         params: &ClausenBrdfParameterisation,
+        level: MeasuredBrdfLevel,
         dense: bool,
         phi_offset: Radians,
     ) -> ClausenBrdf {
         let spectrum = self.params.emitter.spectrum.values().collect::<Vec<_>>();
         let n_spectrum = spectrum.len();
         let n_wi = params.incoming.len();
-        let n_wo = params.num_outgoing_per_incoming;
+        let n_wo = params.n_wo;
         let n_wo_dense = if dense { n_wo * 4 } else { n_wo };
 
         // row-major [wi, wo, spectrum]
@@ -622,7 +626,7 @@ impl MeasuredBsdfData {
             ClausenBrdfParameterisation {
                 incoming: params.incoming.clone(),
                 outgoing,
-                num_outgoing_per_incoming: n_wo_dense,
+                n_wo: n_wo_dense,
             }
         } else {
             params.clone()
@@ -634,7 +638,7 @@ impl MeasuredBsdfData {
             for (j, wo) in wos.iter().enumerate() {
                 let samples_offset = samples_offset_wi + j * n_spectrum;
                 self.sample_at(
-                    0,
+                    level.0,
                     *wi,
                     *wo,
                     &mut samples[samples_offset..samples_offset + n_spectrum],
@@ -687,7 +691,7 @@ impl MeasuredBsdfData {
             .incoming
             .as_slice()
             .iter()
-            .position(|snap| wi.approx_eq(&wi))
+            .position(|snap| wi.approx_eq(snap))
             .expect(
                 "The incident direction is not found in the BSDF snapshots. The incident \
                  direction must be one of the directions of the emitter.",
@@ -1411,7 +1415,7 @@ pub fn measure_bsdf_rt(
         let n_spectrum = params.emitter.spectrum.step_count();
 
         let mut trajectories: Box<[MaybeUninit<Vec<RayTrajectory>>]> = Box::new_uninit_slice(n_wi);
-        let mut hit_points: Box<[MaybeUninit<Box<[Vec3]>>]> = Box::new_uninit_slice(n_wi);
+        let mut hit_points: Box<[MaybeUninit<Vec<Vec3>>]> = Box::new_uninit_slice(n_wi);
         let mut records: Box<[MaybeUninit<BounceAndEnergy>]> =
             Box::new_uninit_slice(n_wi * n_wo * n_spectrum);
         let mut stats: Box<[MaybeUninit<BsdfMeasurementStatsPoint>]> = Box::new_uninit_slice(n_wi);

@@ -1,15 +1,21 @@
-pub mod sampled;
-
 use crate::{
-    app::cache::{RawCache, RefractiveIndexRegistry},
+    app::cache::RawCache,
     fitting::{FittingProblem, FittingReport},
-    measure::bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
+    measure::bsdf::MeasuredBrdfLevel,
 };
-use base::{math::Vec3, optics::ior::Ior, range::RangeByStepSizeInclusive, Isotropy};
+use base::{
+    math::Vec3,
+    optics::ior::{Ior, RefractiveIndexRegistry},
+    range::RangeByStepSizeInclusive,
+    Isotropy,
+};
 use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
-        measured::VgonioBrdf,
+        measured::{
+            AnalyticalFit, BrdfParameterisation, ClausenBrdf, ClausenBrdfParameterisation,
+            MeasuredBrdfKind, VgonioBrdf, VgonioBrdfParameterisation,
+        },
         Bxdf,
     },
     distro::MicrofacetDistroKind,
@@ -18,14 +24,14 @@ use bxdf::{
 use jabr::array::DyArr;
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
-use std::{borrow::Cow, fmt::Display};
+use std::{any::Any, fmt::Display};
 
 /// The fitting problem for the microfacet based BSDF model.
 ///
 /// The fitting procedure is based on the Levenberg-Marquardt algorithm.
-pub struct MicrofacetBrdfFittingProblem<'a> {
+pub struct MicrofacetBrdfFittingProblem<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>> {
     /// The measured BSDF data.
-    pub measured: Cow<'a, MeasuredBsdfData>,
+    pub measured: &'a M,
     /// The target BSDF model.
     pub target: MicrofacetDistroKind,
     /// The level of the measured BRDF data to be fitted.
@@ -44,7 +50,9 @@ pub struct MicrofacetBrdfFittingProblem<'a> {
     pub initial_guess: RangeByStepSizeInclusive<f64>,
 }
 
-impl<'a> Display for MicrofacetBrdfFittingProblem<'a> {
+impl<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>> Display
+    for MicrofacetBrdfFittingProblem<'a, P, M>
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BSDF Fitting Problem")
             .field("target", &self.target)
@@ -52,7 +60,9 @@ impl<'a> Display for MicrofacetBrdfFittingProblem<'a> {
     }
 }
 
-impl<'a> MicrofacetBrdfFittingProblem<'a> {
+impl<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>>
+    MicrofacetBrdfFittingProblem<'a, P, M>
+{
     /// Creates a new BSDF fitting problem.
     ///
     /// # Arguments
@@ -60,39 +70,33 @@ impl<'a> MicrofacetBrdfFittingProblem<'a> {
     /// * `measured` - The measured BSDF data.
     /// * `target` - The target BSDF model.
     pub fn new(
-        measured: &'a MeasuredBsdfData,
+        measured: &'a M,
         target: MicrofacetDistroKind,
         initial: RangeByStepSizeInclusive<f64>,
         level: MeasuredBrdfLevel, // temporarily only one level is supported
         cache: &'a RawCache,
     ) -> Self {
-        let wavelengths = measured
-            .params
-            .emitter
-            .spectrum
-            .values()
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
+        let spectrum = measured.spectrum();
         let iors_i = cache
             .iors
-            .ior_of_spectrum(measured.params.incident_medium, &wavelengths)
+            .ior_of_spectrum(measured.incident_medium(), &spectrum)
             .unwrap_or_else(|| {
                 panic!(
                     "missing refractive indices for {:?}",
-                    measured.params.incident_medium
+                    measured.incident_medium()
                 )
             });
         let iors_t = cache
             .iors
-            .ior_of_spectrum(measured.params.transmitted_medium, &wavelengths)
+            .ior_of_spectrum(measured.transmitted_medium(), &spectrum)
             .unwrap_or_else(|| {
                 panic!(
                     "missing refractive indices for {:?}",
-                    measured.params.transmitted_medium
+                    measured.transmitted_medium()
                 )
             });
         Self {
-            measured: Cow::Borrowed(measured),
+            measured,
             target,
             level,
             iors_i,
@@ -129,7 +133,9 @@ fn initialise_microfacet_bsdf_models(
 }
 
 // Actual implementation of the fitting problem.
-impl<'a> FittingProblem for MicrofacetBrdfFittingProblem<'a> {
+impl<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>> FittingProblem
+    for MicrofacetBrdfFittingProblem<'a, P, M>
+{
     type Model = Box<dyn Bxdf<Params = [f64; 2]>>;
 
     fn lsq_lm_fit(self, isotropy: Isotropy) -> FittingReport<Self::Model> {
@@ -148,21 +154,20 @@ impl<'a> FittingProblem for MicrofacetBrdfFittingProblem<'a> {
                 let kind = model.family();
                 let (model, report) = match isotropy {
                     Isotropy::Isotropic => {
-                        let problem =
-                            MicrofacetBrdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
-                                &self.measured.brdf_at(self.level).unwrap(),
-                                model,
-                                self.iors,
-                                &self.iors_i,
-                                &self.iors_t,
-                            );
+                        let problem = BrdfFittingProblemProxy::<P, M, { Isotropy::Isotropic }>::new(
+                            self.measured,
+                            model,
+                            self.iors,
+                            &self.iors_i,
+                            &self.iors_t,
+                        );
                         let (result, report) = solver.minimize(problem);
                         (result.model, report)
                     }
                     Isotropy::Anisotropic => {
                         let problem =
-                            MicrofacetBrdfFittingProblemProxy::<{ Isotropy::Anisotropic }>::new(
-                                &self.measured.brdf_at(self.level).unwrap(),
+                            BrdfFittingProblemProxy::<P, M, { Isotropy::Anisotropic }>::new(
+                                self.measured,
                                 model,
                                 self.iors,
                                 &self.iors_i,
@@ -197,9 +202,13 @@ impl<'a> FittingProblem for MicrofacetBrdfFittingProblem<'a> {
     }
 }
 
-struct MicrofacetBrdfFittingProblemProxy<'a, const I: Isotropy> {
+struct BrdfFittingProblemProxy<'a, P, M, const I: Isotropy>
+where
+    P: BrdfParameterisation,
+    M: AnalyticalFit<Params = P>,
+{
     /// The measured BSDF data.
-    measured: &'a VgonioBrdf,
+    measured: &'a M,
     /// The target BSDF model.
     model: Box<dyn Bxdf<Params = [f64; 2]>>,
     /// The refractive index registry.
@@ -210,42 +219,62 @@ struct MicrofacetBrdfFittingProblemProxy<'a, const I: Isotropy> {
     /// The refractive indices of the transmitted medium at the measured
     /// wavelengths.
     iors_t: &'a [Ior],
+    /// Cached data for the fitting problem.
+    cache: Box<dyn Any>,
+}
+
+pub struct VgonioBrdfFittingCache {
     /// Incident directions in cartesian coordinates.
     wis: DyArr<Vec3>,
     /// Outgoing directions in cartesian coordinates.
     wos: DyArr<Vec3>,
 }
 
-impl<'a, const I: Isotropy> MicrofacetBrdfFittingProblemProxy<'a, I> {
+impl<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>, const I: Isotropy>
+    BrdfFittingProblemProxy<'a, P, M, I>
+{
     pub fn new(
-        measured: &'a VgonioBrdf,
+        measured: &'a M,
         model: Box<dyn Bxdf<Params = [f64; 2]>>,
         iors: &'a RefractiveIndexRegistry,
         iors_i: &'a [Ior],
         iors_t: &'a [Ior],
     ) -> Self {
+        let cache: Box<dyn Any> = match measured.kind() {
+            MeasuredBrdfKind::Vgonio => {
+                let cache = VgonioBrdfFittingCache {
+                    wis: measured.params().incoming_cartesian(),
+                    wos: measured.params().outgoing_cartesian(),
+                };
+                Box::new(cache) as _
+            }
+            _ => Box::new(()) as _,
+        };
         Self {
             measured,
             model,
             iors,
             iors_i,
             iors_t,
-            wis: measured.params.incoming_cartesian(),
-            wos: measured.params.outgoing_cartesian(),
+            cache,
         }
     }
+}
 
+impl<'a, const I: Isotropy> BrdfFittingProblemProxy<'a, VgonioBrdfParameterisation, VgonioBrdf, I> {
     /// Evaluates the residuals of the fitting problem.
     pub fn eval_residuals(&self) -> Box<[f64]> {
         // The number of residuals is n_wi * n_wo * n_spectrum.
-        let n_wo = self.wos.len();
-        let n_wi = self.wis.len();
+        let n_wo = self.measured.params.n_wo();
+        let n_wi = self.measured.params.n_wi();
         let n_spectrum = self.measured.spectrum.len();
+        let mut cache = self.cache.downcast_ref::<VgonioBrdfFittingCache>().unwrap();
         // Row-major [snapshot, patch, wavelength]
         let mut rs = Box::new_uninit_slice(n_wi * n_wo * n_spectrum);
         for (i, snapshot) in self.measured.snapshots().enumerate() {
             let wi = snapshot.wi.to_cartesian();
-            self.wos
+            cache
+                .wos
                 .iter()
                 .zip(snapshot.samples.chunks(n_spectrum))
                 .enumerate()
@@ -272,7 +301,7 @@ impl<'a, const I: Isotropy> MicrofacetBrdfFittingProblemProxy<'a, I> {
 }
 
 impl<'a> LeastSquaresProblem<f64, Dyn, U1>
-    for MicrofacetBrdfFittingProblemProxy<'a, { Isotropy::Isotropic }>
+    for BrdfFittingProblemProxy<'a, VgonioBrdfParameterisation, VgonioBrdf, { Isotropy::Isotropic }>
 {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U1>;
@@ -294,15 +323,16 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
         let n_spectrum = self.measured.spectrum.len();
-        let n_wi = self.wis.len();
-        let n_wo = self.wos.len();
+        let n_wi = self.measured.params.n_wi();
+        let n_wo = self.measured.params.n_wo();
+        let cache = self.cache.downcast_ref::<VgonioBrdfFittingCache>().unwrap();
         let derivative_per_wavelength = self
             .iors_i
             .iter()
             .zip(self.iors_t.iter())
             .map(|(ior_i, ior_t)| {
                 self.model
-                    .pds_iso(self.wis.as_ref(), self.wos.as_ref(), ior_i, ior_t)
+                    .pds_iso(cache.wis.as_ref(), cache.wos.as_ref(), ior_i, ior_t)
             })
             .collect::<Vec<_>>();
         // Re-arrange the shape of the derivatives to match the residuals:
@@ -321,7 +351,12 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
 }
 
 impl<'a> LeastSquaresProblem<f64, Dyn, U2>
-    for MicrofacetBrdfFittingProblemProxy<'a, { Isotropy::Anisotropic }>
+    for BrdfFittingProblemProxy<
+        'a,
+        VgonioBrdfParameterisation,
+        VgonioBrdf,
+        { Isotropy::Anisotropic },
+    >
 {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U2>;
@@ -342,17 +377,18 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
+        let n_wi = self.measured.params.n_wi();
+        let n_wo = self.measured.params.n_wo();
+        let cache = self.cache.downcast_ref::<VgonioBrdfFittingCache>().unwrap();
         let derivative_per_wavelength = self
             .iors_i
             .iter()
             .zip(self.iors_t.iter())
             .map(|(ior_i, ior_t)| {
                 self.model
-                    .pds(self.wis.as_ref(), self.wos.as_ref(), ior_i, ior_t)
+                    .pds(cache.wis.as_ref(), cache.wos.as_ref(), ior_i, ior_t)
             })
             .collect::<Vec<_>>();
-        let n_wi = self.wis.len();
-        let n_wo = self.wos.len();
         let n_spectrum = self.measured.spectrum.len();
         // Re-arrange the shape of the derivatives to match the residuals:
         // [snapshot, patch, wavelength, alpha]
@@ -368,5 +404,105 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
             }
         }
         Some(OMatrix::<f64, Dyn, U2>::from_row_slice(&jacobian))
+    }
+}
+
+impl<'a, const I: Isotropy>
+    BrdfFittingProblemProxy<'a, ClausenBrdfParameterisation, ClausenBrdf, I>
+{
+    pub fn new(
+        measured: &'a ClausenBrdf,
+        model: Box<dyn Bxdf<Params = [f64; 2]>>,
+        iors: &'a RefractiveIndexRegistry,
+        iors_i: &'a [Ior],
+        iors_t: &'a [Ior],
+    ) -> Self {
+        Self {
+            measured,
+            model,
+            iors,
+            iors_i,
+            iors_t,
+            cache: Box::new(()),
+        }
+    }
+
+    /// Evaluates the residuals of the fitting problem.
+    pub fn eval_residuals(&self) -> Box<[f64]> {
+        let n_spectrum = self.measured.n_spectrum();
+        let n_wo = self.measured.n_wo();
+        self.measured
+            .params
+            .wi_wos_iter()
+            .flat_map(|(i, (wi, wos))| {
+                let wi = wi.to_cartesian();
+                wos.iter().enumerate().flat_map(move |(j, wo)| {
+                    let wo = wo.to_cartesian();
+                    // Reuse the memory of the modelled samples to store the residuals.
+                    let mut modelled = Scattering::eval_reflectance_spectrum(
+                        self.model.as_ref(),
+                        &wi,
+                        &wo,
+                        &self.iors_i,
+                        &self.iors_t,
+                    )
+                    .into_vec();
+                    let offset = i * n_wo * n_spectrum + j * n_spectrum;
+                    let measured = &self.measured.samples.as_slice()[offset..offset + n_spectrum];
+                    modelled
+                        .iter_mut()
+                        .zip(measured.iter())
+                        .for_each(|(modelled, measured)| {
+                            *modelled = *measured as f64 - *modelled;
+                        });
+                    modelled.into_iter()
+                })
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+    }
+}
+
+impl<'a> LeastSquaresProblem<f64, Dyn, U1>
+    for BrdfFittingProblemProxy<
+        'a,
+        ClausenBrdfParameterisation,
+        ClausenBrdf,
+        { Isotropy::Isotropic },
+    >
+{
+    type ResidualStorage = VecStorage<f64, Dyn, U1>;
+    type JacobianStorage = Owned<f64, Dyn, U1>;
+    type ParameterStorage = Owned<f64, U1, U1>;
+
+    fn set_params(&mut self, params: &Vector<f64, U1, Self::ParameterStorage>) {
+        self.model.set_params(&[params[0], params[0]]);
+    }
+
+    fn params(&self) -> Vector<f64, U1, Self::ParameterStorage> {
+        Vector::<f64, U1, Self::ParameterStorage>::new(self.model.params()[0])
+    }
+
+    fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> {
+        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
+            &self.eval_residuals(),
+        ))
+    }
+
+    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
+        let pds = self
+            .measured
+            .params
+            .all_wi_wo_iter()
+            .flat_map(|(wi_sph, wo_sph)| {
+                let wi = wi_sph.to_cartesian();
+                let wo = wo_sph.to_cartesian();
+                self.iors_i
+                    .iter()
+                    .zip(self.iors_t)
+                    .map(move |(ior_i, ior_t)| self.model.pd_iso(&wi, &wo, ior_i, ior_t))
+            })
+            .collect::<Vec<_>>();
+        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&pds))
     }
 }

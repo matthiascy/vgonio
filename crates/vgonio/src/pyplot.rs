@@ -51,12 +51,7 @@ pub fn plot_brdf(itrp: &ClausenBrdf, olaf: &ClausenBrdf, dense: bool) -> PyResul
             .incoming
             .as_slice()
             .iter()
-            .zip(
-                olaf.params
-                    .outgoing
-                    .as_slice()
-                    .chunks(olaf.params.num_outgoing_per_incoming),
-            )
+            .zip(olaf.params.outgoing.as_slice().chunks(olaf.params.n_wo))
             .map(|(wi, wos)| {
                 (
                     (wi.theta.as_f32(), wi.phi.as_f32()),
@@ -75,12 +70,7 @@ pub fn plot_brdf(itrp: &ClausenBrdf, olaf: &ClausenBrdf, dense: bool) -> PyResul
             .incoming
             .as_slice()
             .iter()
-            .zip(
-                itrp.params
-                    .outgoing
-                    .as_slice()
-                    .chunks(itrp.params.num_outgoing_per_incoming),
-            )
+            .zip(itrp.params.outgoing.as_slice().chunks(itrp.params.n_wo))
             .map(|(wi, wos)| {
                 (
                     (wi.theta.as_f32(), wi.phi.as_f32()),

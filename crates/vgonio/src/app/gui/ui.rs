@@ -253,12 +253,14 @@ impl VgonioGui {
                         match family {
                             BxdfFamily::Microfacet => {
                                 let report = self.cache.read(|cache| {
-                                    let measurement = cache.get_measurement(*data).unwrap();
+                                    let measured_brdf_data = cache
+                                        .get_measurement(*data)
+                                        .unwrap()
+                                        .measured
+                                        .downcast::<MeasuredBsdfData>()
+                                        .unwrap();
                                     let problem = MicrofacetBrdfFittingProblem::new(
-                                        measurement
-                                            .measured
-                                            .downcast::<MeasuredBsdfData>()
-                                            .unwrap(),
+                                        measured_brdf_data.brdf_at(L0).unwrap(),
                                         distro.unwrap(),
                                         RangeByStepSizeInclusive::new(0.001, 1.0, 0.01),
                                         L0,

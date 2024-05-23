@@ -1,5 +1,3 @@
-#[cfg(feature = "embree")]
-use crate::measure::bsdf::rtc::RtcMethod::Embree;
 use crate::{
     app::{
         cache::{Cache, RawCache},
@@ -7,19 +5,12 @@ use crate::{
         Config,
     },
     fitting::{
-        err::{
-            compute_iso_clausen_brdf_err, compute_iso_microfacet_brdf_err, generate_analytical_brdf,
-        },
-        sampled::ClausenBrdfFittingProblem,
-        FittingProblem, FittingReport, MicrofacetBrdfFittingProblem,
+        err::compute_microfacet_brdf_err, FittingProblem, FittingReport,
+        MicrofacetBrdfFittingProblem,
     },
-    measure::{
-        bsdf::{
-            emitter::EmitterParams,
-            receiver::{DataRetrieval, ReceiverParams},
-            BsdfKind, MeasuredBsdfData, L0,
-        },
-        params::{BsdfMeasurementParams, SimulationKind},
+    measure::bsdf::{
+        receiver::{DataRetrieval, ReceiverParams},
+        MeasuredBrdfLevel, MeasuredBsdfData,
     },
     pyplot::plot_err,
 };
@@ -29,18 +20,19 @@ use base::{
     medium::Medium,
     partition::{PartitionScheme, SphericalDomain},
     range::RangeByStepSizeInclusive,
-    units::{deg, nm, Rads},
+    units::{nm, Rads},
     ErrorMetric, Isotropy,
 };
 use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
-        measured::ClausenBrdf,
+        measured::{AnalyticalFit, ClausenBrdf, VgonioBrdf, VgonioBrdfParameterisation},
         Bxdf, BxdfFamily,
     },
     distro::MicrofacetDistroKind,
 };
 use core::slice::SlicePattern;
+use jabr::array::DyArr;
 use std::path::PathBuf;
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
@@ -87,50 +79,55 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                 },
                 _ => unimplemented!("Only microfacet-based BxDFs are supported."),
             };
-            let params = BsdfMeasurementParams {
-                kind: BsdfKind::Brdf,
-                #[cfg(feature = "embree")]
-                sim_kind: SimulationKind::GeomOptics(Embree),
-                #[cfg(not(feature = "embree"))]
-                sim_kind: SimulationKind::GeomOptics(RtcMethod::Grid),
-                incident_medium: Medium::Air,
-                transmitted_medium: Medium::Aluminium,
-                emitter: EmitterParams {
-                    num_rays: 0,
-                    max_bounces: 0,
-                    zenith: RangeByStepSizeInclusive {
-                        start: Rads::ZERO,
-                        stop: Rads::HALF_PI,
-                        step_size: Rads::from_degrees(5.0),
-                    },
-                    azimuth: RangeByStepSizeInclusive {
-                        start: Rads::ZERO,
-                        stop: Rads::TWO_PI,
-                        step_size: Rads::from_degrees(60.0),
-                    },
-                    spectrum: RangeByStepSizeInclusive {
-                        start: nm!(400.0),
-                        stop: nm!(700.0),
-                        step_size: nm!(300.0),
-                    },
-                },
-                receiver: ReceiverParams {
+            let spectrum = RangeByStepSizeInclusive {
+                start: nm!(400.0),
+                stop: nm!(700.0),
+                step_size: nm!(300.0),
+            }
+            .values()
+            .collect::<Vec<_>>();
+            let zenith = RangeByStepSizeInclusive {
+                start: Rads::ZERO,
+                stop: Rads::HALF_PI,
+                step_size: Rads::from_degrees(5.0),
+            };
+            let azimuth = RangeByStepSizeInclusive {
+                start: Rads::ZERO,
+                stop: Rads::TWO_PI,
+                step_size: Rads::from_degrees(60.0),
+            };
+            let mut incoming =
+                DyArr::<Sph2>::zeros([zenith.step_count_wrapped() * azimuth.step_count_wrapped()]);
+            for (i, theta) in zenith.values_wrapped().enumerate() {
+                for (j, phi) in azimuth.values_wrapped().enumerate() {
+                    incoming[i * azimuth.step_count_wrapped() + j] = Sph2::new(theta, phi);
+                }
+            }
+            let params = VgonioBrdfParameterisation {
+                incoming,
+                outgoing: ReceiverParams {
                     domain: SphericalDomain::Upper,
                     precision: Sph2::new(Rads::from_degrees(2.0), Rads::from_degrees(2.0)),
                     scheme: PartitionScheme::Beckers,
                     retrieval: DataRetrieval::BsdfOnly,
-                },
-                fresnel: true,
+                }
+                .partitioning(),
             };
             for model in models.iter() {
-                let brdf = generate_analytical_brdf(&params, &**model, &cache.iors);
+                let brdf = VgonioBrdf::new_analytical(
+                    Medium::Air,
+                    Medium::Aluminium,
+                    &spectrum,
+                    &params,
+                    &**model,
+                    &cache.iors,
+                );
                 let output = config.output_dir().join(format!(
                     "{:?}_{}.exr",
                     model.family(),
                     model.params()[0],
                 ));
-                brdf.write_as_exr(&output, &chrono::Local::now(), 512)
-                    .unwrap();
+                brdf.write_as_exr(&output, 512).unwrap();
             }
         } else {
             if opts.olaf {
@@ -157,12 +154,14 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             .measured
                             .downcast::<MeasuredBsdfData>()
                             .unwrap();
+                        let level = MeasuredBrdfLevel(opts.level);
                         #[cfg(debug_assertions)]
                         {
-                            let n_spectrum = simulated_brdf.params.emitter.spectrum.step_count();
-                            let partition = simulated_brdf.params.receiver.partitioning();
-                            for snap in simulated_brdf.snapshots.iter() {
-                                log::debug!("  = snapshot | wi: {}", snap.wi);
+                            let brdf = simulated_brdf.brdf_at(level).unwrap();
+                            let n_spectrum = simulated_brdf.n_spectrum();
+                            let partition = &simulated_brdf.raw.outgoing;
+                            for snapshot in brdf.snapshots() {
+                                log::debug!("  = snapshot | wi: {}", snapshot.wi);
                                 for (i, ring) in partition.rings.iter().enumerate() {
                                     log::debug!(
                                         "    - ring[{}], center: (min {}, max {})",
@@ -179,7 +178,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                             partition.patches[patch_idx].min,
                                             partition.patches[patch_idx].max,
                                             partition.patches[patch_idx].center(),
-                                            &snap.samples.as_slice()[patch_idx * n_spectrum
+                                            &snapshot.samples.as_slice()[patch_idx * n_spectrum
                                                 ..(patch_idx + 1) * n_spectrum]
                                         );
                                     }
@@ -202,17 +201,10 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             false
                         };
                         log::debug!("Resampling the measured data, dense: {}", dense);
-                        simulated_brdf.resample(&olaf_data.params, dense, Rads::ZERO)
+                        simulated_brdf.resample(&olaf_data.params, level, dense, Rads::ZERO)
                     };
                     log::debug!("BRDF extraction done, starting fitting.");
-                    measured_brdf_fitting_clausen(
-                        opts.method,
-                        &input[0],
-                        &brdf,
-                        &opts,
-                        alpha,
-                        &cache,
-                    );
+                    measured_brdf_fitting(opts.method, &input[0], &brdf, &opts, alpha, &cache);
                 }
             } else {
                 for input in &opts.inputs {
@@ -223,16 +215,10 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     match measured.downcast::<MeasuredBsdfData>() {
                         None => {
                             let brdf = measured.downcast::<ClausenBrdf>().unwrap();
-                            measured_brdf_fitting_clausen(
-                                opts.method,
-                                &input,
-                                brdf,
-                                &opts,
-                                alpha,
-                                &cache,
-                            );
+                            measured_brdf_fitting(opts.method, &input, brdf, &opts, alpha, &cache);
                         }
-                        Some(brdf) => {
+                        Some(brdfs) => {
+                            let brdf = brdfs.brdf_at(MeasuredBrdfLevel(opts.level)).unwrap();
                             measured_brdf_fitting(opts.method, &input, brdf, &opts, alpha, &cache)
                         }
                     }
@@ -243,45 +229,18 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     })
 }
 
-fn measured_brdf_fitting_clausen(
-    method: FittingMethod,
-    filepath: &PathBuf,
-    brdf: &ClausenBrdf,
-    opts: &FitOptions,
-    alpha: RangeByStepSizeInclusive<f64>,
-    cache: &RawCache,
-) {
-    println!(
-        "    {}>{} Fitting to model: {:?} , distro: {:?}, isotropy: {}, olaf: {}",
-        ansi::BRIGHT_YELLOW,
-        ansi::RESET,
-        opts.family,
-        opts.distro,
-        opts.isotropy,
-        opts.olaf,
-    );
-    match method {
-        FittingMethod::Bruteforce => {
-            brute_force_fitting_clausen_brdf(brdf, filepath, opts, alpha, cache)
-        }
-        FittingMethod::Nlls => {
-            nlls_fitting_clausen_brdf(brdf, opts, alpha, cache).print_fitting_report()
-        }
-    }
-}
-
-fn brute_force_fitting_clausen_brdf(
-    brdf: &ClausenBrdf,
+fn brdf_fitting_brute_force<F: AnalyticalFit>(
+    brdf: &F,
     filepath: &PathBuf,
     opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) {
-    let errs = compute_iso_clausen_brdf_err(
-        &brdf,
+    let errs = compute_microfacet_brdf_err(
+        brdf,
         opts.distro,
         alpha,
-        &cache,
+        cache,
         opts.error_metric.unwrap_or(ErrorMetric::Mse),
     );
     let min_err = errs.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
@@ -311,20 +270,10 @@ fn brute_force_fitting_clausen_brdf(
     }
 }
 
-fn nlls_fitting_clausen_brdf(
-    brdf: &ClausenBrdf,
-    opts: &FitOptions,
-    alpha: RangeByStepSizeInclusive<f64>,
-    cache: &RawCache,
-) -> FittingReport<Box<dyn Bxdf<Params = [f64; 2]>>> {
-    let problem = ClausenBrdfFittingProblem::new(brdf, opts.distro, alpha, cache);
-    problem.lsq_lm_fit(opts.isotropy)
-}
-
-fn measured_brdf_fitting(
+fn measured_brdf_fitting<F: AnalyticalFit>(
     method: FittingMethod,
     filepath: &PathBuf,
-    brdf: &MeasuredBsdfData,
+    brdf: &F,
     opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
@@ -339,66 +288,27 @@ fn measured_brdf_fitting(
         opts.method,
     );
     match method {
-        FittingMethod::Bruteforce => {
-            brute_force_fitting_measured_brdf(brdf, filepath, opts, alpha, cache)
-        }
+        FittingMethod::Bruteforce => brdf_fitting_brute_force(brdf, filepath, opts, alpha, cache),
         FittingMethod::Nlls => {
-            nlls_fitting_measured_brdf(brdf, opts, alpha, cache).print_fitting_report()
+            brdf_fitting_nonlin_lsq(brdf, opts, alpha, cache).print_fitting_report()
         }
     }
 }
 
-fn nlls_fitting_measured_brdf(
-    brdf: &MeasuredBsdfData,
+fn brdf_fitting_nonlin_lsq<F: AnalyticalFit>(
+    brdf: &F,
     opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,
     cache: &RawCache,
 ) -> FittingReport<Box<dyn Bxdf<Params = [f64; 2]>>> {
-    let problem = MicrofacetBrdfFittingProblem::new(brdf, opts.distro, alpha, L0, cache);
-    problem.lsq_lm_fit(opts.isotropy)
-}
-
-fn brute_force_fitting_measured_brdf(
-    brdf: &MeasuredBsdfData,
-    filepath: &PathBuf,
-    opts: &FitOptions,
-    alpha: RangeByStepSizeInclusive<f64>,
-    cache: &RawCache,
-) {
-    let mut errs = compute_iso_microfacet_brdf_err(
-        &brdf,
-        opts.max_theta_o.map(|t| deg!(t as f32)),
+    let problem = MicrofacetBrdfFittingProblem::new(
+        brdf,
         opts.distro,
         alpha,
-        &cache,
-        opts.error_metric.unwrap_or(ErrorMetric::Mse),
+        MeasuredBrdfLevel(opts.level),
+        cache,
     );
-    let min_err = errs.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
-    let min_idx = errs.iter().position(|&x| x == min_err).unwrap();
-    println!(
-        "    {}>{} MSE ({}) {:?}",
-        ansi::BRIGHT_YELLOW,
-        ansi::RESET,
-        filepath.file_name().unwrap().display(),
-        errs.as_slice()
-    );
-    println!(
-        "    {}>{} Minimum error: {} at alpha = {}",
-        ansi::BRIGHT_YELLOW,
-        ansi::RESET,
-        min_err,
-        alpha.values().nth(min_idx).unwrap()
-    );
-    errs.iter_mut().for_each(|err| *err = err.log10());
-    if opts.plot {
-        plot_err(
-            errs.as_slice(),
-            opts.alpha_start.unwrap_or(0.01),
-            opts.alpha_stop.unwrap_or(1.0),
-            opts.alpha_step.unwrap_or(0.01),
-        )
-        .expect("Failed to plot the error.");
-    }
+    problem.lsq_lm_fit(opts.isotropy)
 }
 
 // TODO: complete fit kind
@@ -452,10 +362,12 @@ pub struct FitOptions {
     pub distro: MicrofacetDistroKind,
 
     #[clap(
+        short,
         long,
-        help = "Maximum colatitude angle in degrees for outgoing directions."
+        help = "Level of the measured BRDF data to fit.",
+        default_value = "0"
     )]
-    pub max_theta_o: Option<f64>,
+    pub level: u32,
 
     #[clap(
         long,

@@ -206,8 +206,6 @@ impl Measurement {
                         "Failed to write VGMO file.",
                     )
                 })?;
-                #[cfg(feature = "bench")]
-                let start = std::time::Instant::now();
 
                 writer.flush().map_err(|err| {
                     VgonioError::from_write_file_error(

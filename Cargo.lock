@@ -3731,6 +3731,7 @@ dependencies = [
  "cfg-if",
  "chrono",
  "clap",
+ "csv",
  "flate2",
  "glam",
  "log",

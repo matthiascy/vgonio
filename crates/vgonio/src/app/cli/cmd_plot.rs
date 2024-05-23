@@ -1,6 +1,6 @@
 use crate::{
     app::{cache::Cache, Config},
-    measure::bsdf::MeasuredBsdfData,
+    measure::bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
     pyplot::plot_brdf,
 };
 use base::{error::VgonioError, units::Rads};
@@ -21,6 +21,9 @@ pub struct PlotOptions {
 
     #[clap(short, long, help = "The kind of plot to generate.")]
     pub kind: PlotKind,
+
+    #[clap(short, long, help = "The level of BRDF to plot.", default_value = "0")]
+    pub level: u32,
 }
 
 pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
@@ -35,6 +38,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         None,
                     ));
                 }
+                let level = MeasuredBrdfLevel(opts.level);
                 for input in opts.inputs.chunks(2) {
                     let simulated_hdl = cache.load_micro_surface_measurement(&config, &input[0])?;
                     // Measured by Olaf
@@ -65,7 +69,8 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         .map(|s| s.parse::<f32>().unwrap())
                         .unwrap_or(0.0)
                         .to_radians();
-                    let itrp = simulated.resample(&olaf.params, dense, Rads::new(phi_offset));
+                    let itrp =
+                        simulated.resample(&olaf.params, level, dense, Rads::new(phi_offset));
                     plot_brdf(&itrp, olaf, dense).unwrap();
                 }
                 Ok(())

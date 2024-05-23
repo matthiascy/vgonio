@@ -1,11 +1,28 @@
-use base::{
-    math,
-    medium::Medium,
-    units::{Nanometres, Rads},
-    ErrorMetric,
-};
+use base::{medium::Medium, units::Nanometres, MeasuredData};
 use jabr::array::DyArr;
 use std::fmt::Debug;
+
+#[cfg(feature = "fitting")]
+use base::{math, optics::ior::RefractiveIndexRegistry, ErrorMetric};
+
+#[cfg(feature = "fitting")]
+macro_rules! impl_analytical_fit_trait {
+    ($self:ident) => {
+        fn spectrum(&$self) -> &[Nanometres] { $self.spectrum.as_ref() }
+
+        fn samples(&$self) -> &[f32] { $self.samples.as_ref() }
+
+        fn params(&$self) -> &Self::Params { &$self.params }
+
+        fn incident_medium(&$self) -> Medium {
+            $self.incident_medium
+        }
+
+        fn transmitted_medium(&$self) -> Medium {
+            $self.transmitted_medium
+        }
+    };
+}
 
 pub mod clausen;
 pub mod merl;
@@ -34,11 +51,12 @@ pub enum ParametrisationKind {
     IncidentDirection,
 }
 
-pub trait BrdfParameterisation {
+pub trait BrdfParameterisation: PartialEq {
     /// Returns the kind of the parameterisation.
     fn kind() -> ParametrisationKind;
 }
 
+use crate::brdf::Bxdf;
 pub use clausen::*;
 pub use merl::*;
 pub use utia::*;
@@ -54,6 +72,78 @@ pub enum MeasuredBrdfKind {
     Unknown,
 }
 
+#[cfg(feature = "fitting")]
+/// A BRDF that can be fitted analytically.
+pub trait AnalyticalFit {
+    type Params: BrdfParameterisation;
+
+    #[inline]
+    fn kind(&self) -> MeasuredBrdfKind;
+
+    /// Creates a new analytical BRDF with the same parameterisation as the
+    /// given measured BRDF.
+    fn new_analytical(
+        medium_i: Medium,
+        medium_t: Medium,
+        spectrum: &[Nanometres],
+        params: &Self::Params,
+        model: &dyn Bxdf<Params = [f64; 2]>,
+        iors: &RefractiveIndexRegistry,
+    ) -> Self;
+
+    /// Creates a new analytical BRDF based on the parameterisation of the
+    /// measured BRDF (self).
+    fn new_analytical_from_self(
+        &self,
+        model: &dyn Bxdf<Params = [f64; 2]>,
+        iors: &RefractiveIndexRegistry,
+    ) -> Self
+    where
+        Self: Sized,
+    {
+        Self::new_analytical(
+            self.incident_medium(),
+            self.transmitted_medium(),
+            self.spectrum(),
+            self.params(),
+            model,
+            iors,
+        )
+    }
+
+    /// Returns the distance between two BRDFs.
+    fn distance(&self, other: &Self, metric: ErrorMetric) -> f64 {
+        assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
+        if self.params() != other.params() {
+            panic!("Parameterisations must be the same!");
+        }
+        let factor = match metric {
+            ErrorMetric::Mse => math::rcp_f64(self.samples().len() as f64),
+            ErrorMetric::Nlls => 0.5,
+        };
+        self.samples()
+            .iter()
+            .zip(other.samples().iter())
+            .fold(0.0f64, |acc, (a, b)| {
+                let diff = *a as f64 - *b as f64;
+                acc + math::sqr(diff) * factor
+            })
+    }
+
+    /// Returns the wavelengths at which the BRDF is measured.
+    fn spectrum(&self) -> &[Nanometres];
+
+    /// Returns the samples of the measured BRDF as a one-dimensional array.
+    fn samples(&self) -> &[f32];
+
+    /// Returns the parameterisation of the measured BRDF.
+    fn params(&self) -> &Self::Params;
+
+    fn incident_medium(&self) -> Medium;
+
+    fn transmitted_medium(&self) -> Medium;
+}
+
 /// A BRDF measured either in the real world or in a simulation.
 ///
 /// The BRDF is parameterised by a specific parameterisation. Extra data can be
@@ -61,7 +151,7 @@ pub enum MeasuredBrdfKind {
 #[derive(Clone, Debug)]
 pub struct MeasuredBrdf<P, const N: usize>
 where
-    P: Clone + Send + Sync + BrdfParameterisation + PartialEq + 'static,
+    P: Clone + Send + Sync + BrdfParameterisation + 'static,
 {
     /// The origin of the measured BRDF.
     pub origin: Origin,
@@ -87,24 +177,4 @@ where
 
     /// Returns the number of samples of the measured BRDF.
     pub fn n_samples(&self) -> usize { self.samples.len() }
-
-    /// Computes the distance between two BRDFs.
-    pub fn distance(&self, other: &Self, metric: ErrorMetric) -> f64 {
-        assert_eq!(self.spectrum, other.spectrum, "Spectra must be equal!");
-        if self.params != other.params {
-            panic!("Parameterisations must be the same!");
-        }
-        let factor = match metric {
-            ErrorMetric::Mse => math::rcp_f64(self.n_samples() as f64),
-            ErrorMetric::Nlls => 0.5,
-        };
-        self.samples
-            .as_slice()
-            .iter()
-            .zip(other.samples.as_slice())
-            .fold(0.0f64, |acc, (a, b)| {
-                let diff = *a as f64 - *b as f64;
-                acc + math::sqr(diff) * factor
-            })
-    }
 }

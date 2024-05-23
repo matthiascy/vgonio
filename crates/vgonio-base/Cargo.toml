@@ -9,7 +9,7 @@ version.workspace = true
 default = []
 use_f64 = []
 cli = ["dep:clap"]
-io = []
+io = ["dep:csv"]
 winit = ["dep:winit"]
 
 
@@ -19,6 +19,7 @@ byteorder.workspace = true
 cfg-if.workspace = true
 chrono.workspace = true
 clap = { workspace = true, optional = true }
+csv = { workspace = true, optional = true }
 flate2.workspace = true
 glam.workspace = true
 log.workspace = true

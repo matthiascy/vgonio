@@ -3,21 +3,13 @@ use std::{
     collections::HashMap,
     fmt::{Debug, Display, Formatter},
     hash::{Hash, Hasher},
-    ops::Deref,
     path::{Path, PathBuf},
     str::FromStr,
 };
 
 use uuid::Uuid;
 
-use base::{
-    error::VgonioError,
-    math,
-    medium::Medium,
-    optics::ior::{Ior, RefractiveIndexRecord},
-    units::{Length, LengthMeasurement, Nanometres},
-    Asset,
-};
+use base::{error::VgonioError, medium::Medium, optics::ior::RefractiveIndexRegistry, Asset};
 use gfxkit::{context::GpuContext, mesh::RenderableMesh};
 use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
 
@@ -590,6 +582,7 @@ impl RawCache {
         Ok(loaded)
     }
 
+    // TODO: move to RefractiveIndexRegistry
     /// Loads the refractive index database from the paths specified in the
     /// configuration.
     ///
@@ -622,6 +615,7 @@ impl RawCache {
         log::debug!("  Loaded {} ior files from {:?}", n, user_path);
     }
 
+    // TODO: move to RefractiveIndexRegistry
     /// Load the refractive index database from the given path.
     /// Returns the number of files loaded.
     fn load_refractive_indices(iors: &mut RefractiveIndexRegistry, path: &Path) -> u32 {
@@ -640,7 +634,7 @@ impl RawCache {
             .unwrap();
             // TODO: make this a method of RefractiveIndexRegistry
             let refractive_indices = RefractiveIndexRegistry::read_iors_from_file(path).unwrap();
-            let iors = iors.0.entry(medium).or_default();
+            let iors = iors.entry(medium).or_default();
             for ior in refractive_indices.iter() {
                 if !iors.contains(&ior) {
                     iors.push(*ior);
@@ -657,130 +651,6 @@ impl RawCache {
         }
 
         n_files
-    }
-}
-
-/// Refractive index database.
-#[derive(Debug)]
-pub struct RefractiveIndexRegistry(pub(crate) HashMap<Medium, Vec<RefractiveIndexRecord>>);
-
-impl Default for RefractiveIndexRegistry {
-    fn default() -> Self { Self::new() }
-}
-
-impl Deref for RefractiveIndexRegistry {
-    type Target = HashMap<Medium, Vec<RefractiveIndexRecord>>;
-    fn deref(&self) -> &Self::Target { &self.0 }
-}
-
-impl RefractiveIndexRegistry {
-    /// Create an empty database.
-    pub fn new() -> RefractiveIndexRegistry { RefractiveIndexRegistry(HashMap::new()) }
-
-    /// Returns the refractive index of the given medium at the given wavelength
-    /// (in nanometres).
-    pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<RefractiveIndexRecord> {
-        let refractive_indices = self
-            .get(&medium)
-            .unwrap_or_else(|| panic!("unknown medium {:?}", medium));
-        // Search for the position of the first wavelength equal or greater than the
-        // given one in refractive indices.
-        let i = refractive_indices
-            .iter()
-            .position(|ior| ior.wavelength >= wavelength)
-            .unwrap();
-        let ior_after = refractive_indices[i];
-        // If the first wavelength is equal to the given one, return it.
-        if math::ulp_eq(ior_after.wavelength.value(), wavelength.value()) {
-            Some(ior_after)
-        } else {
-            // Otherwise, interpolate between the two closest refractive indices.
-            let ior_before = if i == 0 {
-                refractive_indices[0]
-            } else {
-                refractive_indices[i - 1]
-            };
-            let diff_eta = ior_after.eta - ior_before.eta;
-            let diff_k = ior_after.k - ior_before.k;
-            let t = (wavelength - ior_before.wavelength)
-                / (ior_after.wavelength - ior_before.wavelength);
-            Some(RefractiveIndexRecord {
-                wavelength,
-                ior: Ior {
-                    eta: ior_before.eta + t * diff_eta,
-                    k: ior_before.k + t * diff_k,
-                },
-            })
-        }
-    }
-
-    /// Returns the refractive index of the given medium at the given spectrum
-    /// (in nanometers).
-    pub fn ior_of_spectrum<A: LengthMeasurement>(
-        &self,
-        medium: Medium,
-        wavelengths: &[Length<A>],
-    ) -> Option<Box<[Ior]>> {
-        wavelengths
-            .iter()
-            .map(|wavelength| {
-                self.ior_of(medium, wavelength.in_nanometres())
-                    .map(|ior| ior.ior)
-            })
-            .collect::<Option<Vec<_>>>()
-            .map(|iors| iors.into_boxed_slice())
-    }
-
-    /// Read a csv file and return a vector of refractive indices.
-    /// File format: "wavelength, µm", "eta", "k"
-    pub(crate) fn read_iors_from_file(path: &Path) -> Option<Box<[RefractiveIndexRecord]>> {
-        std::fs::File::open(path)
-            .map(|f| {
-                let mut rdr = csv::Reader::from_reader(f);
-
-                // Read the header (the first line of the file) to get the unit of the
-                // wavelength.
-                let mut coefficient = 1.0f32;
-
-                let mut is_conductor = false;
-
-                if let Ok(header) = rdr.headers() {
-                    is_conductor = header.len() == 3;
-                    match header.get(0).unwrap().split(' ').last().unwrap() {
-                        "nm" => coefficient = 1.0,
-                        "µm" => coefficient = 1e3,
-                        &_ => coefficient = 1.0,
-                    }
-                }
-
-                if is_conductor {
-                    rdr.records()
-                        .filter_map(|ior_record| match ior_record {
-                            Ok(record) => {
-                                let wavelength = record[0].parse::<f32>().unwrap() * coefficient;
-                                let eta = record[1].parse::<f32>().unwrap();
-                                let k = record[2].parse::<f32>().unwrap();
-                                Some(RefractiveIndexRecord::new(wavelength.into(), eta, k))
-                            }
-                            Err(_) => None,
-                        })
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice()
-                } else {
-                    rdr.records()
-                        .filter_map(|ior_record| match ior_record {
-                            Ok(record) => {
-                                let wavelength = record[0].parse::<f32>().unwrap() * coefficient;
-                                let eta = record[1].parse::<f32>().unwrap();
-                                Some(RefractiveIndexRecord::new(wavelength.into(), eta, 0.0))
-                            }
-                            Err(_) => None,
-                        })
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice()
-                }
-            })
-            .ok()
     }
 }
 
