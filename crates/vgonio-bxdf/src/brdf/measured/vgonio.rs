@@ -1,6 +1,7 @@
 //! BRDF from the VGonio simulator.
-use crate::brdf::measured::{
-    BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind,
+use crate::brdf::{
+    measured::{BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind},
+    Bxdf,
 };
 use base::{
     error::VgonioError,
@@ -68,10 +69,27 @@ impl VgonioBrdf {
         }
     }
 
+    /// Creates a new VGonio BRDF witn the same parameterisation as the given
+    /// BRDF except the BRDF samples are generated from an analytical model.
+    pub fn new_analytical(
+        &self,
+        target: &dyn Bxdf<Params = [f64; 2]>,
+        iors: &RefractiveIndexRegistry,
+    ) -> Self {
+        Self {
+            origin,
+            incident_medium,
+            transmitted_medium,
+            params: Box::new(params),
+            spectrum,
+            samples,
+        }
+    }
+
     /// Returns the kind of the measured BRDF.
     pub fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Vgonio }
 
-    /// Computes local BRDF maximum values for each snapshot, i.e., for each
+    /// Computes local BRDF maximum values for each snapshot, that is, for each
     /// incident direction (per wavelength).
     pub fn compute_max_values(&self) -> DyArr<f32, 2> {
         let n_wi = self.params.incoming.len();

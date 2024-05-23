@@ -16,7 +16,7 @@ use base::{
 use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
-        measured::{ClausenBrdf, Origin},
+        measured::{ClausenBrdf, Origin, VgonioBrdf},
         Bxdf,
     },
     distro::MicrofacetDistroKind,
@@ -92,63 +92,6 @@ pub fn compute_iso_microfacet_brdf_err(
         .collect::<Vec<_>>()
         .into_boxed_slice();
     mses
-}
-
-fn compute_distance(
-    normalized_model: &MeasuredBsdfData,
-    measured: &MeasuredBsdfData,
-    partition: &SphericalPartition,
-    max_theta_o: Radians,
-    metric: ErrorMetric,
-) -> f64 {
-    let count = AtomicU64::new(0);
-    let patches = &partition.patches;
-    let n_lambda = measured.params.emitter.spectrum.step_count();
-    let sqr_err_sum = normalized_model
-        .snapshots
-        .par_iter()
-        .zip(measured.snapshots.par_iter())
-        .map(|(model_snapshot, measured_snapshot)| {
-            if model_snapshot.wi.theta > max_theta_o {
-                return 0.0;
-            }
-            model_snapshot
-                .samples
-                .as_slice()
-                .chunks(n_lambda)
-                .zip(measured_snapshot.samples.as_slice().chunks(n_lambda))
-                .zip(patches.iter())
-                .map(|((model_samples, measured_samples), patch)| {
-                    if patch.center().theta > max_theta_o {
-                        0.0
-                    } else {
-                        count.fetch_add(
-                            model_samples.len() as u64,
-                            std::sync::atomic::Ordering::Relaxed,
-                        );
-                        let mut sum = 0.0;
-                        for (model_sample, measured_sample) in
-                            model_samples.iter().zip(measured_samples.iter())
-                        {
-                            sum += sqr(*model_sample as f64 - *measured_sample as f64);
-                        }
-                        sum
-                    }
-                })
-                .sum::<f64>()
-        })
-        .sum::<f64>();
-    match metric {
-        ErrorMetric::Mse => {
-            let n = patches
-                .iter()
-                .map(|p| p.center().theta <= max_theta_o)
-                .count()
-                * measured.snapshots.len();
-            sqr_err_sum / n as f64
-        }
-        ErrorMetric::Nlls => sqr_err_sum * 0.5,
-    }
 }
 
 pub(crate) fn generate_analytical_brdf_from_clausen_brdf(
@@ -238,7 +181,7 @@ pub(crate) fn generate_analytical_brdf(
     params: &BsdfMeasurementParams,
     target: &dyn Bxdf<Params = [f64; 2]>,
     iors: &RefractiveIndexRegistry,
-) -> MeasuredBsdfData {
+) -> VgonioBrdf {
     let partition = params.receiver.partitioning();
     let meas_pts = params.emitter.generate_measurement_points();
     let wavelengths = params
@@ -287,9 +230,5 @@ pub(crate) fn generate_analytical_brdf(
                 });
             }
         });
-    MeasuredBsdfData {
-        params: params.clone(),
-        snapshots: unsafe { snapshots.assume_init() },
-        raw_snapshots: None,
-    }
+    VgonioBrdf::new(
 }

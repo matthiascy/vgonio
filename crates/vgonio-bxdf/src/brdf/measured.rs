@@ -1,4 +1,9 @@
-use base::{math, medium::Medium, units::Nanometres, ErrorMetric};
+use base::{
+    math,
+    medium::Medium,
+    units::{Nanometres, Rads},
+    ErrorMetric,
+};
 use jabr::array::DyArr;
 use std::fmt::Debug;
 
