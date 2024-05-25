@@ -180,7 +180,7 @@ impl PropertyInspector {
                                     match measured.kind() {
                                         MeasurementKind::Ndf => {
                                             let ndf =
-                                                measured.downcast::<MeasuredNdfData>().unwrap();
+                                                measured.downcast_ref::<MeasuredNdfData>().unwrap();
                                             match ndf.params.mode {
                                                 NdfMeasurementMode::ByPoints {
                                                     azimuth,
@@ -232,7 +232,7 @@ impl PropertyInspector {
                                         }
                                         MeasurementKind::Msf => {
                                             let msf =
-                                                measured.downcast::<MeasuredMsfData>().unwrap();
+                                                measured.downcast_ref::<MeasuredMsfData>().unwrap();
                                             ui.label("θ:");
                                             ui.label(format!(
                                                 "{} ~ {}, every {}",

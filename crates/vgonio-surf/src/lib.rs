@@ -1117,7 +1117,7 @@ impl MicroSurfaceMesh {
         self.facet_total_area = new_facet_areas.iter().sum::<f64>() as f32;
         self.facet_normals = new_facet_normals;
         self.facet_areas = new_facet_areas
-            .into_iter()
+            .iter()
             .map(|x| *x as f32)
             .collect::<Vec<f32>>()
             .into_boxed_slice();

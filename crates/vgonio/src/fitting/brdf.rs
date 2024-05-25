@@ -29,9 +29,9 @@ use std::{any::Any, fmt::Display};
 /// The fitting problem for the microfacet based BSDF model.
 ///
 /// The fitting procedure is based on the Levenberg-Marquardt algorithm.
-pub struct MicrofacetBrdfFittingProblem<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>> {
+pub struct MicrofacetBrdfFittingProblem<'a, P: BrdfParameterisation> {
     /// The measured BSDF data.
-    pub measured: &'a M,
+    pub measured: &'a (dyn AnalyticalFit<Params = P> + Sync),
     /// The target BSDF model.
     pub target: MicrofacetDistroKind,
     /// The level of the measured BRDF data to be fitted.
@@ -50,9 +50,7 @@ pub struct MicrofacetBrdfFittingProblem<'a, P: BrdfParameterisation, M: Analytic
     pub initial_guess: RangeByStepSizeInclusive<f64>,
 }
 
-impl<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>> Display
-    for MicrofacetBrdfFittingProblem<'a, P, M>
-{
+impl<'a, P: BrdfParameterisation> Display for MicrofacetBrdfFittingProblem<'a, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BSDF Fitting Problem")
             .field("target", &self.target)
@@ -60,9 +58,7 @@ impl<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>> Display
     }
 }
 
-impl<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>>
-    MicrofacetBrdfFittingProblem<'a, P, M>
-{
+impl<'a, P: BrdfParameterisation> MicrofacetBrdfFittingProblem<'a, P> {
     /// Creates a new BSDF fitting problem.
     ///
     /// # Arguments
@@ -70,7 +66,7 @@ impl<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>>
     /// * `measured` - The measured BSDF data.
     /// * `target` - The target BSDF model.
     pub fn new(
-        measured: &'a M,
+        measured: &'a (dyn AnalyticalFit<Params = P> + Sync),
         target: MicrofacetDistroKind,
         initial: RangeByStepSizeInclusive<f64>,
         level: MeasuredBrdfLevel, // temporarily only one level is supported
@@ -132,10 +128,37 @@ fn initialise_microfacet_bsdf_models(
     }
 }
 
+macro_rules! switch_isotropy {
+    ($brdf_ty:ident<$brdf_params_ty:ident> => $isotropy:ident, $self:ident, $brdf:ident, $model:ident, $solver:ident) => {
+        match $isotropy {
+            Isotropy::Isotropic => {
+                let problem = BrdfFittingProblemProxy::<
+                    $brdf_params_ty,
+                    $brdf_ty,
+                    { Isotropy::Isotropic },
+                >::new(
+                    $brdf, $model, $self.iors, &$self.iors_i, &$self.iors_t
+                );
+                let (result, report) = $solver.minimize(problem);
+                (result.model, report)
+            }
+            Isotropy::Anisotropic => {
+                let problem = BrdfFittingProblemProxy::<
+                    $brdf_params_ty,
+                    $brdf_ty,
+                    { Isotropy::Anisotropic },
+                >::new(
+                    $brdf, $model, $self.iors, &$self.iors_i, &$self.iors_t
+                );
+                let (result, report) = $solver.minimize(problem);
+                (result.model, report)
+            }
+        }
+    };
+}
+
 // Actual implementation of the fitting problem.
-impl<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>> FittingProblem
-    for MicrofacetBrdfFittingProblem<'a, P, M>
-{
+impl<'a, P: BrdfParameterisation> FittingProblem for MicrofacetBrdfFittingProblem<'a, P> {
     type Model = Box<dyn Bxdf<Params = [f64; 2]>>;
 
     fn lsq_lm_fit(self, isotropy: Isotropy) -> FittingReport<Self::Model> {
@@ -152,29 +175,29 @@ impl<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>> FittingProblem
             .filter_map(|model| {
                 let init_guess = model.params();
                 let kind = model.family();
-                let (model, report) = match isotropy {
-                    Isotropy::Isotropic => {
-                        let problem = BrdfFittingProblemProxy::<P, M, { Isotropy::Isotropic }>::new(
-                            self.measured,
-                            model,
-                            self.iors,
-                            &self.iors_i,
-                            &self.iors_t,
+                let (model, report) = match self.measured.kind() {
+                    MeasuredBrdfKind::Clausen => {
+                        let brdf = self
+                            .measured
+                            .as_any()
+                            .downcast_ref::<ClausenBrdf>()
+                            .unwrap();
+                        let problem = BrdfFittingProblemProxy::<ClausenBrdfParameterisation, ClausenBrdf, { Isotropy::Isotropic }>::new(
+                            brdf, model, self.iors, &self.iors_i, &self.iors_t
                         );
                         let (result, report) = solver.minimize(problem);
                         (result.model, report)
                     }
-                    Isotropy::Anisotropic => {
-                        let problem =
-                            BrdfFittingProblemProxy::<P, M, { Isotropy::Anisotropic }>::new(
-                                self.measured,
-                                model,
-                                self.iors,
-                                &self.iors_i,
-                                &self.iors_t,
-                            );
-                        let (result, report) = solver.minimize(problem);
-                        (result.model, report)
+                    MeasuredBrdfKind::Vgonio => {
+                        let brdf = self
+                            .measured
+                            .as_any().downcast_ref::<VgonioBrdf>()
+                            .unwrap();
+                        switch_isotropy!(VgonioBrdf<VgonioBrdfParameterisation> => isotropy, self, brdf, model, solver)
+                    }
+                    _ => {
+                        log::warn!("Unsupported BRDF kind: {:?}", self.measured.kind());
+                        return None;
                     }
                 };
                 log::debug!(
@@ -230,25 +253,17 @@ pub struct VgonioBrdfFittingCache {
     wos: DyArr<Vec3>,
 }
 
-impl<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>, const I: Isotropy>
-    BrdfFittingProblemProxy<'a, P, M, I>
-{
+impl<'a, const I: Isotropy> BrdfFittingProblemProxy<'a, VgonioBrdfParameterisation, VgonioBrdf, I> {
     pub fn new(
-        measured: &'a M,
+        measured: &'a VgonioBrdf,
         model: Box<dyn Bxdf<Params = [f64; 2]>>,
         iors: &'a RefractiveIndexRegistry,
         iors_i: &'a [Ior],
         iors_t: &'a [Ior],
     ) -> Self {
-        let cache: Box<dyn Any> = match measured.kind() {
-            MeasuredBrdfKind::Vgonio => {
-                let cache = VgonioBrdfFittingCache {
-                    wis: measured.params().incoming_cartesian(),
-                    wos: measured.params().outgoing_cartesian(),
-                };
-                Box::new(cache) as _
-            }
-            _ => Box::new(()) as _,
+        let cache = VgonioBrdfFittingCache {
+            wis: measured.params().incoming_cartesian(),
+            wos: measured.params().outgoing_cartesian(),
         };
         Self {
             measured,
@@ -256,19 +271,17 @@ impl<'a, P: BrdfParameterisation, M: AnalyticalFit<Params = P>, const I: Isotrop
             iors,
             iors_i,
             iors_t,
-            cache,
+            cache: Box::new(cache),
         }
     }
-}
 
-impl<'a, const I: Isotropy> BrdfFittingProblemProxy<'a, VgonioBrdfParameterisation, VgonioBrdf, I> {
     /// Evaluates the residuals of the fitting problem.
     pub fn eval_residuals(&self) -> Box<[f64]> {
         // The number of residuals is n_wi * n_wo * n_spectrum.
         let n_wo = self.measured.params.n_wo();
         let n_wi = self.measured.params.n_wi();
         let n_spectrum = self.measured.spectrum.len();
-        let mut cache = self.cache.downcast_ref::<VgonioBrdfFittingCache>().unwrap();
+        let cache = self.cache.downcast_ref::<VgonioBrdfFittingCache>().unwrap();
         // Row-major [snapshot, patch, wavelength]
         let mut rs = Box::new_uninit_slice(n_wi * n_wo * n_spectrum);
         for (i, snapshot) in self.measured.snapshots().enumerate() {

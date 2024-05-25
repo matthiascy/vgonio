@@ -116,25 +116,28 @@ impl Measurement {
     /// * `azimuth_m` - Azimuthal angle of the microfacet normal in radians.
     pub fn ndf_data_slice(&self, azimuth_m: Radians) -> Option<(&[f32], Option<&[f32]>)> {
         debug_assert!(self.kind() == MeasurementKind::Ndf);
-        self.measured.downcast::<MeasuredNdfData>().and_then(|ndf| {
-            let (azi, zen) = ndf.measurement_range().unwrap();
-            let azimuth_m = azimuth_m.wrap_to_tau();
-            let azimuth_m_idx = azi.index_of(azimuth_m);
-            let opposite_azimuth_m = azimuth_m.opposite();
-            let opposite_index =
-                if azi.start <= opposite_azimuth_m && opposite_azimuth_m <= azi.stop {
-                    Some(azi.index_of(opposite_azimuth_m))
-                } else {
-                    None
-                };
-            let zen_step_count = zen.step_count_wrapped();
-            Some((
-                &ndf.samples[azimuth_m_idx * zen_step_count..(azimuth_m_idx + 1) * zen_step_count],
-                opposite_index.map(|index| {
-                    &ndf.samples[index * zen_step_count..(index + 1) * zen_step_count]
-                }),
-            ))
-        })
+        self.measured
+            .downcast_ref::<MeasuredNdfData>()
+            .and_then(|ndf| {
+                let (azi, zen) = ndf.measurement_range().unwrap();
+                let azimuth_m = azimuth_m.wrap_to_tau();
+                let azimuth_m_idx = azi.index_of(azimuth_m);
+                let opposite_azimuth_m = azimuth_m.opposite();
+                let opposite_index =
+                    if azi.start <= opposite_azimuth_m && opposite_azimuth_m <= azi.stop {
+                        Some(azi.index_of(opposite_azimuth_m))
+                    } else {
+                        None
+                    };
+                let zen_step_count = zen.step_count_wrapped();
+                Some((
+                    &ndf.samples
+                        [azimuth_m_idx * zen_step_count..(azimuth_m_idx + 1) * zen_step_count],
+                    opposite_index.map(|index| {
+                        &ndf.samples[index * zen_step_count..(index + 1) * zen_step_count]
+                    }),
+                ))
+            })
     }
 
     /// Returns the Masking Shadowing Function data slice for the given
@@ -154,7 +157,7 @@ impl Measurement {
             self.kind() == MeasurementKind::Msf,
             "measurement data kind should be MicrofacetMaskingShadowing"
         );
-        let msf = self.measured.downcast::<MeasuredMsfData>().unwrap();
+        let msf = self.measured.downcast_ref::<MeasuredMsfData>().unwrap();
         msf.slice_at(azimuth_m, zenith_m, azimuth_i)
     }
 
@@ -221,18 +224,18 @@ impl Measurement {
                 let filepath = filepath.with_extension("exr");
                 match self.measured.kind() {
                     MeasurementKind::Bsdf => {
-                        let bsdf = self.measured.downcast::<MeasuredBsdfData>().unwrap();
+                        let bsdf = self.measured.downcast_ref::<MeasuredBsdfData>().unwrap();
                         bsdf.write_as_exr(&filepath, &self.timestamp, *resolution)?
                     }
                     MeasurementKind::Ndf => {
-                        let ndf = self.measured.downcast::<MeasuredNdfData>().unwrap();
+                        let ndf = self.measured.downcast_ref::<MeasuredNdfData>().unwrap();
                         ndf.write_as_exr(&filepath, &self.timestamp, *resolution)?
                     }
                     MeasurementKind::Msf => {
                         todo!("Writing MSF to EXR is not supported yet.");
                     }
                     MeasurementKind::Sdf => {
-                        let sdf = self.measured.downcast::<MeasuredSdfData>().unwrap();
+                        let sdf = self.measured.downcast_ref::<MeasuredSdfData>().unwrap();
                         sdf.write_histogram_as_exr(&filepath, &self.timestamp, *resolution)?;
                     }
                     _ => {}

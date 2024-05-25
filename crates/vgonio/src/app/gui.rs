@@ -633,7 +633,7 @@ impl VgonioGuiApp {
                                     });
                                     let bsdf = measured[0]
                                         .measured
-                                        .downcast::<MeasuredBsdfData>()
+                                        .downcast_ref::<MeasuredBsdfData>()
                                         .unwrap();
                                     self.dbg_drawing_state.update_ray_trajectories(
                                         &self.gpu_ctx,

@@ -17,6 +17,7 @@ use base::{
     partition::SphericalPartition,
     units::Nanometres,
 };
+use chrono::{DateTime, Local};
 use jabr::array::DyArr;
 use std::{borrow::Cow, collections::HashMap, ops::Index, path::Path};
 
@@ -60,6 +61,11 @@ impl VgonioBrdfParameterisation {
 ///
 /// Sampled BRDF data has three dimensions: ωi, ωo, λ.
 pub type VgonioBrdf = MeasuredBrdf<VgonioBrdfParameterisation, 3>;
+
+unsafe impl Send for VgonioBrdf {}
+unsafe impl Sync for VgonioBrdf {}
+
+// TODO: extract the common code to save data carried on the hemisphere to exr.
 
 impl VgonioBrdf {
     /// Creates a new VGonio BRDF. The BRDF is parameterised in the incident
@@ -116,12 +122,16 @@ impl VgonioBrdf {
     }
 
     #[cfg(feature = "exr")]
-    pub fn write_as_exr(&self, filepath: &Path, resolution: u32) -> Result<(), VgonioError> {
+    pub fn write_as_exr(
+        &self,
+        filepath: &Path,
+        timestamp: &DateTime<Local>,
+        resolution: u32,
+    ) -> Result<(), VgonioError> {
         use exr::prelude::*;
         let n_wi = self.params.incoming.len();
         let n_spectrum = self.spectrum.len();
         let (w, h) = (resolution as usize, resolution as usize);
-        let timestamp = chrono::Local::now();
 
         // The BSDF data is stored in a single flat row-major array, with the order of
         // the dimensions [wi, λ, y, x] where x is the width, y is the height, λ is the

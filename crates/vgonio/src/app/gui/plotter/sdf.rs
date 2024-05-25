@@ -60,7 +60,7 @@ impl SlopeDistributionExtra {
     /// Generates the curves of the slope distribution function estimated from
     /// the measured data according to the azimuth and zenith bin sizes.
     fn generate_curves(&mut self, measured: &Measurement) {
-        let sdf = measured.measured.downcast::<MeasuredSdfData>().unwrap();
+        let sdf = measured.measured.downcast_ref::<MeasuredSdfData>().unwrap();
         self.curves.clear();
         let pmf = sdf.pmf(self.azi_range.step_size, self.zen_range.step_size);
         for azi_idx in 0..pmf.azi_bin_count {

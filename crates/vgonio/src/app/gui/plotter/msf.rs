@@ -76,7 +76,10 @@ impl VariantData for MaskingShadowingExtra {
             MeasurementKind::Msf,
             "Wrong measurement kind!"
         );
-        let msf = measurement.measured.downcast::<MeasuredMsfData>().unwrap();
+        let msf = measurement
+            .measured
+            .downcast_ref::<MeasuredMsfData>()
+            .unwrap();
         let (azimuth, zenith) = msf.measurement_range();
         self.azimuth_range = azimuth;
         self.zenith_range = zenith;

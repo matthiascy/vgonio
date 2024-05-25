@@ -546,7 +546,7 @@ impl PlottingWidget for PlotInspector {
                             let measurement = cache.get_measurement(self.data_handle).unwrap();
                             measurement
                                 .measured
-                                .downcast::<MeasuredNdfData>()
+                                .downcast_ref::<MeasuredNdfData>()
                                 .unwrap()
                                 .zenith_range()
                                 .unwrap()
@@ -701,7 +701,7 @@ impl PlottingWidget for PlotInspector {
                             let measurement = cache.get_measurement(self.data_handle).unwrap();
                             measurement
                                 .measured
-                                .downcast::<MeasuredMsfData>()
+                                .downcast_ref::<MeasuredMsfData>()
                                 .unwrap()
                                 .params
                                 .zenith

@@ -4,7 +4,7 @@ use crate::{
 };
 use base::{
     error::VgonioError,
-    math,
+    impl_measured_data_trait, math,
     math::{Mat4, Vec3},
     range::RangeByStepSizeInclusive,
     units::Radians,
@@ -17,7 +17,7 @@ use gfxkit::{
     render_pass::{tex_fmt_bpp, RenderPass},
     texture::Texture,
 };
-use std::{any::Any, path::Path};
+use std::path::Path;
 use surf::MicroSurface;
 use wgpu::{util::DeviceExt, ColorTargetState};
 
@@ -1361,13 +1361,7 @@ pub struct MeasuredMsfData {
     pub samples: Box<[f32]>,
 }
 
-impl MeasuredData for MeasuredMsfData {
-    fn kind(&self) -> MeasurementKind { MeasurementKind::Msf }
-
-    fn as_any(&self) -> &dyn Any { self }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any { self }
-}
+impl_measured_data_trait!(MeasuredMsfData, Msf);
 
 impl MeasuredMsfData {
     // TODO: review the necessity of this method.

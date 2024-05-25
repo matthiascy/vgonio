@@ -7,7 +7,7 @@ use crate::{
 };
 use base::{
     error::VgonioError,
-    math,
+    impl_measured_data_trait, math,
     math::{Sph2, Vec3Swizzles},
     partition::{SphericalDomain, SphericalPartition},
     range::RangeByStepSizeInclusive,
@@ -15,7 +15,7 @@ use base::{
     units::{rad, Radians},
     MeasurementKind,
 };
-use std::{any::Any, borrow::Cow, path::Path};
+use std::{borrow::Cow, path::Path};
 use surf::{MicroSurface, MicroSurfaceMesh};
 
 /// Structure holding the data for microfacet area distribution measurement.
@@ -40,15 +40,7 @@ pub struct MeasuredNdfData {
     pub samples: Box<[f32]>,
 }
 
-// pub type MeasuredNdf = MeasuredData2<NdfMeasurementParams>;
-
-impl MeasuredData for MeasuredNdfData {
-    fn kind(&self) -> MeasurementKind { MeasurementKind::Ndf }
-
-    fn as_any(&self) -> &dyn Any { self }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any { self }
-}
+impl_measured_data_trait!(MeasuredNdfData, Ndf);
 
 impl MeasuredNdfData {
     /// Writes the measured data as an EXR file.

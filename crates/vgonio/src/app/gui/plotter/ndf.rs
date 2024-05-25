@@ -104,7 +104,10 @@ impl AreaDistributionExtra {
 impl VariantData for AreaDistributionExtra {
     fn pre_process(&mut self, data: Handle<Measurement>, cache: &RawCache) {
         let measurement = cache.get_measurement(data).unwrap();
-        let ndf = measurement.measured.downcast::<MeasuredNdfData>().unwrap();
+        let ndf = measurement
+            .measured
+            .downcast_ref::<MeasuredNdfData>()
+            .unwrap();
         let (azimuth, zenith) = ndf.measurement_range().unwrap();
         self.azimuth_range = azimuth;
         self.zenith_range = zenith;

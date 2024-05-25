@@ -127,7 +127,8 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     model.family(),
                     model.params()[0],
                 ));
-                brdf.write_as_exr(&output, 512).unwrap();
+                brdf.write_as_exr(&output, &chrono::Local::now(), 512)
+                    .unwrap();
             }
         } else {
             if opts.olaf {
@@ -152,7 +153,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             .get_measurement(measured)
                             .unwrap()
                             .measured
-                            .downcast::<MeasuredBsdfData>()
+                            .downcast_ref::<MeasuredBsdfData>()
                             .unwrap();
                         let level = MeasuredBrdfLevel(opts.level);
                         #[cfg(debug_assertions)]
@@ -189,7 +190,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             .get_measurement(olaf)
                             .unwrap()
                             .measured
-                            .downcast::<ClausenBrdf>()
+                            .downcast_ref::<ClausenBrdf>()
                             .unwrap();
                         let dense = if std::env::var("DENSE")
                             .ok()
@@ -212,9 +213,9 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         .load_micro_surface_measurement(&config, &input)
                         .unwrap();
                     let measured = &cache.get_measurement(measurement).unwrap().measured;
-                    match measured.downcast::<MeasuredBsdfData>() {
+                    match measured.downcast_ref::<MeasuredBsdfData>() {
                         None => {
-                            let brdf = measured.downcast::<ClausenBrdf>().unwrap();
+                            let brdf = measured.downcast_ref::<ClausenBrdf>().unwrap();
                             measured_brdf_fitting(opts.method, &input, brdf, &opts, alpha, &cache);
                         }
                         Some(brdfs) => {
@@ -270,7 +271,7 @@ fn brdf_fitting_brute_force<F: AnalyticalFit>(
     }
 }
 
-fn measured_brdf_fitting<F: AnalyticalFit>(
+fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
     method: FittingMethod,
     filepath: &PathBuf,
     brdf: &F,
@@ -295,7 +296,7 @@ fn measured_brdf_fitting<F: AnalyticalFit>(
     }
 }
 
-fn brdf_fitting_nonlin_lsq<F: AnalyticalFit>(
+fn brdf_fitting_nonlin_lsq<F: AnalyticalFit + Sync>(
     brdf: &F,
     opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,

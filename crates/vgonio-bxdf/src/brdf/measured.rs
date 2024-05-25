@@ -1,4 +1,4 @@
-use base::{medium::Medium, units::Nanometres, MeasuredData};
+use base::{medium::Medium, units::Nanometres};
 use jabr::array::DyArr;
 use std::fmt::Debug;
 
@@ -8,18 +8,33 @@ use base::{math, optics::ior::RefractiveIndexRegistry, ErrorMetric};
 #[cfg(feature = "fitting")]
 macro_rules! impl_analytical_fit_trait {
     ($self:ident) => {
+        #[inline]
         fn spectrum(&$self) -> &[Nanometres] { $self.spectrum.as_ref() }
 
+        #[inline]
         fn samples(&$self) -> &[f32] { $self.samples.as_ref() }
 
+        #[inline]
         fn params(&$self) -> &Self::Params { &$self.params }
 
+        #[inline]
         fn incident_medium(&$self) -> Medium {
             $self.incident_medium
         }
 
+        #[inline]
         fn transmitted_medium(&$self) -> Medium {
             $self.transmitted_medium
+        }
+
+        #[inline]
+        fn as_any(&$self) -> &dyn std::any::Any {
+            $self
+        }
+
+        #[inline]
+        fn as_any_mut(&mut $self) -> &mut dyn std::any::Any {
+            $self
         }
     };
 }
@@ -77,7 +92,6 @@ pub enum MeasuredBrdfKind {
 pub trait AnalyticalFit {
     type Params: BrdfParameterisation;
 
-    #[inline]
     fn kind(&self) -> MeasuredBrdfKind;
 
     /// Creates a new analytical BRDF with the same parameterisation as the
@@ -89,7 +103,9 @@ pub trait AnalyticalFit {
         params: &Self::Params,
         model: &dyn Bxdf<Params = [f64; 2]>,
         iors: &RefractiveIndexRegistry,
-    ) -> Self;
+    ) -> Self
+    where
+        Self: Sized;
 
     /// Creates a new analytical BRDF based on the parameterisation of the
     /// measured BRDF (self).
@@ -112,7 +128,10 @@ pub trait AnalyticalFit {
     }
 
     /// Returns the distance between two BRDFs.
-    fn distance(&self, other: &Self, metric: ErrorMetric) -> f64 {
+    fn distance(&self, other: &Self, metric: ErrorMetric) -> f64
+    where
+        Self: Sized,
+    {
         assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
         if self.params() != other.params() {
             panic!("Parameterisations must be the same!");
@@ -142,6 +161,10 @@ pub trait AnalyticalFit {
     fn incident_medium(&self) -> Medium;
 
     fn transmitted_medium(&self) -> Medium;
+
+    fn as_any(&self) -> &dyn std::any::Any;
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
 }
 
 /// A BRDF measured either in the real world or in a simulation.

@@ -47,13 +47,13 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         .get_measurement(simulated_hdl)
                         .unwrap()
                         .measured
-                        .downcast::<MeasuredBsdfData>()
+                        .downcast_ref::<MeasuredBsdfData>()
                         .unwrap();
                     let olaf = cache
                         .get_measurement(measured_hdl)
                         .unwrap()
                         .measured
-                        .downcast::<ClausenBrdf>()
+                        .downcast_ref::<ClausenBrdf>()
                         .expect("Expected BSDF measured by Olaf");
                     let dense = if std::env::var("DENSE")
                         .ok()

@@ -5,7 +5,7 @@ use crate::{
     measure::{
         bsdf::{
             rtc::RayTrajectory, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
-            SimulationResultPoint,
+            SigleSimulationResult,
         },
         params::BsdfMeasurementParams,
     },
@@ -195,10 +195,9 @@ impl Receiver {
     /// [`BsdfSnapshotRaw`].
     pub fn collect(
         &self,
-        result: SimulationResultPoint,
-        // collected: &mut CollectedData<'_>,
-        out_trajs: *mut Vec<RayTrajectory>,
-        out_hpnts: *mut Vec<Vec3>,
+        result: SigleSimulationResult,
+        #[cfg(any(feature = "visu-dbg", debug_assertions))] out_trajs: *mut Vec<RayTrajectory>,
+        #[cfg(any(feature = "visu-dbg", debug_assertions))] out_hpnts: *mut Vec<Vec3>,
         out_stats: *mut BsdfMeasurementStatsPoint,
         out_records: &mut [MaybeUninit<BounceAndEnergy>],
         orbit_radius: f32,

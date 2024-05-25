@@ -5,7 +5,7 @@ use crate::{
     measure::bsdf::{
         emitter::Emitter,
         rtc::{LastHit, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
-        SimulationResultPoint,
+        SigleSimulationResult,
     },
 };
 use base::{
@@ -154,7 +154,7 @@ fn intersect_filter_stream<'a>(
 pub fn simulate_bsdf_measurement<'a>(
     emitter: &'a Emitter,
     mesh: &'a MicroSurfaceMesh,
-) -> Box<dyn Iterator<Item = SimulationResultPoint> + 'a> {
+) -> Box<dyn Iterator<Item = SigleSimulationResult> + 'a> {
     #[cfg(feature = "bench")]
     let t = std::time::Instant::now();
 
@@ -205,7 +205,7 @@ fn simulate_bsdf_measurement_single_point(
     mesh: &MicroSurfaceMesh,
     geometry: Arc<Geometry>,
     scene: &Scene,
-) -> SimulationResultPoint {
+) -> SigleSimulationResult {
     println!(
         "      {}>{} Emit rays from {}",
         ansi::BRIGHT_YELLOW,
@@ -356,7 +356,7 @@ fn simulate_bsdf_measurement_single_point(
         .flat_map(|d| d.trajectory)
         .collect::<Vec<_>>();
 
-    SimulationResultPoint {
+    SigleSimulationResult {
         wi: w_i,
         trajectories,
     }

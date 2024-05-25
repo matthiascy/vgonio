@@ -257,7 +257,7 @@ impl VgonioGui {
                                         .get_measurement(*data)
                                         .unwrap()
                                         .measured
-                                        .downcast::<MeasuredBsdfData>()
+                                        .downcast_ref::<MeasuredBsdfData>()
                                         .unwrap();
                                     let problem = MicrofacetBrdfFittingProblem::new(
                                         measured_brdf_data.brdf_at(L0).unwrap(),
@@ -290,10 +290,16 @@ impl VgonioGui {
                             );
                             let data = match measurement.measured.kind() {
                                 MeasurementKind::Msf => MfdFittingData::Msf(
-                                    measurement.measured.downcast::<MeasuredMsfData>().unwrap(),
+                                    measurement
+                                        .measured
+                                        .downcast_ref::<MeasuredMsfData>()
+                                        .unwrap(),
                                 ),
                                 MeasurementKind::Ndf => MfdFittingData::Ndf(
-                                    measurement.measured.downcast::<MeasuredNdfData>().unwrap(),
+                                    measurement
+                                        .measured
+                                        .downcast_ref::<MeasuredNdfData>()
+                                        .unwrap(),
                                 ),
                                 _ => {
                                     log::error!(

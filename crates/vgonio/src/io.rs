@@ -67,19 +67,19 @@ pub mod vgmo {
     pub fn vgmo_header_ext_from_data(data: &Box<dyn MeasuredData>) -> VgmoHeaderExt {
         match data.kind() {
             MeasurementKind::Bsdf => {
-                let bsdf = data.downcast::<MeasuredBsdfData>().unwrap();
+                let bsdf = data.downcast_ref::<MeasuredBsdfData>().unwrap();
                 VgmoHeaderExt::Bsdf {
                     params: bsdf.params.clone(),
                 }
             }
             MeasurementKind::Ndf => {
-                let ndf = data.downcast::<MeasuredNdfData>().unwrap();
+                let ndf = data.downcast_ref::<MeasuredNdfData>().unwrap();
                 VgmoHeaderExt::Ndf {
                     params: ndf.params.clone(),
                 }
             }
             MeasurementKind::Msf => {
-                let msf = data.downcast::<MeasuredMsfData>().unwrap();
+                let msf = data.downcast_ref::<MeasuredMsfData>().unwrap();
                 VgmoHeaderExt::Gaf {
                     params: msf.params.clone(),
                 }
@@ -260,7 +260,7 @@ pub mod vgmo {
             mfd @ (MeasurementKind::Ndf | MeasurementKind::Msf) => {
                 let (samples, cols) = match mfd {
                     MeasurementKind::Ndf => {
-                        let ndf = measured.downcast::<MeasuredNdfData>().unwrap();
+                        let ndf = measured.downcast_ref::<MeasuredNdfData>().unwrap();
                         let cols = match &ndf.params.mode {
                             NdfMeasurementMode::ByPoints { zenith, .. } => {
                                 zenith.step_count_wrapped()
@@ -272,7 +272,7 @@ pub mod vgmo {
                         (&ndf.samples, cols)
                     }
                     MeasurementKind::Msf => {
-                        let msf = measured.downcast::<MeasuredMsfData>().unwrap();
+                        let msf = measured.downcast_ref::<MeasuredMsfData>().unwrap();
                         (&msf.samples, msf.params.zenith.step_count_wrapped())
                     }
                     _ => {
@@ -292,11 +292,11 @@ pub mod vgmo {
                 .map_err(WriteFileErrorKind::Write)?;
             }
             MeasurementKind::Bsdf => {
-                let bsdf = measured.downcast::<MeasuredBsdfData>().unwrap();
+                let bsdf = measured.downcast_ref::<MeasuredBsdfData>().unwrap();
                 bsdf.write_to_vgmo(writer, header.meta.encoding, header.meta.compression)?;
             }
             MeasurementKind::Sdf => {
-                let sdf = measured.downcast::<MeasuredSdfData>().unwrap();
+                let sdf = measured.downcast_ref::<MeasuredSdfData>().unwrap();
                 writer.write(&(sdf.slopes.len() as u32).to_le_bytes())?;
                 let samples = unsafe {
                     std::slice::from_raw_parts(

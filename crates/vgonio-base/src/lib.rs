@@ -185,7 +185,7 @@ pub trait MeasuredData: Debug {
 
 impl dyn MeasuredData {
     /// Downcasts the measurement data to the concrete type.
-    pub fn downcast<T>(&self) -> Option<&T>
+    pub fn downcast_ref<T>(&self) -> Option<&T>
     where
         T: MeasuredData + 'static,
     {
@@ -199,6 +199,20 @@ impl dyn MeasuredData {
     {
         self.as_any_mut().downcast_mut()
     }
+}
+
+#[macro_export]
+/// Boilerplate macro for implementing the `MeasuredData` trait for a type.
+macro_rules! impl_measured_data_trait {
+    ($t:ty, $kind:ident) => {
+        impl MeasuredData for $t {
+            fn kind(&self) -> MeasurementKind { MeasurementKind::$kind }
+
+            fn as_any(&self) -> &dyn std::any::Any { self }
+
+            fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
+        }
+    };
 }
 
 /// Kind of different measurements.

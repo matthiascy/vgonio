@@ -4,13 +4,13 @@ use crate::{
 };
 use base::{
     error::VgonioError,
-    math,
+    impl_measured_data_trait, math,
     math::{IVec2, Vec2},
     range::RangeByStepSizeInclusive,
     units::{rad, Radians},
     MeasurementKind,
 };
-use std::{any::Any, borrow::Cow, path::Path};
+use std::{borrow::Cow, path::Path};
 use surf::MicroSurface;
 
 /// Slope of the microfacet normal, i.e. the normal of the microfacet in the
@@ -26,13 +26,7 @@ pub struct MeasuredSdfData {
     pub slopes: Box<[Slope2]>,
 }
 
-impl MeasuredData for MeasuredSdfData {
-    fn kind(&self) -> MeasurementKind { MeasurementKind::Sdf }
-
-    fn as_any(&self) -> &dyn Any { self }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any { self }
-}
+impl_measured_data_trait!(MeasuredSdfData, Sdf);
 
 /// Data of the slope distribution function (SDF) of a microsurface.
 pub struct SdfPmf {

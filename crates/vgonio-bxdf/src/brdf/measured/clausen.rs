@@ -12,6 +12,7 @@ use crate::{
 };
 use base::{
     error::VgonioError,
+    impl_measured_data_trait,
     math::Sph2,
     medium::Medium,
     optics::ior::RefractiveIndexRegistry,
@@ -20,7 +21,6 @@ use base::{
 };
 use jabr::array::DyArr;
 use std::{
-    any::Any,
     fs::File,
     io::{BufRead, BufReader},
     path::Path,
@@ -83,13 +83,10 @@ impl ClausenBrdfParameterisation {
 /// BRDF samples are stored in a 3D array with dimensions: ωi, ωo, λ.
 pub type ClausenBrdf = MeasuredBrdf<ClausenBrdfParameterisation, 3>;
 
-impl MeasuredData for ClausenBrdf {
-    fn kind(&self) -> MeasurementKind { MeasurementKind::Bsdf }
+unsafe impl Send for ClausenBrdf {}
+unsafe impl Sync for ClausenBrdf {}
 
-    fn as_any(&self) -> &dyn Any { self }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any { self }
-}
+impl_measured_data_trait!(ClausenBrdf, Bsdf);
 
 impl ClausenBrdf {
     /// Creates a new Clausen BRDF. The BRDF is parameterised in the incident
