@@ -364,10 +364,12 @@ impl<E: HeaderExt> Header<E> {
         writer.write_all(&self.meta.version.as_u32().to_le_bytes())?;
         writer.write_all(&self.meta.length.to_le_bytes())?;
         writer.write_all(&self.meta.timestamp)?;
-        writer.write_all(&[self.meta.sample_size])?;
-        writer.write_all(&[self.meta.encoding as u8])?;
-        writer.write_all(&[self.meta.compression as u8])?;
-        writer.write_all(&[0u8; 1])?; // padding
+        writer.write_all(&[
+            self.meta.sample_size,
+            self.meta.encoding as u8,
+            self.meta.compression as u8,
+            0u8, // padding
+        ])?;
         self.extra.write(self.meta.version, writer)?;
         log::debug!(
             "Finished writing header to file, ending at position {:?}, buffer len: {}",

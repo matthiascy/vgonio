@@ -396,7 +396,9 @@ impl Receiver {
 
         unsafe {
             out_stats.write(stats);
+            #[cfg(any(feature = "visu-dbg", debug_assertions))]
             out_trajs.write(result.trajectories);
+            #[cfg(any(feature = "visu-dbg", debug_assertions))]
             out_hpnts.write(hit_points);
         }
     }

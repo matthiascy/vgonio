@@ -67,6 +67,13 @@ pub mod vgmo {
         Sdf,
     }
 
+    /// Trait for structs that can be written to and read from VGMO files.
+    pub trait VgmoFile {
+        /// The required size of the buffer to read or write the data without
+        /// any compression.
+        const REQUIRED_SIZE: usize;
+    }
+
     /// Returns the corresponding [`VgmoHeaderExt`] variant for the given
     /// measurement data.
     pub fn vgmo_header_ext_from_data(data: &Box<dyn MeasuredData>) -> VgmoHeaderExt {
@@ -544,7 +551,7 @@ pub mod vgmo {
                     buf[12..16].copy_from_slice(&self.precision.phi.value().to_le_bytes());
                     buf[16..20].copy_from_slice(&(partition.n_rings() as u32).to_le_bytes());
                     buf[20..24].copy_from_slice(&(partition.n_patches() as u32).to_le_bytes());
-                    let offset = required_size;
+                    let offset = 24;
                     for (i, ring) in partition.rings.iter().enumerate() {
                         ring.write_to_buf(&mut buf[offset + i * Ring::REQUIRED_SIZE..]);
                     }
@@ -681,7 +688,7 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => {
-                    8 + EmitterParams::required_size(version).unwrap()
+                    11 + EmitterParams::required_size(version).unwrap()
                         + ReceiverParams::required_size(version, self.receiver.num_rings()).unwrap()
                 }
                 _ => {
@@ -694,9 +701,13 @@ pub mod vgmo {
             self.incident_medium.write_to_buf(&mut buf[1..4]);
             self.transmitted_medium.write_to_buf(&mut buf[4..7]);
             buf[7] = self.sim_kind.as_u8();
-            let n_written = self.emitter.write_to_buf(version, &mut buf[8..]);
+            buf[8] = self.fresnel as u8;
+            // buf[9/10] are padding bytes
+
+            let n_written = self.emitter.write_to_buf(version, &mut buf[11..]);
+            log::debug!("Written {} bytes for emitter", n_written);
             self.receiver
-                .write_to_buf(version, &mut buf[n_written + 8..]);
+                .write_to_buf(version, &mut buf[n_written + 11..]);
             writer.write_all(&buf)
         }
     }
@@ -1067,7 +1078,9 @@ pub mod vgmo {
                         records.assume_init(),
                     ),
                     stats: DyArr::from_boxed_slice_1d(stats.assume_init()),
+                    #[cfg(any(feature = "visu-dbg", debug_assertions))]
                     trajectories: Box::new([]),
+                    #[cfg(any(feature = "visu-dbg", debug_assertions))]
                     hit_points: Box::new([]),
                 }
             })
