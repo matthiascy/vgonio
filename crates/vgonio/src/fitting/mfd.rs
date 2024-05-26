@@ -18,7 +18,9 @@ use std::fmt::Display;
 /// Enum representing the measured microfacet distribution related data on which
 /// the fitting procedure is based.
 pub enum MfdFittingData<'a> {
+    /// The measured NDF data.
     Ndf(&'a MeasuredNdfData),
+    /// The measured MSF data.
     Msf(&'a MeasuredMsfData),
 }
 

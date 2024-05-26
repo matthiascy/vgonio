@@ -8,14 +8,14 @@ use egui::Widget;
 #[derive(Debug)]
 pub struct AdfMeasurementTab {
     pub params: NdfMeasurementParams,
-    event_loop: EventLoopProxy,
+    _event_loop: EventLoopProxy,
 }
 
 impl AdfMeasurementTab {
     pub fn new(event_loop: EventLoopProxy) -> Self {
         Self {
             params: NdfMeasurementParams::default(),
-            event_loop,
+            _event_loop: event_loop,
         }
     }
 

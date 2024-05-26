@@ -5,14 +5,14 @@ use crate::{
 
 pub struct MsfMeasurementTab {
     pub params: MsfMeasurementParams,
-    event_loop: EventLoopProxy,
+    _event_loop: EventLoopProxy,
 }
 
 impl MsfMeasurementTab {
     pub fn new(event_loop: EventLoopProxy) -> Self {
         Self {
             params: MsfMeasurementParams::default(),
-            event_loop,
+            _event_loop: event_loop,
         }
     }
 

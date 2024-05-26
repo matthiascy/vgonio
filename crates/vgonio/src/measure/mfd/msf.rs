@@ -58,13 +58,13 @@ pub struct VisibilityEstimator {
     /// Number of measurement points.
     num_measurement_points: u32,
 
-    /// Color attachments used to compute the ratio of visible projected area
+    /// Colour attachments used to compute the ratio of visible projected area
     /// over the whole area of all visible facets at each measurement point.
-    /// Each color attachment is a 2D texture array with one layer per
-    /// measurement point. 1st color attachment is used to store the visible
-    /// projected area (area of visible facets respecting each other), 2nd
-    /// color attachment is used to store the whole area of all visible
-    /// facets.
+    /// Each colour attachment is a 2D texture array with one layer per
+    /// measurement point. The first colour attachment is used to store the
+    /// visible projected area (area of visible facets respecting each
+    /// other), the second colour attachment is used to store the whole area of
+    /// all visible facets.
     color_attachments: [ColorAttachment; 2],
 
     /// Depth buffers of all micro-facets at all possible measurement points.
@@ -1145,9 +1145,6 @@ impl ColorAttachment {
         }
     }
 
-    /// Number of layers in total.
-    pub fn layers(&self) -> u32 { self.layers }
-
     /// Returns the texture view of the specified layer of the whole attachment.
     pub fn layer_view(&self, layer: u32) -> &wgpu::TextureView {
         assert!(layer < self.layers, "Layer index out of range");
@@ -1347,6 +1344,7 @@ impl MeasurementPoint {
 /// incident direction i and the outgoing direction o.
 ///
 /// The Smith microfacet masking-shadowing function is defined as:
+///
 /// G(i, o, m) = G1(i, m) * G1(o, m)
 ///
 /// This structure holds the data for G1(i, m).
@@ -1366,8 +1364,8 @@ impl_measured_data_trait!(MeasuredMsfData, Msf);
 impl MeasuredMsfData {
     // TODO: review the necessity of this method.
     /// Returns the measurement range of the azimuthal and zenith angles.
-    /// The azimuthal angle is in the range [0, 2π] and the zenith angle is in
-    /// the range [0, π/2].
+    /// The azimuthal angle is in the range 0 ~ 2π, and the zenith angle is in
+    /// the range 0 ~ π/2.
     pub fn measurement_range(
         &self,
     ) -> (

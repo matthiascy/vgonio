@@ -80,6 +80,8 @@ pub struct RawBsdfSnapshotIterator<'a> {
     idx: usize,
 }
 
+/// A snapshot of the raw measured BSDF data at a given incident direction of
+/// the emitter.
 pub struct RawBsdfSnapshot<'a> {
     /// The incident direction of the snapshot.
     pub wi: Sph2,
@@ -127,19 +129,24 @@ impl ExactSizeIterator for RawBsdfSnapshotIterator<'_> {
 }
 
 impl RawMeasuredBsdfData {
+    /// Returns the iterator over the snapshots of the raw measured BSDF data.
     pub fn snapshots(&self) -> RawBsdfSnapshotIterator {
         RawBsdfSnapshotIterator { data: self, idx: 0 }
     }
 
+    /// Returns the number of incident directions.
     #[inline]
     pub fn n_wi(&self) -> usize { self.incoming.len() }
 
+    /// Returns the number of outgoing directions.
     #[inline]
     pub fn n_wo(&self) -> usize { self.outgoing.n_patches() }
 
+    /// Returns the number of wavelengths.
     #[inline]
     pub fn n_spectrum(&self) -> usize { self.spectrum.len() }
 
+    /// Computes the BSDF data from the raw data.
     pub fn compute_bsdfs(
         &self,
         medium_i: Medium,
@@ -198,6 +205,7 @@ impl RawMeasuredBsdfData {
     }
 }
 
+/// The level of the measured BRDF.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct MeasuredBrdfLevel(pub u32);
 
@@ -224,6 +232,7 @@ pub struct MeasuredBsdfData {
 impl_measured_data_trait!(MeasuredBsdfData, Bsdf);
 
 impl MeasuredBsdfData {
+    /// Returns the number of wavelengths.
     #[inline]
     pub fn n_spectrum(&self) -> usize { self.raw.n_spectrum() }
 
@@ -859,26 +868,26 @@ impl MeasuredBsdfData {
     }
 }
 
-pub(crate) fn compute_bsdf_snapshots_max_values(
-    snapshots: &[BsdfSnapshot],
-    n_wavelength: usize,
-) -> Box<[f32]> {
-    let n_wi = snapshots.len();
-    let mut max_values = vec![0.0; n_wi * n_wavelength].into_boxed_slice();
-    snapshots.iter().enumerate().for_each(|(i, snapshot)| {
-        let offset = i * n_wavelength;
-        snapshot
-            .samples
-            .as_slice()
-            .chunks(n_wavelength)
-            .for_each(|patch_samples| {
-                patch_samples.iter().enumerate().for_each(|(j, val)| {
-                    max_values[offset + j] = f32::max(max_values[offset + j], *val);
-                });
-            });
-    });
-    max_values
-}
+// pub(crate) fn compute_bsdf_snapshots_max_values(
+//     snapshots: &[BsdfSnapshot],
+//     n_wavelength: usize,
+// ) -> Box<[f32]> {
+//     let n_wi = snapshots.len();
+//     let mut max_values = vec![0.0; n_wi * n_wavelength].into_boxed_slice();
+//     snapshots.iter().enumerate().for_each(|(i, snapshot)| {
+//         let offset = i * n_wavelength;
+//         snapshot
+//             .samples
+//             .as_slice()
+//             .chunks(n_wavelength)
+//             .for_each(|patch_samples| {
+//                 patch_samples.iter().enumerate().for_each(|(j, val)| {
+//                     max_values[offset + j] = f32::max(max_values[offset + j],
+// *val);                 });
+//             });
+//     });
+//     max_values
+// }
 
 #[cfg(test)]
 mod tests {
@@ -889,8 +898,6 @@ mod tests {
     use base::{
         medium::Medium, partition::SphericalDomain, range::RangeByStepSizeInclusive, units::nm,
     };
-    use bxdf::brdf::measured::MeasuredBrdf;
-    use jabr::array::DynArr;
 
     #[test]
     fn test_measured_bsdf_sample() {
@@ -932,7 +939,6 @@ mod tests {
                     domain: SphericalDomain::Upper,
                     precision,
                     scheme: PartitionScheme::Beckers,
-                    retrieval: Default::default(),
                 },
                 kind: BsdfKind::Brdf,
                 sim_kind: SimulationKind::GeomOptics(Grid),
@@ -1215,65 +1221,6 @@ impl Debug for BsdfMeasurementStatsPoint {
             self.energy_per_bounce
         )
     }
-}
-
-/// A snapshot of the BSDF during the measurement.
-///  
-/// This is the data collected at a single incident direction of the emitter.
-///
-/// It contains the statistics of the measurement and the data collected
-/// for all the patches of the collector at the incident direction.
-#[derive(Clone)]
-pub struct BsdfSnapshotRaw<D>
-where
-    D: PerPatchData,
-{
-    /// Incident direction in the unit spherical coordinates.
-    pub wi: Sph2,
-    /// Statistics of the measurement at the point.
-    pub stats: BsdfMeasurementStatsPoint,
-    /// A list of data collected for each patch of the collector.
-    /// The data is stored as a flat array in row-major order with the
-    /// dimensions (patch, wavelength).
-    pub records: Box<[D]>,
-    /// Extra ray trajectory data for debugging purposes.
-    #[cfg(any(feature = "visu-dbg", debug_assertions))]
-    pub trajectories: Vec<RayTrajectory>,
-    /// Hit points on the collector.
-    #[cfg(any(feature = "visu-dbg", debug_assertions))]
-    pub hit_points: Box<[Vec3]>,
-}
-
-impl<D: Debug + PerPatchData> Debug for BsdfSnapshotRaw<D> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BsdfMeasurementPoint")
-            .field("stats", &self.stats)
-            .field("data", &self.records)
-            .finish()
-    }
-}
-
-impl<D: PerPatchData + PartialEq> PartialEq for BsdfSnapshotRaw<D> {
-    fn eq(&self, other: &Self) -> bool {
-        self.stats == other.stats && self.records == other.records
-    }
-}
-
-/// A snapshot of the measured BSDF at a single incident direction.
-#[derive(Debug, Clone, PartialEq)]
-pub struct BsdfSnapshot {
-    /// Incident direction in the unit spherical coordinates.
-    pub wi: Sph2,
-    /// BSDF values for each patch of the collector and each wavelength.
-    /// Two-dimensional data (patch, wavelength) (ωo, λ) stored in a flat array
-    /// in row-major order.
-    pub samples: DyArr<f32, 2>,
-    #[cfg(any(feature = "visu-dbg", debug_assertions))]
-    /// Extra ray trajectory data for debugging purposes.
-    pub trajectories: Vec<RayTrajectory>,
-    #[cfg(any(feature = "visu-dbg", debug_assertions))]
-    /// Hit points on the collector for debugging purposes.
-    pub hit_points: Box<[Vec3]>,
 }
 
 /// Ray tracing simulation result for a single incident direction of a surface.

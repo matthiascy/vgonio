@@ -1,5 +1,4 @@
 use crate::{
-    app::cache::RawCache,
     fitting::{FittingProblem, FittingReport},
     measure::bsdf::MeasuredBrdfLevel,
 };
@@ -42,10 +41,6 @@ pub struct MicrofacetBrdfFittingProblem<'a, P: BrdfParameterisation> {
     /// The refractive indices of the transmitted medium at the measured
     /// wavelengths.
     pub iors_t: Box<[Ior]>,
-    /// The refractive index registry.
-    // Used to retrieve the refractive indices of the incident and transmitted
-    // mediums while calculating the modelled BSDF maximum values.
-    pub iors: &'a RefractiveIndexRegistry,
     /// The initial guess for the roughness parameter.
     pub initial_guess: RangeByStepSizeInclusive<f64>,
 }
@@ -70,11 +65,10 @@ impl<'a, P: BrdfParameterisation> MicrofacetBrdfFittingProblem<'a, P> {
         target: MicrofacetDistroKind,
         initial: RangeByStepSizeInclusive<f64>,
         level: MeasuredBrdfLevel, // temporarily only one level is supported
-        cache: &'a RawCache,
+        iors: &'a RefractiveIndexRegistry,
     ) -> Self {
         let spectrum = measured.spectrum();
-        let iors_i = cache
-            .iors
+        let iors_i = iors
             .ior_of_spectrum(measured.incident_medium(), &spectrum)
             .unwrap_or_else(|| {
                 panic!(
@@ -82,8 +76,7 @@ impl<'a, P: BrdfParameterisation> MicrofacetBrdfFittingProblem<'a, P> {
                     measured.incident_medium()
                 )
             });
-        let iors_t = cache
-            .iors
+        let iors_t = iors
             .ior_of_spectrum(measured.transmitted_medium(), &spectrum)
             .unwrap_or_else(|| {
                 panic!(
@@ -97,7 +90,6 @@ impl<'a, P: BrdfParameterisation> MicrofacetBrdfFittingProblem<'a, P> {
             level,
             iors_i,
             iors_t,
-            iors: &cache.iors,
             initial_guess: initial,
         }
     }
@@ -136,9 +128,7 @@ macro_rules! switch_isotropy {
                     $brdf_params_ty,
                     $brdf_ty,
                     { Isotropy::Isotropic },
-                >::new(
-                    $brdf, $model, $self.iors, &$self.iors_i, &$self.iors_t
-                );
+                >::new($brdf, $model, &$self.iors_i, &$self.iors_t);
                 let (result, report) = $solver.minimize(problem);
                 (result.model, report)
             }
@@ -147,9 +137,7 @@ macro_rules! switch_isotropy {
                     $brdf_params_ty,
                     $brdf_ty,
                     { Isotropy::Anisotropic },
-                >::new(
-                    $brdf, $model, $self.iors, &$self.iors_i, &$self.iors_t
-                );
+                >::new($brdf, $model, &$self.iors_i, &$self.iors_t);
                 let (result, report) = $solver.minimize(problem);
                 (result.model, report)
             }
@@ -183,7 +171,7 @@ impl<'a, P: BrdfParameterisation> FittingProblem for MicrofacetBrdfFittingProble
                             .downcast_ref::<ClausenBrdf>()
                             .unwrap();
                         let problem = BrdfFittingProblemProxy::<ClausenBrdfParameterisation, ClausenBrdf, { Isotropy::Isotropic }>::new(
-                            brdf, model, self.iors, &self.iors_i, &self.iors_t
+                            brdf, model, &self.iors_i, &self.iors_t
                         );
                         let (result, report) = solver.minimize(problem);
                         (result.model, report)
@@ -234,8 +222,6 @@ where
     measured: &'a M,
     /// The target BSDF model.
     model: Box<dyn Bxdf<Params = [f64; 2]>>,
-    /// The refractive index registry.
-    iors: &'a RefractiveIndexRegistry,
     /// The refractive indices of the incident medium at the measured
     /// wavelengths.
     iors_i: &'a [Ior],
@@ -246,6 +232,7 @@ where
     cache: Box<dyn Any>,
 }
 
+/// The cache for the V-gonio BRDF fitting problem.
 pub struct VgonioBrdfFittingCache {
     /// Incident directions in cartesian coordinates.
     wis: DyArr<Vec3>,
@@ -257,7 +244,6 @@ impl<'a, const I: Isotropy> BrdfFittingProblemProxy<'a, VgonioBrdfParameterisati
     pub fn new(
         measured: &'a VgonioBrdf,
         model: Box<dyn Bxdf<Params = [f64; 2]>>,
-        iors: &'a RefractiveIndexRegistry,
         iors_i: &'a [Ior],
         iors_t: &'a [Ior],
     ) -> Self {
@@ -268,7 +254,6 @@ impl<'a, const I: Isotropy> BrdfFittingProblemProxy<'a, VgonioBrdfParameterisati
         Self {
             measured,
             model,
-            iors,
             iors_i,
             iors_t,
             cache: Box::new(cache),
@@ -426,14 +411,12 @@ impl<'a, const I: Isotropy>
     pub fn new(
         measured: &'a ClausenBrdf,
         model: Box<dyn Bxdf<Params = [f64; 2]>>,
-        iors: &'a RefractiveIndexRegistry,
         iors_i: &'a [Ior],
         iors_t: &'a [Ior],
     ) -> Self {
         Self {
             measured,
             model,
-            iors,
             iors_i,
             iors_t,
             cache: Box::new(()),

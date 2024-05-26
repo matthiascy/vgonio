@@ -384,6 +384,7 @@ enum CurveKind {
 
 /// Inspector for microfacet distribution function.
 pub struct MicrofacetDistributionPlotter {}
+/// Inspector for BxDF.
 pub struct BxdfPlotter {}
 
 impl PlottingWidget for PlotInspector {

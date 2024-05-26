@@ -102,6 +102,7 @@ impl FittedModel {
         }
     }
 
+    /// Returns the scaling factor applied to the measured NDF.
     pub fn scale(&self) -> Option<f32> {
         match self {
             FittedModel::Ndf(_, scale) => Some(*scale),

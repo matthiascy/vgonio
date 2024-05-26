@@ -17,7 +17,6 @@ type: !bsdf
       theta: 2.0 deg
       phi: 0.5 deg # only for equal-angle scheme
     scheme: beckers
-    retrieval: bsdf-only # full-data # / bsdf-only
 surfaces:
   - usr://surfaces/olaf/aluminium65bar100.vgms
   - usr://surfaces/olaf/aluminium4bar100.vgms

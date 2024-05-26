@@ -26,8 +26,8 @@ pub mod vgmo {
     use crate::measure::{
         bsdf::{
             emitter::EmitterParams,
-            receiver::{BounceAndEnergy, DataRetrieval, ReceiverParams},
-            BsdfKind, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
+            receiver::{BounceAndEnergy, ReceiverParams},
+            BsdfKind, BsdfMeasurementStatsPoint, MeasuredBrdfLevel, RawMeasuredBsdfData,
         },
         mfd::MeasuredSdfData,
         params::{
@@ -36,6 +36,7 @@ pub mod vgmo {
         },
     };
     use base::{
+        io,
         io::{
             CompressionScheme, FileEncoding, Header, HeaderExt, ReadFileErrorKind,
             VgonioFileVariant, WriteFileErrorKind,
@@ -47,10 +48,14 @@ pub mod vgmo {
         units::{rad, Nanometres, Radians},
         MeasuredData, MeasurementKind, Version,
     };
+    use bxdf::brdf::measured::{Origin, VgonioBrdf, VgonioBrdfParameterisation};
     use jabr::array::DyArr;
     use std::{
+        collections::HashMap,
         io::{BufWriter, Seek},
         mem,
+        mem::MaybeUninit,
+        ptr,
     };
 
     /// The VGMO header extension.
@@ -238,7 +243,6 @@ pub mod vgmo {
         }
     }
 
-    // TODO: write partitioned adf data
     /// Writes the given measurement data to the given writer.
     pub fn write<W: Write + Seek>(
         writer: &mut BufWriter<W>,
@@ -266,7 +270,7 @@ pub mod vgmo {
                                 zenith.step_count_wrapped()
                             }
                             NdfMeasurementMode::ByPartition { .. } => {
-                                unimplemented!()
+                                todo!("Partitioned ADF data")
                             }
                         };
                         (&ndf.samples, cols)
@@ -353,28 +357,6 @@ pub mod vgmo {
         } else {
             zenith_step_count * azimuth_step_count * zenith_step_count * azimuth_step_count
         }
-    }
-
-    fn read_adf_or_msf_params_from_vgmo<R: Read>(
-        reader: &mut BufReader<R>,
-        is_adf: bool,
-    ) -> Result<
-        (
-            RangeByStepSizeInclusive<Radians>,
-            RangeByStepSizeInclusive<Radians>,
-        ),
-        std::io::Error,
-    > {
-        let mut buf = [0u8; 36];
-        reader.read_exact(&mut buf)?;
-        let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[0..16]);
-        let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[16..32]);
-        let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
-        debug_assert_eq!(
-            sample_count as usize,
-            madf_or_mmsf_samples_count(&azimuth, &zenith, is_adf)
-        );
-        Ok((azimuth, zenith))
     }
 
     /// Writes the ADF and MSF measurement parameters to the VGMO file.
@@ -479,7 +461,7 @@ pub mod vgmo {
                     major: 0,
                     minor: 1,
                     patch: 0,
-                } => Some(num_rings * Ring::REQUIRED_SIZE + 28),
+                } => Some(num_rings * Ring::REQUIRED_SIZE + 24),
                 _ => None,
             }
         }
@@ -496,7 +478,7 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => {
-                    let mut buf = [0u8; 28];
+                    let mut buf = [0u8; 24];
                     reader.read_exact(&mut buf).unwrap();
                     let domain = match u32::from_le_bytes(buf[0..4].try_into().unwrap()) {
                         0 => SphericalDomain::Whole,
@@ -511,14 +493,10 @@ pub mod vgmo {
                     };
                     let precision_theta = rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
                     let precision_phi = rad!(f32::from_le_bytes(buf[12..16].try_into().unwrap()));
-                    let retrieval = DataRetrieval::from(u32::from_le_bytes(
-                        buf[24..28].try_into().unwrap(),
-                    ) as u8);
                     let params = ReceiverParams {
                         domain,
                         precision: Sph2::new(precision_theta, precision_phi),
                         scheme,
-                        retrieval,
                     };
                     let expected_num_rings = params.num_rings();
                     let num_rings = u32::from_le_bytes(buf[16..20].try_into().unwrap()) as usize;
@@ -566,8 +544,7 @@ pub mod vgmo {
                     buf[12..16].copy_from_slice(&self.precision.phi.value().to_le_bytes());
                     buf[16..20].copy_from_slice(&(partition.n_rings() as u32).to_le_bytes());
                     buf[20..24].copy_from_slice(&(partition.n_patches() as u32).to_le_bytes());
-                    buf[24..28].copy_from_slice(&(self.retrieval as u32).to_le_bytes());
-                    let offset = 28;
+                    let offset = required_size;
                     for (i, ring) in partition.rings.iter().enumerate() {
                         ring.write_to_buf(&mut buf[offset + i * Ring::REQUIRED_SIZE..]);
                     }
@@ -764,15 +741,15 @@ pub mod vgmo {
 
     /// Writes the given slice to the buffer in little-endian format.
     pub fn write_slice_to_buf<T: EndianWrite>(src: &[T], dst: &mut [u8]) {
-        let SIZE: usize = mem::size_of::<T>();
+        let size: usize = mem::size_of::<T>();
         debug_assert!(
-            dst.len() >= src.len() * SIZE,
+            dst.len() >= src.len() * size,
             "Write array to buffer: desired size {}, got {}",
-            src.len() * SIZE,
+            src.len() * size,
             dst.len()
         );
         for i in 0..src.len() {
-            src[i].write_le_bytes(&mut dst[i * SIZE..(i + 1) * SIZE]);
+            src[i].write_le_bytes(&mut dst[i * size..(i + 1) * size]);
         }
     }
 
@@ -785,16 +762,16 @@ pub mod vgmo {
     /// * `dst` - The destination slice to write to.
     #[track_caller]
     pub fn read_slice_from_buf<T: EndianRead>(src: &[u8], dst: &mut [T], len: usize) {
-        let SIZE: usize = mem::size_of::<T>();
+        let size: usize = mem::size_of::<T>();
         assert_eq!(
             src.len(),
-            len * SIZE,
+            len * size,
             "Buffer size mismatch, expected {} bytes, got {}",
-            len * SIZE,
+            len * size,
             src.len()
         );
         for i in 0..len {
-            dst[i] = <T>::read_le_bytes(&src[i * SIZE..(i + 1) * SIZE]);
+            dst[i] = <T>::read_le_bytes(&src[i * size..(i + 1) * size]);
         }
     }
 
@@ -810,9 +787,9 @@ pub mod vgmo {
         pub fn write<W: Write>(
             &self,
             writer: &mut BufWriter<W>,
-            n_wavelength: usize,
+            n_spectrum: usize,
         ) -> Result<(), std::io::Error> {
-            let size = Self::size_in_bytes(n_wavelength, self.n_bounce as usize);
+            let size = Self::size_in_bytes(n_spectrum, self.n_bounce as usize);
             let mut buf = vec![0u8; size].into_boxed_slice();
             let mut offset_in_bytes = 0;
             buf[offset_in_bytes..offset_in_bytes + 4].copy_from_slice(&self.n_bounce.to_le_bytes());
@@ -824,16 +801,16 @@ pub mod vgmo {
             // Write n_absorbed, n_reflected, n_captured per wavelength
             write_slice_to_buf::<u32>(
                 &self.n_ray_stats,
-                &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_wavelength * 3],
+                &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_spectrum * 3],
             );
-            offset_in_bytes += 4 * n_wavelength * 3;
+            offset_in_bytes += 4 * n_spectrum * 3;
 
             // Write the energy captured per wavelength
             write_slice_to_buf(
                 &self.e_captured,
-                &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_wavelength],
+                &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_spectrum],
             );
-            offset_in_bytes += 4 * n_wavelength;
+            offset_in_bytes += 4 * n_spectrum;
 
             // Write the number of rays per bounce for each wavelength
             self.n_ray_per_bounce.iter().for_each(|val| {
@@ -851,58 +828,57 @@ pub mod vgmo {
 
         /// Reads the BSDF measurement statistics at a single point from the
         /// buffer.
-        pub fn read<R: Read>(reader: &mut R, n_wavelength: usize) -> Result<Self, std::io::Error> {
+        pub fn read<R: Read>(reader: &mut R, n_spectrum: usize) -> Result<Self, std::io::Error> {
             let mut buf = [0u8; 4];
             reader.read_exact(&mut buf)?;
             let n_bounce = u32::from_le_bytes(buf);
             reader.read_exact(&mut buf)?;
             let n_received = u32::from_le_bytes(buf);
 
-            let mut buf =
-                vec![0u8; 4 * n_wavelength * 4 + 4 * n_wavelength * n_bounce as usize * 2];
+            let mut buf = vec![0u8; 4 * n_spectrum * 4 + 4 * n_spectrum * n_bounce as usize * 2];
             reader.read_exact(&mut buf)?;
 
             let mut offset = 0;
-            let mut n_rays_stats = vec![0u32; n_wavelength * 3].into_boxed_slice();
+            let mut n_rays_stats = vec![0u32; n_spectrum * 3].into_boxed_slice();
             let n_ray_stats_size = 4 * n_rays_stats.len();
             read_slice_from_buf::<u32>(
                 &buf[offset..n_ray_stats_size],
                 &mut n_rays_stats,
-                n_wavelength * 3,
+                n_spectrum * 3,
             );
             offset += n_ray_stats_size;
 
-            let mut e_captured = vec![0f32; n_wavelength].into_boxed_slice();
+            let mut e_captured = vec![0f32; n_spectrum].into_boxed_slice();
             let e_captured_size = 4 * e_captured.len();
             read_slice_from_buf::<f32>(
                 &buf[offset..offset + e_captured_size],
                 &mut e_captured,
-                n_wavelength,
+                n_spectrum,
             );
             offset += e_captured_size;
 
             let mut n_ray_per_bounce =
-                vec![0u32; n_wavelength * n_bounce as usize].into_boxed_slice();
+                vec![0u32; n_spectrum * n_bounce as usize].into_boxed_slice();
             let n_rays_per_bounce_size = 4 * n_ray_per_bounce.len();
             read_slice_from_buf::<u32>(
                 &buf[offset..offset + n_rays_per_bounce_size],
                 &mut n_ray_per_bounce,
-                n_wavelength * n_bounce as usize,
+                n_spectrum * n_bounce as usize,
             );
             offset += n_rays_per_bounce_size;
 
             let mut energy_per_bounce =
-                vec![0f32; n_wavelength * n_bounce as usize].into_boxed_slice();
+                vec![0f32; n_spectrum * n_bounce as usize].into_boxed_slice();
             read_slice_from_buf::<f32>(
-                &buf[offset..offset + 4 * n_wavelength * n_bounce as usize],
+                &buf[offset..offset + 4 * n_spectrum * n_bounce as usize],
                 &mut energy_per_bounce,
-                n_wavelength * n_bounce as usize,
+                n_spectrum * n_bounce as usize,
             );
 
             Ok(Self {
                 n_bounce,
                 n_received,
-                n_wavelength,
+                n_wavelength: n_spectrum,
                 n_ray_stats: n_rays_stats,
                 e_captured,
                 n_ray_per_bounce,
@@ -975,169 +951,126 @@ pub mod vgmo {
         }
     }
 
-    fn read_sph2_from_buf(buf: &[u8]) -> Sph2 {
-        let theta = rad!(f32::from_le_bytes(buf[0..4].try_into().unwrap()));
-        let phi = rad!(f32::from_le_bytes(buf[4..8].try_into().unwrap()));
-        Sph2::new(theta, phi)
-    }
+    impl MeasuredBsdfData {
+        pub(crate) fn write_vgonio_brdf<W: Write>(
+            writer: &mut W,
+            level: MeasuredBrdfLevel,
+            brdf: &VgonioBrdf,
+        ) -> Result<(), std::io::Error> {
+            writer.write_all(&level.0.to_le_bytes())?;
+            io::write_binary_samples(writer, brdf.samples.as_slice())
+        }
 
-    fn write_sph2_to_buf(sph2: Sph2, buf: &mut [u8]) {
-        buf[0..4].copy_from_slice(&sph2.theta.as_f32().to_le_bytes());
-        buf[4..8].copy_from_slice(&sph2.phi.as_f32().to_le_bytes());
-    }
-
-    impl BsdfSnapshotRaw<BounceAndEnergy> {
-        /// Reads a single data point from the reader.
-        pub fn read<R: Read>(
+        pub(crate) fn read_vgonio_brdf<R: Read>(
             reader: &mut R,
-            n_wavelength: usize,
-            n_patches: usize,
-        ) -> Result<Self, std::io::Error> {
-            let mut buf = [0u8; 8];
-            reader.read_exact(&mut buf)?;
-            let w_i = read_sph2_from_buf(&buf);
-            let stats = BsdfMeasurementStatsPoint::read(reader, n_wavelength).unwrap();
-            // TODO: improve this
-            let mut records =
-                vec![BounceAndEnergy::default(); n_patches * n_wavelength].into_boxed_slice();
-            for i in 0..n_patches {
-                for j in 0..n_wavelength {
-                    records[i * n_wavelength + j] = BounceAndEnergy::read(reader)?;
+            n_wi: usize,
+            n_wo: usize,
+            n_spectrum: usize,
+            brdf: *mut VgonioBrdf,
+        ) -> Result<MeasuredBrdfLevel, ReadFileErrorKind> {
+            let level = {
+                let mut buf = [0u8; 4];
+                reader.read_exact(&mut buf)?;
+                MeasuredBrdfLevel(u32::from_le_bytes(buf))
+            };
+            let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
+            io::read_binary_samples(reader, samples.len(), samples.as_mut_slice())
+                .map_err(ReadFileErrorKind::Parse)?;
+
+            unsafe {
+                ptr::addr_of_mut!((*brdf).samples).write(samples);
+            }
+            Ok(level)
+        }
+
+        pub(crate) fn write_measured_bsdf_data<
+            'a,
+            W: Write,
+            F: Iterator<Item = (&'a MeasuredBrdfLevel, &'a VgonioBrdf)>,
+        >(
+            writer: &'a mut W,
+            brdfs: F,
+        ) -> Result<(), std::io::Error> {
+            for (level, brdf) in brdfs {
+                Self::write_vgonio_brdf(writer, *level, brdf)?;
+            }
+            Ok(())
+        }
+
+        pub(crate) fn read_measured_bsdf_data<R: Read>(
+            reader: &mut R,
+            n_wi: usize,
+            n_wo: usize,
+            n_spectrum: usize,
+        ) -> Result<HashMap<MeasuredBrdfLevel, MaybeUninit<VgonioBrdf>>, std::io::Error> {
+            let mut brdfs = HashMap::new();
+            loop {
+                let mut brdf = MaybeUninit::<VgonioBrdf>::uninit();
+                match Self::read_vgonio_brdf(reader, n_wi, n_wo, n_spectrum, brdf.as_mut_ptr()) {
+                    Ok(level) => {
+                        brdfs.insert(level, brdf);
+                    }
+                    Err(_) => {
+                        break;
+                    }
                 }
             }
-
-            Ok(Self {
-                wi: w_i,
-                stats,
-                records,
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                trajectories: vec![],
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                hit_points: vec![].into_boxed_slice(),
-            })
+            Ok(brdfs)
         }
 
-        /// Writes a single data point to a buffer.
-        pub fn write<W: Write>(
-            &self,
-            writer: &mut BufWriter<W>,
-            n_wavelength: usize,
-        ) -> Result<(), std::io::Error> {
-            let mut buf = [0u8; 8];
-            write_sph2_to_buf(self.wi, &mut buf);
-            writer.write_all(&buf)?;
-            // Writes the stats for the current measurement point.
-            self.stats.write(writer, n_wavelength)?;
-            // Writes the collected data for each patch.
-            for samples in self.records.iter() {
-                samples.write(writer)?;
-            }
-            Ok(())
-        }
-    }
-
-    impl BsdfSnapshot {
-        /// Reads a BSDF snapshot from the given reader.
-        ///
-        /// The `samples_buf` is a buffer that is used to read the spectral
-        /// samples for all patches. It must have the size of `n_patch *
-        /// n_wavelength * 4`
-        pub fn read<R: Read>(
-            reader: &mut R,
-            n_wavelength: usize,
-            n_patch: usize,
-            samples_buf: &mut [u8],
-        ) -> Result<Self, std::io::Error> {
-            assert_eq!(
-                samples_buf.len(),
-                n_patch * n_wavelength * 4,
-                "Buffer too small"
-            );
-            let wi = {
-                let mut buf = [0u8; 8];
-                reader.read_exact(&mut buf)?;
-                read_sph2_from_buf(&buf)
-            };
-            let mut samples = DyArr::zeros([n_patch, n_wavelength]);
-            reader.read_exact(samples_buf)?;
-            read_slice_from_buf(samples_buf, samples.as_mut_slice(), n_patch * n_wavelength);
-
-            Ok(Self {
-                wi,
-                samples,
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                trajectories: vec![],
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                hit_points: vec![].into_boxed_slice(),
-            })
-        }
-
-        /// Writes a BSDF snapshot to the given writer.
-        ///
-        /// The `samples_buf` is a buffer that is used to write the spectral
-        /// samples for each patch. It must be at least `n_patch * n_wavelength
-        /// * 4` bytes.
-        pub fn write<W: Write>(
-            &self,
+        pub(crate) fn write_raw_measured_data<W: Write>(
             writer: &mut W,
-            n_wavelength: usize,
-            n_patch: usize,
-            samples_buf: &mut [u8],
+            raw: &RawMeasuredBsdfData,
         ) -> Result<(), std::io::Error> {
-            log::debug!("Writing BSDF snapshot at {}", self.wi);
-            assert_eq!(
-                samples_buf.len(),
-                n_patch * n_wavelength * 4,
-                "Writing BSDF snapshot: samples buffer too small!"
-            );
-            let mut buf = [0u8; 8];
-            buf[0..4].copy_from_slice(&self.wi.theta.as_f32().to_le_bytes());
-            buf[4..8].copy_from_slice(&self.wi.phi.as_f32().to_le_bytes());
-            writer.write_all(&buf)?;
-            write_slice_to_buf(&self.samples.as_slice(), samples_buf);
-            writer.write_all(samples_buf)
-        }
-    }
-
-    impl MeasuredBsdfData {
-        /// Writes the BSDF data to the given writer.
-        pub(crate) fn write_bsdf_snapshots<W: Write>(
-            writer: &mut W,
-            snapshots: &[BsdfSnapshot],
-            n_wavelength: usize,
-            n_patch: usize,
-        ) -> Result<(), std::io::Error> {
-            log::debug!(
-                "Writing BSDF snapshots, n_snapshot: {}, n_wavelength: {}, n_patch: {}",
-                snapshots.len(),
-                n_wavelength,
-                n_patch
-            );
-            let mut samples_buf = vec![0u8; 4 * n_patch * n_wavelength].into_boxed_slice();
-            for snapshot in snapshots {
-                snapshot.write(writer, n_wavelength, n_patch, &mut samples_buf)?;
+            let mut writer = BufWriter::new(writer);
+            // Collected data of the receiver per incident direction per
+            // outgoing(patch) direction and per wavelength: `ωi, ωo, λ`.
+            for record in raw.records.iter() {
+                record.write(&mut writer)?;
             }
-            Ok(())
+            // Writes the statistics of the measurement per incident direction
+            for stats in raw.stats.iter() {
+                stats.write(&mut writer, raw.spectrum.len())?;
+            }
+            writer.flush()
         }
 
-        pub(crate) fn read_bsdf_snapshots<R: Read>(
+        pub(crate) fn read_raw_measured_data<R: Read>(
             reader: &mut R,
-            n_wavelength: usize,
-            n_patch: usize,
-            n_snapshot: usize,
-        ) -> Result<Box<[BsdfSnapshot]>, std::io::Error> {
-            let mut snapshots = Vec::with_capacity(n_snapshot);
-            // Buffer for reading the samples for all patches and wavelengths
-            let mut samples_buf = vec![0u8; n_patch * n_wavelength * 4].into_boxed_slice();
-            for _ in 0..n_snapshot {
-                snapshots.push(BsdfSnapshot::read(
-                    reader,
-                    n_wavelength,
-                    n_patch,
-                    &mut samples_buf,
-                )?);
+            params: &BsdfMeasurementParams,
+        ) -> Result<RawMeasuredBsdfData, std::io::Error> {
+            let n_wi = params.n_wi();
+            let n_wo = params.n_wo();
+            let n_spectrum = params.n_spectrum();
+            let mut records = Box::new_uninit_slice(n_wi * n_wo * n_spectrum);
+            for record in records.iter_mut() {
+                record.write(BounceAndEnergy::read(reader)?);
             }
-            Ok(snapshots.into_boxed_slice())
+
+            let mut stats = Box::new_uninit_slice(n_wi);
+            for stat in stats.iter_mut() {
+                stat.write(BsdfMeasurementStatsPoint::read(reader, n_spectrum)?);
+            }
+
+            Ok(unsafe {
+                RawMeasuredBsdfData {
+                    spectrum: DyArr::from_iterator(
+                        [n_spectrum as isize],
+                        params.emitter.spectrum.values(),
+                    ),
+                    incoming: DyArr::from_boxed_slice_1d(
+                        params.emitter.generate_measurement_points().0,
+                    ),
+                    outgoing: params.receiver.partitioning(),
+                    records: DyArr::from_boxed_slice(
+                        [n_wi, n_wo, n_spectrum],
+                        records.assume_init(),
+                    ),
+                    stats: DyArr::from_boxed_slice_1d(stats.assume_init()),
+                    trajectories: Box::new([]),
+                    hit_points: Box::new([]),
+                }
+            })
         }
 
         /// Reads the measured BSDF data from the given reader.
@@ -1163,41 +1096,47 @@ pub mod vgmo {
                         }
                         _ => Box::new(reader),
                     };
-
-                    log::debug!(
-                        "Reading {} BSDF snapshots, n_wavelengths: {}, n_patches: {}",
-                        params.emitter.measurement_points_count(),
-                        params.emitter.spectrum.step_count(),
-                        params.receiver.num_patches(),
-                    );
-                    let snapshots = Self::read_bsdf_snapshots(
+                    let raw = Self::read_raw_measured_data(&mut decoder, params)?;
+                    let mut bsdfs = Self::read_measured_bsdf_data(
                         &mut decoder,
-                        params.emitter.spectrum.step_count(),
-                        params.receiver.num_patches(),
-                        params.emitter.measurement_points_count(),
+                        params.n_wi(),
+                        params.n_wo(),
+                        params.n_spectrum(),
                     )?;
-                    let mut raw_snapshots = None;
-                    if params.receiver.retrieval == DataRetrieval::FullData {
-                        let n_patches = params.receiver.num_patches();
-                        let snapshots = {
-                            let mut snapshots = Box::new_uninit_slice(n_patches);
-                            for i in 0..n_patches {
-                                let snapshot = BsdfSnapshotRaw::<BounceAndEnergy>::read(
-                                    &mut decoder,
-                                    params.emitter.spectrum.step_count(),
-                                    params.receiver.num_patches(),
-                                )?;
-                                snapshots[i].write(snapshot);
-                            }
-                            unsafe { snapshots.assume_init() }
-                        };
-                        raw_snapshots = Some(snapshots);
+
+                    let parameterisation = VgonioBrdfParameterisation {
+                        incoming: DyArr::from_boxed_slice_1d(
+                            params.emitter.generate_measurement_points().0,
+                        ),
+                        outgoing: params.receiver.partitioning(),
                     };
+
+                    for bsdf in bsdfs.values_mut() {
+                        let bsdf_ptr = bsdf.as_mut_ptr();
+                        unsafe {
+                            ptr::addr_of_mut!((*bsdf_ptr).origin).write(Origin::Simulated);
+                            ptr::addr_of_mut!((*bsdf_ptr).incident_medium)
+                                .write(params.incident_medium);
+                            ptr::addr_of_mut!((*bsdf_ptr).transmitted_medium)
+                                .write(params.transmitted_medium);
+                            ptr::addr_of_mut!((*bsdf_ptr).params)
+                                .write(Box::new(parameterisation.clone()));
+                            ptr::addr_of_mut!((*bsdf_ptr).spectrum).write(DyArr::from_iterator(
+                                [params.n_spectrum() as isize],
+                                params.emitter.spectrum.values(),
+                            ));
+                        }
+                    }
 
                     Ok(Self {
                         params: *params,
-                        snapshots,
-                        raw_snapshots,
+                        raw,
+                        bsdfs: unsafe {
+                            mem::transmute::<
+                                HashMap<MeasuredBrdfLevel, MaybeUninit<VgonioBrdf>>,
+                                HashMap<MeasuredBrdfLevel, VgonioBrdf>,
+                            >(bsdfs)
+                        },
                     })
                 }
             }
@@ -1214,49 +1153,27 @@ pub mod vgmo {
             if encoding == FileEncoding::Ascii {
                 return Err(WriteFileErrorKind::UnsupportedEncoding);
             }
-            let n_wavelength = self.params.emitter.spectrum.step_count();
-            let n_patch = self.params.receiver.num_patches();
             match compression {
                 CompressionScheme::None => {
-                    let before = writer.buffer().len();
-                    Self::write_bsdf_snapshots(writer, &self.snapshots, n_wavelength, n_patch)?;
-                    log::debug!(
-                        "BSDF snapshots written in {} bytes",
-                        writer.buffer().len() - before
-                    );
-                    if self.params.receiver.retrieval == DataRetrieval::FullData {
-                        // TODO: the same for zlib and gzip
-                        log::debug!("Writing raw BSDF snapshots");
-                        for snapshot in self.raw_snapshots.as_ref().unwrap().iter() {
-                            snapshot.write(writer, n_wavelength)?;
-                        }
-                    }
+                    Self::write_raw_measured_data(writer, &self.raw)?;
+                    Self::write_measured_bsdf_data(writer, self.bsdfs.iter())?;
                 }
                 CompressionScheme::Zlib => {
                     let mut zlib_encoder =
                         flate2::write::ZlibEncoder::new(vec![], flate2::Compression::default());
-                    Self::write_bsdf_snapshots(
-                        &mut zlib_encoder,
-                        &self.snapshots,
-                        n_wavelength,
-                        n_patch,
-                    )?;
+                    Self::write_raw_measured_data(&mut zlib_encoder, &self.raw)?;
+                    Self::write_measured_bsdf_data(&mut zlib_encoder, self.bsdfs.iter())?;
                     writer.write_all(&zlib_encoder.flush_finish()?)?
                 }
                 CompressionScheme::Gzip => {
                     let mut gzip_encoder =
                         flate2::write::GzEncoder::new(vec![], flate2::Compression::default());
-                    Self::write_bsdf_snapshots(
-                        &mut gzip_encoder,
-                        &self.snapshots,
-                        n_wavelength,
-                        n_patch,
-                    )?;
+                    Self::write_raw_measured_data(&mut gzip_encoder, &self.raw)?;
+                    Self::write_measured_bsdf_data(&mut gzip_encoder, self.bsdfs.iter())?;
                     writer.write_all(&gzip_encoder.finish()?)?
                 }
                 _ => {}
             }
-
             Ok(())
         }
     }
@@ -1265,8 +1182,7 @@ pub mod vgmo {
 #[cfg(test)]
 mod tests {
     use crate::measure::bsdf::{
-        receiver::BounceAndEnergy, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
-        MeasuredBsdfData,
+        receiver::BounceAndEnergy, BsdfMeasurementStatsPoint, MeasuredBsdfData,
     };
     use base::math::Sph2;
     use jabr::array::DyArr;

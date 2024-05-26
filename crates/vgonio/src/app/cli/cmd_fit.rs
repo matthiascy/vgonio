@@ -1,23 +1,17 @@
 use crate::{
-    app::{
-        cache::{Cache, RawCache},
-        cli::ansi,
-        Config,
-    },
+    app::{cache::Cache, cli::ansi, Config},
     fitting::{
         err::compute_microfacet_brdf_err, FittingProblem, FittingReport,
         MicrofacetBrdfFittingProblem,
     },
-    measure::bsdf::{
-        receiver::{DataRetrieval, ReceiverParams},
-        MeasuredBrdfLevel, MeasuredBsdfData,
-    },
+    measure::bsdf::{receiver::ReceiverParams, MeasuredBrdfLevel, MeasuredBsdfData},
     pyplot::plot_err,
 };
 use base::{
     error::VgonioError,
     math::Sph2,
     medium::Medium,
+    optics::ior::RefractiveIndexRegistry,
     partition::{PartitionScheme, SphericalDomain},
     range::RangeByStepSizeInclusive,
     units::{nm, Rads},
@@ -109,7 +103,6 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     domain: SphericalDomain::Upper,
                     precision: Sph2::new(Rads::from_degrees(2.0), Rads::from_degrees(2.0)),
                     scheme: PartitionScheme::Beckers,
-                    retrieval: DataRetrieval::BsdfOnly,
                 }
                 .partitioning(),
             };
@@ -205,7 +198,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         simulated_brdf.resample(&olaf_data.params, level, dense, Rads::ZERO)
                     };
                     log::debug!("BRDF extraction done, starting fitting.");
-                    measured_brdf_fitting(opts.method, &input[0], &brdf, &opts, alpha, &cache);
+                    measured_brdf_fitting(opts.method, &input[0], &brdf, &opts, alpha, &cache.iors);
                 }
             } else {
                 for input in &opts.inputs {
@@ -216,11 +209,25 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     match measured.downcast_ref::<MeasuredBsdfData>() {
                         None => {
                             let brdf = measured.downcast_ref::<ClausenBrdf>().unwrap();
-                            measured_brdf_fitting(opts.method, &input, brdf, &opts, alpha, &cache);
+                            measured_brdf_fitting(
+                                opts.method,
+                                &input,
+                                brdf,
+                                &opts,
+                                alpha,
+                                &cache.iors,
+                            );
                         }
                         Some(brdfs) => {
                             let brdf = brdfs.brdf_at(MeasuredBrdfLevel(opts.level)).unwrap();
-                            measured_brdf_fitting(opts.method, &input, brdf, &opts, alpha, &cache)
+                            measured_brdf_fitting(
+                                opts.method,
+                                &input,
+                                brdf,
+                                &opts,
+                                alpha,
+                                &cache.iors,
+                            )
                         }
                     }
                 }
@@ -235,13 +242,13 @@ fn brdf_fitting_brute_force<F: AnalyticalFit>(
     filepath: &PathBuf,
     opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,
-    cache: &RawCache,
+    iors: &RefractiveIndexRegistry,
 ) {
     let errs = compute_microfacet_brdf_err(
         brdf,
         opts.distro,
         alpha,
-        cache,
+        iors,
         opts.error_metric.unwrap_or(ErrorMetric::Mse),
     );
     let min_err = errs.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
@@ -277,7 +284,7 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
     brdf: &F,
     opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,
-    cache: &RawCache,
+    iors: &RefractiveIndexRegistry,
 ) {
     println!(
         "    {}>{} Fitting to model: {:?} , distro: {:?}, isotropy: {}, method: {:?}",
@@ -289,9 +296,9 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
         opts.method,
     );
     match method {
-        FittingMethod::Bruteforce => brdf_fitting_brute_force(brdf, filepath, opts, alpha, cache),
+        FittingMethod::Bruteforce => brdf_fitting_brute_force(brdf, filepath, opts, alpha, iors),
         FittingMethod::Nlls => {
-            brdf_fitting_nonlin_lsq(brdf, opts, alpha, cache).print_fitting_report()
+            brdf_fitting_nonlin_lsq(brdf, opts, alpha, iors).print_fitting_report()
         }
     }
 }
@@ -300,14 +307,14 @@ fn brdf_fitting_nonlin_lsq<F: AnalyticalFit + Sync>(
     brdf: &F,
     opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,
-    cache: &RawCache,
+    iors: &RefractiveIndexRegistry,
 ) -> FittingReport<Box<dyn Bxdf<Params = [f64; 2]>>> {
     let problem = MicrofacetBrdfFittingProblem::new(
         brdf,
         opts.distro,
         alpha,
         MeasuredBrdfLevel(opts.level),
-        cache,
+        iors,
     );
     problem.lsq_lm_fit(opts.isotropy)
 }

@@ -1,52 +1,25 @@
 //! Sensor of the virtual gonio-reflectometer.
 
 use crate::{
-    app::cache::{Handle, RawCache},
+    app::cache::RawCache,
     measure::{
-        bsdf::{
-            rtc::RayTrajectory, BsdfMeasurementStatsPoint, BsdfSnapshot, BsdfSnapshotRaw,
-            SigleSimulationResult,
-        },
+        bsdf::{rtc::RayTrajectory, BsdfMeasurementStatsPoint, SigleSimulationResult},
         params::BsdfMeasurementParams,
     },
 };
 use base::{
-    math::{rcp_f32, Sph2, Vec3, Vec3A},
+    math::{Sph2, Vec3, Vec3A},
     optics::{fresnel, ior::Ior},
     partition::{PartitionScheme, SphericalDomain, SphericalPartition},
     range::RangeByStepSizeInclusive,
     units::{Nanometres, Radians},
 };
-use jabr::array::DyArr;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
     mem::MaybeUninit,
     sync::{atomic, atomic::AtomicU32},
 };
-use surf::MicroSurface;
-
-/// Kind of data to retrieve from the simulation.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Hash, Default)]
-pub enum DataRetrieval {
-    /// The full data is collected.
-    #[serde(rename = "full-data")]
-    FullData = 0x00,
-    /// Only the BSDF values are collected.
-    #[serde(rename = "bsdf-only")]
-    #[default]
-    BsdfOnly = 0x01,
-}
-
-impl From<u8> for DataRetrieval {
-    fn from(v: u8) -> Self {
-        match v {
-            0x00 => Self::FullData,
-            0x01 => Self::BsdfOnly,
-            _ => panic!("invalid data retrieval mode"),
-        }
-    }
-}
 
 /// Description of a receiver collecting the data.
 ///
@@ -65,8 +38,6 @@ pub struct ReceiverParams {
     pub precision: Sph2,
     /// Partitioning schema of the globe.
     pub scheme: PartitionScheme,
-    /// Type of data to retrieve.
-    pub retrieval: DataRetrieval,
 }
 
 impl ReceiverParams {
@@ -431,92 +402,92 @@ impl Receiver {
     }
 }
 
-/// Collected data by the receiver for a specific micro-surface.
-///
-/// The data are collected for patches of the receiver and for each
-/// wavelength of the incident spectrum.
-#[derive(Debug, Clone)]
-pub struct CollectedData<'a> {
-    /// The micro-surface where the data were collected.
-    pub surface: Handle<MicroSurface>,
-    /// The partitioned patches of the receiver.
-    pub partition: &'a SphericalPartition,
-    /// The collected data.
-    pub snapshots: Vec<BsdfSnapshotRaw<BounceAndEnergy>>,
-}
+// /// Collected data by the receiver for a specific micro-surface.
+// ///
+// /// The data are collected for patches of the receiver and for each
+// /// wavelength of the incident spectrum.
+// #[derive(Debug, Clone)]
+// pub struct CollectedData<'a> {
+//     /// The micro-surface where the data were collected.
+//     pub surface: Handle<MicroSurface>,
+//     /// The partitioned patches of the receiver.
+//     pub partition: &'a SphericalPartition,
+//     /// The collected data.
+//     pub snapshots: Vec<BsdfSnapshotRaw<BounceAndEnergy>>,
+// }
+//
+// impl<'a> CollectedData<'a> {
+//     /// Creates an empty collected date.
+//     pub fn empty(surf: Handle<MicroSurface>, partition: &'a
+// SphericalPartition) -> Self {         Self {
+//             surface: surf,
+//             partition,
+//             snapshots: vec![],
+//         }
+//     }
 
-impl<'a> CollectedData<'a> {
-    /// Creates an empty collected date.
-    pub fn empty(surf: Handle<MicroSurface>, partition: &'a SphericalPartition) -> Self {
-        Self {
-            surface: surf,
-            partition,
-            snapshots: vec![],
-        }
-    }
-
-    /// Computes the BSDF according to the collected data.
-    ///
-    /// # Arguments
-    ///
-    /// * `params` - The parameters of the BSDF measurement.
-    ///
-    /// # Returns
-    ///
-    /// The BSDF computed from the collected data for each wavelength of the
-    /// incident spectrum. The output vector is of size equal to the number of
-    /// measurement points of the emitter times the number of patches of the
-    /// receiver.
-    pub fn compute_bsdf(&self, params: &BsdfMeasurementParams) -> Box<[BsdfSnapshot]> {
-        // For each snapshot (w_i), compute the BSDF.
-        log::info!(
-            "Computing BSDF... with {} patches",
-            params.receiver.num_patches()
-        );
-        let n_wavelength = params.emitter.spectrum.step_count();
-        let n_patch = params.receiver.num_patches();
-        self.snapshots
-            .par_iter()
-            .map(|snapshot| {
-                let mut samples = DyArr::<f32, 2>::zeros([n_patch, n_wavelength]);
-                let cos_i = snapshot.wi.theta.cos();
-                let rcp_e_i = rcp_f32(snapshot.stats.n_received as f32 * cos_i);
-                for (i, patch_data) in snapshot.records.chunks(n_wavelength).enumerate() {
-                    // Per wavelength
-                    for (j, stats) in patch_data.iter().enumerate() {
-                        let patch = self.partition.patches.get(i).unwrap();
-                        let cos_o = patch.center().theta.cos();
-                        let solid_angle = patch.solid_angle().as_f32();
-                        if cos_o != 0.0 {
-                            let l_o = stats.total_energy * rcp_f32(cos_o) * rcp_f32(solid_angle);
-                            samples[[i, j]] = l_o * rcp_e_i;
-                            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-                            log::debug!(
-                                "energy of patch {i}: {:>12.4}, λ[{j}] --  E_i: {:>12.4}, \
-                                 L_o[{i}]: {:>12.4} -- brdf: {:>14.8}",
-                                stats.total_energy,
-                                rcp_f32(rcp_e_i),
-                                l_o,
-                                samples[i * n_wavelength + j],
-                            );
-                        }
-                    }
-                }
-                // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-                // log::debug!("snapshot.samples, w_i = {:?}: {:?}", snapshot.w_i, samples);
-                BsdfSnapshot {
-                    wi: snapshot.wi,
-                    samples,
-                    #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                    trajectories: snapshot.trajectories.clone(),
-                    #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                    hit_points: snapshot.hit_points.clone(),
-                }
-            })
-            .collect::<Vec<_>>()
-            .into_boxed_slice()
-    }
-}
+// /// Computes the BSDF according to the collected data.
+// ///
+// /// # Arguments
+// ///
+// /// * `params` - The parameters of the BSDF measurement.
+// ///
+// /// # Returns
+// ///
+// /// The BSDF computed from the collected data for each wavelength of the
+// /// incident spectrum. The output vector is of size equal to the number of
+// /// measurement points of the emitter times the number of patches of the
+// /// receiver.
+// pub fn compute_bsdf(&self, params: &BsdfMeasurementParams) ->
+// Box<[BsdfSnapshot]> {     // For each snapshot (w_i), compute the BSDF.
+//     log::info!(
+//         "Computing BSDF... with {} patches",
+//         params.receiver.num_patches()
+//     );
+//     let n_wavelength = params.emitter.spectrum.step_count();
+//     let n_patch = params.receiver.num_patches();
+//     self.snapshots
+//         .par_iter()
+//         .map(|snapshot| {
+//             let mut samples = DyArr::<f32, 2>::zeros([n_patch,
+// n_wavelength]);             let cos_i = snapshot.wi.theta.cos();
+//             let rcp_e_i = rcp_f32(snapshot.stats.n_received as f32 * cos_i);
+//             for (i, patch_data) in
+// snapshot.records.chunks(n_wavelength).enumerate() {                 //
+// Per wavelength                 for (j, stats) in
+// patch_data.iter().enumerate() {                     let patch =
+// self.partition.patches.get(i).unwrap();                     let cos_o =
+// patch.center().theta.cos();                     let solid_angle =
+// patch.solid_angle().as_f32();                     if cos_o != 0.0 {
+//                         let l_o = stats.total_energy * rcp_f32(cos_o) *
+// rcp_f32(solid_angle);                         samples[[i, j]] = l_o *
+// rcp_e_i;                         #[cfg(all(debug_assertions, feature =
+// "verbose-dbg"))]                         log::debug!(
+//                             "energy of patch {i}: {:>12.4}, λ[{j}] --  E_i:
+// {:>12.4}, \                              L_o[{i}]: {:>12.4} -- brdf:
+// {:>14.8}",                             stats.total_energy,
+//                             rcp_f32(rcp_e_i),
+//                             l_o,
+//                             samples[i * n_wavelength + j],
+//                         );
+//                     }
+//                 }
+//             }
+//             // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+//             // log::debug!("snapshot.samples, w_i = {:?}: {:?}",
+// snapshot.w_i, samples);             BsdfSnapshot {
+//                 wi: snapshot.wi,
+//                 samples,
+//                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
+//                 trajectories: snapshot.trajectories.clone(),
+//                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
+//                 hit_points: snapshot.hit_points.clone(),
+//             }
+//         })
+//         .collect::<Vec<_>>()
+//         .into_boxed_slice()
+// }
+// }
 
 /// Energy after a ray is reflected by the micro-surface.
 ///

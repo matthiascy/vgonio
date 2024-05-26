@@ -264,7 +264,7 @@ impl VgonioGui {
                                         distro.unwrap(),
                                         RangeByStepSizeInclusive::new(0.001, 1.0, 0.01),
                                         L0,
-                                        cache,
+                                        &cache.iors,
                                     );
                                     problem.lsq_lm_fit(*isotropy)
                                 });

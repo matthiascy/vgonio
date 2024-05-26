@@ -21,10 +21,7 @@ use crate::{
         },
     },
     io::{OutputFileFormatOption, OutputOptions},
-    measure::{
-        bsdf::receiver::{DataRetrieval, ReceiverParams},
-        params::MeasurementParams,
-    },
+    measure::{bsdf::receiver::ReceiverParams, params::MeasurementParams},
 };
 use base::{
     io::{CompressionScheme, FileEncoding},
@@ -75,21 +72,6 @@ impl ReceiverParams {
                                 &mut self.scheme,
                                 PartitionScheme::EqualAngle,
                                 "EqualAngle",
-                            );
-                        });
-                        ui.end_row();
-
-                        ui.label("Data Retrieval:");
-                        ui.horizontal_wrapped(|ui| {
-                            ui.selectable_value(
-                                &mut self.retrieval,
-                                DataRetrieval::BsdfOnly,
-                                "BSDF Only",
-                            );
-                            ui.selectable_value(
-                                &mut self.retrieval,
-                                DataRetrieval::FullData,
-                                "Full Data",
                             );
                         });
                         ui.end_row();

@@ -483,6 +483,14 @@ fn f32_samples_to_bytes(samples: &[f32]) -> Cow<[u8]> {
 }
 
 /// Write the data samples to the given writer.
+pub fn write_binary_samples<W: Write>(
+    writer: &mut W,
+    samples: &[f32],
+) -> Result<(), std::io::Error> {
+    writer.write_all(&f32_samples_to_bytes(samples))
+}
+
+/// Write the data samples to the given writer.
 pub fn write_f32_data_samples_binary<'a, W: Write>(
     writer: &mut BufWriter<W>,
     comp: CompressionScheme,
@@ -544,10 +552,11 @@ pub fn read_f32_data_samples<R: Read>(
 }
 
 /// Reads sample values separated by whitespace line by line.
-pub fn read_ascii_samples<R>(reader: R, count: usize, samples: &mut [f32]) -> Result<(), ParseError>
-where
-    R: Read,
-{
+pub fn read_ascii_samples<R: Read>(
+    reader: R,
+    count: usize,
+    samples: &mut [f32],
+) -> Result<(), ParseError> {
     debug_assert!(
         samples.len() >= count,
         "Samples' container must be large enough to hold all samples"

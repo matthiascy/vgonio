@@ -469,6 +469,8 @@ pub fn estimate_orbit_radius(mesh: &MicroSurfaceMesh) -> f32 {
 pub fn estimate_disc_radius(mesh: &MicroSurfaceMesh) -> f32 { mesh.bounds.max_extent() * 0.7 }
 
 // TODO: unify the data sampling and the measured data.
+/// Structure for sampling the measured data.
 pub struct MeasuredDataSampler<'a> {
-    data: &'a dyn MeasuredData,
+    /// The measured data to sample from.
+    pub data: &'a dyn MeasuredData,
 }

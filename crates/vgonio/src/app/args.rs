@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
     path::PathBuf,
-    str::FromStr,
 };
 
 /// Vgonio command line interface arguments.
@@ -96,43 +95,6 @@ pub enum SubCommand {
     Diff(DiffOptions),
 
     Plot(PlotOptions),
-}
-
-/// Arguments for the `convert --resize` command.
-#[derive(Copy, Clone, Debug)]
-pub struct NewSize(pub u32, pub u32);
-
-impl FromStr for NewSize {
-    type Err = std::io::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        println!("s: {}", s);
-        let mut parts = s.trim().split_ascii_whitespace();
-        let width: u32 = parts
-            .next()
-            .ok_or(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "No input provided for new width",
-            ))?
-            .parse()
-            .map_err(|_| {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to parse new width")
-            })?;
-        let height: u32 = parts
-            .next()
-            .ok_or(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "No input provided for new height",
-            ))?
-            .parse()
-            .map_err(|_| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Failed to parse new height",
-                )
-            })?;
-        Ok(Self(width, height))
-    }
 }
 
 #[derive(clap::Args, Debug)]
