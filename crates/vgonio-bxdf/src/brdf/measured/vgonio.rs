@@ -19,7 +19,7 @@ use base::{
 };
 use chrono::{DateTime, Local};
 use jabr::array::DyArr;
-use std::{borrow::Cow, collections::HashMap, ops::Index, path::Path};
+use std::{borrow::Cow, collections::HashMap, ops::Index, path::Path, ptr};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct VgonioBrdfParameterisation {
@@ -203,8 +203,7 @@ impl VgonioBrdf {
             ));
         }
 
-        let layers = unsafe { Vec::from_raw_parts(layers.assume_init().as_mut_ptr(), n_wi, n_wi) };
-
+        let layers = unsafe { layers.assume_init().into_vec() };
         let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (w, h)));
         let image = Image::from_layers(img_attrib, layers);
         image.write().to_file(filepath).map_err(|err| {

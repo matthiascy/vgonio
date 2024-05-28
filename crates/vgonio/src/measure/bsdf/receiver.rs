@@ -181,6 +181,12 @@ impl Receiver {
         #[cfg(feature = "bench")]
         let start = std::time::Instant::now();
 
+        log::debug!(
+            "SingleSimulationResult at {}, {} rays",
+            result.wi,
+            result.trajectories.len()
+        );
+
         let (n_bounce, mut stats, dirs) = {
             let n_escaped = AtomicU32::new(0);
             let n_bounce = AtomicU32::new(0);
@@ -354,6 +360,7 @@ impl Receiver {
                         mut_patch.energy_per_bounce[bounce_idx] += e;
                         mut_patch.n_ray_per_bounce[bounce_idx] += 1;
                         stats.n_ray_per_bounce[j * n_bounce + bounce_idx] += 1;
+                        stats.n_captured_mut()[j] += 1;
                         stats.energy_per_bounce[j * n_bounce + bounce_idx] += e;
                         stats.e_captured[j] += e;
                     }
@@ -383,7 +390,7 @@ impl Receiver {
             );
         }
 
-        #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+        #[cfg(all(debug_assertions))]
         log::debug!("stats: {:?}", stats);
 
         #[cfg(feature = "bench")]

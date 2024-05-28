@@ -137,15 +137,12 @@ where
 
 impl<T> Drop for DynSized<T> {
     fn drop(&mut self) {
-        let mut data = unsafe {
+        let _ = unsafe {
             Box::from_raw(std::ptr::slice_from_raw_parts_mut(
                 self.data.as_ptr(),
                 self.len,
             ))
         };
-        for elem in data.iter_mut() {
-            unsafe { std::ptr::drop_in_place(elem) };
-        }
     }
 }
 

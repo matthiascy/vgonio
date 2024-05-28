@@ -1,6 +1,5 @@
 //! Error computation for fitting measured data to a model.
 
-use crate::app::cache::RawCache;
 use base::{optics::ior::RefractiveIndexRegistry, range::RangeByStepSizeInclusive, ErrorMetric};
 use bxdf::{
     brdf::{

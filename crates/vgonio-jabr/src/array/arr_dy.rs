@@ -1,4 +1,4 @@
-use crate::array::{core::ArrCore, mem::heap::DynSized, shape::compute_n_elems, DynArr, MemLayout};
+use crate::array::{core::ArrCore, mem::heap::DynSized, shape::compute_n_elems, MemLayout};
 use num_traits::{One, Zero};
 use std::{
     fmt::Debug,

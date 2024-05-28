@@ -12,7 +12,7 @@ use crate::{
     measure::{
         bsdf::{
             emitter::Emitter,
-            receiver::{BounceAndEnergy, PerPatchData, Receiver},
+            receiver::{BounceAndEnergy, Receiver},
             rtc::{RayTrajectory, RtcMethod},
         },
         params::SimulationKind,
@@ -491,10 +491,9 @@ impl MeasuredBsdfData {
         // }
         for bsdf in &self.bsdfs {
             let filename = format!(
-                "{}_bsdf_l{}_{}.exr",
+                "{}_l{}.exr",
                 filepath.file_stem().unwrap().to_str().unwrap(),
                 bsdf.0 .0,
-                timestamp.format("%Y-%m-%dT%H-%M-%S")
             );
             bsdf.1
                 .write_as_exr(&filepath.with_file_name(filename), timestamp, resolution)?;
@@ -1316,7 +1315,6 @@ pub fn measure_bsdf_rt(
             let hpts = hit_points[i].as_mut_ptr();
 
             let recs = &mut records[i * n_wo * n_spectrum..(i + 1) * n_wo * n_spectrum];
-            let stat = stats[i].as_mut_ptr();
 
             log::debug!("Collecting BSDF snapshot at {}", sim.wi);
 
@@ -1330,7 +1328,7 @@ pub fn measure_bsdf_rt(
                 trjs,
                 #[cfg(any(feature = "visu-dbg", debug_assertions))]
                 hpts,
-                stat,
+                stats[i].as_mut_ptr(),
                 recs,
                 orbit_radius,
                 params.fresnel,
@@ -1351,7 +1349,7 @@ pub fn measure_bsdf_rt(
             incoming,
             outgoing: receiver.patches.clone(),
             records: DyArr::from_boxed_slice([n_wi, n_wo, n_spectrum], unsafe {
-                std::mem::transmute(records)
+                records.assume_init()
             }),
             stats: DyArr::from_boxed_slice([n_wi], unsafe { stats.assume_init() }),
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -1359,6 +1357,10 @@ pub fn measure_bsdf_rt(
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             hit_points: unsafe { hit_points.assume_init() },
         };
+
+        for rec in raw.records.iter() {
+            log::debug!("  - Records: {:?}", rec);
+        }
 
         // let snapshots = collected.compute_bsdf(&params);
         // let raw_snapshots = match params.receiver.retrieval {
