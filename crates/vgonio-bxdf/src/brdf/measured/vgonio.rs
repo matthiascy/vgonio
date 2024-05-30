@@ -1,9 +1,10 @@
 //! BRDF from the VGonio simulator.
+#[cfg(feature = "fitting")]
+use crate::brdf::measured::AnalyticalFit;
 use crate::{
     brdf::{
         measured::{
-            AnalyticalFit, BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin,
-            ParametrisationKind,
+            BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind,
         },
         Bxdf,
     },

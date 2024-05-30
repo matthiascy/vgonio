@@ -3,6 +3,12 @@ use crate::fitting::{
     FittedModel, FittingProblem, FittingProblemKind, MicrofacetBrdfFittingProblem,
     MicrofacetDistributionFittingProblem,
 };
+#[cfg(feature = "fitting")]
+use crate::fitting::{FittingReport, MfdFittingData};
+use crate::measure::{
+    bsdf::{MeasuredBsdfData, L0},
+    mfd::{MeasuredMsfData, MeasuredNdfData},
+};
 use crate::{
     app::{
         cache::{Cache, Handle},
@@ -24,13 +30,6 @@ use crate::{
         Config,
     },
     measure::Measurement,
-};
-use crate::{
-    fitting::{FittingReport, MfdFittingData},
-    measure::{
-        bsdf::{MeasuredBsdfData, L0},
-        mfd::{MeasuredMsfData, MeasuredNdfData},
-    },
 };
 use base::{
     io::{CompressionScheme, FileEncoding},

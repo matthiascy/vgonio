@@ -3,7 +3,7 @@
 use crate::{
     app::cache::RawCache,
     measure::{
-        bsdf::{rtc::RayTrajectory, BsdfMeasurementStatsPoint, SigleSimulationResult},
+        bsdf::{rtc::RayTrajectory, SigleSimulationResult, SingleBsdfMeasurementStats},
         params::BsdfMeasurementParams,
     },
 };
@@ -169,12 +169,12 @@ impl Receiver {
         result: SigleSimulationResult,
         #[cfg(any(feature = "visu-dbg", debug_assertions))] out_trajs: *mut Vec<RayTrajectory>,
         #[cfg(any(feature = "visu-dbg", debug_assertions))] out_hpnts: *mut Vec<Vec3>,
-        out_stats: *mut BsdfMeasurementStatsPoint,
+        out_stats: *mut SingleBsdfMeasurementStats,
         out_records: &mut [MaybeUninit<BounceAndEnergy>],
         orbit_radius: f32,
         fresnel: bool,
     ) {
-        const CHUNK_SIZE: usize = 2048;
+        const CHUNK_SIZE: usize = 4096;
         // TODO: deal with the domain of the receiver
         let n_spectrum = self.spectrum.len();
 
@@ -191,11 +191,16 @@ impl Receiver {
             let n_escaped = AtomicU32::new(0);
             let n_bounce = AtomicU32::new(0);
             let n_received = AtomicU32::new(0);
+            let n_missed = AtomicU32::new(0);
             let mut n_reflected = Vec::with_capacity(n_spectrum);
             for _ in 0..n_spectrum {
                 n_reflected.push(AtomicU32::new(0));
             }
             n_reflected.shrink_to_fit();
+
+            #[cfg(any(debug_assertions, feature = "verbose-dbg"))]
+            log::debug!("Initial trajectories count: {}", result.trajectories.len());
+
             // Convert the last rays of the trajectories into a vector located
             // at the centre of the collector.
             let dirs: Box<[OutgoingRay]> = result
@@ -209,7 +214,10 @@ impl Receiver {
                         .filter_map(|(i, trajectory)| {
                             let ray_idx = chunk_idx * CHUNK_SIZE + i;
                             match trajectory.last() {
-                                None => None,
+                                None => {
+                                    n_missed.fetch_add(1, atomic::Ordering::Relaxed);
+                                    None
+                                }
                                 Some(last) => {
                                     // 1. Get the outgoing ray direction it's the last ray of the
                                     //    trajectory.
@@ -250,26 +258,14 @@ impl Receiver {
                                         });
                                     }
 
-                                    // 3. Compute the index of the patch where the ray is collected.
-                                    let patch_idx = match self
-                                        .patches
-                                        .contains(Sph2::from_cartesian(ray_dir.into()))
-                                    {
-                                        Some(idx) => idx,
-                                        None => {
-                                            n_escaped.fetch_add(1, atomic::Ordering::Relaxed);
-                                            return None;
-                                        }
-                                    };
+                                    // 3. Update the number of received rays.
+                                    n_received.fetch_add(1, atomic::Ordering::Relaxed);
 
                                     // 4. Update the maximum number of bounces.
                                     let bounce = (trajectory.len() - 1) as u32;
                                     n_bounce.fetch_max(bounce, atomic::Ordering::Relaxed);
 
-                                    // 5. Update the number of received rays.
-                                    n_received.fetch_add(1, atomic::Ordering::Relaxed);
-
-                                    // 6. Update the number of rays reflected by the surface.
+                                    // 5. Update the number of rays reflected by the surface.
                                     for (i, energy) in energy.iter().enumerate() {
                                         match energy {
                                             Energy::Absorbed => continue,
@@ -280,15 +276,28 @@ impl Receiver {
                                         }
                                     }
 
-                                    // Returns the index of the ray, the unit vector pointing to
-                                    // the collector's surface, and the number of bounces.
-                                    Some(OutgoingRay {
-                                        ray_idx: ray_idx as u32,
-                                        ray_dir,
-                                        bounce,
-                                        energy_per_wavelength: energy,
-                                        patch_idx,
-                                    })
+                                    // 6. Compute the index of the patch where the ray is collected.
+                                    match self
+                                        .patches
+                                        .contains(Sph2::from_cartesian(ray_dir.into()))
+                                    {
+                                        Some(patch_idx) => {
+                                            // Returns the index of the ray, the unit vector
+                                            // pointing to
+                                            // the collector's surface, and the number of bounces.
+                                            Some(OutgoingRay {
+                                                ray_idx: ray_idx as u32,
+                                                ray_dir,
+                                                bounce,
+                                                energy_per_wavelength: energy,
+                                                patch_idx,
+                                            })
+                                        }
+                                        None => {
+                                            n_escaped.fetch_add(1, atomic::Ordering::Relaxed);
+                                            None
+                                        }
+                                    }
                                 }
                             }
                         })
@@ -299,9 +308,10 @@ impl Receiver {
             let n_escaped = n_escaped.load(atomic::Ordering::Relaxed);
             let n_bounce = n_bounce.load(atomic::Ordering::Relaxed) as usize;
             let n_received = n_received.load(atomic::Ordering::Relaxed);
+            let n_missed = n_missed.load(atomic::Ordering::Relaxed);
 
             // Create the statistics of the BSDF measurement for the current incident point.
-            let mut stats = BsdfMeasurementStatsPoint::new(n_spectrum, n_bounce);
+            let mut stats = SingleBsdfMeasurementStats::new(n_spectrum, n_bounce);
             stats.n_received = n_received;
 
             // Update the number of rays statistics including the number of rays absorbed
@@ -315,14 +325,15 @@ impl Receiver {
             });
 
             log::debug!(
-                "n_escaped: {}, n_received: {}, sum: {}",
-                n_escaped,
-                n_received,
-                n_escaped + n_received
+                "stats.n_received: {:?}\n                stat.n_missed:    {:?}\n                \
+                 stat.n_absorbed:  {:?}\n                stat.n_reflected: {:?}\n                \
+                 stat.n_escaped:   {:?}",
+                stats.n_received,
+                n_missed,
+                stats.n_absorbed(),
+                stats.n_reflected(),
+                n_escaped
             );
-            log::debug!("stats.n_absorbed: {:?}", stats.n_absorbed());
-            log::debug!("stats.n_reflected: {:?}", stats.n_reflected());
-            log::debug!("stats.n_received: {:?}", stats.n_received);
 
             (n_bounce, stats, dirs)
         };
@@ -369,7 +380,8 @@ impl Receiver {
 
         #[cfg(any(debug_assertions, feature = "verbose-dbg"))]
         {
-            log::debug!("n_bounce: {}", n_bounce);
+            log::debug!("stats.n_bounce: {}", n_bounce);
+            log::debug!("stats.n_capture: {:?}", stats.n_captured());
             log::debug!("captured energy per wavelength: {:?}", stats.e_captured,);
             for i in 0..n_spectrum {
                 log::debug!(

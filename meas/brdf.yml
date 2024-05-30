@@ -6,7 +6,7 @@ type: !bsdf
   transmitted_medium: al
   fresnel: true
   emitter:
-    num_rays: 1000000
+    num_rays: 10000
     max_bounces: 10
     zenith: 0deg .. =80deg / 40deg
     azimuth: 0deg .. =360deg / 180deg

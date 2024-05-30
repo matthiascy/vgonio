@@ -13,7 +13,7 @@ use crate::{
         bsdf::{
             emitter::Emitter,
             receiver::{BounceAndEnergy, Receiver},
-            rtc::{RayTrajectory, RtcMethod},
+            rtc::{compute_num_of_streams, RayTrajectory, RtcMethod},
         },
         params::SimulationKind,
         MeasuredData, Measurement, MeasurementSource,
@@ -64,7 +64,7 @@ pub struct RawMeasuredBsdfData {
     /// outgoing(patch) direction and per wavelength: `ωi, ωo, λ`.
     pub records: DyArr<BounceAndEnergy, 3>,
     /// The statistics of the measurement per incident direction.
-    pub stats: DyArr<BsdfMeasurementStatsPoint>,
+    pub stats: DyArr<SingleBsdfMeasurementStats>,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     /// Extra ray trajectory data per incident direction.
     pub trajectories: Box<[Vec<RayTrajectory>]>,
@@ -89,7 +89,7 @@ pub struct RawBsdfSnapshot<'a> {
     /// wavelength. The data is stored as `ωo, λ`.
     pub records: &'a [BounceAndEnergy],
     /// The statistics of the snapshot.
-    pub stats: &'a BsdfMeasurementStatsPoint,
+    pub stats: &'a SingleBsdfMeasurementStats,
     /// Extra ray trajectory data.
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
     pub trajectories: &'a [RayTrajectory],
@@ -951,7 +951,7 @@ mod tests {
                 outgoing: partition,
                 records: DyArr::splat(BounceAndEnergy::empty(2), [1, n_wo, n_spectrum]),
                 stats: DyArr::splat(
-                    BsdfMeasurementStatsPoint {
+                    SingleBsdfMeasurementStats {
                         n_bounce: 0,
                         n_received: 0,
                         n_wavelength: n_spectrum,
@@ -1078,7 +1078,7 @@ impl From<u8> for BsdfKind {
 
 /// BSDF measurement statistics for a single emitter's position.
 #[derive(Clone)]
-pub struct BsdfMeasurementStatsPoint {
+pub struct SingleBsdfMeasurementStats {
     /// Number of bounces (actual bounce, not always equals to the maximum
     /// bounce limit).
     pub n_bounce: u32,
@@ -1114,7 +1114,7 @@ pub struct BsdfMeasurementStatsPoint {
     pub energy_per_bounce: Box<[f32]>,
 }
 
-impl PartialEq for BsdfMeasurementStatsPoint {
+impl PartialEq for SingleBsdfMeasurementStats {
     fn eq(&self, other: &Self) -> bool {
         self.n_bounce == other.n_bounce
             && self.n_wavelength == other.n_wavelength
@@ -1126,7 +1126,7 @@ impl PartialEq for BsdfMeasurementStatsPoint {
     }
 }
 
-impl BsdfMeasurementStatsPoint {
+impl SingleBsdfMeasurementStats {
     /// Index of the number of absorbed rays statistics in the `n_ray_stats`
     /// array.
     pub const ABSORBED_IDX: usize = 0;
@@ -1192,11 +1192,11 @@ impl BsdfMeasurementStatsPoint {
     }
 }
 
-impl Default for BsdfMeasurementStatsPoint {
+impl Default for SingleBsdfMeasurementStats {
     fn default() -> Self { Self::new(0, 0) }
 }
 
-impl Debug for BsdfMeasurementStatsPoint {
+impl Debug for SingleBsdfMeasurementStats {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -1245,9 +1245,10 @@ pub fn measure_bsdf_rt(
     let n_wo = receiver.patches.n_patches();
 
     log::debug!(
-        "Measuring BSDF of {} surfaces from {} measurement points.",
+        "Measuring BSDF of {} surfaces from {} measurement points with {} rays",
         surfaces.len(),
-        emitter.measpts.len()
+        emitter.measpts.len(),
+        emitter.params.num_rays,
     );
 
     let mut measurements = Vec::with_capacity(surfaces.len());
@@ -1293,9 +1294,6 @@ pub fn measure_bsdf_rt(
         let orbit_radius = crate::measure::estimate_orbit_radius(mesh);
         log::trace!("Estimated orbit radius: {}", orbit_radius);
 
-        // let mut collected = CollectedData::empty(Handle::with_id(surf.uuid),
-        // &receiver.patches);
-
         let incoming = DyArr::<Sph2>::from_slice([n_wi], &emitter.measpts);
         let n_spectrum = params.emitter.spectrum.step_count();
 
@@ -1306,7 +1304,7 @@ pub fn measure_bsdf_rt(
 
         let mut records: Box<[MaybeUninit<BounceAndEnergy>]> =
             Box::new_uninit_slice(n_wi * n_wo * n_spectrum);
-        let mut stats: Box<[MaybeUninit<BsdfMeasurementStatsPoint>]> = Box::new_uninit_slice(n_wi);
+        let mut stats: Box<[MaybeUninit<SingleBsdfMeasurementStats>]> = Box::new_uninit_slice(n_wi);
 
         for (i, sim) in sim_results.enumerate() {
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -1316,10 +1314,17 @@ pub fn measure_bsdf_rt(
 
             let recs = &mut records[i * n_wo * n_spectrum..(i + 1) * n_wo * n_spectrum];
 
-            log::debug!("Collecting BSDF snapshot at {}", sim.wi);
-
             #[cfg(feature = "bench")]
             let t = std::time::Instant::now();
+
+            println!(
+                "        {} Collecting BSDF snapshot {}{}/{}{}...",
+                ansi::YELLOW_GT,
+                ansi::BRIGHT_CYAN,
+                i + 1,
+                n_wi,
+                ansi::RESET
+            );
 
             // Collect the tracing data into raw bsdf snapshots.
             receiver.collect(
@@ -1358,15 +1363,10 @@ pub fn measure_bsdf_rt(
             hit_points: unsafe { hit_points.assume_init() },
         };
 
+        #[cfg(debug_assertions)]
         for rec in raw.records.iter() {
             log::debug!("  - Records: {:?}", rec);
         }
-
-        // let snapshots = collected.compute_bsdf(&params);
-        // let raw_snapshots = match params.receiver.retrieval {
-        //     DataRetrieval::FullData => Some(collected.snapshots.into_boxed_slice()),
-        //     DataRetrieval::BsdfOnly => None,
-        // };
 
         let bsdfs = raw.compute_bsdfs(params.incident_medium, params.transmitted_medium);
 
@@ -1375,7 +1375,7 @@ pub fn measure_bsdf_rt(
             source: MeasurementSource::Measured(Handle::with_id(surf.uuid)),
             timestamp: chrono::Local::now(),
             measured: Box::new(MeasuredBsdfData { params, raw, bsdfs }),
-        })
+        });
     }
 
     measurements.into_boxed_slice()

@@ -1,10 +1,11 @@
 //! BRDF measured in the paper "Investigation and Simulation of Diffraction on
 //! Rough Surfaces" by O. Clausen, Y. Chen, A. Fuhrmann and R. Marroquim.
+#[cfg(feature = "fitting")]
+use crate::brdf::measured::AnalyticalFit;
 use crate::{
     brdf::{
         measured::{
-            AnalyticalFit, BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin,
-            ParametrisationKind,
+            BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind,
         },
         Bxdf,
     },

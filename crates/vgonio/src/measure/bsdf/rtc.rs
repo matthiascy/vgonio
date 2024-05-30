@@ -526,3 +526,8 @@ pub struct RayTracingResult {
     /// The hit result.
     pub hit: Hit,
 }
+
+/// Computes the number of streams required to trace the given number of rays.
+pub const fn compute_num_of_streams(num_rays: usize) -> usize {
+    (num_rays + MAX_RAY_STREAM_SIZE - 1) / MAX_RAY_STREAM_SIZE
+}

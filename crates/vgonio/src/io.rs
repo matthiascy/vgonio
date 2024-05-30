@@ -27,7 +27,7 @@ pub mod vgmo {
         bsdf::{
             emitter::EmitterParams,
             receiver::{BounceAndEnergy, ReceiverParams},
-            BsdfKind, BsdfMeasurementStatsPoint, MeasuredBrdfLevel, RawMeasuredBsdfData,
+            BsdfKind, MeasuredBrdfLevel, RawMeasuredBsdfData, SingleBsdfMeasurementStats,
         },
         mfd::MeasuredSdfData,
         params::{
@@ -786,7 +786,7 @@ pub mod vgmo {
         }
     }
 
-    impl BsdfMeasurementStatsPoint {
+    impl SingleBsdfMeasurementStats {
         /// The size of the buffer required to read/write the BSDF measurement
         /// stats point.
         pub fn size_in_bytes(n_wavelengths: usize, n_bounces: usize) -> usize {
@@ -1060,7 +1060,7 @@ pub mod vgmo {
 
             let mut stats = Box::new_uninit_slice(n_wi);
             for stat in stats.iter_mut() {
-                stat.write(BsdfMeasurementStatsPoint::read(reader, n_spectrum)?);
+                stat.write(SingleBsdfMeasurementStats::read(reader, n_spectrum)?);
             }
 
             Ok(unsafe {
@@ -1195,15 +1195,16 @@ pub mod vgmo {
 #[cfg(test)]
 mod tests {
     use crate::measure::bsdf::{
-        receiver::BounceAndEnergy, BsdfMeasurementStatsPoint, MeasuredBsdfData,
+        receiver::BounceAndEnergy, MeasuredBsdfData, RawMeasuredBsdfData,
+        SingleBsdfMeasurementStats,
     };
-    use base::math::Sph2;
+    use base::{math::Sph2, units::nm};
     use jabr::array::DyArr;
     use std::io::{BufReader, BufWriter, Cursor, Write};
 
     #[test]
     fn test_bsdf_measurement_stats_point_read_write() {
-        let data = BsdfMeasurementStatsPoint {
+        let data = SingleBsdfMeasurementStats {
             n_bounce: 3,
             n_received: 1234567,
             n_wavelength: 4,
@@ -1229,12 +1230,12 @@ mod tests {
             ]
             .into_boxed_slice(),
         };
-        let size = BsdfMeasurementStatsPoint::size_in_bytes(4, 3);
+        let size = SingleBsdfMeasurementStats::size_in_bytes(4, 3);
         let mut writer = BufWriter::with_capacity(size, vec![]);
         data.write(&mut writer, 4).unwrap();
         let buf = writer.into_inner().unwrap();
         let mut reader = BufReader::new(Cursor::new(buf));
-        let data2 = BsdfMeasurementStatsPoint::read(&mut reader, 4).unwrap();
+        let data2 = SingleBsdfMeasurementStats::read(&mut reader, 4).unwrap();
         assert_eq!(data, data2);
     }
 
@@ -1265,9 +1266,21 @@ mod tests {
     fn test_bsdf_measurement_raw_snapshot() {
         let n_wavelength = 4;
         let n_patches = 2;
+        let raw = RawMeasuredBsdfData {
+            spectrum: DyArr::from_iterator(
+                [n_wavelength as isize],
+                vec![nm!(400.0), nm!(500.0), nm!(600.0), nm!(700.0)],
+            ),
+            incoming: (),
+            outgoing: SphericalPartition {},
+            records: (),
+            stats: (),
+            trajectories: Box::new([]),
+            hit_points: Box::new([]),
+        };
         let data = BsdfSnapshotRaw::<BounceAndEnergy> {
             wi: Sph2::zero(),
-            stats: BsdfMeasurementStatsPoint {
+            stats: SingleBsdfMeasurementStats {
                 n_bounce: 3,
                 n_received: 1111,
                 n_wavelength,
