@@ -61,8 +61,8 @@ pub struct RawMeasuredBsdfData {
     /// The outgoing directions of the receiver.
     pub outgoing: SphericalPartition,
     /// Collected data of the receiver per incident direction per
-    /// outgoing(patch) direction and per wavelength: `ωi, ωo, λ`.
-    pub records: DyArr<BounceAndEnergy, 3>,
+    /// outgoing (patch) direction and per wavelength: `ωi, ωo, λ`.
+    pub records: DyArr<Option<BounceAndEnergy>, 3>,
     /// The statistics of the measurement per incident direction.
     pub stats: DyArr<SingleBsdfMeasurementStats>,
     #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -87,7 +87,7 @@ pub struct RawBsdfSnapshot<'a> {
     pub wi: Sph2,
     /// The collected data of the receiver per outgoing direction and per
     /// wavelength. The data is stored as `ωo, λ`.
-    pub records: &'a [BounceAndEnergy],
+    pub records: &'a [Option<BounceAndEnergy>],
     /// The statistics of the snapshot.
     pub stats: &'a SingleBsdfMeasurementStats,
     /// Extra ray trajectory data.
@@ -146,6 +146,15 @@ impl RawMeasuredBsdfData {
     #[inline]
     pub fn n_spectrum(&self) -> usize { self.spectrum.len() }
 
+    /// Returns maximum number of bounces.
+    pub fn max_bounces(&self) -> usize {
+        self.stats
+            .iter()
+            .map(|stats| stats.n_bounce as usize)
+            .max()
+            .unwrap()
+    }
+
     /// Computes the BSDF data from the raw data.
     pub fn compute_bsdfs(
         &self,
@@ -156,51 +165,71 @@ impl RawMeasuredBsdfData {
         let n_wo = self.n_wo();
         let n_spectrum = self.n_spectrum();
         log::info!("Computing BSDF... with {} patches", n_wo);
+        let max_bounces = self.max_bounces();
+        let mut bsdfs = HashMap::new();
         let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
-        for (i, snapshot) in self.snapshots().enumerate() {
-            let snapshot_samples =
-                &mut samples.as_mut_slice()[i * n_wo * n_spectrum..(i + 1) * n_wo * n_spectrum];
-            let cos_i = snapshot.wi.theta.cos();
-            let rcp_e_i = rcp_f32(snapshot.stats.n_received as f32 * cos_i);
-            for (j, patch_data) in snapshot.records.chunks(n_spectrum).enumerate() {
-                for (k, stats) in patch_data.iter().enumerate() {
-                    let patch = self.outgoing.patches.get(j).unwrap();
-                    let cos_o = patch.center().theta.cos();
-                    let solid_angle = patch.solid_angle().as_f32();
-                    if cos_o != 0.0 {
-                        let l_o = stats.total_energy * rcp_f32(cos_o) * rcp_f32(solid_angle);
-                        snapshot_samples[j * n_spectrum + k] = l_o * rcp_e_i;
+        for b in 0..max_bounces {
+            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+            log::debug!("Computing BSDF at bounce #{}", b);
+            let mut any_energy = false;
+            for (wi_idx, snapshot) in self.snapshots().enumerate() {
+                if snapshot.stats.n_bounce <= b as u32 {
+                    continue;
+                }
+                let snapshot_samples = &mut samples.as_mut_slice()
+                    [wi_idx * n_wo * n_spectrum..(wi_idx + 1) * n_wo * n_spectrum];
+                let cos_i = snapshot.wi.theta.cos();
+                let rcp_e_i = rcp_f32(snapshot.stats.n_received as f32 * cos_i);
+                for (wo_idx, patch_data_per_wavelength) in
+                    snapshot.records.chunks(n_spectrum).enumerate()
+                {
+                    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+                    log::debug!("  - snapshot #{i} and patch #{j}",);
+                    for (k, patch_energy) in patch_data_per_wavelength.iter().enumerate() {
+                        if patch_energy.is_none() {
+                            continue;
+                        }
+                        let patch = self.outgoing.patches.get(wo_idx).unwrap();
+                        let cos_o = patch.center().theta.cos();
+                        let solid_angle = patch.solid_angle().as_f32();
+                        let e_o = patch_energy.as_ref().unwrap().energy_per_bounce[b];
+                        if cos_o != 0.0 {
+                            let l_o = e_o * rcp_f32(cos_o) * rcp_f32(solid_angle);
+                            snapshot_samples[wo_idx * n_spectrum + k] = l_o * rcp_e_i;
+                            any_energy = true;
 
-                        #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-                        log::debug!(
-                            "energy of patch {i}: {:>12.4}, λ[{j}] --  E_i: {:>12.4}, L_o[{i}]: \
-                             {:>12.4} -- brdf: {:>14.8}",
-                            stats.total_energy,
-                            rcp_f32(rcp_e_i),
-                            l_o,
-                            samples[i * n_spectrum + j],
-                        );
+                            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+                            log::debug!(
+                                "    - energy of patch {j}: {:>12.4}, λ[{k}] --  e_i: {:>12.4}, \
+                                 L_o[{k}]: {:>12.4} -- brdf: {:>14.8}",
+                                e_o,
+                                rcp_f32(rcp_e_i),
+                                l_o,
+                                snapshot_samples[wo_idx * n_spectrum + k],
+                            );
+                        }
                     }
                 }
             }
+            if any_energy {
+                let brdf = unsafe {
+                    let mut uninit: MaybeUninit<VgonioBrdf> = MaybeUninit::uninit();
+                    uninit.as_mut_ptr().write(VgonioBrdf::new(
+                        Origin::Simulated,
+                        medium_i,
+                        medium_t,
+                        VgonioBrdfParameterisation {
+                            incoming: self.incoming.clone(),
+                            outgoing: self.outgoing.clone(),
+                        },
+                        self.spectrum.clone(),
+                        samples.clone(),
+                    ));
+                    uninit.assume_init()
+                };
+                bsdfs.insert(MeasuredBrdfLevel(b as u32), brdf);
+            }
         }
-        let brdf_l0 = unsafe {
-            let mut uninit: MaybeUninit<VgonioBrdf> = MaybeUninit::uninit();
-            uninit.as_mut_ptr().write(VgonioBrdf::new(
-                Origin::Simulated,
-                medium_i,
-                medium_t,
-                VgonioBrdfParameterisation {
-                    incoming: self.incoming.clone(),
-                    outgoing: self.outgoing.clone(),
-                },
-                self.spectrum.clone(),
-                samples,
-            ));
-            uninit.assume_init()
-        };
-        let mut bsdfs = HashMap::new();
-        bsdfs.insert(MeasuredBrdfLevel(0), brdf_l0);
         bsdfs
     }
 }
@@ -949,7 +978,7 @@ mod tests {
                 spectrum,
                 incoming: DyArr::zeros([1]),
                 outgoing: partition,
-                records: DyArr::splat(BounceAndEnergy::empty(2), [1, n_wo, n_spectrum]),
+                records: DyArr::splat(Some(BounceAndEnergy::empty(2)), [1, n_wo, n_spectrum]),
                 stats: DyArr::splat(
                     SingleBsdfMeasurementStats {
                         n_bounce: 0,
@@ -1369,8 +1398,7 @@ pub fn measure_bsdf_rt(
         #[cfg(any(feature = "visu-dbg", debug_assertions))]
         let mut hit_points: Box<[MaybeUninit<Vec<Vec3>>]> = Box::new_uninit_slice(n_wi);
 
-        let mut records: Box<[MaybeUninit<BounceAndEnergy>]> =
-            Box::new_uninit_slice(n_wi * n_wo * n_spectrum);
+        let mut records = DyArr::splat(Option::<BounceAndEnergy>::None, [n_wi, n_wo, n_spectrum]);
         let mut stats: Box<[MaybeUninit<SingleBsdfMeasurementStats>]> = Box::new_uninit_slice(n_wi);
 
         for (i, sim) in sim_results.enumerate() {
@@ -1379,7 +1407,15 @@ pub fn measure_bsdf_rt(
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             let hpts = hit_points[i].as_mut_ptr();
 
-            let recs = &mut records[i * n_wo * n_spectrum..(i + 1) * n_wo * n_spectrum];
+            println!(
+                "process bsdf snapshot {}, records range: {}-{} / {}",
+                i,
+                i * n_wo * n_spectrum,
+                (i + 1) * n_wo * n_spectrum,
+                n_wi * n_wo * n_spectrum
+            );
+            let recs =
+                &mut records.as_mut_slice()[i * n_wo * n_spectrum..(i + 1) * n_wo * n_spectrum];
 
             #[cfg(feature = "bench")]
             let t = std::time::Instant::now();
@@ -1420,20 +1456,13 @@ pub fn measure_bsdf_rt(
             spectrum: DyArr::from_iterator([-1], params.emitter.spectrum.values()),
             incoming,
             outgoing: receiver.patches.clone(),
-            records: DyArr::from_boxed_slice([n_wi, n_wo, n_spectrum], unsafe {
-                records.assume_init()
-            }),
+            records,
             stats: DyArr::from_boxed_slice([n_wi], unsafe { stats.assume_init() }),
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             trajectories: unsafe { trajectories.assume_init() },
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             hit_points: unsafe { hit_points.assume_init() },
         };
-
-        #[cfg(debug_assertions)]
-        for rec in raw.records.iter() {
-            log::debug!("  - Records: {:?}", rec);
-        }
 
         let bsdfs = raw.compute_bsdfs(params.incident_medium, params.transmitted_medium);
 

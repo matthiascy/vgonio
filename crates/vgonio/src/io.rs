@@ -908,7 +908,9 @@ pub mod vgmo {
 
     impl BounceAndEnergy {
         /// Calculates the size of a single data point in bytes.
-        pub fn size_in_bytes(n_bounces: usize) -> usize { 4 * 3 + n_bounces * 4 * 2 }
+        pub fn size_in_bytes(n_bounces: usize) -> usize {
+            mem::size_of::<u32>() + (n_bounces + 1) * 2 * mem::size_of::<f32>()
+        }
 
         /// Reads the data for one single patch.
         pub fn read<R: Read>(reader: &mut R) -> Result<Self, std::io::Error> {
@@ -917,19 +919,16 @@ pub mod vgmo {
                 reader.read_exact(&mut buf)?;
                 u32::from_le_bytes(buf)
             };
-            let size_without_n_bounces = 4 * 2 + n_bounces as usize * 4 * 2;
-            let mut buf = vec![0u8; size_without_n_bounces].into_boxed_slice();
+            let mut buf = vec![0u8; Self::size_in_bytes(n_bounces as usize) - 4].into_boxed_slice();
             reader.read_exact(&mut buf)?;
-            let total_rays = u32::from_le_bytes(buf[0..4].try_into().unwrap());
-            let total_energy = f32::from_le_bytes(buf[4..8].try_into().unwrap());
-            let mut offset = 8;
-            let mut n_ray_per_bounce = vec![0u32; n_bounces as usize].into_boxed_slice();
+            let mut offset = 0;
+            let mut n_ray_per_bounce = vec![0u32; n_bounces as usize + 1].into_boxed_slice();
             for i in 0..n_bounces as usize {
                 n_ray_per_bounce[i] =
                     u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
                 offset += 4;
             }
-            let mut energy_per_bounce = vec![0f32; n_bounces as usize].into_boxed_slice();
+            let mut energy_per_bounce = vec![0f32; n_bounces as usize + 1].into_boxed_slice();
             for i in 0..n_bounces as usize {
                 energy_per_bounce[i] =
                     f32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
@@ -937,8 +936,6 @@ pub mod vgmo {
             }
             Ok(Self {
                 n_bounce: n_bounces,
-                total_rays,
-                total_energy,
                 n_ray_per_bounce,
                 energy_per_bounce,
             })
@@ -948,15 +945,13 @@ pub mod vgmo {
         pub fn write<W: Write>(&self, writer: &mut BufWriter<W>) -> Result<(), std::io::Error> {
             let mut buf = vec![0u8; Self::size_in_bytes(self.n_bounce as usize)].into_boxed_slice();
             buf[0..4].copy_from_slice(&self.n_bounce.to_le_bytes());
-            buf[4..8].copy_from_slice(&self.total_rays.to_le_bytes());
-            buf[8..12].copy_from_slice(&self.total_energy.to_le_bytes());
-            let mut offset = 12;
-            for i in 0..self.n_bounce as usize {
-                buf[offset..offset + 4].copy_from_slice(&self.n_ray_per_bounce[i].to_le_bytes());
+            let mut offset = 4;
+            for n_ray_per_bounce in self.n_ray_per_bounce.iter() {
+                buf[offset..offset + 4].copy_from_slice(&n_ray_per_bounce.to_le_bytes());
                 offset += 4;
             }
-            for i in 0..self.n_bounce as usize {
-                buf[offset..offset + 4].copy_from_slice(&self.energy_per_bounce[i].to_le_bytes());
+            for energy_per_bounce in self.energy_per_bounce.iter() {
+                buf[offset..offset + 4].copy_from_slice(&energy_per_bounce.to_le_bytes());
                 offset += 4;
             }
             debug_assert!(
@@ -1040,57 +1035,59 @@ pub mod vgmo {
             writer: &mut W,
             raw: &RawMeasuredBsdfData,
         ) -> Result<(), std::io::Error> {
-            let mut writer = BufWriter::new(writer);
-            // Collected data of the receiver per incident direction per
-            // outgoing(patch) direction and per wavelength: `ωi, ωo, λ`.
-            for record in raw.records.iter() {
-                record.write(&mut writer)?;
-            }
-            // Writes the statistics of the measurement per incident direction
-            for stats in raw.stats.iter() {
-                stats.write(&mut writer, raw.spectrum.len())?;
-            }
-            writer.flush()
+            // let mut writer = BufWriter::new(writer);
+            // // Collected data of the receiver per incident direction per
+            // // outgoing(patch) direction and per wavelength: `ωi, ωo, λ`.
+            // for record in raw.records.iter() {
+            //     record.write(&mut writer)?;
+            // }
+            // // Writes the statistics of the measurement per incident direction
+            // for stats in raw.stats.iter() {
+            //     stats.write(&mut writer, raw.spectrum.len())?;
+            // }
+            // writer.flush()
+            todo!("Implement writing raw measured data")
         }
 
         pub(crate) fn read_raw_measured_data<R: Read>(
             reader: &mut R,
             params: &BsdfMeasurementParams,
         ) -> Result<RawMeasuredBsdfData, std::io::Error> {
-            let n_wi = params.n_wi();
-            let n_wo = params.n_wo();
-            let n_spectrum = params.n_spectrum();
-            let mut records = Box::new_uninit_slice(n_wi * n_wo * n_spectrum);
-            for record in records.iter_mut() {
-                record.write(BounceAndEnergy::read(reader)?);
-            }
-
-            let mut stats = Box::new_uninit_slice(n_wi);
-            for stat in stats.iter_mut() {
-                stat.write(SingleBsdfMeasurementStats::read(reader, n_spectrum)?);
-            }
-
-            Ok(unsafe {
-                RawMeasuredBsdfData {
-                    spectrum: DyArr::from_iterator(
-                        [n_spectrum as isize],
-                        params.emitter.spectrum.values(),
-                    ),
-                    incoming: DyArr::from_boxed_slice_1d(
-                        params.emitter.generate_measurement_points().0,
-                    ),
-                    outgoing: params.receiver.partitioning(),
-                    records: DyArr::from_boxed_slice(
-                        [n_wi, n_wo, n_spectrum],
-                        records.assume_init(),
-                    ),
-                    stats: DyArr::from_boxed_slice_1d(stats.assume_init()),
-                    #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                    trajectories: Box::new([]),
-                    #[cfg(any(feature = "visu-dbg", debug_assertions))]
-                    hit_points: Box::new([]),
-                }
-            })
+            // let n_wi = params.n_wi();
+            // let n_wo = params.n_wo();
+            // let n_spectrum = params.n_spectrum();
+            // let mut records = Box::new_uninit_slice(n_wi * n_wo * n_spectrum);
+            // for record in records.iter_mut() {
+            //     record.write(BounceAndEnergy::read(reader)?);
+            // }
+            //
+            // let mut stats = Box::new_uninit_slice(n_wi);
+            // for stat in stats.iter_mut() {
+            //     stat.write(SingleBsdfMeasurementStats::read(reader, n_spectrum)?);
+            // }
+            //
+            // Ok(unsafe {
+            //     RawMeasuredBsdfData {
+            //         spectrum: DyArr::from_iterator(
+            //             [n_spectrum as isize],
+            //             params.emitter.spectrum.values(),
+            //         ),
+            //         incoming: DyArr::from_boxed_slice_1d(
+            //             params.emitter.generate_measurement_points().0,
+            //         ),
+            //         outgoing: params.receiver.partitioning(),
+            //         records: DyArr::from_boxed_slice(
+            //             [n_wi, n_wo, n_spectrum],
+            //             records.assume_init(),
+            //         ),
+            //         stats: DyArr::from_boxed_slice_1d(stats.assume_init()),
+            //         #[cfg(any(feature = "visu-dbg", debug_assertions))]
+            //         trajectories: Box::new([]),
+            //         #[cfg(any(feature = "visu-dbg", debug_assertions))]
+            //         hit_points: Box::new([]),
+            //     }
+            // })
+            todo!("Implement reading raw measured data")
         }
 
         /// Reads the measured BSDF data from the given reader.
@@ -1251,12 +1248,10 @@ mod tests {
     fn test_bounce_and_energy_read_write() {
         let data = BounceAndEnergy {
             n_bounce: 11,
-            total_rays: 33468,
-            total_energy: 1349534.0,
-            n_ray_per_bounce: vec![210, 40, 60, 70, 80, 90, 100, 110, 120, 130, 0]
+            n_ray_per_bounce: vec![33468, 210, 40, 60, 70, 80, 90, 100, 110, 120, 130, 0]
                 .into_boxed_slice(),
             energy_per_bounce: vec![
-                20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90., 100., 110., 120.,
+                1349534.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90., 100., 110., 120.,
             ]
             .into_boxed_slice(),
         };

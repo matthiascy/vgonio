@@ -170,7 +170,7 @@ impl Receiver {
         #[cfg(any(feature = "visu-dbg", debug_assertions))] out_trajs: *mut Vec<RayTrajectory>,
         #[cfg(any(feature = "visu-dbg", debug_assertions))] out_hpnts: *mut Vec<Vec3>,
         out_stats: *mut SingleBsdfMeasurementStats,
-        out_records: &mut [MaybeUninit<BounceAndEnergy>],
+        out_records: &mut [Option<BounceAndEnergy>],
         orbit_radius: f32,
         fresnel: bool,
     ) {
@@ -354,11 +354,12 @@ impl Receiver {
                 .for_each(|(j, (energy, patch))| match energy {
                     Energy::Absorbed => {}
                     Energy::Reflected(e) => {
-                        let mut_patch = patch.write(BounceAndEnergy::empty(n_bounce));
-                        mut_patch.total_energy += e;
-                        mut_patch.total_rays += 1;
-                        mut_patch.energy_per_bounce[bounce_idx] += e;
-                        mut_patch.n_ray_per_bounce[bounce_idx] += 1;
+                        *patch = Some(BounceAndEnergy::empty(n_bounce));
+                        let mut mut_patch = patch.as_mut().unwrap();
+                        mut_patch.energy_per_bounce[0] += *e;
+                        mut_patch.n_ray_per_bounce[0] += 1;
+                        mut_patch.energy_per_bounce[bounce_idx + 1] += e;
+                        mut_patch.n_ray_per_bounce[bounce_idx + 1] += 1;
                         stats.n_ray_per_bounce[j * n_bounce + bounce_idx] += 1;
                         stats.n_captured_mut()[j] += 1;
                         stats.energy_per_bounce[j * n_bounce + bounce_idx] += e;
@@ -500,18 +501,17 @@ impl Energy {
 /// Represents the data that a patch can carry.
 pub trait PerPatchData: Sized + Clone + Send + Sync + 'static {}
 
-/// Bounce and energy of a patch.
+/// Bounce and energy of a patch for each bounce.
+///
+/// The index of the array corresponds to the bounce number starting from 1.
+/// At index 0, the data is the sum of all the bounces.
 #[derive(Debug, Clone, Default)]
 pub struct BounceAndEnergy {
     /// Maximum number of bounces of rays hitting the patch.
     pub n_bounce: u32,
-    /// Total number of rays that hit the patch.
-    pub total_rays: u32,
-    /// Total energy of rays that hit the patch.
-    pub total_energy: f32,
-    /// Number of rays hitting the patch at the given bounce.
+    /// Number of rays hitting the patch for each bounce.
     pub n_ray_per_bounce: Box<[u32]>,
-    /// Total energy of rays hitting the patch at the given bounce.
+    /// Total energy of rays hitting the patch for each bounce.
     pub energy_per_bounce: Box<[f32]>,
 }
 
@@ -520,18 +520,21 @@ impl BounceAndEnergy {
     pub fn empty(bounces: usize) -> Self {
         Self {
             n_bounce: bounces as u32,
-            n_ray_per_bounce: vec![0; bounces].into_boxed_slice(),
-            energy_per_bounce: vec![0.0; bounces].into_boxed_slice(),
-            total_energy: 0.0,
-            total_rays: 0,
+            n_ray_per_bounce: vec![0; bounces + 1].into_boxed_slice(),
+            energy_per_bounce: vec![0.0; bounces + 1].into_boxed_slice(),
         }
     }
+
+    /// Returns the total number of rays.
+    pub fn total_rays(&self) -> u32 { self.n_ray_per_bounce[0] }
+
+    /// Returns the total energy of rays.
+    pub fn total_energy(&self) -> f32 { self.energy_per_bounce[0] }
 }
 
 impl PartialEq for BounceAndEnergy {
     fn eq(&self, other: &Self) -> bool {
-        self.total_rays == other.total_rays
-            && self.total_energy == other.total_energy
+        self.n_bounce == other.n_bounce
             && self.n_ray_per_bounce == other.n_ray_per_bounce
             && self.energy_per_bounce == other.energy_per_bounce
     }

@@ -78,6 +78,12 @@ opt-level = 3
 strip = "debuginfo"
 lto = "fat"
 
+[profile.rel-with-dbg-info]
+inherits = "release"
+strip = "none"
+debug = "full"
+
+
 [profile.release.build-override]
 opt-level = 3
 codegen-units = 16

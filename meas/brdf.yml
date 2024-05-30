@@ -14,7 +14,7 @@ type: !bsdf
   receiver:
     domain: upper_hemisphere
     precision:
-      theta: 30.0 deg
+      theta: 2.0 deg
       phi: 0.5 deg # only for equal-angle scheme
     scheme: beckers
 surfaces:
