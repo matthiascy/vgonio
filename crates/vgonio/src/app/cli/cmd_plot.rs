@@ -38,7 +38,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         None,
                     ));
                 }
-                let level = MeasuredBrdfLevel(opts.level);
+                let level = MeasuredBrdfLevel::from(opts.level);
                 for input in opts.inputs.chunks(2) {
                     let simulated_hdl = cache.load_micro_surface_measurement(&config, &input[0])?;
                     // Measured by Olaf

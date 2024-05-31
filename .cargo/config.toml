@@ -1,3 +1,11 @@
+[alias]
+b = "build"
+bef = "build --features embree,fitting"
+bdbg = "build --features debug,embree,fitting,verbose-dbg"
+r = "run"
+ref = "build --features embree,fitting"
+rdbg = "build --features debug,embree,fitting,verbose-dbg"
+
 [build]
 rustc-wrapper = "sccache"
 rustdocflags = ["--html-in-header", "./misc/docs-header.html"]

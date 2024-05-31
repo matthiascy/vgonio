@@ -13,7 +13,7 @@ use crate::{
         bsdf::{
             emitter::Emitter,
             receiver::{BounceAndEnergy, Receiver},
-            rtc::{compute_num_of_streams, RayTrajectory, RtcMethod},
+            rtc::{RayTrajectory, RtcMethod},
         },
         params::SimulationKind,
         MeasuredData, Measurement, MeasurementSource,
@@ -38,7 +38,7 @@ use jabr::array::DyArr;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    fmt::{Debug, Display, Formatter},
+    fmt::{write, Debug, Display, Formatter},
     mem::MaybeUninit,
     path::Path,
 };
@@ -168,6 +168,7 @@ impl RawMeasuredBsdfData {
         let max_bounces = self.max_bounces();
         let mut bsdfs = HashMap::new();
         let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
+        let mut samples_l1_plus = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
         for b in 0..max_bounces {
             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
             log::debug!("Computing BSDF at bounce #{}", b);
@@ -178,30 +179,36 @@ impl RawMeasuredBsdfData {
                 }
                 let snapshot_samples = &mut samples.as_mut_slice()
                     [wi_idx * n_wo * n_spectrum..(wi_idx + 1) * n_wo * n_spectrum];
+                let snapshot_l1_plus = &mut samples_l1_plus.as_mut_slice()
+                    [wi_idx * n_wo * n_spectrum..(wi_idx + 1) * n_wo * n_spectrum];
                 let cos_i = snapshot.wi.theta.cos();
                 let rcp_e_i = rcp_f32(snapshot.stats.n_received as f32 * cos_i);
                 for (wo_idx, patch_data_per_wavelength) in
                     snapshot.records.chunks(n_spectrum).enumerate()
                 {
                     #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-                    log::debug!("  - snapshot #{i} and patch #{j}",);
+                    log::debug!("- snapshot #{wi_idx} and patch #{wo_idx}",);
                     for (k, patch_energy) in patch_data_per_wavelength.iter().enumerate() {
                         if patch_energy.is_none() {
                             continue;
                         }
-                        let patch = self.outgoing.patches.get(wo_idx).unwrap();
+                        let patch = &self.outgoing.patches[wo_idx];
                         let cos_o = patch.center().theta.cos();
                         let solid_angle = patch.solid_angle().as_f32();
                         let e_o = patch_energy.as_ref().unwrap().energy_per_bounce[b];
                         if cos_o != 0.0 {
                             let l_o = e_o * rcp_f32(cos_o) * rcp_f32(solid_angle);
-                            snapshot_samples[wo_idx * n_spectrum + k] = l_o * rcp_e_i;
+                            let val = l_o * rcp_e_i;
+                            snapshot_samples[wo_idx * n_spectrum + k] = val;
+                            if b > 1 {
+                                snapshot_l1_plus[wo_idx * n_spectrum + k] += val;
+                            }
                             any_energy = true;
 
                             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                             log::debug!(
-                                "    - energy of patch {j}: {:>12.4}, λ[{k}] --  e_i: {:>12.4}, \
-                                 L_o[{k}]: {:>12.4} -- brdf: {:>14.8}",
+                                "    - energy of patch {wo_idx}: {:>12.4}, λ[{k}] --  e_i: \
+                                 {:>12.4}, L_o[{k}]: {:>12.4} -- brdf: {:>14.8}",
                                 e_o,
                                 rcp_f32(rcp_e_i),
                                 l_o,
@@ -212,9 +219,9 @@ impl RawMeasuredBsdfData {
                 }
             }
             if any_energy {
-                let brdf = unsafe {
-                    let mut uninit: MaybeUninit<VgonioBrdf> = MaybeUninit::uninit();
-                    uninit.as_mut_ptr().write(VgonioBrdf::new(
+                bsdfs.insert(
+                    MeasuredBrdfLevel::from(b),
+                    VgonioBrdf::new(
                         Origin::Simulated,
                         medium_i,
                         medium_t,
@@ -224,22 +231,125 @@ impl RawMeasuredBsdfData {
                         },
                         self.spectrum.clone(),
                         samples.clone(),
-                    ));
-                    uninit.assume_init()
-                };
-                bsdfs.insert(MeasuredBrdfLevel(b as u32), brdf);
+                    ),
+                );
             }
         }
+        bsdfs.insert(
+            MeasuredBrdfLevel::L1PLUS,
+            VgonioBrdf::new(
+                Origin::Simulated,
+                medium_i,
+                medium_t,
+                VgonioBrdfParameterisation {
+                    incoming: self.incoming.clone(),
+                    outgoing: self.outgoing.clone(),
+                },
+                self.spectrum.clone(),
+                samples_l1_plus,
+            ),
+        );
         bsdfs
     }
 }
 
 /// The level of the measured BRDF.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct MeasuredBrdfLevel(pub u32);
+pub struct MeasuredBrdfLevel(u32);
 
-/// L0: energy of rays at all bounces.
-pub const L0: MeasuredBrdfLevel = MeasuredBrdfLevel(0);
+impl MeasuredBrdfLevel {
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// bounces greater than 1.
+    pub const L1PLUS: MeasuredBrdfLevel = MeasuredBrdfLevel(u32::MAX);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// all bounces.
+    pub const L0: MeasuredBrdfLevel = MeasuredBrdfLevel(0);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the first bounce.
+    pub const L1: MeasuredBrdfLevel = MeasuredBrdfLevel(1);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the second bounce.
+    pub const L2: MeasuredBrdfLevel = MeasuredBrdfLevel(2);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the third bounce.
+    pub const L3: MeasuredBrdfLevel = MeasuredBrdfLevel(3);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the fourth bounce.
+    pub const L4: MeasuredBrdfLevel = MeasuredBrdfLevel(4);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the fifth bounce.
+    pub const L5: MeasuredBrdfLevel = MeasuredBrdfLevel(5);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the sixth bounce.
+    pub const L6: MeasuredBrdfLevel = MeasuredBrdfLevel(6);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the seventh bounce.
+    pub const L7: MeasuredBrdfLevel = MeasuredBrdfLevel(7);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the eighth bounce.
+    pub const L8: MeasuredBrdfLevel = MeasuredBrdfLevel(8);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the ninth bounce.
+    pub const L9: MeasuredBrdfLevel = MeasuredBrdfLevel(9);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the tenth bounce.
+    pub const L10: MeasuredBrdfLevel = MeasuredBrdfLevel(10);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the eleventh bounce.
+    pub const L11: MeasuredBrdfLevel = MeasuredBrdfLevel(11);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the twelfth bounce.
+    pub const L12: MeasuredBrdfLevel = MeasuredBrdfLevel(12);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the thirteenth bounce.
+    pub const L13: MeasuredBrdfLevel = MeasuredBrdfLevel(13);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the fourteenth bounce.
+    pub const L14: MeasuredBrdfLevel = MeasuredBrdfLevel(14);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the fifteenth bounce.
+    pub const L15: MeasuredBrdfLevel = MeasuredBrdfLevel(15);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the sixteenth bounce.
+    pub const L16: MeasuredBrdfLevel = MeasuredBrdfLevel(16);
+
+    /// Returns the u32 representation of the level.
+    pub const fn as_u32(&self) -> u32 { self.0 }
+}
+
+impl From<usize> for MeasuredBrdfLevel {
+    fn from(n: usize) -> Self { MeasuredBrdfLevel(n as u32) }
+}
+
+impl From<u32> for MeasuredBrdfLevel {
+    fn from(n: u32) -> Self { MeasuredBrdfLevel(n) }
+}
+
+impl Display for MeasuredBrdfLevel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            u32::MAX => f.write_str("l1+"),
+            _ => write!(f, "l{}", self.0),
+        }
+    }
+}
 
 /// BSDF measurement data.
 ///
@@ -286,246 +396,13 @@ impl MeasuredBsdfData {
         timestamp: &DateTime<Local>,
         resolution: u32,
     ) -> Result<(), VgonioError> {
-        // use exr::prelude::*;
-        // let n_wi = self.snapshots.len();
-        // let n_wavelength = self.params.emitter.spectrum.step_count();
-        // let (w, h) = (resolution as usize, resolution as usize);
-        // let wavelengths = self
-        //     .params
-        //     .emitter
-        //     .spectrum
-        //     .values()
-        //     .collect::<Vec<_>>()
-        //     .into_boxed_slice();
-        //
-        // // The BSDF data are stored in a single flat row-major array, with the order
-        // of // the dimensions [wi, λ, y, x] where x is the width, y is the
-        // height, λ is the // wavelength, and wi is the incident direction.
-        // let mut bsdf_images = vec![0.0; n_wi * n_wavelength * w * h];
-        // // Pre-compute the patch index for each pixel.
-        // let mut patch_indices = vec![0i32; w * h].into_boxed_slice();
-        // let partition = self.params.receiver.partitioning();
-        // partition.compute_pixel_patch_indices(resolution, resolution, &mut
-        // patch_indices); {
-        //     // Each snapshot is saved as a separate layer of the image.
-        //     // Each channel of the layer stores the BSDF data for a single
-        // wavelength.     for (l, snapshot) in
-        // self.snapshots.iter().enumerate() {         let offset = l *
-        // n_wavelength * w * h;         for i in 0..w {
-        //             for j in 0..h {
-        //                 let idx = patch_indices[i + j * w];
-        //                 if idx < 0 {
-        //                     continue;
-        //                 }
-        //                 for k in 0..n_wavelength {
-        //                     bsdf_images[offset + k * w * h + j * w + i] =
-        //                         snapshot.samples[[idx as usize, k]];
-        //                 }
-        //             }
-        //         }
-        //     }
-        //
-        //     let layers = self
-        //         .snapshots
-        //         .iter()
-        //         .enumerate()
-        //         .map(|(snap_idx, snapshot)| {
-        //             let theta = format!("{:4.2}",
-        // snapshot.wi.theta.in_degrees().as_f32())
-        // .replace(".", "_");             let phi =
-        //                 format!("{:4.2}",
-        // snapshot.wi.phi.in_degrees().as_f32()).replace(".", "_");
-        // let layer_attrib = LayerAttributes {                 owner:
-        // Text::new_or_none("vgonio"),                 capture_date:
-        // Text::new_or_none(base::utils::iso_timestamp_from_datetime(
-        //                     timestamp,
-        //                 )),
-        //                 software_name: Text::new_or_none("vgonio"),
-        //                 other: self.params.to_exr_extra_info(),
-        //                 layer_name: Some(Text::new_or_panic(format!("θ{}.φ{}", theta,
-        // phi))),                 ..LayerAttributes::default()
-        //             };
-        //             let offset = snap_idx * w * h * wavelengths.len();
-        //             let channels = wavelengths
-        //                 .iter()
-        //                 .enumerate()
-        //                 .map(|(i, wavelength)| {
-        //                     let name = Text::new_or_panic(format!("{}", wavelength));
-        //                     AnyChannel::new(
-        //                         name,
-        //                         FlatSamples::F32(Cow::Borrowed(
-        //                             &bsdf_images[offset + i * w * h..offset + (i + 1)
-        // * w * h],                         )), ) }) .collect::<Vec<_>>(); Layer::new(
-        //   (w, h), layer_attrib, Encoding::FAST_LOSSLESS, AnyChannels { list:
-        //   SmallVec::from(channels), }, ) }) .collect::<Vec<_>>();
-        //
-        //     let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (w,
-        // h)));     let image = Image::from_layers(img_attrib, layers);
-        //     image.write().to_file(filepath).map_err(|err| {
-        //         VgonioError::new(
-        //             format!(
-        //                 "Failed to write BSDF measurement data to image file: {}",
-        //                 err
-        //             ),
-        //             Some(Box::new(err)),
-        //         )
-        //     })?;
-        // }
-        //
-        // if let Some(raw_snapshots) = &self.raw_snapshots {
-        //     log::debug!("Writing BSDF bounces measurement data to image file.");
-        //     let max_bounces = self
-        //         .raw_snapshots
-        //         .as_ref()
-        //         .map(|snapshots| {
-        //             snapshots
-        //                 .iter()
-        //                 .map(|snap| snap.stats.n_bounce)
-        //                 .max()
-        //                 .unwrap()
-        //         })
-        //         .unwrap_or(0) as usize;
-        //     if max_bounces == 0 {
-        //         log::info!("No bounces to save.");
-        //         return Ok(());
-        //     }
-        //
-        //     // Save the BSDF samples for each wavelength and each bounce.
-        //     {
-        //         let desired = n_wi * max_bounces * h * w;
-        //         if desired > bsdf_images.len() {
-        //             // Try to reuse the bsdf_images buffer with the new size.
-        //             // [wi, bounce, y, x]
-        //             bsdf_images = vec![0.0; desired];
-        //         }
-        //     }
-        //
-        //     // Save the percentage of rays that have bounced a certain number of
-        // times for     // each patch.
-        //     {
-        //         let desired = n_wi * max_bounces * h * w;
-        //         if desired > bsdf_images.len() {
-        //             // Try to reuse the bsdf_images buffer with the new size.
-        //             // [wi, bounce, y, x]
-        //             bsdf_images = vec![0.0; desired];
-        //         }
-        //         bsdf_images.fill(0.0);
-        //
-        //         // Each snapshot is saved as a separate layer of the image.
-        //         // Each channel of the layer stores the percentage of rays that have
-        // bounced a         // certain number of times.
-        //         for (snap_idx, snapshot) in raw_snapshots.iter().enumerate() {
-        //             let offset = snap_idx * max_bounces * h * w;
-        //             let rcp_n_received = rcp_f32(snapshot.stats.n_received as f32);
-        //             for i in 0..w {
-        //                 for j in 0..h {
-        //                     let patch_idx = patch_indices[i + j * w];
-        //                     if patch_idx < 0 {
-        //                         continue;
-        //                     }
-        //                     for k in 0..snapshot.stats.n_bounce as usize {
-        //                         bsdf_images[offset + k * w * h + j * w + i] =
-        // snapshot.records                             [patch_idx as usize *
-        // n_wavelength]                             .n_ray_per_bounce[k]
-        //                             as f32
-        //                             * rcp_n_received;
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //
-        //         let layers = raw_snapshots
-        //             .iter()
-        //             .enumerate()
-        //             .filter_map(|(snap_idx, snapshot)| {
-        //                 let theta = format!("{:4.2}",
-        // snapshot.wi.theta.in_degrees().as_f32())
-        // .replace(".", "_");                 let phi = format!("{:4.2}",
-        // snapshot.wi.phi.in_degrees().as_f32())
-        // .replace(".", "_");                 let offset = snap_idx *
-        // max_bounces * h * w;                 if snapshot.stats.n_bounce == 0
-        // {                     return None;
-        //                 }
-        //                 let n_bounce = snapshot.stats.n_bounce as usize;
-        //                 let (percentage_per_bounce, channels): (
-        //                     Vec<f32>,
-        //                     Vec<AnyChannel<FlatSamples>>,
-        //                 ) = (0..n_bounce)
-        //                     .map(|bounce_idx| {
-        //                         let name =
-        //                             Text::new_or_panic(format!("bounce-{:03}",
-        // bounce_idx + 1));                         let samples =
-        // &bsdf_images[offset + bounce_idx * w * h
-        // ..offset + (bounce_idx + 1) * w * h];                         // Only
-        // take the first wavelength.                         let sum_percent =
-        // snapshot.stats.n_ray_per_bounce                             [0 *
-        // n_bounce + bounce_idx]                             as f32
-        //                             / snapshot.stats.n_received as f32;
-        //                         (
-        //                             sum_percent,
-        //                             AnyChannel::new(name,
-        // FlatSamples::F32(Cow::Borrowed(samples))),                         )
-        //                     })
-        //                     .unzip();
-        //                 let mut other_info = self.params.to_exr_extra_info();
-        //                 for (i, bounce_percent) in
-        // percentage_per_bounce.iter().enumerate() {
-        // other_info.insert(
-        // Text::new_or_panic(format!("bounce-{:03}", i + 1)),
-        // AttributeValue::Text(Text::new_or_panic(format!(
-        // "{:.2}%",                             bounce_percent
-        //                         ))),
-        //                     );
-        //                 }
-        //                 let layer_attrib = LayerAttributes {
-        //                     owner: Text::new_or_none("vgonio"),
-        //                     capture_date: Text::new_or_none(
-        //                         base::utils::iso_timestamp_from_datetime(timestamp),
-        //                     ),
-        //                     software_name: Text::new_or_none("vgonio"),
-        //                     other: other_info,
-        //                     layer_name: Some(Text::new_or_panic(format!("θ{}.φ{}",
-        // theta, phi))),                     ..LayerAttributes::default()
-        //                 };
-        //                 Some(Layer::new(
-        //                     (w, h),
-        //                     layer_attrib,
-        //                     Encoding::FAST_LOSSLESS,
-        //                     AnyChannels {
-        //                         list: SmallVec::from(channels),
-        //                     },
-        //                 ))
-        //             })
-        //             .collect::<Vec<_>>();
-        //
-        //         let filename = format!(
-        //             "{}_ray_percent_per_patch_per_bounce.exr",
-        //             filepath.file_stem().unwrap().to_str().unwrap()
-        //         );
-        //         let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (w,
-        // h)));         let image = Image::from_layers(img_attrib, layers);
-        //         image
-        //             .write()
-        //             .to_file(filepath.with_file_name(filename))
-        //             .map_err(|err| {
-        //                 VgonioError::new(
-        //                     format!(
-        //                         "Failed to write BSDF bounces measurement data to
-        // image file: {}",                         err
-        //                     ),
-        //                     Some(Box::new(err)),
-        //                 )
-        //             })?;
-        //     }
-        // }
-        for bsdf in &self.bsdfs {
+        for (level, bsdf) in &self.bsdfs {
             let filename = format!(
-                "{}_l{}.exr",
+                "{}_{}.exr",
                 filepath.file_stem().unwrap().to_str().unwrap(),
-                bsdf.0 .0,
+                level
             );
-            bsdf.1
-                .write_as_exr(&filepath.with_file_name(filename), timestamp, resolution)?;
+            bsdf.write_as_exr(&filepath.with_file_name(filename), timestamp, resolution)?;
         }
         Ok(())
     }
@@ -1406,14 +1283,6 @@ pub fn measure_bsdf_rt(
             let trjs = trajectories[i].as_mut_ptr();
             #[cfg(any(feature = "visu-dbg", debug_assertions))]
             let hpts = hit_points[i].as_mut_ptr();
-
-            println!(
-                "process bsdf snapshot {}, records range: {}-{} / {}",
-                i,
-                i * n_wo * n_spectrum,
-                (i + 1) * n_wo * n_spectrum,
-                n_wi * n_wo * n_spectrum
-            );
             let recs =
                 &mut records.as_mut_slice()[i * n_wo * n_spectrum..(i + 1) * n_wo * n_spectrum];
 

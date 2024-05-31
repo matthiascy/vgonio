@@ -282,9 +282,9 @@ fn simulate_bsdf_measurement_single_point(
         .par_chunks(MAX_RAY_STREAM_SIZE)
         .zip(stream_data.par_iter_mut())
         .enumerate()
-        .for_each(|(stream_idx, (rays, data))| {
+        .for_each(|(_stream_idx, (rays, data))| {
             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-            log::trace!("stream {} of {}", stream_idx, num_streams);
+            log::trace!("stream {} of {}", _stream_idx, num_streams);
             // Populate embree ray stream with generated rays.
             let chunk_size = rays.len();
             let mut ray_hit_n = RayHitNp::new(RayNp::new(chunk_size));

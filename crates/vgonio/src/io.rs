@@ -970,7 +970,7 @@ pub mod vgmo {
             level: MeasuredBrdfLevel,
             brdf: &VgonioBrdf,
         ) -> Result<(), std::io::Error> {
-            writer.write_all(&level.0.to_le_bytes())?;
+            writer.write_all(&level.as_u32().to_le_bytes())?;
             io::write_binary_samples(writer, brdf.samples.as_slice())
         }
 
@@ -984,7 +984,7 @@ pub mod vgmo {
             let level = {
                 let mut buf = [0u8; 4];
                 reader.read_exact(&mut buf)?;
-                MeasuredBrdfLevel(u32::from_le_bytes(buf))
+                MeasuredBrdfLevel::from(u32::from_le_bytes(buf))
             };
             let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
             io::read_binary_samples(reader, samples.len(), samples.as_mut_slice())

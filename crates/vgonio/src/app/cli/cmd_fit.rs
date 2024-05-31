@@ -148,7 +148,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             .measured
                             .downcast_ref::<MeasuredBsdfData>()
                             .unwrap();
-                        let level = MeasuredBrdfLevel(opts.level);
+                        let level = MeasuredBrdfLevel::from(opts.level);
                         #[cfg(debug_assertions)]
                         {
                             let brdf = simulated_brdf.brdf_at(level).unwrap();
@@ -219,7 +219,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             );
                         }
                         Some(brdfs) => {
-                            let brdf = brdfs.brdf_at(MeasuredBrdfLevel(opts.level)).unwrap();
+                            let brdf = brdfs.brdf_at(MeasuredBrdfLevel::from(opts.level)).unwrap();
                             measured_brdf_fitting(
                                 opts.method,
                                 &input,
@@ -313,7 +313,7 @@ fn brdf_fitting_nonlin_lsq<F: AnalyticalFit + Sync>(
         brdf,
         opts.distro,
         alpha,
-        MeasuredBrdfLevel(opts.level),
+        MeasuredBrdfLevel::from(opts.level),
         iors,
     );
     problem.lsq_lm_fit(opts.isotropy)

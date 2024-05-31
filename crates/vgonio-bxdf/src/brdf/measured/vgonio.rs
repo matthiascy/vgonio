@@ -20,7 +20,7 @@ use base::{
 };
 use chrono::{DateTime, Local};
 use jabr::array::DyArr;
-use std::{borrow::Cow, collections::HashMap, ops::Index, path::Path, ptr};
+use std::{borrow::Cow, collections::HashMap, ops::Index, path::Path};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct VgonioBrdfParameterisation {
@@ -197,7 +197,7 @@ impl VgonioBrdf {
             layers[l].write(Layer::new(
                 (w, h),
                 layer_attrib,
-                Encoding::FAST_LOSSLESS,
+                Encoding::SMALL_LOSSLESS,
                 AnyChannels {
                     list: SmallVec::from(channels),
                 },

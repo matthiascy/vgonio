@@ -16,10 +16,7 @@ use base::{
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::{
-    mem::MaybeUninit,
-    sync::{atomic, atomic::AtomicU32},
-};
+use std::sync::{atomic, atomic::AtomicU32};
 
 /// Description of a receiver collecting the data.
 ///
@@ -170,10 +167,14 @@ impl Receiver {
         #[cfg(any(feature = "visu-dbg", debug_assertions))] out_trajs: *mut Vec<RayTrajectory>,
         #[cfg(any(feature = "visu-dbg", debug_assertions))] out_hpnts: *mut Vec<Vec3>,
         out_stats: *mut SingleBsdfMeasurementStats,
-        out_records: &mut [Option<BounceAndEnergy>],
+        records: &mut [Option<BounceAndEnergy>],
         orbit_radius: f32,
         fresnel: bool,
     ) {
+        debug_assert!(
+            records.len() == self.patches.n_patches() * self.spectrum.len(),
+            "records length mismatch"
+        );
         const CHUNK_SIZE: usize = 4096;
         // TODO: deal with the domain of the receiver
         let n_spectrum = self.spectrum.len();
@@ -327,9 +328,6 @@ impl Receiver {
             (n_bounce, stats, dirs)
         };
 
-        // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-        // log::debug!("process dirs: {:?}", dirs);
-
         #[cfg(feature = "bench")]
         let dirs_proc_time = start.elapsed().as_millis();
         #[cfg(feature = "bench")]
@@ -345,7 +343,7 @@ impl Receiver {
                 hit_points[i] = (dir.ray_dir * orbit_radius).into();
             }
             let samples_offset = dir.patch_idx * n_spectrum;
-            let patch_samples = &mut out_records[samples_offset..samples_offset + n_spectrum];
+            let patch_samples = &mut records[samples_offset..samples_offset + n_spectrum];
             let bounce_idx = dir.bounce as usize - 1;
             dir.energy_per_wavelength
                 .iter()
@@ -354,8 +352,12 @@ impl Receiver {
                 .for_each(|(j, (energy, patch))| match energy {
                     Energy::Absorbed => {}
                     Energy::Reflected(e) => {
-                        *patch = Some(BounceAndEnergy::empty(n_bounce));
-                        let mut mut_patch = patch.as_mut().unwrap();
+                        let mut_patch = {
+                            if patch.is_none() {
+                                *patch = Some(BounceAndEnergy::empty(n_bounce));
+                            }
+                            patch.as_mut().unwrap()
+                        };
                         mut_patch.energy_per_bounce[0] += *e;
                         mut_patch.n_ray_per_bounce[0] += 1;
                         mut_patch.energy_per_bounce[bounce_idx + 1] += e;
