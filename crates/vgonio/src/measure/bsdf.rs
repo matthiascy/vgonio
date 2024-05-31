@@ -52,7 +52,7 @@ pub mod rtc;
 // TODO: data retrieval and processing
 
 /// Raw data of the BSDF measurement.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RawMeasuredBsdfData {
     /// The spectrum of the emitter.
     pub spectrum: DyArr<Nanometres>,
@@ -358,7 +358,7 @@ impl Display for MeasuredBrdfLevel {
 ///
 /// At each emitter's position, each emitted ray carries an initial energy
 /// equals to 1.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MeasuredBsdfData {
     /// Parameters of the measurement.
     pub params: BsdfMeasurementParams,
@@ -1139,14 +1139,48 @@ impl SingleBsdfMeasurementStats {
 
     /// Tests if the statistics are valid.
     pub fn is_valid(&self) -> bool {
+        if self.n_ray_stats.len() != Self::N_STATS * self.n_spectrum {
+            eprintln!("Invalid n_ray_stats length: {}", self.n_ray_stats.len());
+            return false;
+        }
+        if self.n_ray_per_bounce.len() != self.n_spectrum * self.n_bounce as usize {
+            eprintln!(
+                "Invalid n_ray_per_bounce length: {}",
+                self.n_ray_per_bounce.len()
+            );
+            return false;
+        }
+        if self.energy_per_bounce.len() != self.n_spectrum * self.n_bounce as usize {
+            eprintln!(
+                "Invalid energy_per_bounce length: {}",
+                self.energy_per_bounce.len()
+            );
+            return false;
+        }
+        if self.e_captured.len() != self.n_spectrum {
+            eprintln!("Invalid e_captured length: {}", self.e_captured.len());
+            return false;
+        }
         // N_emitted = N_missed + N_received
         for i in 0..self.n_spectrum {
             // N_received = N_absorbed + N_reflected
             if self.n_reflected()[i] + self.n_absorbed()[i] != self.n_received {
+                eprintln!(
+                    "Invalid N_received: {} = Nr {} + Na {}",
+                    self.n_received,
+                    self.n_reflected()[i],
+                    self.n_absorbed()[i]
+                );
                 return false;
             }
             // N_reflected = N_captured + N_escaped
             if self.n_captured()[i] + self.n_escaped()[i] != self.n_reflected()[i] {
+                eprintln!(
+                    "Invalid N_reflected: {} = {} + {}",
+                    self.n_reflected()[i],
+                    self.n_captured()[i],
+                    self.n_escaped()[i]
+                );
                 return false;
             }
         }

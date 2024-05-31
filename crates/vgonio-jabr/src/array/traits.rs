@@ -1,7 +1,6 @@
 mod decay;
 
 use crate::{array::traits::decay::Decay, utils::IsFalse};
-use num_traits::Num;
 
 /// Base trait for n-dimensional arrays.
 pub trait NdArray<T> {

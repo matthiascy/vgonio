@@ -9,7 +9,6 @@
 #![feature(thin_box)]
 #![feature(new_uninit)]
 #![feature(associated_type_defaults)]
-#![feature(inline_const)]
 #![feature(negative_impls)]
 #![feature(min_specialization)]
 #![feature(specialization)]

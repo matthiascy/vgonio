@@ -201,3 +201,17 @@ where
     /// Returns the number of samples of the measured BRDF.
     pub fn n_samples(&self) -> usize { self.samples.len() }
 }
+
+impl<P, const N: usize> PartialEq for MeasuredBrdf<P, N>
+where
+    P: Clone + Send + Sync + BrdfParameterisation + PartialEq + 'static,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.origin == other.origin
+            && self.incident_medium == other.incident_medium
+            && self.transmitted_medium == other.transmitted_medium
+            && self.params == other.params
+            && self.spectrum == other.spectrum
+            && self.samples == other.samples
+    }
+}

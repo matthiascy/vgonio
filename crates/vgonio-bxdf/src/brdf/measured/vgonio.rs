@@ -1,20 +1,19 @@
 //! BRDF from the VGonio simulator.
 #[cfg(feature = "fitting")]
 use crate::brdf::measured::AnalyticalFit;
-use crate::{
-    brdf::{
-        measured::{
-            BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind,
-        },
-        Bxdf,
-    },
-    Scattering,
+use crate::brdf::{
+    measured::{BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind},
+    Bxdf,
 };
+#[cfg(feature = "fitting")]
+use crate::Scattering;
+#[cfg(feature = "fitting")]
+use base::optics::ior::RefractiveIndexRegistry;
+
 use base::{
     error::VgonioError,
     math::{Sph2, Vec3},
     medium::Medium,
-    optics::ior::RefractiveIndexRegistry,
     partition::SphericalPartition,
     units::Nanometres,
 };
