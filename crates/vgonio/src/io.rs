@@ -201,7 +201,7 @@ pub mod vgmo {
                     "Reading ADF data of {} samples from VGMO file",
                     params.samples_count()
                 );
-                let samples = base::io::read_f32_data_samples(
+                let samples = io::read_f32_data_samples(
                     reader,
                     params.samples_count(),
                     header.meta.encoding,
@@ -215,7 +215,7 @@ pub mod vgmo {
                     "Reading MSF data of {} samples from VGMO file",
                     params.samples_count()
                 );
-                let samples = base::io::read_f32_data_samples(
+                let samples = io::read_f32_data_samples(
                     reader,
                     params.samples_count(),
                     header.meta.encoding,
@@ -229,7 +229,7 @@ pub mod vgmo {
                 let mut buf = [0u8; 4];
                 reader.read_exact(&mut buf)?;
                 let num_slopes = u32::from_le_bytes(buf);
-                let samples = base::io::read_f32_data_samples(
+                let samples = io::read_f32_data_samples(
                     reader,
                     num_slopes as usize * 2,
                     header.meta.encoding,
@@ -645,14 +645,15 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => {
-                    let mut buf = vec![0u8; 8 + EmitterParams::required_size(version).unwrap()]
+                    let mut buf = vec![0u8; 11 + EmitterParams::required_size(version).unwrap()]
                         .into_boxed_slice();
                     reader.read_exact(&mut buf)?;
                     let kind = BsdfKind::from(buf[0]);
                     let incident_medium = Medium::read_from_buf(&buf[1..4]);
                     let transmitted_medium = Medium::read_from_buf(&buf[4..7]);
                     let sim_kind = SimulationKind::try_from(buf[7]).unwrap();
-                    let emitter = EmitterParams::read_from_buf(version, &buf[8..]);
+                    let fresnel = buf[8] != 0; // 9/10 are padding bytes
+                    let emitter = EmitterParams::read_from_buf(version, &buf[11..]);
                     let receiver = ReceiverParams::read(version, reader);
                     Ok(Self {
                         kind,
@@ -661,7 +662,7 @@ pub mod vgmo {
                         sim_kind,
                         emitter,
                         receiver,
-                        fresnel: false, // TODO: read/write from file
+                        fresnel,
                     })
                 }
                 _ => Err(std::io::Error::new(
@@ -749,6 +750,7 @@ pub mod vgmo {
     impl_endian_read_write!(u32, f32);
 
     /// Writes the given slice to the buffer in little-endian format.
+    #[track_caller]
     pub fn write_slice_to_buf<T: EndianWrite>(src: &[T], dst: &mut [u8]) {
         let size: usize = mem::size_of::<T>();
         debug_assert!(
@@ -815,9 +817,9 @@ pub mod vgmo {
             // Write n_absorbed, n_reflected, n_captured and n_escaped per wavelength
             write_slice_to_buf::<u32>(
                 &self.n_ray_stats,
-                &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_spectrum * 4],
+                &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_spectrum * Self::N_STATS],
             );
-            offset_in_bytes += 4 * n_spectrum * 4;
+            offset_in_bytes += 4 * n_spectrum * Self::N_STATS;
 
             // Write the energy captured per wavelength
             write_slice_to_buf(
@@ -1224,7 +1226,8 @@ mod tests {
         medium::Medium,
         partition::{PartitionScheme, SphericalDomain, SphericalPartition},
         range::RangeByStepSizeInclusive,
-        units::{nm, Rads},
+        units::{nm, rad, Rads},
+        Version,
     };
     use bxdf::brdf::measured::{Origin, VgonioBrdf, VgonioBrdfParameterisation};
     use jabr::array::DyArr;
@@ -1233,7 +1236,39 @@ mod tests {
         io::{BufReader, BufWriter, Cursor, Write},
         mem::MaybeUninit,
     };
-    use wgpu::naga::MathFunction::Radians;
+
+    #[test]
+    fn test_bsdf_measurement_params() {
+        let params = BsdfMeasurementParams {
+            kind: BsdfKind::Brdf,
+            incident_medium: Medium::Vacuum,
+            transmitted_medium: Medium::Aluminium,
+            sim_kind: SimulationKind::WaveOptics,
+            emitter: EmitterParams {
+                num_rays: 0,
+                max_bounces: 0,
+                zenith: RangeByStepSizeInclusive::new(rad!(0.0), rad!(0.0), rad!(0.0)),
+                azimuth: RangeByStepSizeInclusive::new(rad!(0.0), rad!(0.0), rad!(0.0)),
+                spectrum: RangeByStepSizeInclusive::new(nm!(400.0), nm!(700.0), nm!(100.0)),
+            },
+            receiver: ReceiverParams {
+                domain: SphericalDomain::Upper,
+                precision: Sph2::new(rad!(0.1), rad!(0.1)),
+                scheme: PartitionScheme::Beckers,
+            },
+            fresnel: false,
+        };
+
+        let mut writer = BufWriter::new(vec![]);
+        params
+            .write_to_vgmo(Version::new(0, 1, 0), &mut writer)
+            .unwrap();
+        let buf = writer.into_inner().unwrap();
+        let mut reader = BufReader::new(Cursor::new(buf));
+        let params2 =
+            BsdfMeasurementParams::read_from_vgmo(Version::new(0, 1, 0), &mut reader).unwrap();
+        assert_eq!(params, params2);
+    }
 
     #[test]
     fn test_bsdf_measurement_stats_point_read_write() {
@@ -1435,7 +1470,7 @@ mod tests {
                 stop: Rads::from_degrees(360.0),
                 step_size: Rads::from_degrees(180.0),
             },
-            spectrum: RangeByStepSizeInclusive::new(nm!(400.0), nm!(700.0), nm!(300.0)),
+            spectrum: RangeByStepSizeInclusive::new(nm!(400.0), nm!(700.0), nm!(100.0)),
         };
         let incoming = DyArr::from_boxed_slice_1d(emitter_params.generate_measurement_points().0);
         let spectrum = DyArr::from_vec_1d(emitter_params.spectrum.values().collect::<Vec<_>>());
@@ -1449,7 +1484,7 @@ mod tests {
             VgonioBrdf {
                 origin: Origin::Simulated,
                 incident_medium: Medium::Vacuum,
-                transmitted_medium: Medium::Vacuum,
+                transmitted_medium: Medium::Aluminium,
                 params: Box::new(VgonioBrdfParameterisation {
                     incoming: incoming.clone(),
                     outgoing: partition.clone(),
@@ -1547,7 +1582,9 @@ mod tests {
                 compression,
             )
             .unwrap();
-            assert_eq!(measured, data2);
+            assert_eq!(measured.params, data2.params);
+            assert_eq!(measured.raw, data2.raw);
+            assert_eq!(measured.bsdfs, data2.bsdfs);
         }
     }
 }

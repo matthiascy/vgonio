@@ -8,7 +8,7 @@ type: !bsdf
   emitter:
     num_rays: 1000000
     max_bounces: 10
-    zenith: 0deg .. =80deg / 40deg
+    zenith: 0deg .. =80deg / 20deg
     azimuth: 0deg .. =360deg / 180deg
     spectrum: 400 nm .. = 700 nm / 300 nm # 379.71 nm .. =799.55 nm / 0.774612546 nm
   receiver:
