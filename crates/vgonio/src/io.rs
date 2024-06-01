@@ -564,6 +564,7 @@ pub mod vgmo {
     impl NdfMeasurementParams {
         // TODO: resolve `crop_to_disk`
         // TODO: read partitioned ADF data
+        /// Reads the NDF measurement parameters from the given reader.
         pub fn read_from_vgmo<R: Read + Seek>(
             version: Version,
             reader: &mut BufReader<R>,
@@ -599,6 +600,7 @@ pub mod vgmo {
 
     impl MsfMeasurementParams {
         // TODO: resolve resolution and strict
+        /// Reads the MSF measurement parameters from the given reader.
         pub fn read_from_vgmo<R: Read + Seek>(
             version: Version,
             reader: &mut BufReader<R>,

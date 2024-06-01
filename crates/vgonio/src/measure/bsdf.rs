@@ -41,6 +41,7 @@ use std::{
     fmt::{write, Debug, Display, Formatter},
     mem::MaybeUninit,
     path::Path,
+    str::FromStr,
 };
 use surf::{MicroSurface, MicroSurfaceMesh};
 
@@ -340,6 +341,40 @@ impl From<usize> for MeasuredBrdfLevel {
 
 impl From<u32> for MeasuredBrdfLevel {
     fn from(n: u32) -> Self { MeasuredBrdfLevel(n) }
+}
+
+impl FromStr for MeasuredBrdfLevel {
+    type Err = VgonioError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let val = s.to_lowercase();
+        let val = val.trim();
+        if val.len() > 3 {
+            return Err(VgonioError::new(
+                "Invalid BRDF level. The level must be between l0 and l16 or l1+.",
+                None,
+            ));
+        }
+        match val {
+            "l1+" => Ok(MeasuredBrdfLevel::L1PLUS),
+            _ => {
+                let level = s.strip_prefix('l').ok_or_else(|| {
+                    VgonioError::new(
+                        "Invalid BRDF level. The level must be between l0 and l16",
+                        None,
+                    )
+                })?;
+                Ok(MeasuredBrdfLevel::from(level.parse::<u32>().map_err(
+                    |err| {
+                        VgonioError::new(
+                            format!("Invalid BRDF level. {}", err),
+                            Some(Box::new(err)),
+                        )
+                    },
+                )?))
+            }
+        }
+    }
 }
 
 impl Display for MeasuredBrdfLevel {

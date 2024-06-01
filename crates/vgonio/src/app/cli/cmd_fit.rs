@@ -1,9 +1,6 @@
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
-    fitting::{
-        err::compute_microfacet_brdf_err, FittingProblem, FittingReport,
-        MicrofacetBrdfFittingProblem,
-    },
+    fitting::{err, FittingProblem, FittingReport, MicrofacetBrdfFittingProblem},
     measure::bsdf::{receiver::ReceiverParams, MeasuredBrdfLevel, MeasuredBsdfData},
     pyplot::plot_err,
 };
@@ -148,10 +145,9 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             .measured
                             .downcast_ref::<MeasuredBsdfData>()
                             .unwrap();
-                        let level = MeasuredBrdfLevel::from(opts.level);
                         #[cfg(debug_assertions)]
                         {
-                            let brdf = simulated_brdf.brdf_at(level).unwrap();
+                            let brdf = simulated_brdf.brdf_at(opts.level).unwrap();
                             let n_spectrum = simulated_brdf.n_spectrum();
                             let partition = &simulated_brdf.raw.outgoing;
                             for snapshot in brdf.snapshots() {
@@ -195,7 +191,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             false
                         };
                         log::debug!("Resampling the measured data, dense: {}", dense);
-                        simulated_brdf.resample(&olaf_data.params, level, dense, Rads::ZERO)
+                        simulated_brdf.resample(&olaf_data.params, opts.level, dense, Rads::ZERO)
                     };
                     log::debug!("BRDF extraction done, starting fitting.");
                     measured_brdf_fitting(opts.method, &input[0], &brdf, &opts, alpha, &cache.iors);
@@ -237,14 +233,14 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     })
 }
 
-fn brdf_fitting_brute_force<F: AnalyticalFit>(
+fn brdf_fitting_brute_force<F: AnalyticalFit + Sync>(
     brdf: &F,
     filepath: &PathBuf,
     opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,
     iors: &RefractiveIndexRegistry,
 ) {
-    let errs = compute_microfacet_brdf_err(
+    let errs = err::compute_microfacet_brdf_err(
         brdf,
         opts.distro,
         alpha,
@@ -296,30 +292,14 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
         opts.method,
     );
     match method {
-        FittingMethod::Bruteforce => brdf_fitting_brute_force(brdf, filepath, opts, alpha, iors),
-        FittingMethod::Nlls => {
-            brdf_fitting_nonlin_lsq(brdf, opts, alpha, iors).print_fitting_report()
+        FittingMethod::Brute => brdf_fitting_brute_force(brdf, filepath, opts, alpha, iors),
+        FittingMethod::Nllsq => {
+            let problem =
+                MicrofacetBrdfFittingProblem::new(brdf, opts.distro, alpha, opts.level, iors);
+            problem.lsq_lm_fit(opts.isotropy).print_fitting_report();
         }
     }
 }
-
-fn brdf_fitting_nonlin_lsq<F: AnalyticalFit + Sync>(
-    brdf: &F,
-    opts: &FitOptions,
-    alpha: RangeByStepSizeInclusive<f64>,
-    iors: &RefractiveIndexRegistry,
-) -> FittingReport<Box<dyn Bxdf<Params = [f64; 2]>>> {
-    let problem = MicrofacetBrdfFittingProblem::new(
-        brdf,
-        opts.distro,
-        alpha,
-        MeasuredBrdfLevel::from(opts.level),
-        iors,
-    );
-    problem.lsq_lm_fit(opts.isotropy)
-}
-
-// TODO: complete fit kind
 
 /// Options for the `fit` subcommand.
 #[derive(clap::Args, Debug, Clone)]
@@ -373,9 +353,9 @@ pub struct FitOptions {
         short,
         long,
         help = "Level of the measured BRDF data to fit.",
-        default_value = "0"
+        default_value = "l0"
     )]
-    pub level: u32,
+    pub level: MeasuredBrdfLevel,
 
     #[clap(
         long,
@@ -412,7 +392,7 @@ pub struct FitOptions {
         short,
         long,
         help = "Method to use for the fitting.",
-        default_value = "bruteforce"
+        default_value = "brute"
     )]
     pub method: FittingMethod,
 
@@ -435,7 +415,7 @@ pub struct FitOptions {
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FittingMethod {
     /// Brute force fitting method.
-    Bruteforce,
+    Brute,
     /// Non-linear least squares fitting method.
-    Nlls,
+    Nllsq,
 }

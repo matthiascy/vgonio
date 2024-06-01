@@ -9,10 +9,11 @@ use bxdf::{
     },
     distro::MicrofacetDistroKind,
 };
+use rayon::prelude::{IndexedParallelIterator, ParallelIterator, ParallelSliceMut};
 
 /// Compute the distance (error) between the measured data and the model.
-pub fn compute_microfacet_brdf_err(
-    measured: &impl AnalyticalFit,
+pub fn compute_microfacet_brdf_err<M: AnalyticalFit + Sync>(
+    measured: &M,
     distro: MicrofacetDistroKind,
     alpha: RangeByStepSizeInclusive<f64>,
     iors: &RefractiveIndexRegistry,
@@ -21,7 +22,7 @@ pub fn compute_microfacet_brdf_err(
     let count = alpha.step_count();
     const CHUNK_SIZE: usize = 32;
     let mut errs = Box::new_uninit_slice(count);
-    errs.chunks_mut(CHUNK_SIZE)
+    errs.par_chunks_mut(CHUNK_SIZE)
         .enumerate()
         .for_each(|(i, err_chunks)| {
             for j in 0..err_chunks.len() {
