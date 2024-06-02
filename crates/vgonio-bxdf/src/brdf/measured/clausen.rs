@@ -73,7 +73,8 @@ impl ClausenBrdfParameterisation {
         self.incoming
             .as_slice()
             .iter()
-            .flat_map(move |wi| self.outgoing.as_slice().iter().map(move |wo| (wi, wo)))
+            .zip(self.outgoing.as_slice().chunks(self.n_wo))
+            .flat_map(|(wi, wos)| wos.iter().map(move |wo| (wi, wo)))
     }
 }
 
@@ -119,8 +120,8 @@ impl ClausenBrdf {
     /// Return the number of outgoing directions for each incident direction.
     pub fn n_wo(&self) -> usize { self.params.n_wo }
 
-    /// Computes the local BRDF maximum values for each snapshot, i.e., for each
-    /// incident direction (per wavelength).
+    /// Computes the local BRDF maximum values for each snapshot, that is, for
+    /// each incident direction (per wavelength).
     pub fn compute_max_values(&self) -> DyArr<f32, 2> {
         let (n_wi, n_wo, n_spectrum) = (self.n_wi(), self.n_wo(), self.spectrum.len());
         let mut max_values = DyArr::splat(-1.0f32, [n_wi, n_spectrum]);
@@ -150,7 +151,7 @@ impl ClausenBrdf {
         match filepath.as_ref().extension() {
             None => {
                 return Err(VgonioError::new(
-                    format!("Can't read Clausen BRDF from files without extension!"),
+                    "Can't read Clausen BRDF from files without extension!".to_string(),
                     None,
                 ))
             }
@@ -168,13 +169,16 @@ impl ClausenBrdf {
         }
     }
 
+    /// Loads the BRDF from a reader.
     #[cfg(feature = "io")]
     pub fn load_from_reader<R: BufRead>(reader: R) -> Result<Self, VgonioError> {
         use serde_json::Value;
 
+        // TODO: auto detect medium from file
+
         let content: Value = serde_json::from_reader(reader).map_err(|err| {
             VgonioError::new(
-                format!("Load Clausen BRDF: failed to parse JSON file",),
+                "Load Clausen BRDF: failed to parse JSON file".to_string(),
                 Some(Box::new(err)),
             )
         })?;
@@ -240,13 +244,13 @@ impl ClausenBrdf {
             }
 
             // then sort by phi_o
-            if wo_a.phi < wo_b.phi {
-                return std::cmp::Ordering::Less;
+            return if wo_a.phi < wo_b.phi {
+                std::cmp::Ordering::Less
             } else if wo_a.phi > wo_b.phi {
-                return std::cmp::Ordering::Greater;
+                std::cmp::Ordering::Greater
             } else {
-                return std::cmp::Ordering::Equal;
-            }
+                std::cmp::Ordering::Equal
+            };
         });
 
         // TODO: remove, unordered_samples ==> outgoing
@@ -266,6 +270,14 @@ impl ClausenBrdf {
         let n_wi = wi_wo_pairs.len();
         let n_wo = wi_wo_pairs[0].1.len();
 
+        #[cfg(any(debug_assertions, verbose_debug))]
+        log::debug!(
+            "Load Clausen BRDF with {} wavelengths, {} incident directions, {} outgoing directions",
+            n_spectrum,
+            n_wi,
+            n_wo
+        );
+
         let samples = DyArr::from_iterator(
             [n_wi as isize, n_wo as isize, n_spectrum as isize],
             unordered_samples
@@ -280,20 +292,23 @@ impl ClausenBrdf {
         );
 
         let params = Box::new(ClausenBrdfParameterisation {
-            incoming: DyArr::from_vec_1d(
-                unordered_samples
-                    .iter()
-                    .map(|(wi, _, _)| *wi)
-                    .collect::<Vec<_>>(),
-            ),
+            incoming: DyArr::from_vec_1d(wi_wo_pairs.iter().map(|(wi, _)| *wi).collect::<Vec<_>>()),
             outgoing,
-            n_wo: 0,
+            n_wo,
         });
+
+        debug_assert_eq!(params.incoming.len(), n_wi, "Number of incident directions");
+        #[cfg(any(debug_assertions, verbose_debug))]
+        log::debug!(
+            "Load Clausen BRDF with {} wavelengths, parameters: {:?}",
+            n_spectrum,
+            params
+        );
 
         Ok(Self {
             origin: Origin::RealWorld,
-            incident_medium: Medium::Vacuum,
-            transmitted_medium: Medium::Vacuum,
+            incident_medium: Medium::Air,
+            transmitted_medium: Medium::Aluminium,
             params,
             spectrum,
             samples,

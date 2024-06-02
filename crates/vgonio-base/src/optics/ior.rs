@@ -36,6 +36,9 @@ impl RefractiveIndexRegistry {
     /// Returns the refractive index of the given medium at the given wavelength
     /// (in nanometres).
     pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<RefractiveIndexRecord> {
+        if medium == Medium::Vacuum {
+            return Some(RefractiveIndexRecord::VACUUM);
+        }
         let refractive_indices = self
             .get(&medium)
             .unwrap_or_else(|| panic!("unknown medium {:?}", medium));

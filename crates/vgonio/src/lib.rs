@@ -19,6 +19,7 @@
 #![feature(generic_const_exprs)]
 #![feature(effects)]
 #![warn(missing_docs)]
+#![warn(unused_crate_dependencies)]
 
 extern crate core;
 
