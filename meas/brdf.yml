@@ -6,11 +6,11 @@ type: !bsdf
   transmitted_medium: al
   fresnel: true
   emitter:
-    num_rays: 10000000
+    num_rays: 1000000
     max_bounces: 10
     zenith: 0deg .. =80deg / 5deg
-    azimuth: 0deg .. =360deg / 30deg
-    spectrum: 400 nm .. = 700 nm / 100 nm # 379.71 nm .. =799.55 nm / 0.774612546 nm
+    azimuth: 0deg .. =360deg / 120deg
+    spectrum: 400 nm .. = 700 nm / 300 nm # 379.71 nm .. =799.55 nm / 0.774612546 nm
   receiver:
     domain: upper_hemisphere
     precision:
@@ -20,11 +20,11 @@ type: !bsdf
     retrieval: bsdf-only # full-data # / bsdf-only
 surfaces:
   - usr://surfaces/olaf/aluminium65bar100.vgms
-  - usr://surfaces/olaf/aluminium4bar100.vgms
-  - usr://surfaces/olaf/aluminium1bar100.vgms
-  - usr://surfaces/olaf/aluminiummirror.vgms
-  - usr://surfaces/olaf/aluminium2bar100.vgms
-  - usr://surfaces/olaf/aluminium3bar100.vgms
+#  - usr://surfaces/olaf/aluminium4bar100.vgms
+#  - usr://surfaces/olaf/aluminium1bar100.vgms
+#  - usr://surfaces/olaf/aluminiummirror.vgms
+#  - usr://surfaces/olaf/aluminium2bar100.vgms
+#  - usr://surfaces/olaf/aluminium3bar100.vgms
 #  - usr://surfaces/olaf/aluminium1bar100.vgms
 # - usr://surfaces/gaussian_sigma_0.5.vgms
 # - usr://surfaces/8x8_flat.vgms

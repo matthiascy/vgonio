@@ -1,4 +1,4 @@
 triangulation = "top-left-to-bottom-right"
 # triangulation = "bottom-left-to-top-right"
-output_dir = "~/Documents/virtual-gonio/output"
+output_dir = "~/Documents/virtual-gonio/devout"
 data_dir = "~/Documents/virtual-gonio/datafiles"

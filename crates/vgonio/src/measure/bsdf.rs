@@ -75,6 +75,7 @@ pub struct MeasuredBsdfData {
 
 impl MeasuredBsdfData {
     pub fn into_measured_brdf(self) -> VgonioBrdf {
+        /*
         // TODO: NdArray ergonomics
         let mut incoming = DyArr::<Sph2>::zeros([self.snapshots.len()]);
         for (i, snapshot) in self.snapshots.iter().enumerate() {
@@ -105,7 +106,9 @@ impl MeasuredBsdfData {
             params,
             spectrum,
             samples,
-        )
+        );
+        */
+        todo!("")
     }
 
     /// Writes the BSDF data to images in exr format.

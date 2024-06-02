@@ -341,6 +341,8 @@ impl Receiver {
             (n_bounce, stats, dirs)
         };
 
+        log::debug!("n_entered: {}", dirs.len());
+
         // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
         // log::debug!("process dirs: {:?}", dirs);
 
@@ -475,12 +477,17 @@ impl<'a> CollectedData<'a> {
         let n_wavelength = params.emitter.spectrum.step_count();
         let n_patch = params.receiver.num_patches();
         self.snapshots
-            .par_iter()
-            .map(|snapshot| {
+            /* .par_iter() */
+            .iter()
+            .enumerate()
+            .map(|(snap_idx, snapshot)| {
                 let mut samples = DyArr::<f32, 2>::zeros([n_patch, n_wavelength]);
                 let cos_i = snapshot.wi.theta.cos();
                 let rcp_e_i = rcp_f32(snapshot.stats.n_received as f32 * cos_i);
                 for (i, patch_data) in snapshot.records.chunks(n_wavelength).enumerate() {
+                    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+                    log::debug!("- snapshot #{snap_idx} and patch #{i}");
+
                     // Per wavelength
                     for (j, stats) in patch_data.iter().enumerate() {
                         let patch = self.partition.patches.get(i).unwrap();
