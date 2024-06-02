@@ -364,10 +364,12 @@ impl<E: HeaderExt> Header<E> {
         writer.write_all(&self.meta.version.as_u32().to_le_bytes())?;
         writer.write_all(&self.meta.length.to_le_bytes())?;
         writer.write_all(&self.meta.timestamp)?;
-        writer.write_all(&[self.meta.sample_size])?;
-        writer.write_all(&[self.meta.encoding as u8])?;
-        writer.write_all(&[self.meta.compression as u8])?;
-        writer.write_all(&[0u8; 1])?; // padding
+        writer.write_all(&[
+            self.meta.sample_size,
+            self.meta.encoding as u8,
+            self.meta.compression as u8,
+            0u8, // padding
+        ])?;
         self.extra.write(self.meta.version, writer)?;
         log::debug!(
             "Finished writing header to file, ending at position {:?}, buffer len: {}",
@@ -483,6 +485,14 @@ fn f32_samples_to_bytes(samples: &[f32]) -> Cow<[u8]> {
 }
 
 /// Write the data samples to the given writer.
+pub fn write_binary_samples<W: Write>(
+    writer: &mut W,
+    samples: &[f32],
+) -> Result<(), std::io::Error> {
+    writer.write_all(&f32_samples_to_bytes(samples))
+}
+
+/// Write the data samples to the given writer.
 pub fn write_f32_data_samples_binary<'a, W: Write>(
     writer: &mut BufWriter<W>,
     comp: CompressionScheme,
@@ -544,10 +554,11 @@ pub fn read_f32_data_samples<R: Read>(
 }
 
 /// Reads sample values separated by whitespace line by line.
-pub fn read_ascii_samples<R>(reader: R, count: usize, samples: &mut [f32]) -> Result<(), ParseError>
-where
-    R: Read,
-{
+pub fn read_ascii_samples<R: Read>(
+    reader: R,
+    count: usize,
+    samples: &mut [f32],
+) -> Result<(), ParseError> {
     debug_assert!(
         samples.len() >= count,
         "Samples' container must be large enough to hold all samples"

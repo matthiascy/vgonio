@@ -1,4 +1,12 @@
+[alias]
+b = "build"
+bef = "build --features embree,fitting"
+bdbg = "build --features debug,embree,fitting,verbose-dbg"
+r = "run"
+ref = "build --features embree,fitting"
+rdbg = "build --features debug,embree,fitting,verbose-dbg"
+
 [build]
 rustc-wrapper = "sccache"
 rustdocflags = ["--html-in-header", "./misc/docs-header.html"]
-rustflags = ["-C", "link-arg=-fuse-ld=mold", "-Z", "threads=12"]
+rustflags = ["-Clink-arg=-fuse-ld=mold", "-Zthreads=12"]

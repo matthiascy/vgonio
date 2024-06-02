@@ -1,14 +1,6 @@
 use crate::{
     error::RuntimeError,
-    measure::{
-        bsdf::{
-            emitter::EmitterParams,
-            receiver::{DataRetrieval, ReceiverParams},
-            rtc::RtcMethod,
-            BsdfKind,
-        },
-        MeasurementParams,
-    },
+    measure::bsdf::{emitter::EmitterParams, receiver::ReceiverParams, rtc::RtcMethod, BsdfKind},
 };
 use base::{
     error::VgonioError,
@@ -115,16 +107,22 @@ impl Default for BsdfMeasurementParams {
                 domain: SphericalDomain::Upper,
                 precision: Sph2::new(deg!(2.0).in_radians(), deg!(5.0).in_radians()),
                 scheme: PartitionScheme::Beckers,
-                retrieval: DataRetrieval::BsdfOnly,
             },
             fresnel: true,
         }
     }
 }
 
-impl MeasurementParams for BsdfMeasurementParams {}
-
 impl BsdfMeasurementParams {
+    /// Returns the number of measurement points.
+    pub fn n_wi(&self) -> usize { self.emitter.measurement_points_count() }
+
+    /// Returns the number of patches on the receiver.
+    pub fn n_wo(&self) -> usize { self.receiver.num_patches() }
+
+    /// Returns the number of wavelengths in the spectrum.
+    pub fn n_spectrum(&self) -> usize { self.emitter.spectrum.step_count() }
+
     /// Whether the measurement parameters are valid.
     pub fn validate(self) -> Result<Self, VgonioError> {
         log::info!("Validating measurement description...");

@@ -140,7 +140,7 @@ impl PartitionScheme {
 }
 
 /// Partitioned patches of the collector.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SphericalPartition {
     /// Precision of the partitioning scheme.
     pub precision: Sph2,
@@ -361,7 +361,7 @@ impl SphericalPartition {
 }
 
 /// A patch of the receiver.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Patch {
     /// Minimum zenith (theta) and azimuth (phi) angles of the patch.
     pub min: Sph2,
@@ -411,7 +411,7 @@ impl Patch {
 }
 
 /// A segment in the form of an annulus on the collector hemisphere.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Ring {
     /// Minimum theta angle of the annulus.
     pub theta_min: f32,

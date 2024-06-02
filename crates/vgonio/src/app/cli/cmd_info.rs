@@ -4,8 +4,8 @@ use crate::{
         Config,
     },
     measure::params::{
-        AdfMeasurementMode, BsdfMeasurementParams, Measurement, MeasurementParams,
-        MsfMeasurementParams, NdfMeasurementParams,
+        BsdfMeasurementParams, MeasurementDescription, MeasurementParams, MsfMeasurementParams,
+        NdfMeasurementMode, NdfMeasurementParams,
     },
 };
 use base::{error::VgonioError, partition::PartitionScheme};
@@ -17,7 +17,7 @@ use std::{
 impl Display for NdfMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.mode {
-            AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+            NdfMeasurementMode::ByPoints { azimuth, zenith } => {
                 write!(
                     f,
                     "MicrofacetDistributionMeasurement\n    - by-points\n    - azimuthal angle: \
@@ -32,7 +32,7 @@ impl Display for NdfMeasurementParams {
                     zenith.step_count_wrapped(),
                 )
             }
-            AdfMeasurementMode::ByPartition { precision, scheme } => {
+            NdfMeasurementMode::ByPartition { precision, scheme } => {
                 write!(
                     f,
                     "MicrofacetDistributionMeasurement\n    - by-partition\n    - scheme: {:?}\n    \
@@ -112,21 +112,21 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioEr
     if prints[2] {
         println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         [
-            Measurement {
+            MeasurementDescription {
                 params: MeasurementParams::Adf(NdfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),
                 ],
             },
-            Measurement {
+            MeasurementDescription {
                 params: MeasurementParams::Msf(MsfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),
                 ],
             },
-            Measurement {
+            MeasurementDescription {
                 params: MeasurementParams::Bsdf(BsdfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),

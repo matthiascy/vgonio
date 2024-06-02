@@ -15,6 +15,7 @@ impl RawGuiContext {
     /// Creates a new GUI context.
     pub(crate) fn new(window: &Window) -> Self {
         let context = egui::Context::default();
+        egui_extras::install_image_loaders(&context);
         let state =
             egui_winit::State::new(context.clone(), egui::ViewportId::ROOT, window, None, None);
         Self {

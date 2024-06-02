@@ -19,8 +19,9 @@
 #![warn(missing_docs)]
 #![feature(effects)]
 
+use serde::{Deserialize, Serialize};
 use std::{
-    fmt::{Display, Formatter},
+    fmt::{Debug, Display, Formatter},
     marker::{ConstParamTy, StructuralPartialEq},
 };
 
@@ -148,5 +149,130 @@ pub mod utils {
     /// timezone and with the colon in the time field.
     pub fn iso_timestamp_display(dt: &chrono::DateTime<chrono::Local>) -> String {
         dt.format("%Y-%m-%d %H:%M:%S").to_string()
+    }
+}
+
+/// Metrics to use for the error/distance computation.
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ErrorMetric {
+    /// Mean squared error.
+    Mse,
+    /// Most commonly used error metrics in non-linear least squares fitting.
+    /// Which is the half of the sum of the squares of the differences between
+    /// the measured data and the model.
+    #[default]
+    Nlls,
+}
+
+/// Trait for the different kinds of measurement data.
+///
+/// Measurement data can be of different kinds, such as
+/// - Normal Distribution Function (NDF)
+/// - Masking Shadowing Function (MSF)
+/// - Slope Distribution Function (SDF)
+/// - Bidirectional Scattering Distribution Function (BSDF)
+pub trait MeasuredData: Debug {
+    /// Returns the kind of the measurement.
+    fn kind(&self) -> MeasurementKind;
+    /// Returns whether the measurement data is a Clausen representation.
+    fn is_clausen(&self) -> bool { false }
+    /// Casts the measurement data to a trait object for downcasting to the
+    /// concrete type.
+    fn as_any(&self) -> &dyn std::any::Any;
+    /// Casts the measurement data to a mutable trait object for downcasting to
+    /// the concrete type.
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+}
+
+impl dyn MeasuredData {
+    /// Downcasts the measurement data to the concrete type.
+    pub fn downcast_ref<T>(&self) -> Option<&T>
+    where
+        T: MeasuredData + 'static,
+    {
+        self.as_any().downcast_ref()
+    }
+
+    /// Downcasts the measurement data to the mutable concrete type.
+    pub fn downcast_mut<T>(&mut self) -> Option<&mut T>
+    where
+        T: MeasuredData + 'static,
+    {
+        self.as_any_mut().downcast_mut()
+    }
+}
+
+#[macro_export]
+/// Boilerplate macro for implementing the `MeasuredData` trait for a type.
+macro_rules! impl_measured_data_trait {
+    ($t:ty, $kind:ident, $is_clausen:expr) => {
+        impl MeasuredData for $t {
+            fn kind(&self) -> MeasurementKind { MeasurementKind::$kind }
+
+            fn is_clausen(&self) -> bool { $is_clausen }
+
+            fn as_any(&self) -> &dyn std::any::Any { self }
+
+            fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
+        }
+    };
+}
+
+/// Kind of different measurements.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MeasurementKind {
+    /// BSDF measurement.
+    Bsdf = 0x00,
+    /// Microfacet area distribution function measurement.
+    Ndf = 0x01,
+    /// Microfacet Masking-shadowing function measurement.
+    Msf = 0x02,
+    /// Microfacet slope distribution function measurement.
+    Sdf = 0x03,
+}
+
+impl Display for MeasurementKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MeasurementKind::Bsdf => {
+                write!(f, "BSDF")
+            }
+            MeasurementKind::Ndf => {
+                write!(f, "ADF")
+            }
+            MeasurementKind::Msf => {
+                write!(f, "MSF")
+            }
+            MeasurementKind::Sdf => {
+                write!(f, "SDF")
+            }
+        }
+    }
+}
+
+impl From<u8> for MeasurementKind {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => Self::Bsdf,
+            0x01 => Self::Ndf,
+            0x02 => Self::Msf,
+            0x03 => Self::Sdf,
+            _ => panic!("Invalid measurement kind! {}", value),
+        }
+    }
+}
+
+impl MeasurementKind {
+    /// Returns the measurement kind in the form of a string slice in
+    /// lowercase ASCII characters.
+    pub fn ascii_str(&self) -> &'static str {
+        match self {
+            MeasurementKind::Bsdf => "bsdf",
+            MeasurementKind::Ndf => "adf",
+            MeasurementKind::Msf => "msf",
+            MeasurementKind::Sdf => "sdf",
+        }
     }
 }

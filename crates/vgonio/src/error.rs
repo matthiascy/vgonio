@@ -18,7 +18,7 @@ pub enum RuntimeError {
     Logger(log::SetLoggerError),
     /// Invalid parameters.
     InvalidParameters,
-    /// Directory or file not found.
+    /// Directory or file isn't found.
     DirectoryOrFileNotFound,
     /// Invalid emitter.
     InvalidEmitter,

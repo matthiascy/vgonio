@@ -1,15 +1,14 @@
 use crate::{
     app::cache::{Handle, RawCache},
-    measure::{
-        data::{MeasuredData, MeasurementData, MeasurementDataSource},
-        params::MsfMeasurementParams,
-    },
+    measure::{params::MsfMeasurementParams, MeasuredData, Measurement, MeasurementSource},
 };
 use base::{
     error::VgonioError,
-    math,
+    impl_measured_data_trait, math,
     math::{Mat4, Vec3},
+    range::RangeByStepSizeInclusive,
     units::Radians,
+    MeasurementKind,
 };
 use bytemuck::{Pod, Zeroable};
 use gfxkit::{
@@ -59,13 +58,13 @@ pub struct VisibilityEstimator {
     /// Number of measurement points.
     num_measurement_points: u32,
 
-    /// Color attachments used to compute the ratio of visible projected area
+    /// Colour attachments used to compute the ratio of visible projected area
     /// over the whole area of all visible facets at each measurement point.
-    /// Each color attachment is a 2D texture array with one layer per
-    /// measurement point. 1st color attachment is used to store the visible
-    /// projected area (area of visible facets respecting each other), 2nd
-    /// color attachment is used to store the whole area of all visible
-    /// facets.
+    /// Each colour attachment is a 2D texture array with one layer per
+    /// measurement point. The first colour attachment is used to store the
+    /// visible projected area (area of visible facets respecting each
+    /// other), the second colour attachment is used to store the whole area of
+    /// all visible facets.
     color_attachments: [ColorAttachment; 2],
 
     /// Depth buffers of all micro-facets at all possible measurement points.
@@ -1146,9 +1145,6 @@ impl ColorAttachment {
         }
     }
 
-    /// Number of layers in total.
-    pub fn layers(&self) -> u32 { self.layers }
-
     /// Returns the texture view of the specified layer of the whole attachment.
     pub fn layer_view(&self, layer: u32) -> &wgpu::TextureView {
         assert!(layer < self.layers, "Layer index out of range");
@@ -1348,6 +1344,7 @@ impl MeasurementPoint {
 /// incident direction i and the outgoing direction o.
 ///
 /// The Smith microfacet masking-shadowing function is defined as:
+///
 /// G(i, o, m) = G1(i, m) * G1(o, m)
 ///
 /// This structure holds the data for G1(i, m).
@@ -1362,14 +1359,94 @@ pub struct MeasuredMsfData {
     pub samples: Box<[f32]>,
 }
 
+impl_measured_data_trait!(MeasuredMsfData, Msf, false);
+
+impl MeasuredMsfData {
+    // TODO: review the necessity of this method.
+    /// Returns the measurement range of the azimuthal and zenith angles.
+    /// The azimuthal angle is in the range 0 ~ 2π, and the zenith angle is in
+    /// the range 0 ~ π/2.
+    pub fn measurement_range(
+        &self,
+    ) -> (
+        RangeByStepSizeInclusive<Radians>,
+        RangeByStepSizeInclusive<Radians>,
+    ) {
+        (self.params.azimuth.clone(), self.params.zenith.clone())
+    }
+
+    /// Returns the Masking Shadowing Function data slice for the given
+    /// microfacet normal and azimuthal angle of the incident direction.
+    ///
+    /// The returned slice contains two elements, the first one is the
+    /// data slice for the given azimuthal angle, the second one is the
+    /// data slice for the azimuthal angle that is 180 degrees away from
+    /// the given azimuthal angle, if it exists.
+    pub fn slice_at(
+        &self,
+        azimuth_m: Radians,
+        zenith_m: Radians,
+        azimuth_i: Radians,
+    ) -> (&[f32], Option<&[f32]>) {
+        let azimuth_m = azimuth_m.wrap_to_tau();
+        let azimuth_i = azimuth_i.wrap_to_tau();
+        let zenith_m = zenith_m.clamp(self.params.zenith.start, self.params.zenith.stop);
+        let azimuth_m_idx = self.params.azimuth.index_of(azimuth_m);
+        let zenith_m_idx = self.params.zenith.index_of(zenith_m);
+        let azimuth_i_idx = self.params.azimuth.index_of(azimuth_i);
+        let opposite_azimuth_i = azimuth_i.opposite();
+        let opposite_azimuth_i_idx = if self.params.azimuth.start <= opposite_azimuth_i
+            && opposite_azimuth_i <= self.params.azimuth.stop
+        {
+            Some(self.params.azimuth.index_of(opposite_azimuth_i))
+        } else {
+            None
+        };
+        (
+            self.slice_at_indices(azimuth_m_idx, zenith_m_idx, azimuth_i_idx),
+            opposite_azimuth_i_idx
+                .map(|index| self.slice_at_indices(azimuth_m_idx, zenith_m_idx, index)),
+        )
+    }
+
+    /// Returns a data slice of the Masking Shadowing Function for the given
+    /// indices.
+    fn slice_at_indices(
+        &self,
+        azimuth_m_idx: usize,
+        zenith_m_idx: usize,
+        azimuth_i_idx: usize,
+    ) -> &[f32] {
+        debug_assert!(self.kind() == MeasurementKind::Msf);
+        debug_assert!(
+            azimuth_m_idx < self.params.azimuth.step_count_wrapped(),
+            "index out of range"
+        );
+        debug_assert!(
+            azimuth_i_idx < self.params.azimuth.step_count_wrapped(),
+            "index out of range"
+        );
+        debug_assert!(
+            zenith_m_idx < self.params.zenith.step_count_wrapped(),
+            "index out of range"
+        );
+        let zenith_bin_count = self.params.zenith.step_count_wrapped();
+        let azimuth_bin_count = self.params.azimuth.step_count_wrapped();
+        let offset = azimuth_m_idx * zenith_bin_count * azimuth_bin_count * zenith_bin_count
+            + zenith_m_idx * azimuth_bin_count * zenith_bin_count
+            + azimuth_i_idx * zenith_bin_count;
+        &self.samples[offset..offset + zenith_bin_count]
+    }
+}
+
 // pub type MeasuredMsf = MeasuredData2<MsfMeasurementParams, 4>;
 
 /// Measurement of microfacet shadowing and masking function.
-pub fn measure_masking_shadowing(
+pub fn measure_masking_shadowing_function(
     params: MsfMeasurementParams,
     handles: &[Handle<MicroSurface>],
     cache: &RawCache,
-) -> Box<[MeasurementData]> {
+) -> Box<[Measurement]> {
     log::info!("Measuring microfacet masking/shadowing function...");
     let wgpu_config = WgpuConfig {
         device_descriptor: wgpu::DeviceDescriptor {
@@ -1557,11 +1634,11 @@ pub fn measure_masking_shadowing(
                 .expect("Failed to save color attachment");
         }
 
-        results.push(MeasurementData {
+        results.push(Measurement {
             name: surface.unwrap().file_stem().unwrap().to_owned(),
-            source: MeasurementDataSource::Measured(*hdl),
+            source: MeasurementSource::Measured(*hdl),
             timestamp: chrono::Local::now(),
-            measured: MeasuredData::Msf(MeasuredMsfData {
+            measured: Box::new(MeasuredMsfData {
                 params,
                 samples: measurement,
             }),

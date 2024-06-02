@@ -7,7 +7,7 @@ use crate::{
             event::{EventLoopProxy, OutlinerEvent, VgonioEvent},
         },
     },
-    measure::data::MeasurementData,
+    measure::Measurement,
 };
 use egui::WidgetText;
 use std::sync::{Arc, RwLock};
@@ -25,7 +25,7 @@ pub struct Outliner {
     /// Collapsable headers for the micro surfaces.
     surface_headers: Vec<CollapsableHeader<Handle<MicroSurface>>>,
     /// Collapsable headers for the measured data.
-    measured_headers: Vec<CollapsableHeader<Handle<MeasurementData>>>,
+    measured_headers: Vec<CollapsableHeader<Handle<Measurement>>>,
     /// The property data of each item.
     data: Arc<RwLock<PropertyData>>,
 }
@@ -47,7 +47,7 @@ impl Outliner {
 #[derive(Debug, Clone, Copy)]
 pub enum OutlinerItem {
     MicroSurface(Handle<MicroSurface>),
-    MeasurementData(Handle<MeasurementData>),
+    MeasurementData(Handle<Measurement>),
 }
 
 pub struct CollapsableHeader<T> {
@@ -127,7 +127,7 @@ impl CollapsableHeader<Handle<MicroSurface>> {
     }
 }
 
-impl CollapsableHeader<Handle<MeasurementData>> {
+impl CollapsableHeader<Handle<Measurement>> {
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,

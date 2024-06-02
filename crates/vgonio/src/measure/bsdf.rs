@@ -12,30 +12,36 @@ use crate::{
     measure::{
         bsdf::{
             emitter::Emitter,
-            receiver::{BounceAndEnergy, CollectedData, DataRetrieval, PerPatchData, Receiver},
+            receiver::{BounceAndEnergy, Receiver},
             rtc::{RayTrajectory, RtcMethod},
         },
-        data::{MeasuredData, MeasurementData, MeasurementDataSource, SampledBrdf},
-        microfacet::MeasuredAdfData,
         params::SimulationKind,
+        MeasuredData, Measurement, MeasurementSource,
     },
 };
 #[cfg(any(feature = "visu-dbg", debug_assertions))]
 use base::math::Vec3;
 use base::{
     error::VgonioError,
+    impl_measured_data_trait,
     math::{circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2},
+    medium::Medium,
     partition::{PartitionScheme, SphericalPartition},
     units::{Degs, Nanometres, Radians, Rads},
+    MeasurementKind,
 };
-use bxdf::brdf::measured::{MeasuredBrdf, VgonioBrdf, VgonioBrdfParameterisation};
+use bxdf::brdf::measured::{
+    ClausenBrdf, ClausenBrdfParameterisation, Origin, VgonioBrdf, VgonioBrdfParameterisation,
+};
+use chrono::{DateTime, Local};
 use jabr::array::DyArr;
-use rayon::slice::ParallelSlice;
 use serde::{Deserialize, Serialize};
 use std::{
-    borrow::Cow,
-    fmt::{Debug, Display, Formatter},
+    collections::HashMap,
+    fmt::{write, Debug, Display, Formatter},
+    mem::MaybeUninit,
     path::Path,
+    str::FromStr,
 };
 use surf::{MicroSurface, MicroSurfaceMesh};
 
@@ -44,6 +50,342 @@ pub(crate) mod params;
 pub mod receiver;
 pub mod rtc;
 
+// TODO: data retrieval and processing
+
+/// Raw data of the BSDF measurement.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RawMeasuredBsdfData {
+    /// The spectrum of the emitter.
+    pub spectrum: DyArr<Nanometres>,
+    /// The incident directions of the emitter.
+    pub incoming: DyArr<Sph2>,
+    /// The outgoing directions of the receiver.
+    pub outgoing: SphericalPartition,
+    /// Collected data of the receiver per incident direction per
+    /// outgoing (patch) direction and per wavelength: `ωi, ωo, λ`.
+    pub records: DyArr<Option<BounceAndEnergy>, 3>,
+    /// The statistics of the measurement per incident direction.
+    pub stats: DyArr<SingleBsdfMeasurementStats>,
+    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+    /// Extra ray trajectory data per incident direction.
+    pub trajectories: Box<[Vec<RayTrajectory>]>,
+    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+    /// Hit points on the receiver per incident direction.
+    pub hit_points: Box<[Vec<Vec3>]>,
+}
+
+/// A snapshot of the raw measured BSDF data at a given incident direction of
+/// the emitter.
+pub struct RawBsdfSnapshotIterator<'a> {
+    data: &'a RawMeasuredBsdfData,
+    idx: usize,
+}
+
+/// A snapshot of the raw measured BSDF data at a given incident direction of
+/// the emitter.
+pub struct RawBsdfSnapshot<'a> {
+    /// The incident direction of the snapshot.
+    pub wi: Sph2,
+    /// The collected data of the receiver per outgoing direction and per
+    /// wavelength. The data is stored as `ωo, λ`.
+    pub records: &'a [Option<BounceAndEnergy>],
+    /// The statistics of the snapshot.
+    pub stats: &'a SingleBsdfMeasurementStats,
+    /// Extra ray trajectory data.
+    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+    pub trajectories: &'a [RayTrajectory],
+    /// Hit points on the receiver.
+    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+    pub hit_points: &'a [Vec3],
+}
+
+impl<'a> Iterator for RawBsdfSnapshotIterator<'a> {
+    type Item = RawBsdfSnapshot<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.data.incoming.len();
+        if self.idx < self.data.incoming.len() {
+            let n_wo = self.data.outgoing.n_patches();
+            let n_spectrum = self.data.spectrum.len();
+            let idx = self.idx * n_wo * n_spectrum;
+            let snapshot = RawBsdfSnapshot {
+                wi: self.data.incoming[self.idx],
+                records: &self.data.records.as_slice()[idx..idx + n_wo * n_spectrum],
+                stats: &self.data.stats[self.idx],
+                #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                trajectories: &self.data.trajectories[self.idx],
+                #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                hit_points: &self.data.hit_points[self.idx],
+            };
+            self.idx += 1;
+            Some(snapshot)
+        } else {
+            None
+        }
+    }
+}
+
+impl ExactSizeIterator for RawBsdfSnapshotIterator<'_> {
+    fn len(&self) -> usize { self.data.incoming.len() - self.idx }
+}
+
+impl RawMeasuredBsdfData {
+    /// Returns the iterator over the snapshots of the raw measured BSDF data.
+    pub fn snapshots(&self) -> RawBsdfSnapshotIterator {
+        RawBsdfSnapshotIterator { data: self, idx: 0 }
+    }
+
+    /// Returns the number of incident directions.
+    #[inline]
+    pub fn n_wi(&self) -> usize { self.incoming.len() }
+
+    /// Returns the number of outgoing directions.
+    #[inline]
+    pub fn n_wo(&self) -> usize { self.outgoing.n_patches() }
+
+    /// Returns the number of wavelengths.
+    #[inline]
+    pub fn n_spectrum(&self) -> usize { self.spectrum.len() }
+
+    /// Returns maximum number of bounces.
+    pub fn max_bounces(&self) -> usize {
+        self.stats
+            .iter()
+            .map(|stats| stats.n_bounce as usize)
+            .max()
+            .unwrap()
+    }
+
+    /// Computes the BSDF data from the raw data.
+    pub fn compute_bsdfs(
+        &self,
+        medium_i: Medium,
+        medium_t: Medium,
+    ) -> HashMap<MeasuredBrdfLevel, VgonioBrdf> {
+        let n_wi = self.n_wi();
+        let n_wo = self.n_wo();
+        let n_spectrum = self.n_spectrum();
+        log::info!("Computing BSDF... with {} patches", n_wo);
+        let max_bounces = self.max_bounces();
+        let mut bsdfs = HashMap::new();
+        let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
+        let mut samples_l1_plus = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
+        for b in 0..max_bounces {
+            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+            log::debug!("Computing BSDF at bounce #{}", b);
+            let mut any_energy = false;
+            for (wi_idx, snapshot) in self.snapshots().enumerate() {
+                if snapshot.stats.n_bounce <= b as u32 {
+                    continue;
+                }
+                let snapshot_samples = &mut samples.as_mut_slice()
+                    [wi_idx * n_wo * n_spectrum..(wi_idx + 1) * n_wo * n_spectrum];
+                let snapshot_l1_plus = &mut samples_l1_plus.as_mut_slice()
+                    [wi_idx * n_wo * n_spectrum..(wi_idx + 1) * n_wo * n_spectrum];
+                let cos_i = snapshot.wi.theta.cos();
+                let rcp_e_i = rcp_f32(snapshot.stats.n_received as f32 * cos_i);
+                for (wo_idx, patch_data_per_wavelength) in
+                    snapshot.records.chunks(n_spectrum).enumerate()
+                {
+                    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+                    log::debug!("- snapshot #{wi_idx} and patch #{wo_idx}",);
+                    for (k, patch_energy) in patch_data_per_wavelength.iter().enumerate() {
+                        if patch_energy.is_none() {
+                            continue;
+                        }
+                        let patch = &self.outgoing.patches[wo_idx];
+                        let cos_o = patch.center().theta.cos();
+                        let solid_angle = patch.solid_angle().as_f32();
+                        let e_o = patch_energy.as_ref().unwrap().energy_per_bounce[b];
+                        if cos_o != 0.0 {
+                            let l_o = e_o * rcp_f32(cos_o) * rcp_f32(solid_angle);
+                            let val = l_o * rcp_e_i;
+                            snapshot_samples[wo_idx * n_spectrum + k] = val;
+                            if b > 1 {
+                                snapshot_l1_plus[wo_idx * n_spectrum + k] += val;
+                            }
+                            any_energy = true;
+
+                            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+                            log::debug!(
+                                "    - energy of patch {wo_idx}: {:>12.4}, λ[{k}] --  e_i: \
+                                 {:>12.4}, L_o[{k}]: {:>12.4} -- brdf: {:>14.8}",
+                                e_o,
+                                rcp_f32(rcp_e_i),
+                                l_o,
+                                snapshot_samples[wo_idx * n_spectrum + k],
+                            );
+                        }
+                    }
+                }
+            }
+            if any_energy {
+                bsdfs.insert(
+                    MeasuredBrdfLevel::from(b),
+                    VgonioBrdf::new(
+                        Origin::Simulated,
+                        medium_i,
+                        medium_t,
+                        VgonioBrdfParameterisation {
+                            incoming: self.incoming.clone(),
+                            outgoing: self.outgoing.clone(),
+                        },
+                        self.spectrum.clone(),
+                        samples.clone(),
+                    ),
+                );
+            }
+        }
+        bsdfs.insert(
+            MeasuredBrdfLevel::L1PLUS,
+            VgonioBrdf::new(
+                Origin::Simulated,
+                medium_i,
+                medium_t,
+                VgonioBrdfParameterisation {
+                    incoming: self.incoming.clone(),
+                    outgoing: self.outgoing.clone(),
+                },
+                self.spectrum.clone(),
+                samples_l1_plus,
+            ),
+        );
+        bsdfs
+    }
+}
+
+/// The level of the measured BRDF.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct MeasuredBrdfLevel(u32);
+
+impl MeasuredBrdfLevel {
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// bounces greater than 1.
+    pub const L1PLUS: MeasuredBrdfLevel = MeasuredBrdfLevel(u32::MAX);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// all bounces.
+    pub const L0: MeasuredBrdfLevel = MeasuredBrdfLevel(0);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the first bounce.
+    pub const L1: MeasuredBrdfLevel = MeasuredBrdfLevel(1);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the second bounce.
+    pub const L2: MeasuredBrdfLevel = MeasuredBrdfLevel(2);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the third bounce.
+    pub const L3: MeasuredBrdfLevel = MeasuredBrdfLevel(3);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the fourth bounce.
+    pub const L4: MeasuredBrdfLevel = MeasuredBrdfLevel(4);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the fifth bounce.
+    pub const L5: MeasuredBrdfLevel = MeasuredBrdfLevel(5);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the sixth bounce.
+    pub const L6: MeasuredBrdfLevel = MeasuredBrdfLevel(6);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the seventh bounce.
+    pub const L7: MeasuredBrdfLevel = MeasuredBrdfLevel(7);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the eighth bounce.
+    pub const L8: MeasuredBrdfLevel = MeasuredBrdfLevel(8);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the ninth bounce.
+    pub const L9: MeasuredBrdfLevel = MeasuredBrdfLevel(9);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the tenth bounce.
+    pub const L10: MeasuredBrdfLevel = MeasuredBrdfLevel(10);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the eleventh bounce.
+    pub const L11: MeasuredBrdfLevel = MeasuredBrdfLevel(11);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the twelfth bounce.
+    pub const L12: MeasuredBrdfLevel = MeasuredBrdfLevel(12);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the thirteenth bounce.
+    pub const L13: MeasuredBrdfLevel = MeasuredBrdfLevel(13);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the fourteenth bounce.
+    pub const L14: MeasuredBrdfLevel = MeasuredBrdfLevel(14);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the fifteenth bounce.
+    pub const L15: MeasuredBrdfLevel = MeasuredBrdfLevel(15);
+
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the sixteenth bounce.
+    pub const L16: MeasuredBrdfLevel = MeasuredBrdfLevel(16);
+
+    /// Returns the u32 representation of the level.
+    pub const fn as_u32(&self) -> u32 { self.0 }
+}
+
+impl From<usize> for MeasuredBrdfLevel {
+    fn from(n: usize) -> Self { MeasuredBrdfLevel(n as u32) }
+}
+
+impl From<u32> for MeasuredBrdfLevel {
+    fn from(n: u32) -> Self { MeasuredBrdfLevel(n) }
+}
+
+impl FromStr for MeasuredBrdfLevel {
+    type Err = VgonioError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let val = s.to_lowercase();
+        let val = val.trim();
+        if val.len() > 3 {
+            return Err(VgonioError::new(
+                "Invalid BRDF level. The level must be between l0 and l16 or l1+.",
+                None,
+            ));
+        }
+        match val {
+            "l1+" => Ok(MeasuredBrdfLevel::L1PLUS),
+            _ => {
+                let level = s.strip_prefix('l').ok_or_else(|| {
+                    VgonioError::new(
+                        "Invalid BRDF level. The level must be between l0 and l16",
+                        None,
+                    )
+                })?;
+                Ok(MeasuredBrdfLevel::from(level.parse::<u32>().map_err(
+                    |err| {
+                        VgonioError::new(
+                            format!("Invalid BRDF level. {}", err),
+                            Some(Box::new(err)),
+                        )
+                    },
+                )?))
+            }
+        }
+    }
+}
+
+impl Display for MeasuredBrdfLevel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            u32::MAX => f.write_str("l1+"),
+            _ => write!(f, "l{}", self.0),
+        }
+    }
+}
+
 /// BSDF measurement data.
 ///
 /// The Number of emitted rays, wavelengths, and bounces are invariant over
@@ -51,532 +393,154 @@ pub mod rtc;
 ///
 /// At each emitter's position, each emitted ray carries an initial energy
 /// equals to 1.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MeasuredBsdfData {
     /// Parameters of the measurement.
     pub params: BsdfMeasurementParams,
-    /// Snapshot of the BSDF at each incident direction of the emitter.
-    /// See [`BsdfSnapshot`] for more details.
-    pub snapshots: Box<[BsdfSnapshot]>,
-    // TODO: write the max_values and normalised fields to the vgmo file.
-    /// Maximum values of the BSDF samples for each incident direction and each
-    /// wavelength; stored in 1D row major order array [ωi, λ].
-    pub max_values: Box<[f32]>,
-    /// Tells whether the BSDF data are normalized for each snapshot, i.e., the
-    /// samples are divided by the maximum value of each snapshot.
-    pub normalised: bool,
-    /// Raw snapshots of the BSDF containing the full measurement data.
-    /// This field is only available when the
-    /// [`crate::measure::bsdf::params::DataRetrievalMode`] is set to
-    /// `FullData`.
-    /// See [`BsdfSnapshotRaw`] for more details.
-    pub raw_snapshots: Option<Box<[BsdfSnapshotRaw<BounceAndEnergy>]>>,
+    /// Raw data of the measurement.
+    pub raw: RawMeasuredBsdfData,
+    /// Collected BSDF data.
+    pub bsdfs: HashMap<MeasuredBrdfLevel, VgonioBrdf>,
 }
 
+impl_measured_data_trait!(MeasuredBsdfData, Bsdf, false);
+
 impl MeasuredBsdfData {
-    pub fn into_measured_brdf(self) -> VgonioBrdf {
-        /*
-        // TODO: NdArray ergonomics
-        let mut incoming = DyArr::<Sph2>::zeros([self.snapshots.len()]);
-        for (i, snapshot) in self.snapshots.iter().enumerate() {
-            incoming[i] = snapshot.wi;
-        }
-        let params = VgonioBrdfParameterisation {
-            incoming,
-            outgoing: self.params.receiver.partitioning(),
-        };
-        let n_wi = self.snapshots.len();
-        let n_wo = params.outgoing.n_patches();
-        let n_spectrum = self.params.emitter.spectrum.step_count();
-        let mut spectrum = DyArr::<Nanometres>::zeros([n_spectrum]);
-        for (i, w) in self.params.emitter.spectrum.values().enumerate() {
-            spectrum[[i]] = w;
-        }
-        let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
-        samples
-            .as_mut_slice()
-            .par_chunks(n_wo * n_spectrum)
-            .zip(self.snapshots.iter())
-            .for_each(|(s, snapshot)| {
-                s.copy_from_slice(snapshot.samples.as_slice());
-            });
-        VgonioBrdf::new(
-            self.params.incident_medium,
-            self.params.transmitted_medium,
-            params,
-            spectrum,
-            samples,
-        );
-        */
-        todo!("")
+    /// Returns the number of wavelengths.
+    #[inline]
+    pub fn n_spectrum(&self) -> usize { self.raw.n_spectrum() }
+
+    /// Returns the brdf at the given level.
+    pub fn brdf_at(&self, level: MeasuredBrdfLevel) -> Option<&VgonioBrdf> {
+        self.bsdfs.get(&level)
     }
 
     /// Writes the BSDF data to images in exr format.
     ///
-    /// Only BSDF data are written to the images. The full measurement data
-    /// are not written.
+    /// Only BSDF data is written to the images. The full measurement data is
+    /// not written.
     ///
     /// # Arguments
     ///
     /// * `filepath` - The path to the directory where the images will be saved.
     /// * `timestamp` - The timestamp of the measurement.
     /// * `resolution` - The resolution of the images.
-    /// * `normalise` - Whether to normalise the BSDF data before writing them
-    ///   to the images.
     pub fn write_as_exr(
         &self,
         filepath: &Path,
-        timestamp: &chrono::DateTime<chrono::Local>,
+        timestamp: &DateTime<Local>,
         resolution: u32,
-        normalise: bool,
     ) -> Result<(), VgonioError> {
-        use exr::prelude::*;
-        let n_wi = self.snapshots.len();
-        let n_wavelength = self.params.emitter.spectrum.step_count();
-        let (w, h) = (resolution as usize, resolution as usize);
-        let wavelengths = self
-            .params
-            .emitter
-            .spectrum
-            .values()
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-
-        // Compute the correction factor for normalisation.
-        //
-        // Set to 1 the correction factor for normalisation
-        //   - if the BSDF data are NOT normalised and the user does NOT want to
-        //     normalise it
-        //   - if the BSDF data are normalised and the user wants to normalise it
-        let mut factor = vec![1.0; n_wi * n_wavelength].into_boxed_slice();
-
-        if normalise && !self.normalised {
-            // Set to the reciprocal of the maximum values the correction factor for
-            // normalisation if the BSDF data are NOT normalised and the user wants
-            // to normalise it
-            factor.copy_from_slice(&self.max_values);
-            factor.iter_mut().for_each(|val| *val = rcp_f32(*val));
-        } else if !normalise && self.normalised {
-            // Set the correction factor to the maximum values if the BSDF data are
-            // normalised and the user does NOT want to normalise it
-            factor.copy_from_slice(&self.max_values);
-        }
-
-        log::debug!(
-            "pre-normalised? {} to normalise ? {} - max_bsdf_samples: {:?}",
-            self.normalised,
-            normalise,
-            factor
-        );
-
-        // The BSDF data are stored in a single flat row-major array, with the order of
-        // the dimensions [wi, λ, y, x] where x is the width, y is the height, λ is the
-        // wavelength, and wi is the incident direction.
-        let mut bsdf_images = vec![0.0; n_wi * n_wavelength * w * h];
-        // Pre-compute the patch index for each pixel.
-        let mut patch_indices = vec![0i32; w * h].into_boxed_slice();
-        let partition = self.params.receiver.partitioning();
-        partition.compute_pixel_patch_indices(resolution, resolution, &mut patch_indices);
-        {
-            // Each snapshot is saved as a separate layer of the image.
-            // Each channel of the layer stores the BSDF data for a single wavelength.
-            for (l, snapshot) in self.snapshots.iter().enumerate() {
-                let offset = l * n_wavelength * w * h;
-                for i in 0..w {
-                    for j in 0..h {
-                        let idx = patch_indices[i + j * w];
-                        if idx < 0 {
-                            continue;
-                        }
-                        for k in 0..n_wavelength {
-                            bsdf_images[offset + k * w * h + j * w + i] =
-                                snapshot.samples[[idx as usize, k]] * factor[l * n_wavelength + k];
-                        }
-                    }
-                }
-            }
-
-            let layers = self
-                .snapshots
-                .iter()
-                .enumerate()
-                .map(|(snap_idx, snapshot)| {
-                    let theta = format!("{:4.2}", snapshot.wi.theta.in_degrees().as_f32())
-                        .replace(".", "_");
-                    let phi =
-                        format!("{:4.2}", snapshot.wi.phi.in_degrees().as_f32()).replace(".", "_");
-                    let layer_attrib = LayerAttributes {
-                        owner: Text::new_or_none("vgonio"),
-                        capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
-                            timestamp,
-                        )),
-                        software_name: Text::new_or_none("vgonio"),
-                        other: self.params.to_exr_extra_info(),
-                        layer_name: Some(Text::new_or_panic(format!("θ{}.φ{}", theta, phi))),
-                        ..LayerAttributes::default()
-                    };
-                    let offset = snap_idx * w * h * wavelengths.len();
-                    let channels = wavelengths
-                        .iter()
-                        .enumerate()
-                        .map(|(i, wavelength)| {
-                            let name = Text::new_or_panic(format!("{}", wavelength));
-                            AnyChannel::new(
-                                name,
-                                FlatSamples::F32(Cow::Borrowed(
-                                    &bsdf_images[offset + i * w * h..offset + (i + 1) * w * h],
-                                )),
-                            )
-                        })
-                        .collect::<Vec<_>>();
-                    Layer::new(
-                        (w, h),
-                        layer_attrib,
-                        Encoding::FAST_LOSSLESS,
-                        AnyChannels {
-                            list: SmallVec::from(channels),
-                        },
-                    )
-                })
-                .collect::<Vec<_>>();
-
-            let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (w, h)));
-            let image = Image::from_layers(img_attrib, layers);
-            image.write().to_file(filepath).map_err(|err| {
-                VgonioError::new(
-                    format!(
-                        "Failed to write BSDF measurement data to image file: {}",
-                        err
-                    ),
-                    Some(Box::new(err)),
-                )
-            })?;
-        }
-
-        if let Some(raw_snapshots) = &self.raw_snapshots {
-            log::debug!("Writing BSDF bounces measurement data to image file.");
-            let max_bounces = self
-                .raw_snapshots
-                .as_ref()
-                .map(|snapshots| {
-                    snapshots
-                        .iter()
-                        .map(|snap| snap.stats.n_bounce)
-                        .max()
-                        .unwrap()
-                })
-                .unwrap_or(0) as usize;
-            if max_bounces == 0 {
-                log::info!("No bounces to save.");
-                return Ok(());
-            }
-
-            // Save the BSDF samples for each wavelength and each bounce.
-            {
-                let desired = n_wi * max_bounces * h * w;
-                if desired > bsdf_images.len() {
-                    // Try to reuse the bsdf_images buffer with the new size.
-                    // [wi, bounce, y, x]
-                    bsdf_images = vec![0.0; desired];
-                }
-            }
-
-            // Save the percentage of rays that have bounced a certain number of times for
-            // each patch.
-            {
-                let desired = n_wi * max_bounces * h * w;
-                if desired > bsdf_images.len() {
-                    // Try to reuse the bsdf_images buffer with the new size.
-                    // [wi, bounce, y, x]
-                    bsdf_images = vec![0.0; desired];
-                }
-                bsdf_images.fill(0.0);
-
-                // Each snapshot is saved as a separate layer of the image.
-                // Each channel of the layer stores the percentage of rays that have bounced a
-                // certain number of times.
-                for (snap_idx, snapshot) in raw_snapshots.iter().enumerate() {
-                    let offset = snap_idx * max_bounces * h * w;
-                    let rcp_n_received = rcp_f32(snapshot.stats.n_received as f32);
-                    for i in 0..w {
-                        for j in 0..h {
-                            let patch_idx = patch_indices[i + j * w];
-                            if patch_idx < 0 {
-                                continue;
-                            }
-                            for k in 0..snapshot.stats.n_bounce as usize {
-                                bsdf_images[offset + k * w * h + j * w + i] = snapshot.records
-                                    [patch_idx as usize * n_wavelength]
-                                    .n_ray_per_bounce[k]
-                                    as f32
-                                    * rcp_n_received;
-                            }
-                        }
-                    }
-                }
-
-                let layers = raw_snapshots
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(snap_idx, snapshot)| {
-                        let theta = format!("{:4.2}", snapshot.wi.theta.in_degrees().as_f32())
-                            .replace(".", "_");
-                        let phi = format!("{:4.2}", snapshot.wi.phi.in_degrees().as_f32())
-                            .replace(".", "_");
-                        let offset = snap_idx * max_bounces * h * w;
-                        if snapshot.stats.n_bounce == 0 {
-                            return None;
-                        }
-                        let n_bounce = snapshot.stats.n_bounce as usize;
-                        let (percentage_per_bounce, channels): (
-                            Vec<f32>,
-                            Vec<AnyChannel<FlatSamples>>,
-                        ) = (0..n_bounce)
-                            .map(|bounce_idx| {
-                                let name =
-                                    Text::new_or_panic(format!("bounce-{:03}", bounce_idx + 1));
-                                let samples = &bsdf_images[offset + bounce_idx * w * h
-                                    ..offset + (bounce_idx + 1) * w * h];
-                                // Only take the first wavelength.
-                                let sum_percent = snapshot.stats.n_ray_per_bounce
-                                    [0 * n_bounce + bounce_idx]
-                                    as f32
-                                    / snapshot.stats.n_received as f32;
-                                (
-                                    sum_percent,
-                                    AnyChannel::new(name, FlatSamples::F32(Cow::Borrowed(samples))),
-                                )
-                            })
-                            .unzip();
-                        let mut other_info = self.params.to_exr_extra_info();
-                        for (i, bounce_percent) in percentage_per_bounce.iter().enumerate() {
-                            other_info.insert(
-                                Text::new_or_panic(format!("bounce-{:03}", i + 1)),
-                                AttributeValue::Text(Text::new_or_panic(format!(
-                                    "{:.2}%",
-                                    bounce_percent
-                                ))),
-                            );
-                        }
-                        let layer_attrib = LayerAttributes {
-                            owner: Text::new_or_none("vgonio"),
-                            capture_date: Text::new_or_none(
-                                base::utils::iso_timestamp_from_datetime(timestamp),
-                            ),
-                            software_name: Text::new_or_none("vgonio"),
-                            other: other_info,
-                            layer_name: Some(Text::new_or_panic(format!("θ{}.φ{}", theta, phi))),
-                            ..LayerAttributes::default()
-                        };
-                        Some(Layer::new(
-                            (w, h),
-                            layer_attrib,
-                            Encoding::FAST_LOSSLESS,
-                            AnyChannels {
-                                list: SmallVec::from(channels),
-                            },
-                        ))
-                    })
-                    .collect::<Vec<_>>();
-
-                let filename = format!(
-                    "{}_ray_percent_per_patch_per_bounce.exr",
-                    filepath.file_stem().unwrap().to_str().unwrap()
-                );
-                let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (w, h)));
-                let image = Image::from_layers(img_attrib, layers);
-                image
-                    .write()
-                    .to_file(filepath.with_file_name(filename))
-                    .map_err(|err| {
-                        VgonioError::new(
-                            format!(
-                                "Failed to write BSDF bounces measurement data to image file: {}",
-                                err
-                            ),
-                            Some(Box::new(err)),
-                        )
-                    })?;
-            }
+        for (level, bsdf) in &self.bsdfs {
+            let filename = format!(
+                "{}_{}.exr",
+                filepath.file_stem().unwrap().to_str().unwrap(),
+                level
+            );
+            bsdf.write_as_exr(&filepath.with_file_name(filename), timestamp, resolution)?;
         }
         Ok(())
     }
 
-    /// Returns the number of samples (number of incident & outgoing direction
-    /// pairs) in total without considering the wavelength.
-    #[inline(always)]
-    pub fn num_samples(&self) -> usize { self.params.receiver.num_patches() * self.snapshots.len() }
-
-    #[cfg(feature = "visu-dbg")]
-    /// Returns the trajectories of the rays for each BSDF snapshot.
-    pub fn trajectories(&self) -> Vec<Vec<RayTrajectory>> {
-        self.snapshots
-            .iter()
-            .map(|snapshot| snapshot.trajectories.clone())
-            .collect()
-    }
-
-    #[cfg(feature = "visu-dbg")]
-    /// Returns the hit points on the collector for each BSDF snapshot.
-    pub fn hit_points(&self) -> Vec<Vec<Vec3>> {
-        self.snapshots
-            .iter()
-            .map(|snapshot| snapshot.hit_points.clone().into_vec())
-            .collect()
-    }
-
-    /// Extracts the NDF from the measured BSDF.
-    pub fn extract_ndf(&self) -> MeasuredAdfData {
-        todo!()
-        // let params =  AdfMeasurementParams {
-        //     azimuth: RangeByStepSizeInclusive {},
-        //     zenith: RangeByStepSizeInclusive {},
-        // };
-        // for snapshot in &self.snapshots {
-        //     for (patch, samples) in
-        // snapshot.samples.iter().zip(ndf.samples.iter_mut()) {
-        //         for (wavelength, sample) in samples.iter_mut().enumerate() {
-        //             *sample += patch[wavelength];
-        //         }
-        //     }
-        // }
-        // ndf
-    }
-
-    /// Extracts the BRDF from the measured BSDF data.
-    pub fn sampled_brdf(&self, s: &SampledBrdf, dense: bool, phi_offset: Radians) -> SampledBrdf {
-        let spectrum = self
-            .params
-            .emitter
-            .spectrum
-            .values()
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let n_lambda = spectrum.len();
-        let n_wi = s.n_wi();
-        let n_wo = s.n_wo();
+    /// Resamples the BSDF data to match the `ClausenBrdfParameterisation`.
+    pub fn resample(
+        &self,
+        params: &ClausenBrdfParameterisation,
+        level: MeasuredBrdfLevel,
+        dense: bool,
+        phi_offset: Radians,
+    ) -> ClausenBrdf {
+        let spectrum = self.params.emitter.spectrum.values().collect::<Vec<_>>();
+        let n_spectrum = spectrum.len();
+        let n_wi = params.incoming.len();
+        let n_wo = params.n_wo;
         let n_wo_dense = if dense { n_wo * 4 } else { n_wo };
 
         // row-major [wi, wo, spectrum]
-        let mut samples = vec![0.0; n_wi * n_wo_dense * n_lambda].into_boxed_slice();
-        // row-major [wi, spectrum]
-        let mut max_values = vec![0.0; n_wi * n_lambda].into_boxed_slice();
-
+        let mut samples = vec![0.0; n_wi * n_wo_dense * n_spectrum];
         let wo_step = Degs::new(2.5).to_radians();
-        let wi_wo_pairs = if dense {
-            s.wi_wo_pairs
-                .iter()
-                .map(|(wi, wos)| {
-                    let wos_new = wos
-                        .iter()
-                        .flat_map(|wo| {
-                            if wo.approx_eq(&Sph2::zero()) {
-                                vec![Sph2::zero(); 1]
-                            } else if (wo.theta - wi.theta).abs().as_f32() < 1e-6 {
-                                let mut wos_out = vec![*wo; 7];
-                                // The incident and outgoing directions are the same.
-                                if wo.phi.as_f32().abs() < 1e-6 {
-                                    // The azimuth of the incident direction is almost zero.
-                                    for i in 0..4 {
-                                        wos_out[i] = Sph2::new(
-                                            wo.theta - wo_step * (3 - i) as f32,
-                                            wo.phi + phi_offset,
-                                        );
-                                    }
-                                    for i in 0..3 {
-                                        wos_out[i + 4] = Sph2::new(
-                                            wo.theta - wo_step * (3 - i) as f32,
-                                            Rads::PI + phi_offset,
-                                        );
-                                    }
-                                } else {
-                                    for i in 0..3 {
-                                        wos_out[i] = Sph2::new(
-                                            wo.theta - wo_step * (3 - i) as f32,
-                                            Rads::ZERO + phi_offset,
-                                        );
-                                    }
-                                    for i in 0..4 {
-                                        wos_out[i + 3] = Sph2::new(
-                                            wo.theta - wo_step * (3 - i) as f32,
-                                            wo.phi + phi_offset,
-                                        );
-                                    }
-                                }
-                                wos_out
-                            } else {
-                                let mut wos_out = vec![*wo; 4];
-                                for i in 0..4 {
-                                    wos_out[i] = Sph2::new(
-                                        wo.theta - wo_step * (3 - i) as f32,
-                                        wo.phi + phi_offset,
-                                    );
-                                }
-                                wos_out
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice();
-                    (*wi, wos_new)
-                })
-                .collect::<Vec<(Sph2, Box<[Sph2]>)>>()
-                .into_boxed_slice()
-        } else {
-            s.wi_wo_pairs.clone()
-        };
 
-        // Get the interpolated samples for wi, wo, and spectrum.
-        wi_wo_pairs.iter().enumerate().for_each(|(i, (wi, wos))| {
-            let samples_offset_wi = i * n_wo_dense * n_lambda;
-            let snap_idx = self
-                .snapshots
-                .iter()
-                .position(|snap| snap.wi.approx_eq(&wi))
-                .expect(
-                    "The incident direction is not found in the BSDF snapshots. The incident \
-                     direction must be one of the directions of the emitter.",
-                );
-            let max_offset = i * n_lambda;
-            let use_original_max = std::env::var("ORIGINAL_MAX")
-                .map(|v| v == "1")
-                .unwrap_or(false);
-            if use_original_max {
-                max_values[max_offset..max_offset + n_lambda].copy_from_slice(
-                    &self.max_values[snap_idx * n_lambda..(snap_idx + 1) * n_lambda],
-                );
-                log::trace!(
-                    "Original max values: {:?}",
-                    &self.max_values[snap_idx * n_lambda..(snap_idx + 1) * n_lambda]
-                );
-            }
-            for (j, wo) in wos.iter().enumerate() {
-                let samples_offset = samples_offset_wi + j * n_lambda;
-                self.sample_at(
-                    *wi,
-                    *wo,
-                    &mut samples[samples_offset..samples_offset + n_lambda],
-                );
-                if !use_original_max {
-                    for k in 0..n_lambda {
-                        max_values[max_offset + k] =
-                            f32::max(max_values[max_offset + k], samples[samples_offset + k]);
+        let new_params = if dense {
+            let mut outgoing = DyArr::<Sph2, 2>::zeros([n_wi, n_wo_dense]);
+            for (i, wi) in params.incoming.as_slice().iter().enumerate() {
+                let mut new_j = 0;
+                for j in 0..n_wo {
+                    let wo = params.outgoing[[i, j]];
+                    if wo.approx_eq(&Sph2::zero()) {
+                        outgoing[[i, new_j]] = Sph2::zero();
+                        new_j += 1;
+                    } else if (wo.theta - wi.theta).abs().as_f32() < 1e-6 {
+                        // The incident and outgoing directions are the same.
+                        if wo.phi.as_f32().abs() < 1e-6 {
+                            // The azimuth of the incident direction is almost zero.
+                            for k in 0..4 {
+                                outgoing[[i, new_j]] = Sph2::new(
+                                    wo.theta - wo_step * (3 - k) as f32,
+                                    wo.phi + phi_offset,
+                                );
+                                new_j += 1;
+                            }
+                            for k in 0..3 {
+                                outgoing[[i, new_j]] = Sph2::new(
+                                    wo.theta - wo_step * (3 - k) as f32,
+                                    Rads::PI + phi_offset,
+                                );
+                                new_j += 1;
+                            }
+                        } else {
+                            for k in 0..3 {
+                                outgoing[[i, new_j]] = Sph2::new(
+                                    wo.theta - wo_step * (3 - k) as f32,
+                                    Rads::ZERO + phi_offset,
+                                );
+                                new_j += 1;
+                            }
+                            for k in 0..4 {
+                                outgoing[[i, new_j]] = Sph2::new(
+                                    wo.theta - wo_step * (3 - k) as f32,
+                                    wo.phi + phi_offset,
+                                );
+                            }
+                        }
+                    } else {
+                        for k in 0..4 {
+                            outgoing[[i, new_j]] =
+                                Sph2::new(wo.theta - wo_step * (3 - k) as f32, wo.phi + phi_offset);
+                            new_j += 1;
+                        }
                     }
                 }
             }
-            if !use_original_max {
-                log::trace!(
-                    "Max values: {:?}",
-                    &max_values[max_offset..max_offset + n_lambda]
+            ClausenBrdfParameterisation {
+                incoming: params.incoming.clone(),
+                outgoing,
+                n_wo: n_wo_dense,
+            }
+        } else {
+            params.clone()
+        };
+
+        // Get the interpolated samples for wi, wo, and spectrum.
+        new_params.wi_wos_iter().for_each(|(i, (wi, wos))| {
+            let samples_offset_wi = i * n_wo_dense * n_spectrum;
+            for (j, wo) in wos.iter().enumerate() {
+                let samples_offset = samples_offset_wi + j * n_spectrum;
+                self.sample_at(
+                    level.0,
+                    *wi,
+                    *wo,
+                    &mut samples[samples_offset..samples_offset + n_spectrum],
                 );
             }
         });
 
-        SampledBrdf {
-            spectrum,
-            samples,
-            max_values,
-            normalised: self.normalised,
-            wi_wo_pairs,
+        ClausenBrdf {
+            origin: Origin::RealWorld,
+            incident_medium: self.params.incident_medium,
+            transmitted_medium: self.params.transmitted_medium,
+            params: Box::new(new_params),
+            spectrum: DyArr::from_vec_1d(spectrum),
+            samples: DyArr::<f32, 3>::from_vec([n_wi, n_wo_dense, n_spectrum], samples),
         }
     }
 
@@ -597,7 +561,7 @@ impl MeasuredBsdfData {
     ///
     /// Panic if the number of wavelengths in the interpolated data does not
     /// match the number of wavelengths in the BSDF data.
-    pub fn sample_at(&self, wi: Sph2, wo: Sph2, interpolated: &mut [f32]) {
+    pub fn sample_at(&self, level: u32, wi: Sph2, wo: Sph2, interpolated: &mut [f32]) {
         log::trace!(
             "Sampling at wi: ({}, {}), wo: ({} {})",
             wi.theta.to_degrees().prettified(),
@@ -610,16 +574,22 @@ impl MeasuredBsdfData {
             self.params.emitter.spectrum.step_count(),
             "Mismatch in the number of wavelengths."
         );
-        let snapshot = self
-            .snapshots
+        let snapshot_idx = self
+            .raw
+            .incoming
+            .as_slice()
             .iter()
-            .find(|snap| snap.wi.approx_eq(&wi))
+            .position(|snap| wi.approx_eq(snap))
             .expect(
                 "The incident direction is not found in the BSDF snapshots. The incident \
                  direction must be one of the directions of the emitter.",
             );
         log::trace!("  - Found snapshot at wi: {}", wi);
-        let n_wavelengths = self.params.emitter.spectrum.step_count();
+        let n_spectrum = self.raw.n_spectrum();
+        let n_wo = self.raw.n_wo();
+        let brdf = self.bsdfs.get(&MeasuredBrdfLevel(level)).unwrap();
+        let snapshot_samples = &brdf.samples.as_slice()
+            [snapshot_idx * n_wo * n_spectrum..(snapshot_idx + 1) * n_wo * n_spectrum];
         match self.params.receiver.scheme {
             PartitionScheme::Beckers => {
                 let partition = SphericalPartition::new(
@@ -659,12 +629,12 @@ impl MeasuredBsdfData {
                         center.1.to_cartesian(),
                         center.2.to_cartesian(),
                     );
-                    let patch0_samples = &snapshot.samples.as_slice()
-                        [patch_idx.0 * n_wavelengths..(patch_idx.0 + 1) * n_wavelengths];
-                    let patch1_samples = &snapshot.samples.as_slice()
-                        [patch_idx.1 * n_wavelengths..(patch_idx.1 + 1) * n_wavelengths];
-                    let patch2_samples = &snapshot.samples.as_slice()
-                        [patch_idx.2 * n_wavelengths..(patch_idx.2 + 1) * n_wavelengths];
+                    let patch0_samples =
+                        &snapshot_samples[patch_idx.0 * n_spectrum..(patch_idx.0 + 1) * n_spectrum];
+                    let patch1_samples =
+                        &snapshot_samples[patch_idx.1 * n_spectrum..(patch_idx.1 + 1) * n_spectrum];
+                    let patch2_samples =
+                        &snapshot_samples[patch_idx.2 * n_spectrum..(patch_idx.2 + 1) * n_spectrum];
                     log::trace!(
                         "  - Interpolating inside a triangle between patches #{} ({}, {} | {:?}), \
                          #{} ({}, {} | {:?}), and #{} ({}, {} | {:?})",
@@ -698,10 +668,10 @@ impl MeasuredBsdfData {
                     let patch0 = partition.patches[patch0_idx];
                     let patch1 = partition.patches[patch1_idx];
                     let center = (patch0.center(), patch1.center());
-                    let patch0_samples = &snapshot.samples.as_slice()
-                        [patch0_idx * n_wavelengths..(patch0_idx + 1) * n_wavelengths];
-                    let patch1_samples = &snapshot.samples.as_slice()
-                        [patch1_idx * n_wavelengths..(patch1_idx + 1) * n_wavelengths];
+                    let patch0_samples =
+                        &snapshot_samples[patch0_idx * n_spectrum..(patch0_idx + 1) * n_spectrum];
+                    let patch1_samples =
+                        &snapshot_samples[patch1_idx * n_spectrum..(patch1_idx + 1) * n_spectrum];
                     log::trace!(
                         "  - Interpolating between two patches: #{} ({}, {} | {:?}) and #{} ({}, \
                          {} | {:?}) at ring #{}",
@@ -795,18 +765,14 @@ impl MeasuredBsdfData {
                         ))
                     .clamp(0.0, 1.0);
                     // Bilateral interpolation.
-                    let upper_patch0_samples = &snapshot.samples.as_slice()[upper_patch_idx.0
-                        * n_wavelengths
-                        ..(upper_patch_idx.0 + 1) * n_wavelengths];
-                    let upper_patch1_samples = &snapshot.samples.as_slice()[upper_patch_idx.1
-                        * n_wavelengths
-                        ..(upper_patch_idx.1 + 1) * n_wavelengths];
-                    let lower_patch0_samples = &snapshot.samples.as_slice()[lower_patch_idx.0
-                        * n_wavelengths
-                        ..(lower_patch_idx.0 + 1) * n_wavelengths];
-                    let lower_patch1_samples = &snapshot.samples.as_slice()[lower_patch_idx.1
-                        * n_wavelengths
-                        ..(lower_patch_idx.1 + 1) * n_wavelengths];
+                    let upper_patch0_samples = &snapshot_samples
+                        [upper_patch_idx.0 * n_spectrum..(upper_patch_idx.0 + 1) * n_spectrum];
+                    let upper_patch1_samples = &snapshot_samples
+                        [upper_patch_idx.1 * n_spectrum..(upper_patch_idx.1 + 1) * n_spectrum];
+                    let lower_patch0_samples = &snapshot_samples
+                        [lower_patch_idx.0 * n_spectrum..(lower_patch_idx.0 + 1) * n_spectrum];
+                    let lower_patch1_samples = &snapshot_samples
+                        [lower_patch_idx.1 * n_spectrum..(lower_patch_idx.1 + 1) * n_spectrum];
                     log::trace!(
                         "  - Interpolating inside a quadrilateral between rings #{} (#{} vals \
                          {:?}, #{} vals {:?} | t = {}), and #{} (#{} vals {:?}, #{} vals {:?} | t \
@@ -842,26 +808,26 @@ impl MeasuredBsdfData {
     }
 }
 
-pub(crate) fn compute_bsdf_snapshots_max_values(
-    snapshots: &[BsdfSnapshot],
-    n_wavelength: usize,
-) -> Box<[f32]> {
-    let n_wi = snapshots.len();
-    let mut max_values = vec![0.0; n_wi * n_wavelength].into_boxed_slice();
-    snapshots.iter().enumerate().for_each(|(i, snapshot)| {
-        let offset = i * n_wavelength;
-        snapshot
-            .samples
-            .as_slice()
-            .chunks(n_wavelength)
-            .for_each(|patch_samples| {
-                patch_samples.iter().enumerate().for_each(|(j, val)| {
-                    max_values[offset + j] = f32::max(max_values[offset + j], *val);
-                });
-            });
-    });
-    max_values
-}
+// pub(crate) fn compute_bsdf_snapshots_max_values(
+//     snapshots: &[BsdfSnapshot],
+//     n_wavelength: usize,
+// ) -> Box<[f32]> {
+//     let n_wi = snapshots.len();
+//     let mut max_values = vec![0.0; n_wi * n_wavelength].into_boxed_slice();
+//     snapshots.iter().enumerate().for_each(|(i, snapshot)| {
+//         let offset = i * n_wavelength;
+//         snapshot
+//             .samples
+//             .as_slice()
+//             .chunks(n_wavelength)
+//             .for_each(|patch_samples| {
+//                 patch_samples.iter().enumerate().for_each(|(j, val)| {
+//                     max_values[offset + j] = f32::max(max_values[offset + j],
+// *val);                 });
+//             });
+//     });
+//     max_values
+// }
 
 #[cfg(test)]
 mod tests {
@@ -872,7 +838,6 @@ mod tests {
     use base::{
         medium::Medium, partition::SphericalDomain, range::RangeByStepSizeInclusive, units::nm,
     };
-    use jabr::array::DynArr;
 
     #[test]
     fn test_measured_bsdf_sample() {
@@ -882,16 +847,25 @@ mod tests {
         };
         let partition =
             SphericalPartition::new(PartitionScheme::Beckers, SphericalDomain::Upper, precision);
-        let samples = DyArr::ones([partition.n_patches(), 4]);
-        let snapshots = Box::new([BsdfSnapshot {
-            wi: Sph2 {
-                theta: Rads::ZERO,
-                phi: Rads::ZERO,
+        let n_wo = partition.n_patches();
+        let spectrum_range = RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0));
+        let spectrum = DyArr::from_iterator([-1], spectrum_range.values());
+        let n_spectrum = spectrum.len();
+        let mut bsdfs = HashMap::new();
+        bsdfs.insert(
+            MeasuredBrdfLevel(0),
+            VgonioBrdf {
+                origin: Origin::RealWorld,
+                incident_medium: Medium::Vacuum,
+                transmitted_medium: Medium::Aluminium,
+                params: Box::new(VgonioBrdfParameterisation {
+                    incoming: DyArr::zeros([1]),
+                    outgoing: partition.clone(),
+                }),
+                spectrum: spectrum.clone(),
+                samples: DyArr::ones([1, n_wo, 4]),
             },
-            samples,
-            trajectories: Vec::new(),
-            hit_points: Vec::new().into_boxed_slice(),
-        }]);
+        );
         let measured = MeasuredBsdfData {
             params: BsdfMeasurementParams {
                 emitter: EmitterParams {
@@ -899,13 +873,12 @@ mod tests {
                     max_bounces: 0,
                     zenith: RangeByStepSizeInclusive::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
                     azimuth: RangeByStepSizeInclusive::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
-                    spectrum: RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0)),
+                    spectrum: spectrum_range,
                 },
                 receiver: ReceiverParams {
                     domain: SphericalDomain::Upper,
                     precision,
                     scheme: PartitionScheme::Beckers,
-                    retrieval: Default::default(),
                 },
                 kind: BsdfKind::Brdf,
                 sim_kind: SimulationKind::GeomOptics(Grid),
@@ -913,17 +886,37 @@ mod tests {
                 fresnel: Default::default(),
                 transmitted_medium: Medium::Vacuum,
             },
-            snapshots,
-            raw_snapshots: None,
-            normalised: false,
-            max_values: vec![1.0; 4].into_boxed_slice(),
+            raw: RawMeasuredBsdfData {
+                spectrum,
+                incoming: DyArr::zeros([1]),
+                outgoing: partition,
+                records: DyArr::splat(Some(BounceAndEnergy::empty(2)), [1, n_wo, n_spectrum]),
+                stats: DyArr::splat(
+                    SingleBsdfMeasurementStats {
+                        n_bounce: 0,
+                        n_received: 0,
+                        n_missed: 0,
+                        n_spectrum,
+                        n_ray_stats: Box::new([0, 0, 0]),
+                        e_captured: Box::new([0.0]),
+                        n_ray_per_bounce: Box::new([]),
+                        energy_per_bounce: Box::new([]),
+                    },
+                    [1],
+                ),
+                trajectories: Box::new([]),
+                hit_points: Box::new([]),
+            },
+            bsdfs,
         };
+
         let mut interpolated = vec![0.0, 0.0, 0.0, 0.0];
         let wi = Sph2 {
             theta: Rads::ZERO,
             phi: Rads::ZERO,
         };
         measured.sample_at(
+            0,
             wi,
             Sph2 {
                 theta: Rads::ZERO,
@@ -935,6 +928,7 @@ mod tests {
 
         interpolated.iter_mut().for_each(|spl| *spl = 0.0);
         measured.sample_at(
+            0,
             wi,
             Sph2 {
                 theta: Rads::from_degrees(80.0),
@@ -945,6 +939,7 @@ mod tests {
         assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
 
         measured.sample_at(
+            0,
             wi,
             Sph2 {
                 theta: Rads::from_degrees(40.0),
@@ -955,6 +950,7 @@ mod tests {
         assert_eq!(interpolated, vec![1.0, 1.0, 1.0, 1.0]);
 
         measured.sample_at(
+            0,
             wi,
             Sph2 {
                 theta: Rads::from_degrees(55.0),
@@ -1023,24 +1019,32 @@ impl From<u8> for BsdfKind {
 }
 
 /// BSDF measurement statistics for a single emitter's position.
+///
+/// N_emitted = N_missed + N_received
+/// N_received = N_absorbed + N_reflected
+/// N_reflected = N_captured + N_escaped
 #[derive(Clone)]
-pub struct BsdfMeasurementStatsPoint {
+pub struct SingleBsdfMeasurementStats {
     /// Number of bounces (actual bounce, not always equals to the maximum
     /// bounce limit).
     pub n_bounce: u32,
     /// Number of emitted rays that hit the surface; invariant over wavelength.
     pub n_received: u32,
+    /// Number of emitted rays that missed the surface; invariant over
+    /// wavelength.
+    pub n_missed: u32,
     /// Number of wavelengths, which is the number of samples in the spectrum.
-    pub n_wavelength: usize,
+    pub n_spectrum: usize,
     /// Statistics of the number of emitted rays that either
     /// 1. hit the surface and were absorbed, or
     /// 2. hit the surface and were reflected, or
-    /// 3. hit the surface and were captured by the collector.
+    /// 3. hit the surface and were captured by the collector or
+    /// 4. hit the surface and escaped.
     /// The statistics are variant over wavelength. The data is stored as a
     /// flat array in row-major order with the dimensions (statistics,
     /// wavelength). The index of the statistics is defined by the constants
-    /// `ABSORBED_IDX`, `REFLECTED_IDX`, and `CAPTURED_IDX`.
-    /// The total number of elements in the array is `3 * n_wavelength`.
+    /// `ABSORBED_IDX`, `REFLECTED_IDX`, and `CAPTURED_IDX`, `ESCAPED_IDX`.
+    /// The total number of elements in the array is `4 * n_wavelength`.
     pub n_ray_stats: Box<[u32]>,
     // TODO: verify if this is the correct way to store the energy captured by
     // the collector. Check if the energy is the sum of the energy of the rays
@@ -1060,10 +1064,11 @@ pub struct BsdfMeasurementStatsPoint {
     pub energy_per_bounce: Box<[f32]>,
 }
 
-impl PartialEq for BsdfMeasurementStatsPoint {
+impl PartialEq for SingleBsdfMeasurementStats {
     fn eq(&self, other: &Self) -> bool {
         self.n_bounce == other.n_bounce
-            && self.n_wavelength == other.n_wavelength
+            && self.n_spectrum == other.n_spectrum
+            && self.n_missed == other.n_missed
             && self.n_received == other.n_received
             && self.n_ray_stats == other.n_ray_stats
             && self.e_captured == other.e_captured
@@ -1072,7 +1077,7 @@ impl PartialEq for BsdfMeasurementStatsPoint {
     }
 }
 
-impl BsdfMeasurementStatsPoint {
+impl SingleBsdfMeasurementStats {
     /// Index of the number of absorbed rays statistics in the `n_ray_stats`
     /// array.
     pub const ABSORBED_IDX: usize = 0;
@@ -1082,6 +1087,11 @@ impl BsdfMeasurementStatsPoint {
     /// Index of the number of captured rays statistics in the `n_ray_stats`
     /// array.
     pub const CAPTURED_IDX: usize = 2;
+    /// Index of the number of escaped rays statistics in the `n_ray_stats`
+    /// array.
+    pub const ESCAPED_IDX: usize = 3;
+    /// Number of statistics in the `n_ray_stats` array.
+    pub const N_STATS: usize = 4;
 
     /// Creates an empty `BsdfMeasurementStatsPoint`.
     ///
@@ -1089,146 +1099,173 @@ impl BsdfMeasurementStatsPoint {
     /// * `n_wavelength`: Number of wavelengths.
     /// * `max_bounce`: Maximum number of bounces. This is used to pre-allocate
     ///   the memory for the histograms.
-    pub fn new(n_wavelength: usize, max_bounce: usize) -> Self {
+    pub fn new(n_spectrum: usize, max_bounce: usize) -> Self {
         Self {
             n_bounce: max_bounce as u32,
             n_received: 0,
-            n_wavelength,
-            n_ray_stats: vec![0; 3 * n_wavelength].into_boxed_slice(),
-            e_captured: vec![0.0; n_wavelength].into_boxed_slice(),
-            n_ray_per_bounce: vec![0; n_wavelength * max_bounce].into_boxed_slice(),
-            energy_per_bounce: vec![0.0; n_wavelength * max_bounce].into_boxed_slice(),
+            n_missed: 0,
+            n_spectrum,
+            n_ray_stats: vec![0; Self::N_STATS * n_spectrum].into_boxed_slice(),
+            e_captured: vec![0.0; n_spectrum].into_boxed_slice(),
+            n_ray_per_bounce: vec![0; n_spectrum * max_bounce].into_boxed_slice(),
+            energy_per_bounce: vec![0.0; n_spectrum * max_bounce].into_boxed_slice(),
         }
     }
 
     /// Returns the number of absorbed rays statistics per wavelength.
     pub fn n_absorbed(&self) -> &[u32] {
-        let offset = Self::ABSORBED_IDX * self.n_wavelength;
-        &self.n_ray_stats[offset..offset + self.n_wavelength]
+        let offset = Self::ABSORBED_IDX * self.n_spectrum;
+        &self.n_ray_stats[offset..offset + self.n_spectrum]
     }
 
     /// Returns the number of absorbed rays statistics per wavelength.
     pub fn n_absorbed_mut(&mut self) -> &mut [u32] {
-        let offset = Self::ABSORBED_IDX * self.n_wavelength;
-        &mut self.n_ray_stats[offset..offset + self.n_wavelength]
+        let offset = Self::ABSORBED_IDX * self.n_spectrum;
+        &mut self.n_ray_stats[offset..offset + self.n_spectrum]
     }
 
     /// Returns the number of reflected rays statistics per wavelength.
     pub fn n_reflected(&self) -> &[u32] {
-        let offset = Self::REFLECTED_IDX * self.n_wavelength;
-        &self.n_ray_stats[offset..offset + self.n_wavelength]
+        let offset = Self::REFLECTED_IDX * self.n_spectrum;
+        &self.n_ray_stats[offset..offset + self.n_spectrum]
     }
 
     /// Returns the number of reflected rays statistics per wavelength.
     pub fn n_reflected_mut(&mut self) -> &mut [u32] {
-        let offset = Self::REFLECTED_IDX * self.n_wavelength;
-        &mut self.n_ray_stats[offset..offset + self.n_wavelength]
+        let offset = Self::REFLECTED_IDX * self.n_spectrum;
+        &mut self.n_ray_stats[offset..offset + self.n_spectrum]
     }
 
     /// Returns the number of captured rays statistics per wavelength.
     pub fn n_captured(&self) -> &[u32] {
-        let offset = Self::CAPTURED_IDX * self.n_wavelength;
-        &self.n_ray_stats[offset..offset + self.n_wavelength]
+        let offset = Self::CAPTURED_IDX * self.n_spectrum;
+        &self.n_ray_stats[offset..offset + self.n_spectrum]
     }
 
     /// Returns the number of captured rays statistics per wavelength.
     pub fn n_captured_mut(&mut self) -> &mut [u32] {
-        let offset = Self::CAPTURED_IDX * self.n_wavelength;
-        &mut self.n_ray_stats[offset..offset + self.n_wavelength]
+        let offset = Self::CAPTURED_IDX * self.n_spectrum;
+        &mut self.n_ray_stats[offset..offset + self.n_spectrum]
+    }
+
+    /// Returns the number of escaped rays statistics per wavelength.
+    pub fn n_escaped(&self) -> &[u32] {
+        let offset = Self::ESCAPED_IDX * self.n_spectrum;
+        &self.n_ray_stats[offset..offset + self.n_spectrum]
+    }
+
+    /// Returns the number of escaped rays statistics per wavelength.
+    pub fn n_escaped_mut(&mut self) -> &mut [u32] {
+        let offset = Self::ESCAPED_IDX * self.n_spectrum;
+        &mut self.n_ray_stats[offset..offset + self.n_spectrum]
+    }
+
+    /// Returns the energy per wavelength which is the sum of the energy of the
+    /// per bounce for the given wavelength.
+    pub fn energy_per_wavelength(&self) -> Box<[f32]> {
+        let mut energy = vec![0.0; self.n_spectrum].into_boxed_slice();
+        for i in 0..self.n_spectrum {
+            for j in 0..self.n_bounce as usize {
+                energy[i] += self.energy_per_bounce[i * self.n_bounce as usize + j];
+            }
+        }
+        energy
+    }
+
+    /// Tests if the statistics are valid.
+    pub fn is_valid(&self) -> bool {
+        if self.n_ray_stats.len() != Self::N_STATS * self.n_spectrum {
+            eprintln!("Invalid n_ray_stats length: {}", self.n_ray_stats.len());
+            return false;
+        }
+        if self.n_ray_per_bounce.len() != self.n_spectrum * self.n_bounce as usize {
+            eprintln!(
+                "Invalid n_ray_per_bounce length: {}",
+                self.n_ray_per_bounce.len()
+            );
+            return false;
+        }
+        if self.energy_per_bounce.len() != self.n_spectrum * self.n_bounce as usize {
+            eprintln!(
+                "Invalid energy_per_bounce length: {}",
+                self.energy_per_bounce.len()
+            );
+            return false;
+        }
+        if self.e_captured.len() != self.n_spectrum {
+            eprintln!("Invalid e_captured length: {}", self.e_captured.len());
+            return false;
+        }
+        // N_emitted = N_missed + N_received
+        for i in 0..self.n_spectrum {
+            // N_received = N_absorbed + N_reflected
+            if self.n_reflected()[i] + self.n_absorbed()[i] != self.n_received {
+                eprintln!(
+                    "Invalid N_received: {} = Nr {} + Na {}",
+                    self.n_received,
+                    self.n_reflected()[i],
+                    self.n_absorbed()[i]
+                );
+                return false;
+            }
+            // N_reflected = N_captured + N_escaped
+            if self.n_captured()[i] + self.n_escaped()[i] != self.n_reflected()[i] {
+                eprintln!(
+                    "Invalid N_reflected: {} = {} + {}",
+                    self.n_reflected()[i],
+                    self.n_captured()[i],
+                    self.n_escaped()[i]
+                );
+                return false;
+            }
+        }
+        true
     }
 }
 
-impl Default for BsdfMeasurementStatsPoint {
+impl Default for SingleBsdfMeasurementStats {
     fn default() -> Self { Self::new(0, 0) }
 }
 
-impl Debug for BsdfMeasurementStatsPoint {
+impl Debug for SingleBsdfMeasurementStats {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             r#"BsdfMeasurementPointStats:
-    - n_bounces: {},
-    - n_received: {},
-    - n_absorbed: {:?},
+    - n_bounces:   {},
+    - n_received:  {},
+    - n_missed:    {},
+    - n_absorbed:  {:?},
     - n_reflected: {:?},
-    - n_captured: {:?},
+    - n_escaped:   {:?},
+    - n_captured:  {:?},
     - total_energy_captured: {:?},
-    - num_rays_per_bounce: {:?},
-    - energy_per_bounce: {:?},
-"#,
+    - num_rays_per_bounce:   {:?}"#,
             self.n_bounce,
             self.n_received,
+            self.n_missed,
             self.n_absorbed(),
             self.n_reflected(),
+            self.n_escaped(),
             self.n_captured(),
             self.e_captured,
             self.n_ray_per_bounce,
-            self.energy_per_bounce
-        )
+        )?;
+        for i in 0..self.n_spectrum {
+            let offset = i * self.n_bounce as usize;
+            write!(
+                f,
+                "\n    - energy per bounce λ[{}]: {:?}",
+                i,
+                &self.energy_per_bounce[offset..offset + self.n_bounce as usize],
+            )?;
+        }
+        Ok(())
     }
-}
-
-/// A snapshot of the BSDF during the measurement.
-///  
-/// This is the data collected at a single incident direction of the emitter.
-///
-/// It contains the statistics of the measurement and the data collected
-/// for all the patches of the collector at the incident direction.
-#[derive(Clone)]
-pub struct BsdfSnapshotRaw<D>
-where
-    D: PerPatchData,
-{
-    /// Incident direction in the unit spherical coordinates.
-    pub wi: Sph2,
-    /// Statistics of the measurement at the point.
-    pub stats: BsdfMeasurementStatsPoint,
-    /// A list of data collected for each patch of the collector.
-    /// The data is stored as a flat array in row-major order with the
-    /// dimensions (patch, wavelength).
-    pub records: Box<[D]>,
-    /// Extra ray trajectory data for debugging purposes.
-    #[cfg(any(feature = "visu-dbg", debug_assertions))]
-    pub trajectories: Vec<RayTrajectory>,
-    /// Hit points on the collector.
-    #[cfg(any(feature = "visu-dbg", debug_assertions))]
-    pub hit_points: Box<[Vec3]>,
-}
-
-impl<D: Debug + PerPatchData> Debug for BsdfSnapshotRaw<D> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BsdfMeasurementPoint")
-            .field("stats", &self.stats)
-            .field("data", &self.records)
-            .finish()
-    }
-}
-
-impl<D: PerPatchData + PartialEq> PartialEq for BsdfSnapshotRaw<D> {
-    fn eq(&self, other: &Self) -> bool {
-        self.stats == other.stats && self.records == other.records
-    }
-}
-
-/// A snapshot of the measured BSDF at a single incident direction.
-#[derive(Debug, Clone, PartialEq)]
-pub struct BsdfSnapshot {
-    /// Incident direction in the unit spherical coordinates.
-    pub wi: Sph2,
-    /// BSDF values for each patch of the collector and each wavelength.
-    /// Two-dimensional data (patch, wavelength) (ωo, λ) stored in a flat array
-    /// in row-major order.
-    pub samples: DyArr<f32, 2>,
-    #[cfg(any(feature = "visu-dbg", debug_assertions))]
-    /// Extra ray trajectory data for debugging purposes.
-    pub trajectories: Vec<RayTrajectory>,
-    #[cfg(any(feature = "visu-dbg", debug_assertions))]
-    /// Hit points on the collector for debugging purposes.
-    pub hit_points: Box<[Vec3]>,
 }
 
 /// Ray tracing simulation result for a single incident direction of a surface.
-pub struct SimulationResultPoint {
+pub struct SigleSimulationResult {
     /// Incident direction in the unit spherical coordinates.
     pub wi: Sph2,
     /// Trajectories of the rays.
@@ -1241,16 +1278,19 @@ pub fn measure_bsdf_rt(
     handles: &[Handle<MicroSurface>],
     sim_kind: SimulationKind,
     cache: &RawCache,
-) -> Box<[MeasurementData]> {
+) -> Box<[Measurement]> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
     let emitter = Emitter::new(&params.emitter);
     let receiver = Receiver::new(&params.receiver, &params, cache);
+    let n_wi = emitter.measpts.len();
+    let n_wo = receiver.patches.n_patches();
 
     log::debug!(
-        "Measuring BSDF of {} surfaces from {} measurement points.",
+        "Measuring BSDF of {} surfaces from {} measurement points with {} rays",
         surfaces.len(),
-        emitter.measpts.len()
+        emitter.measpts.len(),
+        emitter.params.num_rays,
     );
 
     let mut measurements = Vec::with_capacity(surfaces.len());
@@ -1268,7 +1308,7 @@ pub fn measure_bsdf_rt(
             surf.path.as_ref().unwrap().display()
         );
 
-        let sim_result_points = match sim_kind {
+        let sim_results = match sim_kind {
             SimulationKind::GeomOptics(method) => {
                 println!(
                     "    {} Measuring {} with geometric optics...",
@@ -1295,17 +1335,47 @@ pub fn measure_bsdf_rt(
 
         let orbit_radius = crate::measure::estimate_orbit_radius(mesh);
         log::trace!("Estimated orbit radius: {}", orbit_radius);
-        let mut collected = CollectedData::empty(Handle::with_id(surf.uuid), &receiver.patches);
-        for sim_result_point in sim_result_points {
-            log::debug!("Collecting BSDF snapshot at {}", sim_result_point.wi);
+
+        let incoming = DyArr::<Sph2>::from_slice([n_wi], &emitter.measpts);
+        let n_spectrum = params.emitter.spectrum.step_count();
+
+        #[cfg(any(feature = "visu-dbg", debug_assertions))]
+        let mut trajectories: Box<[MaybeUninit<Vec<RayTrajectory>>]> = Box::new_uninit_slice(n_wi);
+        #[cfg(any(feature = "visu-dbg", debug_assertions))]
+        let mut hit_points: Box<[MaybeUninit<Vec<Vec3>>]> = Box::new_uninit_slice(n_wi);
+
+        let mut records = DyArr::splat(Option::<BounceAndEnergy>::None, [n_wi, n_wo, n_spectrum]);
+        let mut stats: Box<[MaybeUninit<SingleBsdfMeasurementStats>]> = Box::new_uninit_slice(n_wi);
+
+        for (i, sim) in sim_results.enumerate() {
+            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+            let trjs = trajectories[i].as_mut_ptr();
+            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+            let hpts = hit_points[i].as_mut_ptr();
+            let recs =
+                &mut records.as_mut_slice()[i * n_wo * n_spectrum..(i + 1) * n_wo * n_spectrum];
 
             #[cfg(feature = "bench")]
             let t = std::time::Instant::now();
 
+            println!(
+                "        {} Collecting BSDF snapshot {}{}/{}{}...",
+                ansi::YELLOW_GT,
+                ansi::BRIGHT_CYAN,
+                i + 1,
+                n_wi,
+                ansi::RESET
+            );
+
             // Collect the tracing data into raw bsdf snapshots.
             receiver.collect(
-                &sim_result_point,
-                &mut collected,
+                sim,
+                #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                trjs,
+                #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                hpts,
+                stats[i].as_mut_ptr(),
+                recs,
                 orbit_radius,
                 params.fresnel,
             );
@@ -1320,25 +1390,26 @@ pub fn measure_bsdf_rt(
             }
         }
 
-        let snapshots = collected.compute_bsdf(&params);
-        let raw_snapshots = match params.receiver.retrieval {
-            DataRetrieval::FullData => Some(collected.snapshots.into_boxed_slice()),
-            DataRetrieval::BsdfOnly => None,
+        let raw = RawMeasuredBsdfData {
+            spectrum: DyArr::from_iterator([-1], params.emitter.spectrum.values()),
+            incoming,
+            outgoing: receiver.patches.clone(),
+            records,
+            stats: DyArr::from_boxed_slice([n_wi], unsafe { stats.assume_init() }),
+            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+            trajectories: unsafe { trajectories.assume_init() },
+            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+            hit_points: unsafe { hit_points.assume_init() },
         };
-        let max_values =
-            compute_bsdf_snapshots_max_values(&snapshots, params.emitter.spectrum.step_count());
-        measurements.push(MeasurementData {
+
+        let bsdfs = raw.compute_bsdfs(params.incident_medium, params.transmitted_medium);
+
+        measurements.push(Measurement {
             name: surf.file_stem().unwrap().to_owned(),
-            source: MeasurementDataSource::Measured(collected.surface),
+            source: MeasurementSource::Measured(Handle::with_id(surf.uuid)),
             timestamp: chrono::Local::now(),
-            measured: MeasuredData::Bsdf(MeasuredBsdfData {
-                params,
-                snapshots,
-                raw_snapshots,
-                normalised: false,
-                max_values,
-            }),
-        })
+            measured: Box::new(MeasuredBsdfData { params, raw, bsdfs }),
+        });
     }
 
     measurements.into_boxed_slice()
@@ -1351,7 +1422,7 @@ fn rtc_simulation_grid(
     _mesh: &MicroSurfaceMesh,
     _emitter: &Emitter,
     _cache: &RawCache,
-) -> Box<dyn Iterator<Item = SimulationResultPoint>> {
+) -> Box<dyn Iterator<Item = SigleSimulationResult>> {
     // for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
     //     if surf.is_none() || mesh.is_none() {
     //         log::debug!("Skipping surface {:?} and its mesh {:?}", surf,
@@ -1382,7 +1453,7 @@ fn rtc_simulation_optix(
     _surf: &MicroSurfaceMesh,
     _emitter: &Emitter,
     _cache: &RawCache,
-) -> Box<dyn Iterator<Item = SimulationResultPoint>> {
+) -> Box<dyn Iterator<Item = SingleSimulationResult>> {
     todo!()
 }
 

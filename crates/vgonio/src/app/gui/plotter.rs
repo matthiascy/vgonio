@@ -19,12 +19,16 @@ use crate::{
             widgets::{AngleKnob, AngleKnobWinding},
         },
     },
-    measure::{data::MeasurementData, params::MeasurementKind},
+    measure::{
+        mfd::{MeasuredMsfData, MeasuredNdfData},
+        Measurement,
+    },
 };
 use base::{
     math,
     range::RangeByStepSizeInclusive,
     units::{deg, rad, Radians},
+    MeasurementKind,
 };
 use bxdf::distro::{BeckmannDistribution, MicrofacetDistribution, TrowbridgeReitzDistribution};
 use egui::{Context, Response, Ui, WidgetText};
@@ -75,7 +79,7 @@ pub trait PlottingWidget {
             });
     }
 
-    fn measurement_data_handle(&self) -> Handle<MeasurementData>;
+    fn measurement_data_handle(&self) -> Handle<Measurement>;
 
     fn measurement_data_kind(&self) -> MeasurementKind;
 }
@@ -83,7 +87,7 @@ pub trait PlottingWidget {
 /// Trait for extra data to be used by the plotting inspector.
 pub trait VariantData {
     /// Initialise the extra data.
-    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &RawCache);
+    fn pre_process(&mut self, data: Handle<Measurement>, cache: &RawCache);
 
     /// Returns the curve to be displayed.
     fn current_curve(&self) -> Option<&Curve>;
@@ -103,7 +107,7 @@ pub trait VariantData {
         &mut self,
         ui: &mut Ui,
         event_loop: &EventLoopProxy,
-        data: Handle<MeasurementData>,
+        data: Handle<Measurement>,
         cache: &Cache,
     );
 }
@@ -114,7 +118,7 @@ pub struct PlotInspector {
     /// Name for the plot.
     name: String,
     /// The handle to the data to be plotted.
-    data_handle: Handle<MeasurementData>,
+    data_handle: Handle<Measurement>,
     /// Cache of the application.
     cache: Cache,
     /// Inspector properties data might be used by the plot.
@@ -228,7 +232,7 @@ impl Deref for Curve {
 }
 
 impl VariantData for BsdfPlotExtraData {
-    fn pre_process(&mut self, _data: Handle<MeasurementData>, _cache: &RawCache) {
+    fn pre_process(&mut self, _data: Handle<Measurement>, _cache: &RawCache) {
         // TODO: pre-process data
     }
 
@@ -245,8 +249,8 @@ impl VariantData for BsdfPlotExtraData {
         &mut self,
         _ui: &mut Ui,
         _event_loop: &EventLoopProxy,
-        _data: Handle<MeasurementData>,
-        cache: &Cache,
+        _data: Handle<Measurement>,
+        _cache: &Cache,
     ) {
         todo!()
     }
@@ -256,7 +260,7 @@ impl PlotInspector {
     /// Creates a new inspector for a microfacet area distribution function.
     pub fn new_adf(
         name: String,
-        data: Handle<MeasurementData>,
+        data: Handle<Measurement>,
         cache: Cache,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
@@ -271,7 +275,7 @@ impl PlotInspector {
     /// Creates a new inspector for a microfacet masking-shadowing function.
     pub fn new_msf(
         name: String,
-        data: Handle<MeasurementData>,
+        data: Handle<Measurement>,
         cache: Cache,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
@@ -294,7 +298,7 @@ impl PlotInspector {
     /// function.
     pub fn new_bsdf(
         name: String,
-        data: Handle<MeasurementData>,
+        data: Handle<Measurement>,
         cache: Cache,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
@@ -306,7 +310,7 @@ impl PlotInspector {
 
     pub fn new_sdf(
         name: String,
-        data: Handle<MeasurementData>,
+        data: Handle<Measurement>,
         cache: Cache,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
@@ -346,7 +350,7 @@ impl PlotInspector {
 
     fn new_inner(
         name: String,
-        data: Handle<MeasurementData>,
+        data: Handle<Measurement>,
         extra: Option<Box<dyn VariantData>>,
         cache: Cache,
         props: Arc<RwLock<PropertyData>>,
@@ -380,6 +384,7 @@ enum CurveKind {
 
 /// Inspector for microfacet distribution function.
 pub struct MicrofacetDistributionPlotter {}
+/// Inspector for BxDF.
 pub struct BxdfPlotter {}
 
 impl PlottingWidget for PlotInspector {
@@ -536,13 +541,16 @@ impl PlottingWidget for PlotInspector {
                 MeasurementKind::Bsdf => {
                     todo!("bsdf plot");
                 }
-                MeasurementKind::Adf => {
+                MeasurementKind::Ndf => {
                     if let Some(variant) = &mut self.variant {
                         let zenith = self.cache.read(|cache| {
-                            let measurement = cache.get_measurement_data(self.data_handle).unwrap();
-                            let (_, zenith) =
-                                measurement.measured.adf_or_msf_angle_ranges().unwrap();
-                            zenith
+                            let measurement = cache.get_measurement(self.data_handle).unwrap();
+                            measurement
+                                .measured
+                                .downcast_ref::<MeasuredNdfData>()
+                                .unwrap()
+                                .zenith_range()
+                                .unwrap()
                         });
                         let zenith_bin_width_rad = zenith.step_size.as_f32();
                         variant.ui(ui, &self.event_loop, self.data_handle, &self.cache);
@@ -691,10 +699,13 @@ impl PlottingWidget for PlotInspector {
                             .downcast_mut::<MaskingShadowingExtra>()
                             .unwrap();
                         let zenith = self.cache.read(|cache| {
-                            let measurement = cache.get_measurement_data(self.data_handle).unwrap();
-                            let (_, zenith) =
-                                measurement.measured.adf_or_msf_angle_ranges().unwrap();
-                            zenith
+                            let measurement = cache.get_measurement(self.data_handle).unwrap();
+                            measurement
+                                .measured
+                                .downcast_ref::<MeasuredMsfData>()
+                                .unwrap()
+                                .params
+                                .zenith
                         });
                         let zenith_bin_width_rad = zenith.step_size.value();
                         variant.ui(ui, &self.event_loop, self.data_handle, &self.cache);
@@ -820,16 +831,17 @@ impl PlottingWidget for PlotInspector {
                         }
                     }
                 }
+                _ => {}
             }
         }
     }
 
-    fn measurement_data_handle(&self) -> Handle<MeasurementData> { self.data_handle }
+    fn measurement_data_handle(&self) -> Handle<Measurement> { self.data_handle }
 
     fn measurement_data_kind(&self) -> MeasurementKind {
         match self.data_handle.variant_id() {
             0 => MeasurementKind::Bsdf,
-            1 => MeasurementKind::Adf,
+            1 => MeasurementKind::Ndf,
             2 => MeasurementKind::Msf,
             3 => MeasurementKind::Sdf,
             _ => {

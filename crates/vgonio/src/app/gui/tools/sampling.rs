@@ -43,7 +43,7 @@ pub struct SamplingInspector {
     pub pipeline: wgpu::RenderPipeline,
     pub vertex_buffer: wgpu::Buffer,
     pub event_loop: EventLoopProxy,
-    samples: Vec<Vec3>,
+    samples: Box<[Vec3]>,
     sample_count: u32,
     azimuth_min: f32, // in degrees
     azimuth_max: f32, // in degrees
@@ -304,7 +304,7 @@ impl SamplingInspector {
             zenith_min: 0.0,
             zenith_max: 180.0,
             sample_count: 1024,
-            samples: vec![],
+            samples: Box::new([]),
             proj_view_model,
         }
     }

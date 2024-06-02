@@ -8,7 +8,7 @@ use std::{
 /// A block of memory allocated on the heap, with a fixed size.
 #[repr(C)]
 pub struct DynSized<T> {
-    data: NonNull<T>,
+    ptr: NonNull<T>,
     len: usize,
 }
 
@@ -16,7 +16,7 @@ impl<T> DynSized<T> {
     pub(crate) fn new_uninit(len: usize) -> DynSized<MaybeUninit<T>> {
         let mut data = ManuallyDrop::new(Box::new_uninit_slice(len));
         let data = unsafe { NonNull::new_unchecked(data.as_mut_ptr()) };
-        DynSized { data, len }
+        DynSized { ptr: data, len }
     }
 
     pub(crate) fn splat(val: T, len: usize) -> Self
@@ -31,7 +31,7 @@ impl<T> DynSized<T> {
             ManuallyDrop::new(unsafe { data.assume_init() })
         };
         Self {
-            data: unsafe { NonNull::new_unchecked(data.as_mut_ptr()) },
+            ptr: unsafe { NonNull::new_unchecked(data.as_mut_ptr()) },
             len,
         }
     }
@@ -40,7 +40,7 @@ impl<T> DynSized<T> {
         let mut data = ManuallyDrop::new(vec.into_boxed_slice());
         let len = data.len();
         Self {
-            data: unsafe { NonNull::new_unchecked(data.as_mut_ptr()) },
+            ptr: unsafe { NonNull::new_unchecked(data.as_mut_ptr()) },
             len,
         }
     }
@@ -48,7 +48,7 @@ impl<T> DynSized<T> {
     pub(crate) fn into_vec(self) -> Vec<T> {
         unsafe {
             let mut data = ManuallyDrop::new(Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                self.data.as_ptr(),
+                self.ptr.as_ptr(),
                 self.len,
             )));
             Vec::from_raw_parts(data.as_mut_ptr(), self.len, self.len)
@@ -59,7 +59,7 @@ impl<T> DynSized<T> {
         let mut data = ManuallyDrop::new(slice);
         let len = data.len();
         Self {
-            data: unsafe { NonNull::new_unchecked(data.as_mut_ptr()) },
+            ptr: unsafe { NonNull::new_unchecked(data.as_mut_ptr()) },
             len,
         }
     }
@@ -67,7 +67,7 @@ impl<T> DynSized<T> {
     pub(crate) fn into_boxed_slice(self) -> Box<[T]> {
         unsafe {
             let mut data = ManuallyDrop::new(Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                self.data.as_ptr(),
+                self.ptr.as_ptr(),
                 self.len,
             )));
             Box::from_raw(std::ptr::slice_from_raw_parts_mut(
@@ -89,22 +89,22 @@ impl<T> DynSized<T> {
             ManuallyDrop::new(unsafe { data.assume_init() })
         };
         Self {
-            data: unsafe { NonNull::new_unchecked(data.as_mut_ptr()) },
+            ptr: unsafe { NonNull::new_unchecked(data.as_mut_ptr()) },
             len: slice.len(),
         }
     }
 
     pub(crate) fn as_slice(&self) -> &[T] {
-        unsafe { std::slice::from_raw_parts(self.data.as_ptr(), self.len) }
+        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
     }
 
     pub(crate) fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe { std::slice::from_raw_parts_mut(self.data.as_ptr(), self.len) }
+        unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
     }
 
-    pub(crate) fn as_ptr(&self) -> *const T { self.data.as_ptr() }
+    pub(crate) fn as_ptr(&self) -> *const T { self.ptr.as_ptr() }
 
-    pub(crate) fn as_mut_ptr(&mut self) -> *mut T { self.data.as_ptr() }
+    pub(crate) fn as_mut_ptr(&mut self) -> *mut T { self.ptr.as_ptr() }
 
     pub(crate) fn len(&self) -> usize { self.len }
 }
@@ -114,7 +114,7 @@ impl<T> DynSized<MaybeUninit<T>> {
         let len = self.len;
         let myself = ManuallyDrop::new(self);
         DynSized {
-            data: NonNull::new_unchecked(myself.data.as_ptr() as *mut T),
+            ptr: NonNull::new_unchecked(myself.ptr.as_ptr() as *mut T),
             len,
         }
     }
@@ -137,15 +137,12 @@ where
 
 impl<T> Drop for DynSized<T> {
     fn drop(&mut self) {
-        let mut data = unsafe {
+        let _ = unsafe {
             Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                self.data.as_ptr(),
+                self.ptr.as_ptr(),
                 self.len,
             ))
         };
-        for elem in data.iter_mut() {
-            unsafe { std::ptr::drop_in_place(elem) };
-        }
     }
 }
 
@@ -210,9 +207,9 @@ unsafe impl<T> Data for DynSized<T> {
     type Elem = T;
     type Uninit = DynSized<MaybeUninit<T>>;
 
-    fn as_ptr(&self) -> *const T { self.data.as_ptr() }
+    fn as_ptr(&self) -> *const T { self.ptr.as_ptr() }
 
-    fn as_mut_ptr(&mut self) -> *mut Self::Elem { self.data.as_ptr() }
+    fn as_mut_ptr(&mut self) -> *mut Self::Elem { self.ptr.as_ptr() }
 
     fn as_slice(&self) -> &[Self::Elem] { &self.as_slice() }
 

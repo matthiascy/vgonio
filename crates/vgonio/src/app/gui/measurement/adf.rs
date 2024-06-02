@@ -1,6 +1,6 @@
 use crate::{
     app::gui::{event::EventLoopProxy, misc, misc::range_step_size_inclusive_angle_ui},
-    measure::params::{AdfMeasurementMode, NdfMeasurementParams},
+    measure::params::{NdfMeasurementMode, NdfMeasurementParams},
 };
 use base::partition::PartitionScheme;
 use egui::Widget;
@@ -8,14 +8,14 @@ use egui::Widget;
 #[derive(Debug)]
 pub struct AdfMeasurementTab {
     pub params: NdfMeasurementParams,
-    event_loop: EventLoopProxy,
+    _event_loop: EventLoopProxy,
 }
 
 impl AdfMeasurementTab {
     pub fn new(event_loop: EventLoopProxy) -> Self {
         Self {
             params: NdfMeasurementParams::default(),
-            event_loop,
+            _event_loop: event_loop,
         }
     }
 
@@ -38,18 +38,18 @@ impl AdfMeasurementTab {
 
                 ui.selectable_value(
                     &mut self.params.mode,
-                    AdfMeasurementMode::default_by_points(),
+                    NdfMeasurementMode::default_by_points(),
                     "By Points",
                 );
                 ui.selectable_value(
                     &mut self.params.mode,
-                    AdfMeasurementMode::default_by_partition(),
+                    NdfMeasurementMode::default_by_partition(),
                     "By Partition",
                 );
                 ui.end_row();
 
                 match &mut self.params.mode {
-                    AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                    NdfMeasurementMode::ByPoints { azimuth, zenith } => {
                         ui.label("Zenith angle θ:");
                         range_step_size_inclusive_angle_ui(zenith, ui);
                         ui.end_row();
@@ -57,7 +57,7 @@ impl AdfMeasurementTab {
                         range_step_size_inclusive_angle_ui(azimuth, ui);
                         ui.end_row();
                     }
-                    AdfMeasurementMode::ByPartition { scheme, precision } => {
+                    NdfMeasurementMode::ByPartition { scheme, precision } => {
                         ui.label("Partition scheme:");
                         ui.horizontal_wrapped(|ui| {
                             ui.selectable_value(scheme, PartitionScheme::Beckers, "Beckers");

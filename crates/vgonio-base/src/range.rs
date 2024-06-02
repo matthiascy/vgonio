@@ -1068,6 +1068,7 @@ macro_rules! impl_range_by_step_size_inclusive_read_write {
         $(paste::paste! {
             impl RangeByStepSizeInclusive<$T> {
                 #[doc = "Writes the RangeByStepSizeInclusive<`" $T "`> into the given buffer, following the order: start, stop, step_size, step_count."]
+                #[track_caller]
                 pub fn write_to_buf(&self, buf: &mut [u8]) {
                     debug_assert!(buf.len() >= 16, "RangeByStepSizeInclusive needs at least 16 bytes of space");
                     buf[0..4].copy_from_slice(&self.start.value().to_le_bytes());
@@ -1077,6 +1078,7 @@ macro_rules! impl_range_by_step_size_inclusive_read_write {
                 }
 
                 #[doc = "Reads the RangeByStepSizeInclusive<`" $T "`> from the given buffer, checking that the step count matches the expected value."]
+                #[track_caller]
                 pub fn read_from_buf(buf: &[u8]) -> Self {
                     debug_assert!(
                         buf.len() >= 16,

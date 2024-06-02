@@ -1,11 +1,14 @@
 use crate::distro::MicrofacetDistroKind;
-use base::{math::Vec3, optics::ior::Ior, Isotropy};
+use base::{math::Vec3, Isotropy};
 use num_traits::Float;
 use std::fmt::Debug;
 
 pub mod analytical;
 pub mod lambert;
 pub mod measured;
+
+#[cfg(feature = "fitting")]
+use base::optics::ior::Ior;
 
 /// Different kinds of BRDFs.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]

@@ -72,7 +72,7 @@ use crate::{
         Config,
     },
     io::OutputOptions,
-    measure::params::MeasurementParams,
+    measure::{bsdf::MeasuredBsdfData, params::MeasurementParams},
 };
 
 /// Launches Vgonio GUI application.
@@ -429,7 +429,7 @@ impl VgonioGuiApp {
             },
         );
 
-        let cmds: Box<dyn Iterator<Item = wgpu::CommandBuffer>> = match dbg_encoder {
+        let cmfd: Box<dyn Iterator<Item = wgpu::CommandBuffer>> = match dbg_encoder {
             Some(encoder) => Box::new(
                 [viewer_encoder.finish(), encoder.finish()]
                     .into_iter()
@@ -445,7 +445,7 @@ impl VgonioGuiApp {
 
         // Submit the command buffers to the GPU: first the user's command buffers, then
         // the main render pass, and finally the UI render pass.
-        self.gpu_ctx.queue.submit(cmds);
+        self.gpu_ctx.queue.submit(cmfd);
 
         // Present the frame to the screen.
         output_frame.present();
@@ -603,12 +603,10 @@ impl VgonioGuiApp {
                     } => {
                         let data = match params {
                             MeasurementParams::Adf(params) => self.cache.read(|cache| {
-                                measure::microfacet::measure_area_distribution(
-                                    params, &surfaces, cache,
-                                )
+                                measure::mfd::measure_area_distribution(params, &surfaces, cache)
                             }),
                             MeasurementParams::Msf(params) => self.cache.read(|cache| {
-                                measure::microfacet::measure_masking_shadowing(
+                                measure::mfd::measure_masking_shadowing_function(
                                     params, &surfaces, cache,
                                 )
                             }),
@@ -633,24 +631,16 @@ impl VgonioGuiApp {
                                             cache,
                                         )
                                     });
+                                    let bsdf = measured[0]
+                                        .measured
+                                        .downcast_ref::<MeasuredBsdfData>()
+                                        .unwrap();
                                     self.dbg_drawing_state.update_ray_trajectories(
                                         &self.gpu_ctx,
-                                        &measured[0]
-                                            .measured
-                                            .as_bsdf()
-                                            .as_ref()
-                                            .unwrap()
-                                            .trajectories(),
+                                        &bsdf.raw.trajectories,
                                     );
-                                    self.dbg_drawing_state.update_ray_hit_points(
-                                        &self.gpu_ctx,
-                                        &measured[0]
-                                            .measured
-                                            .as_bsdf()
-                                            .as_ref()
-                                            .unwrap()
-                                            .hit_points(),
-                                    );
+                                    self.dbg_drawing_state
+                                        .update_ray_hit_points(&self.gpu_ctx, &bsdf.raw.hit_points);
                                     measured
                                 }
 
@@ -665,9 +655,7 @@ impl VgonioGuiApp {
                                 })
                             }
                             MeasurementParams::Sdf(params) => self.cache.read(|cache| {
-                                measure::microfacet::measure_slope_distribution(
-                                    &surfaces, params, cache,
-                                )
+                                measure::mfd::measure_slope_distribution(&surfaces, params, cache)
                             }),
                         };
                         if let Some(opts @ OutputOptions { .. }) = output_opts {

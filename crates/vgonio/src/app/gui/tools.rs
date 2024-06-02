@@ -66,14 +66,6 @@ impl Tools {
         }
     }
 
-    #[deprecated]
-    pub fn get_tool<T: 'static>(&self) -> Option<&T> {
-        self.windows
-            .iter()
-            .find(|w| w.as_any().type_id() == std::any::TypeId::of::<T>())
-            .and_then(|w| w.as_any().downcast_ref::<T>())
-    }
-
     pub fn get_tool_mut<T: 'static>(&mut self) -> Option<&mut T> {
         self.windows
             .iter_mut()

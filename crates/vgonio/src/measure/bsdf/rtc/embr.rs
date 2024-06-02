@@ -4,8 +4,10 @@ use crate::{
     app::cli::ansi,
     measure::bsdf::{
         emitter::Emitter,
-        rtc::{LastHit, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
-        SimulationResultPoint,
+        rtc::{
+            compute_num_of_streams, LastHit, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE,
+        },
+        SigleSimulationResult,
     },
 };
 use base::{
@@ -154,7 +156,7 @@ fn intersect_filter_stream<'a>(
 pub fn simulate_bsdf_measurement<'a>(
     emitter: &'a Emitter,
     mesh: &'a MicroSurfaceMesh,
-) -> Box<dyn Iterator<Item = SimulationResultPoint> + 'a> {
+) -> Box<dyn Iterator<Item = SigleSimulationResult> + 'a> {
     #[cfg(feature = "bench")]
     let t = std::time::Instant::now();
 
@@ -205,7 +207,7 @@ fn simulate_bsdf_measurement_single_point(
     mesh: &MicroSurfaceMesh,
     geometry: Arc<Geometry>,
     scene: &Scene,
-) -> SimulationResultPoint {
+) -> SigleSimulationResult {
     println!(
         "      {}>{} Emit rays from {}",
         ansi::BRIGHT_YELLOW,
@@ -228,7 +230,7 @@ fn simulate_bsdf_measurement_single_point(
         w_i,
         elapsed.as_secs_f64(),
     );
-    let num_streams = (num_emitted_rays + MAX_RAY_STREAM_SIZE - 1) / MAX_RAY_STREAM_SIZE;
+    let num_streams = compute_num_of_streams(num_emitted_rays);
     // In case the number of rays is less than one stream, we need to
     // adjust the stream size to match the number of rays.
     let stream_size = if num_streams == 1 {
@@ -236,37 +238,53 @@ fn simulate_bsdf_measurement_single_point(
     } else {
         MAX_RAY_STREAM_SIZE
     };
+    let last_stream_size = num_emitted_rays % MAX_RAY_STREAM_SIZE;
 
-    let mut stream_data = vec![
-        RayStreamData {
-            msurf: geometry.clone(),
-            last_hit: vec![
-                LastHit {
-                    geom_id: INVALID_ID,
-                    prim_id: INVALID_ID,
-                    normal: Vec3A::ZERO,
-                };
-                stream_size
-            ],
-            trajectory: vec![RayTrajectory(Vec::with_capacity(max_bounces as usize)); stream_size],
-        };
-        num_streams
-    ];
+    let mut stream_data = {
+        let mut data = Box::new_uninit_slice(num_streams);
+        for i in 0..num_streams {
+            data[i].write(RayStreamData {
+                msurf: geometry.clone(),
+                last_hit: vec![
+                    LastHit {
+                        geom_id: INVALID_ID,
+                        prim_id: INVALID_ID,
+                        normal: Vec3A::ZERO,
+                    };
+                    if i == num_streams - 1 {
+                        last_stream_size
+                    } else {
+                        stream_size
+                    }
+                ],
+                trajectory: vec![
+                    RayTrajectory(Vec::with_capacity(max_bounces as usize));
+                    if i == num_streams - 1 {
+                        last_stream_size
+                    } else {
+                        stream_size
+                    }
+                ],
+            });
+        }
+        unsafe { data.assume_init().into_vec() }
+    };
 
+    #[cfg(all(debug_assertions))]
     println!(
-        "        {} Trace {} rays ({} streams)",
+        "        {} Trace {} rays ({} streams rays)",
         ansi::YELLOW_GT,
         emitted_rays.len(),
-        num_streams
+        stream_size * num_streams
     );
 
     emitted_rays
         .par_chunks(MAX_RAY_STREAM_SIZE)
         .zip(stream_data.par_iter_mut())
         .enumerate()
-        .for_each(|(_i, (rays, data))| {
+        .for_each(|(_stream_idx, (rays, data))| {
             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-            log::trace!("stream {} of {}", _i, num_streams);
+            log::trace!("stream {} of {}", _stream_idx, num_streams);
             // Populate embree ray stream with generated rays.
             let chunk_size = rays.len();
             let mut ray_hit_n = RayHitNp::new(RayNp::new(chunk_size));
@@ -285,6 +303,7 @@ fn simulate_bsdf_measurement_single_point(
                     cos: None,
                 });
             }
+            data.trajectory.shrink_to_fit();
 
             // Trace primary rays with coherent context
             let mut ctx = QueryContext {
@@ -353,23 +372,11 @@ fn simulate_bsdf_measurement_single_point(
     // Extract the trajectory of each ray.
     let trajectories = stream_data
         .into_iter()
-        .flat_map(|d| d.trajectory)
+        .flat_map(|d| d.trajectory.to_vec())
         .collect::<Vec<_>>();
 
-    SimulationResultPoint {
+    SigleSimulationResult {
         wi: w_i,
         trajectories,
     }
-
-    // #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-    // {
-    //     let collected = detector.collect(params, mesh, pos, &trajectories,
-    // cache);     log::debug!("collected stats: {:#?}", collected.stats);
-    //     log::trace!("collected: {:?}", collected.data);
-    //     collected
-    // }
-    // #[cfg(not(all(debug_assertions, feature = "verbose-dbg")))]
-    // params
-    //     .detector
-    //     .collect(params, mesh, pos, &trajectories, patches, cache)
 }

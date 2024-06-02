@@ -1,4 +1,4 @@
-use crate::{error::RuntimeError, measure::MeasurementParams};
+use crate::error::RuntimeError;
 use base::{
     error::VgonioError,
     math::Sph2,
@@ -21,7 +21,7 @@ pub const DEFAULT_ZENITH_RANGE: RangeByStepSizeInclusive<Radians> =
 #[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct NdfMeasurementParams {
     /// The way to measure the area distribution function.
-    pub mode: AdfMeasurementMode,
+    pub mode: NdfMeasurementMode,
     /// Whether to crop the surface to a disk during the measurement.
     pub crop_to_disk: bool,
     /// Whether to use the actual facet area during the measurement.
@@ -30,11 +30,9 @@ pub struct NdfMeasurementParams {
     pub use_facet_area: bool, // TODO: serialise/deserialise
 }
 
-impl MeasurementParams for NdfMeasurementParams {}
-
 /// How to measure the area distribution function.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum AdfMeasurementMode {
+pub enum NdfMeasurementMode {
     /// Measure the area distribution function at the different measurement
     /// points.
     #[serde(rename = "points")]
@@ -57,19 +55,19 @@ pub enum AdfMeasurementMode {
     },
 }
 
-impl Default for AdfMeasurementMode {
+impl Default for NdfMeasurementMode {
     fn default() -> Self {
-        AdfMeasurementMode::ByPoints {
+        NdfMeasurementMode::ByPoints {
             azimuth: DEFAULT_AZIMUTH_RANGE,
             zenith: DEFAULT_ZENITH_RANGE,
         }
     }
 }
 
-impl AdfMeasurementMode {
+impl NdfMeasurementMode {
     /// Default parameters when the measurement mode is `ByPoints`.
     pub fn default_by_points() -> Self {
-        AdfMeasurementMode::ByPoints {
+        NdfMeasurementMode::ByPoints {
             azimuth: DEFAULT_AZIMUTH_RANGE,
             zenith: DEFAULT_ZENITH_RANGE,
         }
@@ -77,7 +75,7 @@ impl AdfMeasurementMode {
 
     /// Default parameters when the measurement mode is `ByPartition`.
     pub fn default_by_partition() -> Self {
-        AdfMeasurementMode::ByPartition {
+        NdfMeasurementMode::ByPartition {
             precision: Sph2::new(deg!(2.0).in_radians(), deg!(5.0).in_radians()),
             scheme: PartitionScheme::Beckers,
         }
@@ -87,26 +85,26 @@ impl AdfMeasurementMode {
     /// parameters, especially when storing the data in a file.
     pub fn partition_scheme_for_data_collection(&self) -> PartitionScheme {
         match self {
-            AdfMeasurementMode::ByPoints { .. } => PartitionScheme::EqualAngle,
-            AdfMeasurementMode::ByPartition { scheme, .. } => *scheme,
+            NdfMeasurementMode::ByPoints { .. } => PartitionScheme::EqualAngle,
+            NdfMeasurementMode::ByPartition { scheme, .. } => *scheme,
         }
     }
 
     /// Returns the corresponding partition precision.
     pub fn partition_precision_for_data_collection(&self) -> Sph2 {
         match self {
-            AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+            NdfMeasurementMode::ByPoints { azimuth, zenith } => {
                 Sph2::new(zenith.step_size, azimuth.step_size)
             }
-            AdfMeasurementMode::ByPartition { precision, .. } => *precision,
+            NdfMeasurementMode::ByPartition { precision, .. } => *precision,
         }
     }
 
     /// Returns the corresponding partition precision and scheme.
     pub fn as_mode_by_partition(&self) -> Option<(Sph2, PartitionScheme)> {
         match self {
-            AdfMeasurementMode::ByPoints { .. } => None,
-            AdfMeasurementMode::ByPartition { precision, scheme } => Some((*precision, *scheme)),
+            NdfMeasurementMode::ByPoints { .. } => None,
+            NdfMeasurementMode::ByPartition { precision, scheme } => Some((*precision, *scheme)),
         }
     }
 
@@ -123,8 +121,8 @@ impl AdfMeasurementMode {
         RangeByStepSizeInclusive<Radians>,
     )> {
         match self {
-            AdfMeasurementMode::ByPoints { azimuth, zenith } => Some((*azimuth, *zenith)),
-            AdfMeasurementMode::ByPartition { .. } => None,
+            NdfMeasurementMode::ByPoints { azimuth, zenith } => Some((*azimuth, *zenith)),
+            NdfMeasurementMode::ByPartition { .. } => None,
         }
     }
 }
@@ -133,10 +131,10 @@ impl NdfMeasurementParams {
     /// Returns the number of samples with the current parameters.
     pub fn samples_count(&self) -> usize {
         match self.mode {
-            AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+            NdfMeasurementMode::ByPoints { azimuth, zenith } => {
                 azimuth.step_count_wrapped() * zenith.step_count_wrapped()
             }
-            AdfMeasurementMode::ByPartition { precision, scheme } => scheme.num_patches(precision),
+            NdfMeasurementMode::ByPartition { precision, scheme } => scheme.num_patches(precision),
         }
     }
 
@@ -158,7 +156,7 @@ impl NdfMeasurementParams {
     /// Validate the parameters.
     pub fn validate(self) -> Result<Self, VgonioError> {
         match self.mode {
-            AdfMeasurementMode::ByPoints { azimuth, zenith } => {
+            NdfMeasurementMode::ByPoints { azimuth, zenith } => {
                 if !(azimuth.start >= Radians::ZERO
                     && azimuth.stop
                         <= (Radians::TWO_PI
@@ -185,7 +183,7 @@ impl NdfMeasurementParams {
                     ));
                 }
             }
-            AdfMeasurementMode::ByPartition { precision, scheme } => {
+            NdfMeasurementMode::ByPartition { precision, scheme } => {
                 if precision.theta <= rad!(0.0) {
                     return Err(VgonioError::new(
                         "Microfacet distribution measurement: theta precision must be positive!",
@@ -229,8 +227,6 @@ impl Default for MsfMeasurementParams {
         }
     }
 }
-
-impl MeasurementParams for MsfMeasurementParams {}
 
 impl MsfMeasurementParams {
     /// Returns the number of samples with the current parameters.
@@ -296,8 +292,6 @@ pub struct SdfMeasurementParams {
     #[serde(deserialize_with = "deserialize_max_slope")]
     pub max_slope: f32,
 }
-
-impl MeasurementParams for SdfMeasurementParams {}
 
 fn deserialize_max_slope<'de, D>(deserializer: D) -> Result<f32, D::Error>
 where

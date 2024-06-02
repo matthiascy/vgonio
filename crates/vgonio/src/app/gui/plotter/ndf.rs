@@ -1,5 +1,5 @@
 #[cfg(feature = "fitting")]
-use crate::fitting::{FittedModel, FittingProblemKind, MicrofacetDistributionFittingVariant};
+use crate::fitting::{FittedModel, FittingProblemKind};
 
 use crate::app::{
     cache::{Handle, RawCache},
@@ -19,7 +19,10 @@ use std::any::Any;
 
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;
-use crate::{app::cache::Cache, measure::data::MeasurementData};
+use crate::{
+    app::cache::Cache,
+    measure::{mfd::MeasuredNdfData, Measurement},
+};
 
 struct ModelSelector {
     model: MicrofacetDistroKind,
@@ -39,7 +42,7 @@ impl ModelSelector {
     }
 }
 
-/// Extra data for the area distribution plot.
+/// Extra data for the normal distribution plot.
 pub struct AreaDistributionExtra {
     /// The azimuthal angle range of the measured data, in radians.
     pub azimuth_range: RangeByStepSizeInclusive<Radians>,
@@ -99,13 +102,17 @@ impl AreaDistributionExtra {
 }
 
 impl VariantData for AreaDistributionExtra {
-    fn pre_process(&mut self, data: Handle<MeasurementData>, cache: &RawCache) {
-        let measurement = cache.get_measurement_data(data).unwrap();
-        let (azimuth, zenith) = measurement.measured.adf_or_msf_angle_ranges().unwrap();
+    fn pre_process(&mut self, data: Handle<Measurement>, cache: &RawCache) {
+        let measurement = cache.get_measurement(data).unwrap();
+        let ndf = measurement
+            .measured
+            .downcast_ref::<MeasuredNdfData>()
+            .unwrap();
+        let (azimuth, zenith) = ndf.measurement_range().unwrap();
         self.azimuth_range = azimuth;
         self.zenith_range = zenith;
         for phi in self.azimuth_range.values_wrapped() {
-            let (starting, opposite) = measurement.ndf_data_slice(phi);
+            let (starting, opposite) = measurement.ndf_data_slice(phi).unwrap();
             let first_part_points = starting
                 .iter()
                 .zip(self.zenith_range.values())
@@ -198,8 +205,8 @@ impl VariantData for AreaDistributionExtra {
         &mut self,
         ui: &mut Ui,
         event_loop: &EventLoopProxy,
-        data: Handle<MeasurementData>,
-        cache: &Cache,
+        data: Handle<Measurement>,
+        _cache: &Cache,
     ) {
         ui.allocate_ui_with_layout(
             egui::Vec2::new(ui.available_width(), 48.0),
@@ -281,9 +288,8 @@ impl VariantData for AreaDistributionExtra {
                         .clicked()
                     {
                         event_loop.send_event(VgonioEvent::Fitting {
-                            kind: FittingProblemKind::Mdf {
+                            kind: FittingProblemKind::Mfd {
                                 model: self.selected.model,
-                                variant: MicrofacetDistributionFittingVariant::Ndf,
                                 isotropy: Isotropy::Isotropic,
                             },
                             data,
@@ -301,9 +307,8 @@ impl VariantData for AreaDistributionExtra {
                         .clicked()
                     {
                         event_loop.send_event(VgonioEvent::Fitting {
-                            kind: FittingProblemKind::Mdf {
+                            kind: FittingProblemKind::Mfd {
                                 model: self.selected.model,
-                                variant: MicrofacetDistributionFittingVariant::Ndf,
                                 isotropy: Isotropy::Anisotropic,
                             },
                             data,

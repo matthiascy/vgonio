@@ -4,6 +4,7 @@ use std::{
     fmt::Debug,
     mem::MaybeUninit,
     ops::{Index, IndexMut},
+    slice::Iter,
 };
 
 /// A dynamically sized array with a known number of dimensions at compile-time.
@@ -34,10 +35,51 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
         Self(ArrCore::new(shape, DynSized::from_vec(vec)))
     }
 
+    /// Consumes the array and returns the underlying data as a vector.
+    pub fn into_vec(self) -> Vec<T> { self.0.data.into_vec() }
+
     /// Creates a new array from a boxed slice.
     pub fn from_boxed_slice(shape: [usize; N], slice: Box<[T]>) -> Self {
         assert_eq!(compute_n_elems(&shape), slice.len());
         Self(ArrCore::new(shape, DynSized::from_boxed_slice(slice)))
+    }
+
+    /// Creates a new array from an iterator.
+    ///
+    /// # Arguments
+    ///
+    /// * `shape` - The shape of the array. Only one dimension size can be -1,
+    ///   which means that the size of that dimension is inferred.
+    /// * `iter` - The iterator to create the array from. The number of elements
+    ///  in the iterator must be equal to the number of elements in the shape.
+    pub fn from_iterator(shape: [isize; N], iter: impl IntoIterator<Item = T>) -> Self {
+        let num_minuses = shape.iter().filter(|&&x| x == -1).count();
+        assert!(
+            num_minuses <= 1,
+            "Only one dimension size can be -1, found {}",
+            num_minuses
+        );
+
+        if num_minuses == 0 {
+            let shape = shape.map(|x| x as usize);
+            return Self::from_vec(shape, iter.into_iter().collect());
+        }
+
+        let vec: Vec<T> = iter.into_iter().collect();
+        let known_size = shape.iter().filter(|&&x| x != -1).product::<isize>() as usize;
+        let inferred_size = vec.len() / known_size;
+        let mut inferred_shape = [0; N];
+        inferred_shape
+            .iter_mut()
+            .zip(shape.iter())
+            .for_each(|(s, &x)| {
+                if x == -1 {
+                    *s = inferred_size;
+                } else {
+                    *s = x as usize
+                }
+            });
+        Self::from_vec(inferred_shape, vec)
     }
 
     /// Creates a new array from a slice.
@@ -90,12 +132,50 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
         Self(ArrCore::new(shape, DynSized::splat(T::one(), n)))
     }
 
+    /// Creates a new array with all elements set to the given value.
     pub fn splat(value: T, shape: [usize; N]) -> Self
     where
         T: Clone,
     {
         let n = compute_n_elems(&shape);
         Self(ArrCore::new(shape, DynSized::splat(value, n)))
+    }
+
+    /// Returns an iterator over the array elements.
+    pub fn iter(&self) -> Iter<T> { self.0.data.as_slice().iter() }
+}
+
+impl<T, const N: usize, const L: MemLayout> DyArr<MaybeUninit<T>, N, L> {
+    /// Assumes that the array is fully initialised and returns a new array with
+    /// the same shape but with the data assumed to be initialised.
+    unsafe fn assume_init(self) -> DyArr<T, N, L> {
+        let mut shape = [0; N];
+        shape.copy_from_slice(self.0.shape());
+        let ArrCore { data, .. } = self.0;
+        DyArr(ArrCore::new(shape, data.assume_init()))
+    }
+}
+
+impl<T, const L: MemLayout> DyArr<T, 1, L> {
+    /// Creates a new 1D array from a vector.
+    pub fn from_vec_1d(vec: Vec<T>) -> Self {
+        Self(ArrCore::new([vec.len()], DynSized::from_vec(vec)))
+    }
+
+    /// Creates a new 1D array from a boxed slice.
+    pub fn from_boxed_slice_1d(slice: Box<[T]>) -> Self {
+        Self(ArrCore::new(
+            [slice.len()],
+            DynSized::from_boxed_slice(slice),
+        ))
+    }
+
+    /// Creates a new 1D array from a slice.
+    pub fn from_slice_1d(slice: &[T]) -> Self
+    where
+        T: Clone,
+    {
+        Self(ArrCore::new([slice.len()], DynSized::from_slice(slice)))
     }
 }
 
@@ -169,5 +249,23 @@ mod tests {
         let arr = arr.reshape([-1, 3, 2]);
         assert_eq!(arr.shape(), &[2, 3, 2]);
         assert_eq!(arr.strides(), &[6, 2, 1]);
+    }
+
+    #[test]
+    fn test_dyarr_from_iterator() {
+        let arr = DyArr::<i32, 3, { MemLayout::RowMajor }>::from_iterator([2, 3, 2], (0..12));
+        assert_eq!(arr.shape(), &[2, 3, 2]);
+        assert_eq!(arr.strides(), &[6, 2, 1]);
+        assert_eq!(arr.as_slice(), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+
+        let arr = DyArr::<i32, 3, { MemLayout::RowMajor }>::from_iterator([-1, 3, 2], (0..12));
+        assert_eq!(arr.shape(), &[2, 3, 2]);
+        assert_eq!(arr.strides(), &[6, 2, 1]);
+        assert_eq!(arr.as_slice(), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+
+        let arr = DyArr::<i32, 1, { MemLayout::RowMajor }>::from_iterator([-1], (0..12));
+        assert_eq!(arr.shape(), &[12]);
+        assert_eq!(arr.strides(), &[1]);
+        assert_eq!(arr.as_slice(), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     }
 }

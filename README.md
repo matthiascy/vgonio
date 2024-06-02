@@ -17,8 +17,14 @@ and rust pull request [#95691](https://github.com/rust-lang/rust/pull/95691).
 
 ## Building
 
-`sccache`
-`mold`
+The default cargo build uses [sccache](https://github.com/mozilla/sccache) and [mold](https://github.com/rui314/mold) to
+speed up the build process. If you don't have them installed, you can disable them by commenting out the `rustc_wrapper`
+and `rustflags` in `./cargo/config.toml`.
+
+```toml
+rustc_wrapper = ["sccache"] # use sccache as compiler
+rustflags = ["-Clink-arg=-fuse-ld=mold"] # use mold as linker
+```
 
 ## Subcommands
 

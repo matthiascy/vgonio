@@ -19,6 +19,7 @@
 #![feature(generic_const_exprs)]
 #![feature(effects)]
 #![warn(missing_docs)]
+#![warn(unused_crate_dependencies)]
 
 extern crate core;
 
@@ -28,7 +29,7 @@ mod error;
 pub mod fitting;
 mod io;
 pub mod measure;
-pub(crate) mod plotting;
+pub(crate) mod pyplot;
 
 use base::error::VgonioError;
 

@@ -21,14 +21,12 @@ use crate::{
         },
     },
     io::{OutputFileFormatOption, OutputOptions},
-    measure::{
-        bsdf::receiver::{DataRetrieval, ReceiverParams},
-        params::{MeasurementKind, MeasurementParams},
-    },
+    measure::{bsdf::receiver::ReceiverParams, params::MeasurementParams},
 };
 use base::{
     io::{CompressionScheme, FileEncoding},
     partition::{PartitionScheme, SphericalDomain},
+    MeasurementKind,
 };
 use egui::Widget;
 use surf::MicroSurface;
@@ -78,38 +76,20 @@ impl ReceiverParams {
                         });
                         ui.end_row();
 
-                        ui.label("Data Retrieval:");
-                        ui.horizontal_wrapped(|ui| {
-                            ui.selectable_value(
-                                &mut self.retrieval,
-                                DataRetrieval::BsdfOnly,
-                                "BSDF Only",
-                            );
-                            ui.selectable_value(
-                                &mut self.retrieval,
-                                DataRetrieval::FullData,
-                                "Full Data",
-                            );
-                        });
-                        ui.end_row();
-
                         add_contents(self, ui);
                     });
             });
     }
 }
 
-impl MeasurementKind {
-    /// UI for measurement kind.
-    pub fn selectable_ui(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal_wrapped(|ui| {
-            ui.label("Measurement kind: ");
-            ui.selectable_value(self, MeasurementKind::Bsdf, "BSDF");
-            ui.selectable_value(self, MeasurementKind::Adf, "ADF");
-            ui.selectable_value(self, MeasurementKind::Msf, "MSF");
-            ui.selectable_value(self, MeasurementKind::Sdf, "SDF");
-        });
-    }
+pub fn measurement_kind_selectable_ui(kind: &mut MeasurementKind, ui: &mut egui::Ui) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label("Measurement kind: ");
+        ui.selectable_value(kind, MeasurementKind::Bsdf, "BSDF");
+        ui.selectable_value(kind, MeasurementKind::Ndf, "ADF");
+        ui.selectable_value(kind, MeasurementKind::Msf, "MSF");
+        ui.selectable_value(kind, MeasurementKind::Sdf, "SDF");
+    });
 }
 
 pub struct MeasurementDialog {
@@ -191,7 +171,7 @@ impl MeasurementDialog {
             .open(&mut self.is_open)
             .fixed_size((400.0, 600.0))
             .show(ctx, |ui| {
-                self.kind.selectable_ui(ui);
+                measurement_kind_selectable_ui(&mut self.kind, ui);
                 #[cfg(feature = "visu-dbg")]
                 {
                     ui.horizontal_wrapped(|ui| {
@@ -312,11 +292,12 @@ impl MeasurementDialog {
                             orbit_radius,
                         )
                     }
-                    MeasurementKind::Adf => self.tab_adf.ui(ui),
+                    MeasurementKind::Ndf => self.tab_adf.ui(ui),
                     MeasurementKind::Msf => self.tab_msf.ui(ui),
                     MeasurementKind::Sdf => {
                         self.tab_sdf.ui(ui);
                     }
+                    _ => {}
                 }
                 ui.separator();
 
@@ -346,7 +327,7 @@ impl MeasurementDialog {
                                         FileEncoding::Binary,
                                         "binary",
                                     );
-                                    if self.kind == MeasurementKind::Adf {
+                                    if self.kind == MeasurementKind::Ndf {
                                         ui.selectable_value(
                                             &mut self.encoding,
                                             FileEncoding::Ascii,
@@ -405,9 +386,12 @@ impl MeasurementDialog {
                         }
                         let params = match self.kind {
                             MeasurementKind::Bsdf => MeasurementParams::Bsdf(self.tab_bsdf.params),
-                            MeasurementKind::Adf => MeasurementParams::Adf(self.tab_adf.params),
+                            MeasurementKind::Ndf => MeasurementParams::Adf(self.tab_adf.params),
                             MeasurementKind::Msf => MeasurementParams::Msf(self.tab_msf.params),
                             MeasurementKind::Sdf => MeasurementParams::Sdf(self.tab_sdf.params),
+                            _ => {
+                                unreachable!("Invalid measurement kind")
+                            }
                         };
                         let options = self.write_to_file.then(|| match self.format {
                             OutputFormat::Vgmo => OutputOptions {
