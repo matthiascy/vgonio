@@ -88,7 +88,7 @@ pub type ClausenBrdf = MeasuredBrdf<ClausenBrdfParameterisation, 3>;
 unsafe impl Send for ClausenBrdf {}
 unsafe impl Sync for ClausenBrdf {}
 
-impl_measured_data_trait!(ClausenBrdf, Bsdf);
+impl_measured_data_trait!(ClausenBrdf, Bsdf, true);
 
 impl ClausenBrdf {
     /// Creates a new Clausen BRDF. The BRDF is parameterised in the incident

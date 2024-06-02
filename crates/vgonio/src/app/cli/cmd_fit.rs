@@ -1,7 +1,10 @@
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
     fitting::{err, FittingProblem, FittingReport, MicrofacetBrdfFittingProblem},
-    measure::bsdf::{receiver::ReceiverParams, MeasuredBrdfLevel, MeasuredBsdfData},
+    measure::{
+        bsdf::{receiver::ReceiverParams, MeasuredBrdfLevel, MeasuredBsdfData},
+        Measurement,
+    },
     pyplot::plot_err,
 };
 use base::{
@@ -121,80 +124,53 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     .unwrap();
             }
         } else {
-            if opts.olaf {
-                println!("Fitting to Olaf data.");
+            if opts.clausen {
+                println!("Fitting to Clausen's data.");
                 if opts.inputs.len() % 2 != 0 {
                     return Err(VgonioError::new(
                         "The input files should be in pairs of measured data and corresponding \
-                         Olaf data.",
+                         Clausen's data.",
                         None,
                     ));
                 }
-                for input in opts.inputs.chunks(2) {
-                    log::debug!("inputs: {:?}, {:?}", input[0], input[1]);
+                for pair in opts.inputs.chunks(2) {
+                    log::debug!("inputs: {:?}, {:?}", pair[0], pair[1]);
                     let brdf = {
-                        let measured = cache
-                            .load_micro_surface_measurement(&config, &input[0])
-                            .unwrap();
-                        let olaf = cache
-                            .load_micro_surface_measurement(&config, &input[1])
-                            .unwrap();
-                        let simulated_brdf = cache
-                            .get_measurement(measured)
-                            .unwrap()
-                            .measured
+                        let handles = pair
+                            .iter()
+                            .map(|p| cache.load_micro_surface_measurement(&config, p).unwrap())
+                            .collect::<Vec<_>>();
+                        let loaded = handles
+                            .iter()
+                            .map(|h| &cache.get_measurement(*h).unwrap().measured)
+                            .collect::<Vec<_>>();
+                        if loaded.iter().all(|m| m.is_clausen())
+                            || loaded.iter().all(|m| !m.is_clausen())
+                        {
+                            return Err(VgonioError::new(
+                                "The input files should be in pairs of measured data and \
+                                 corresponding Clausen's data.",
+                                None,
+                            ));
+                        }
+                        let simulated_brdf_index = if loaded[0].is_clausen() { 1 } else { 0 };
+                        let clausen_brdf_index = simulated_brdf_index ^ 1;
+                        let simulated_brdf = loaded[simulated_brdf_index]
                             .downcast_ref::<MeasuredBsdfData>()
                             .unwrap();
-                        #[cfg(debug_assertions)]
-                        {
-                            let brdf = simulated_brdf.brdf_at(opts.level).unwrap();
-                            let n_spectrum = simulated_brdf.n_spectrum();
-                            let partition = &simulated_brdf.raw.outgoing;
-                            for snapshot in brdf.snapshots() {
-                                log::debug!("  = snapshot | wi: {}", snapshot.wi);
-                                for (i, ring) in partition.rings.iter().enumerate() {
-                                    log::debug!(
-                                        "    - ring[{}], center: (min {}, max {})",
-                                        i,
-                                        ring.theta_min.to_degrees(),
-                                        ring.theta_max.to_degrees()
-                                    );
-                                    for pid in 0..ring.patch_count {
-                                        let patch_idx = pid + ring.base_index;
-                                        log::debug!(
-                                            "      - patch[{}] (min: {}, max: {}, center: {}): \
-                                             {:?}",
-                                            patch_idx,
-                                            partition.patches[patch_idx].min,
-                                            partition.patches[patch_idx].max,
-                                            partition.patches[patch_idx].center(),
-                                            &snapshot.samples.as_slice()[patch_idx * n_spectrum
-                                                ..(patch_idx + 1) * n_spectrum]
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        let olaf_data = cache
-                            .get_measurement(olaf)
-                            .unwrap()
-                            .measured
+                        let clausen_brdf = loaded[clausen_brdf_index]
                             .downcast_ref::<ClausenBrdf>()
                             .unwrap();
-                        let dense = if std::env::var("DENSE")
-                            .ok()
-                            .map(|s| s == "1")
-                            .unwrap_or(false)
-                        {
-                            true
-                        } else {
-                            false
-                        };
-                        log::debug!("Resampling the measured data, dense: {}", dense);
-                        simulated_brdf.resample(&olaf_data.params, opts.level, dense, Rads::ZERO)
+                        log::debug!("Resampling the measured data, dense: {}", opts.dense);
+                        simulated_brdf.resample(
+                            &clausen_brdf.params,
+                            opts.level,
+                            opts.dense,
+                            Rads::ZERO,
+                        )
                     };
                     log::debug!("BRDF extraction done, starting fitting.");
-                    measured_brdf_fitting(opts.method, &input[0], &brdf, &opts, alpha, &cache.iors);
+                    measured_brdf_fitting(opts.method, &pair[0], &brdf, &opts, alpha, &cache.iors);
                 }
             } else {
                 for input in &opts.inputs {
@@ -311,11 +287,19 @@ pub struct FitOptions {
     #[clap(
         long,
         help = "Whether to match the measured BRDF data to physically measured in-plane \
-                BRDF\ndata by Olaf. If true, the inputs should be in pairs of measured data and \
-                Olaf data.",
+                BRDF\ndata by O. Clausen. If true, the inputs should be in pairs of measured data \
+                and O. Clausen's data.",
         default_value = "false"
     )]
-    pub olaf: bool,
+    pub clausen: bool,
+
+    #[clap(
+        long,
+        help = "Whether to use 4 times mores samples while resampling the measured data to match \
+                the resolution of the Clausen's data.",
+        default_value = "false"
+    )]
+    pub dense: bool,
 
     #[clap(
         long,

@@ -40,7 +40,7 @@ pub struct MeasuredNdfData {
     pub samples: Box<[f32]>,
 }
 
-impl_measured_data_trait!(MeasuredNdfData, Ndf);
+impl_measured_data_trait!(MeasuredNdfData, Ndf, false);
 
 impl MeasuredNdfData {
     /// Writes the measured data as an EXR file.

@@ -403,7 +403,7 @@ pub struct MeasuredBsdfData {
     pub bsdfs: HashMap<MeasuredBrdfLevel, VgonioBrdf>,
 }
 
-impl_measured_data_trait!(MeasuredBsdfData, Bsdf);
+impl_measured_data_trait!(MeasuredBsdfData, Bsdf, false);
 
 impl MeasuredBsdfData {
     /// Returns the number of wavelengths.

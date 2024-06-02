@@ -1359,7 +1359,7 @@ pub struct MeasuredMsfData {
     pub samples: Box<[f32]>,
 }
 
-impl_measured_data_trait!(MeasuredMsfData, Msf);
+impl_measured_data_trait!(MeasuredMsfData, Msf, false);
 
 impl MeasuredMsfData {
     // TODO: review the necessity of this method.

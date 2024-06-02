@@ -175,6 +175,8 @@ pub enum ErrorMetric {
 pub trait MeasuredData: Debug {
     /// Returns the kind of the measurement.
     fn kind(&self) -> MeasurementKind;
+    /// Returns whether the measurement data is a Clausen representation.
+    fn is_clausen(&self) -> bool { false }
     /// Casts the measurement data to a trait object for downcasting to the
     /// concrete type.
     fn as_any(&self) -> &dyn std::any::Any;
@@ -204,9 +206,11 @@ impl dyn MeasuredData {
 #[macro_export]
 /// Boilerplate macro for implementing the `MeasuredData` trait for a type.
 macro_rules! impl_measured_data_trait {
-    ($t:ty, $kind:ident) => {
+    ($t:ty, $kind:ident, $is_clausen:expr) => {
         impl MeasuredData for $t {
             fn kind(&self) -> MeasurementKind { MeasurementKind::$kind }
+
+            fn is_clausen(&self) -> bool { $is_clausen }
 
             fn as_any(&self) -> &dyn std::any::Any { self }
 

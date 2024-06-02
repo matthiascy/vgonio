@@ -26,7 +26,7 @@ pub struct MeasuredSdfData {
     pub slopes: Box<[Slope2]>,
 }
 
-impl_measured_data_trait!(MeasuredSdfData, Sdf);
+impl_measured_data_trait!(MeasuredSdfData, Sdf, false);
 
 /// Data of the slope distribution function (SDF) of a microsurface.
 pub struct SdfPmf {
