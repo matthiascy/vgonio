@@ -3732,6 +3732,7 @@ dependencies = [
  "chrono",
  "clap",
  "csv",
+ "exr",
  "flate2",
  "glam",
  "log",

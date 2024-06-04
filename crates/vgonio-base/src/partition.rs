@@ -3,13 +3,17 @@ use crate::{
     math::{Sph2, Vec3},
     range::RangeByStepSizeInclusive,
     units::{rad, Radians, Rads, SolidAngle},
+    utils,
 };
-use num_traits::Euclid;
+use num_traits::{Euclid, ToPrimitive};
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{borrow::Cow, fmt::Display};
 
+use crate::error::VgonioError;
+use exr::prelude::Text;
 #[cfg(feature = "io")]
 use std::io::{BufReader, Read, Seek};
+use std::path::Path;
 
 /// The domain of the spherical coordinate.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -673,6 +677,88 @@ impl Ring {
             patch_count,
             base_index,
         }
+    }
+}
+
+#[cfg(feature = "io")]
+/// A writer for the data carried on the hemisphere.
+pub struct DataCarriedOnHemisphereImageWriter<'a> {
+    /// The partition of the hemisphere.
+    partition: &'a SphericalPartition,
+    /// Resolution of the output image.
+    resolution: u32,
+    /// Patch indices for each pixel.
+    indices: Box<[i32]>,
+}
+
+#[cfg(feature = "io")]
+impl<'a> DataCarriedOnHemisphereImageWriter<'a> {
+    /// Creates a new writer for the data carried on the hemisphere.
+    pub fn new(partition: &'a SphericalPartition, resolution: u32) -> Self {
+        // Calculate the patch indices for each pixel.
+        let mut indices = vec![0i32; (resolution * resolution) as usize].into_boxed_slice();
+        partition.compute_pixel_patch_indices(resolution, resolution, &mut indices);
+        Self {
+            partition,
+            resolution,
+            indices,
+        }
+    }
+
+    /// Writes the data as an EXR file.
+    pub fn write_as_exr<L, C>(
+        &self,
+        data: &'a [f32],
+        filepath: &Path,
+        timestamp: &chrono::DateTime<chrono::Local>,
+        layer_name: L,
+        channel_name: C,
+    ) -> Result<(), VgonioError>
+    where
+        L: FnOnce(usize) -> Option<Text>,
+        C: FnOnce(usize) -> Text,
+    {
+        if data.len() != self.partition.n_patches() {
+            return Err(VgonioError::new(
+                "Data carried on hemisphere length mismatches the partition",
+                None,
+            ));
+        }
+
+        use exr::prelude::*;
+        let (w, h) = (self.resolution, self.resolution);
+        let mut samples = vec![0.0f32; w as usize * h as usize];
+        for i in 0..w {
+            for j in 0..h {
+                let idx = self.indices[(i + j * w) as usize];
+                if idx >= 0 {
+                    samples[(i + j * w) as usize] = data[idx as usize];
+                } else {
+                    samples[(i + j * w) as usize] = 0.0;
+                }
+            }
+        }
+
+        let layer = Layer::new(
+            (w as usize, h as usize),
+            LayerAttributes {
+                layer_name: layer_name(0),
+                capture_date: Text::new_or_none(utils::iso_timestamp_from_datetime(timestamp)),
+                ..LayerAttributes::default()
+            },
+            Encoding::FAST_LOSSLESS,
+            AnyChannels {
+                list: SmallVec::from_vec(vec![AnyChannel::new(
+                    channel_name(0),
+                    FlatSamples::F32(Cow::Borrowed(&samples)),
+                )]),
+            },
+        );
+        let image = Image::from_layer(layer);
+        image
+            .write()
+            .to_file(filepath)
+            .map_err(|err| VgonioError::new("Failed to write EXR file.", Some(Box::new(err))))
     }
 }
 

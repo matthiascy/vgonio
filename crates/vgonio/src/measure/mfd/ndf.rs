@@ -9,7 +9,7 @@ use base::{
     error::VgonioError,
     impl_measured_data_trait, math,
     math::{Sph2, Vec3Swizzles},
-    partition::{SphericalDomain, SphericalPartition},
+    partition::{DataCarriedOnHemisphereImageWriter, SphericalDomain, SphericalPartition},
     range::RangeByStepSizeInclusive,
     units,
     units::{rad, Radians},
@@ -59,7 +59,7 @@ impl MeasuredNdfData {
         );
 
         // Collect the data following the patches.
-        let mut patch_data = vec![0.0; partition.n_patches()];
+        let mut samples_per_patch = vec![0.0; partition.n_patches()];
         match self.params.mode {
             NdfMeasurementMode::ByPoints { zenith, azimuth } => {
                 assert!(
@@ -70,64 +70,34 @@ impl MeasuredNdfData {
                     .step_count_wrapped();
                 let n_phi =
                     RangeByStepSizeInclusive::zero_to_tau(azimuth.step_size).step_count_wrapped();
-                // ADF samples in ByPoints mode is stored by azimuth first, then by zenith.
+                // NDF samples in ByPoints mode are stored by azimuth first, then by zenith.
                 // We need to rearrange the data to match the patch order, which is by zenith
                 // first, then by azimuth.
-                patch_data.iter_mut().enumerate().for_each(|(i_p, v)| {
-                    let i_theta = i_p / n_phi;
-                    let i_phi = i_p % n_phi;
-                    let i_adf = i_phi * n_theta + i_theta;
-                    // In case the number of samples is less than the number of patches.
-                    if i_adf < self.samples.len() {
-                        *v = self.samples[i_adf];
-                    }
-                });
+                samples_per_patch
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(i_p, v)| {
+                        let i_theta = i_p / n_phi;
+                        let i_phi = i_p % n_phi;
+                        let i_adf = i_phi * n_theta + i_theta;
+                        // In case, the number of samples is less than the number of patches.
+                        if i_adf < self.samples.len() {
+                            *v = self.samples[i_adf];
+                        }
+                    });
             }
             NdfMeasurementMode::ByPartition { .. } => {
-                patch_data.copy_from_slice(&self.samples);
+                samples_per_patch.copy_from_slice(&self.samples);
             }
         }
 
-        // Calculate the patch index for each pixel.
-        let mut indices = vec![0i32; (w * h) as usize];
-        partition.compute_pixel_patch_indices(w, h, &mut indices);
-
-        let mut samples = vec![0.0f32; (w * h) as usize];
-        // Collect the data into the buffer.
-        for i in 0..w {
-            // x, width, column
-            for j in 0..h {
-                // y, height, row
-                let idx = i + j * w;
-                let patch_idx = indices[idx as usize];
-                if patch_idx >= 0 {
-                    samples[idx as usize] = patch_data[patch_idx as usize];
-                }
-            }
-        }
-
-        let layer = Layer::new(
-            (w as usize, h as usize),
-            LayerAttributes {
-                layer_name: Some(Text::from("NDF")),
-                capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
-                    timestamp,
-                )),
-                ..LayerAttributes::default()
-            },
-            Encoding::FAST_LOSSLESS,
-            AnyChannels {
-                list: SmallVec::from_vec(vec![AnyChannel::new(
-                    "NDF",
-                    FlatSamples::F32(Cow::Borrowed(&samples)),
-                )]),
-            },
-        );
-        let image = Image::from_layer(layer);
-        image
-            .write()
-            .to_file(filepath)
-            .map_err(|err| VgonioError::new("Failed to write NDF EXR file.", Some(Box::new(err))))
+        DataCarriedOnHemisphereImageWriter::new(&partition, resolution).write_as_exr(
+            &samples_per_patch,
+            filepath,
+            timestamp,
+            |_| Some(Text::from("NDF")),
+            |_| Text::from("NDF"),
+        )
     }
 
     // TODO: review the necessity of this method.
@@ -355,7 +325,6 @@ fn measure_area_distribution_by_points<'a>(
         .collect()
 }
 
-// TODO: review the correctness of the implementation.
 /// Measure the microfacet area distribution function by partitioning the
 /// hemisphere into patches and calculating the corresponding values.
 fn measure_area_distribution_by_partition<'a>(
