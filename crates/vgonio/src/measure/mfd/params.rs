@@ -2,7 +2,7 @@ use crate::error::RuntimeError;
 use base::{
     error::VgonioError,
     math::Sph2,
-    partition::PartitionScheme,
+    partition::{PartitionScheme, SphericalPartition},
     range::RangeByStepSizeInclusive,
     units::{deg, rad, Radians},
 };
@@ -27,7 +27,7 @@ pub struct NdfMeasurementParams {
     /// Whether to use the actual facet area during the measurement.
     /// If `false`, the area distribution function is normalised by
     /// the number of facets.
-    pub use_facet_area: bool, // TODO: serialise/deserialise
+    pub use_facet_area: bool,
 }
 
 /// How to measure the area distribution function.
@@ -43,15 +43,11 @@ pub enum NdfMeasurementMode {
         zenith: RangeByStepSizeInclusive<Radians>,
     },
     /// Measure the area distribution function by partitioning the hemisphere
-    /// covering the surface.
+    /// covering the surface using Beckers' partitioning scheme.
     #[serde(rename = "partition")]
     ByPartition {
-        /// Partition precision along the zenith angle and azimuth angle.
-        /// Note: the azimuth angle precision is not used when the partition
-        /// scheme is not `PartitionScheme::EqualAngle`.
-        precision: Sph2,
-        /// Partition scheme.
-        scheme: PartitionScheme,
+        /// Partition precision along the zenith angle.
+        precision: Radians,
     },
 }
 
@@ -76,8 +72,7 @@ impl NdfMeasurementMode {
     /// Default parameters when the measurement mode is `ByPartition`.
     pub fn default_by_partition() -> Self {
         NdfMeasurementMode::ByPartition {
-            precision: Sph2::new(deg!(2.0).in_radians(), deg!(5.0).in_radians()),
-            scheme: PartitionScheme::Beckers,
+            precision: Radians::from_degrees(2.0),
         }
     }
 
@@ -86,7 +81,7 @@ impl NdfMeasurementMode {
     pub fn partition_scheme_for_data_collection(&self) -> PartitionScheme {
         match self {
             NdfMeasurementMode::ByPoints { .. } => PartitionScheme::EqualAngle,
-            NdfMeasurementMode::ByPartition { scheme, .. } => *scheme,
+            NdfMeasurementMode::ByPartition { .. } => PartitionScheme::Beckers,
         }
     }
 
@@ -96,15 +91,7 @@ impl NdfMeasurementMode {
             NdfMeasurementMode::ByPoints { azimuth, zenith } => {
                 Sph2::new(zenith.step_size, azimuth.step_size)
             }
-            NdfMeasurementMode::ByPartition { precision, .. } => *precision,
-        }
-    }
-
-    /// Returns the corresponding partition precision and scheme.
-    pub fn as_mode_by_partition(&self) -> Option<(Sph2, PartitionScheme)> {
-        match self {
-            NdfMeasurementMode::ByPoints { .. } => None,
-            NdfMeasurementMode::ByPartition { precision, scheme } => Some((*precision, *scheme)),
+            NdfMeasurementMode::ByPartition { precision, .. } => Sph2::new(*precision, rad!(0.0)),
         }
     }
 
@@ -134,7 +121,9 @@ impl NdfMeasurementParams {
             NdfMeasurementMode::ByPoints { azimuth, zenith } => {
                 azimuth.step_count_wrapped() * zenith.step_count_wrapped()
             }
-            NdfMeasurementMode::ByPartition { precision, scheme } => scheme.num_patches(precision),
+            NdfMeasurementMode::ByPartition { precision } => {
+                PartitionScheme::Beckers.num_patches(Sph2::new(precision, rad!(0.0)))
+            }
         }
     }
 
@@ -183,16 +172,10 @@ impl NdfMeasurementParams {
                     ));
                 }
             }
-            NdfMeasurementMode::ByPartition { precision, scheme } => {
-                if precision.theta <= rad!(0.0) {
+            NdfMeasurementMode::ByPartition { precision } => {
+                if precision <= rad!(0.0) {
                     return Err(VgonioError::new(
                         "Microfacet distribution measurement: theta precision must be positive!",
-                        Some(Box::new(RuntimeError::InvalidParameters)),
-                    ));
-                }
-                if scheme == PartitionScheme::EqualAngle && precision.phi <= rad!(0.0) {
-                    return Err(VgonioError::new(
-                        "Microfacet distribution measurement: phi precision must be positive!",
                         Some(Box::new(RuntimeError::InvalidParameters)),
                     ));
                 }

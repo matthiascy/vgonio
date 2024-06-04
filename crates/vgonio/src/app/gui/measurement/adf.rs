@@ -6,12 +6,12 @@ use base::partition::PartitionScheme;
 use egui::Widget;
 
 #[derive(Debug)]
-pub struct AdfMeasurementTab {
+pub struct NdfMeasurementTab {
     pub params: NdfMeasurementParams,
     _event_loop: EventLoopProxy,
 }
 
-impl AdfMeasurementTab {
+impl NdfMeasurementTab {
     pub fn new(event_loop: EventLoopProxy) -> Self {
         Self {
             params: NdfMeasurementParams::default(),
@@ -57,20 +57,10 @@ impl AdfMeasurementTab {
                         range_step_size_inclusive_angle_ui(azimuth, ui);
                         ui.end_row();
                     }
-                    NdfMeasurementMode::ByPartition { scheme, precision } => {
-                        ui.label("Partition scheme:");
-                        ui.horizontal_wrapped(|ui| {
-                            ui.selectable_value(scheme, PartitionScheme::Beckers, "Beckers");
-                            ui.selectable_value(scheme, PartitionScheme::EqualAngle, "EqualAngle");
-                        });
-                        ui.end_row();
-
+                    NdfMeasurementMode::ByPartition { precision } => {
                         ui.label("Partition precision:");
                         ui.horizontal_wrapped(|ui| {
-                            misc::drag_angle(&mut precision.theta, "θ").ui(ui);
-                            if scheme == &PartitionScheme::EqualAngle {
-                                misc::drag_angle(&mut precision.phi, "φ").ui(ui);
-                            }
+                            misc::drag_angle(precision, "θ").ui(ui);
                         });
                     }
                 }

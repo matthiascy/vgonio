@@ -103,7 +103,6 @@ pub mod vgmo {
         }
     }
 
-    // TODO: deal with ADF measurement params
     impl HeaderExt for VgmoHeaderExt {
         const MAGIC: &'static [u8; 4] = b"VGMO";
 
@@ -121,15 +120,35 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => match self {
-                    Self::Ndf { params } => match &params.mode {
-                        NdfMeasurementMode::ByPoints { azimuth, zenith } => {
-                            writer.write_all(&[MeasurementKind::Ndf as u8])?;
-                            write_adf_or_msf_params_to_vgmo(azimuth, zenith, writer, true)?;
+                    Self::Ndf { params } => {
+                        match &params.mode {
+                            NdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                                writer.write_all(&[
+                                    MeasurementKind::Ndf as u8,
+                                    0, // by points
+                                    params.crop_to_disk as u8,
+                                    params.use_facet_area as u8,
+                                ])?;
+                                write_adf_or_msf_params_to_vgmo(azimuth, zenith, writer, true)?;
+                            }
+                            NdfMeasurementMode::ByPartition { precision } => {
+                                writer.write_all(&[
+                                    MeasurementKind::Ndf as u8,
+                                    1, // by partition
+                                    params.crop_to_disk as u8,
+                                    params.use_facet_area as u8,
+                                ])?;
+                                let partition = SphericalPartition::new(
+                                    PartitionScheme::Beckers,
+                                    SphericalDomain::Upper,
+                                    Sph2::new(*precision, rad!(0.0)),
+                                );
+                                let mut buf = vec![0u8; partition.total_required_size()];
+                                partition.write_to_buf(&mut buf);
+                                writer.write_all(&buf)?;
+                            }
                         }
-                        NdfMeasurementMode::ByPartition { .. } => {
-                            // TODO: implement
-                        }
-                    },
+                    }
                     Self::Gaf { params } => {
                         writer.write_all(&[MeasurementKind::Msf as u8])?;
                         write_adf_or_msf_params_to_vgmo(
@@ -276,9 +295,7 @@ pub mod vgmo {
                             NdfMeasurementMode::ByPoints { zenith, .. } => {
                                 zenith.step_count_wrapped()
                             }
-                            NdfMeasurementMode::ByPartition { .. } => {
-                                todo!("Partitioned ADF data")
-                            }
+                            NdfMeasurementMode::ByPartition { .. } => ndf.samples.len(),
                         };
                         (&ndf.samples, cols)
                     }
@@ -483,42 +500,23 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => {
-                    let mut buf = [0u8; 24];
-                    reader.read_exact(&mut buf).unwrap();
-                    let domain = match u32::from_le_bytes(buf[0..4].try_into().unwrap()) {
-                        0 => SphericalDomain::Whole,
-                        1 => SphericalDomain::Upper,
-                        2 => SphericalDomain::Lower,
-                        _ => panic!("Invalid domain kind"),
-                    };
-                    let scheme = match u32::from_le_bytes(buf[4..8].try_into().unwrap()) {
-                        0 => PartitionScheme::Beckers,
-                        1 => PartitionScheme::EqualAngle,
-                        _ => panic!("Invalid scheme kind"),
-                    };
-                    let precision_theta = rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
-                    let precision_phi = rad!(f32::from_le_bytes(buf[12..16].try_into().unwrap()));
+                    let (domain, scheme, precision, n_rings, n_patches) =
+                        SphericalPartition::read_skipping_rings(reader);
                     let params = ReceiverParams {
                         domain,
-                        precision: Sph2::new(precision_theta, precision_phi),
+                        precision,
                         scheme,
                     };
                     let expected_num_rings = params.num_rings();
-                    let num_rings = u32::from_le_bytes(buf[16..20].try_into().unwrap()) as usize;
                     debug_assert!(
-                        num_rings == expected_num_rings,
+                        n_rings == expected_num_rings,
                         "Receiver's partition ring count does not match the precision",
                     );
                     let expected_num_patches = params.num_patches();
-                    let num_patches = u32::from_le_bytes(buf[20..24].try_into().unwrap()) as usize;
                     debug_assert!(
-                        num_patches == expected_num_patches,
+                        n_patches == expected_num_patches,
                         "Receiver's partition patch count does not match the precision",
                     );
-                    // Skip reading the rings
-                    reader
-                        .seek_relative((num_rings * Ring::REQUIRED_SIZE) as i64)
-                        .unwrap();
                     params
                 }
                 _ => {
@@ -542,17 +540,7 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => {
-                    let partition = self.partitioning();
-                    buf[0..4].copy_from_slice(&(self.domain as u32).to_le_bytes());
-                    buf[4..8].copy_from_slice(&(self.scheme as u32).to_le_bytes());
-                    buf[8..12].copy_from_slice(&self.precision.theta.value().to_le_bytes());
-                    buf[12..16].copy_from_slice(&self.precision.phi.value().to_le_bytes());
-                    buf[16..20].copy_from_slice(&(partition.n_rings() as u32).to_le_bytes());
-                    buf[20..24].copy_from_slice(&(partition.n_patches() as u32).to_le_bytes());
-                    let offset = 24;
-                    for (i, ring) in partition.rings.iter().enumerate() {
-                        ring.write_to_buf(&mut buf[offset + i * Ring::REQUIRED_SIZE..]);
-                    }
+                    self.partitioning().write_to_buf(buf);
                 }
                 _ => {
                     log::error!("Unsupported VGMO[ReceiverParams] version: {version}");
@@ -562,8 +550,6 @@ pub mod vgmo {
     }
 
     impl NdfMeasurementParams {
-        // TODO: resolve `crop_to_disk`
-        // TODO: read partitioned ADF data
         /// Reads the NDF measurement parameters from the given reader.
         pub fn read_from_vgmo<R: Read + Seek>(
             version: Version,
@@ -575,19 +561,55 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => {
-                    let mut buf = [0u8; 36];
-                    reader.read_exact(&mut buf)?;
-                    let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[0..16]);
-                    let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[16..32]);
-                    let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
-                    debug_assert_eq!(
-                        sample_count as usize,
-                        NdfMeasurementParams::expected_samples_count_by_points(&azimuth, &zenith)
-                    );
+                    let mut common_info = [0u8; 3];
+                    // Read `measurement mode`, `crop to disk`, and `use facet area`
+                    reader.read_exact(&mut common_info)?;
+                    let mode = match common_info[0] {
+                        0 => {
+                            let mut buf = [0u8; 36];
+                            reader.read_exact(&mut buf)?;
+                            let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(
+                                &common_info[0..16],
+                            );
+                            let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(
+                                &common_info[16..32],
+                            );
+                            let sample_count =
+                                u32::from_le_bytes(common_info[32..36].try_into().unwrap());
+                            debug_assert_eq!(
+                                sample_count as usize,
+                                NdfMeasurementParams::expected_samples_count_by_points(
+                                    &azimuth, &zenith
+                                )
+                            );
+                            NdfMeasurementMode::ByPoints { azimuth, zenith }
+                        }
+                        1 => {
+                            let (domain, scheme, precision, _n_rings, _n_patches) =
+                                SphericalPartition::read_skipping_rings(reader);
+                            debug_assert_eq!(
+                                domain,
+                                SphericalDomain::Upper,
+                                "Only upper domain is supported for NDF"
+                            );
+                            debug_assert_eq!(
+                                scheme,
+                                PartitionScheme::Beckers,
+                                "Only Beckers partition scheme is supported for NDF"
+                            );
+                            NdfMeasurementMode::ByPartition {
+                                precision: precision.theta,
+                            }
+                        }
+                        _ => {
+                            panic!("Invalid NDF measurement mode");
+                        }
+                    };
+
                     Ok(Self {
-                        mode: NdfMeasurementMode::ByPoints { azimuth, zenith },
-                        crop_to_disk: false,
-                        use_facet_area: true,
+                        mode,
+                        crop_to_disk: common_info[1] != 0,
+                        use_facet_area: common_info[2] != 0,
                     })
                 }
                 _ => Err(std::io::Error::new(

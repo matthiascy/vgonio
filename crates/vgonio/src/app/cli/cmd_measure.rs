@@ -175,21 +175,16 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                             zenith.pretty_print(),
                         );
                     }
-                    NdfMeasurementMode::ByPartition { precision, scheme } => {
+                    NdfMeasurementMode::ByPartition { precision } => {
                         println!(
                             "  {}>{} Measuring microfacet area distribution:
     • parameters:
        + mode: by partition
-           + scheme: {:?}
+           + scheme: Beckers
            + precision: {}",
                             ansi::BRIGHT_YELLOW,
                             ansi::RESET,
-                            scheme,
-                            if scheme == &PartitionScheme::EqualAngle {
-                                precision.to_string()
-                            } else {
-                                precision.theta.prettified()
-                            }
+                            precision.prettified()
                         );
                     }
                 }

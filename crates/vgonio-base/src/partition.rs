@@ -8,6 +8,9 @@ use num_traits::Euclid;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
+#[cfg(feature = "io")]
+use std::io::{BufReader, Read, Seek};
+
 /// The domain of the spherical coordinate.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -357,6 +360,82 @@ impl SphericalPartition {
         Self::mirror_partition(&mut patches_lower, &mut rings_lower);
         patches.extend(patches_lower);
         rings.extend(rings_lower);
+    }
+}
+
+#[cfg(feature = "io")]
+impl SphericalPartition {
+    /// The size of the buffer required to read or write the parameters.
+    pub const fn total_required_size(&self) -> usize { 24 + self.rings.len() * Ring::REQUIRED_SIZE }
+
+    /// Serialize the partition to a buffer for writing to a vgmo file.
+    ///
+    /// # Arguments
+    ///
+    /// * `buf` - The buffer to write the partition to.
+    /// * `write_domain_scheme` - If true, the domain and scheme are written to
+    ///   the buffer.
+    #[track_caller]
+    pub fn write_to_buf(&self, buf: &mut [u8]) {
+        let size_required = self.total_required_size();
+        assert_eq!(buf.len(), size_required, "Buffer size mismatch.");
+        buf[0..4].copy_from_slice(&(self.domain as u32).to_le_bytes());
+        buf[4..8].copy_from_slice(&(self.scheme as u32).to_le_bytes());
+        buf[8..12].copy_from_slice(&self.precision.theta.value().to_le_bytes());
+        buf[12..16].copy_from_slice(&self.precision.phi.value().to_le_bytes());
+        buf[16..20].copy_from_slice(&(self.n_rings() as u32).to_le_bytes());
+        buf[20..24].copy_from_slice(&(self.n_patches() as u32).to_le_bytes());
+        let mut offset = 24;
+        self.rings.iter().for_each(|ring| {
+            ring.write_to_buf(&mut buf[offset..offset + Ring::REQUIRED_SIZE]);
+            offset += Ring::REQUIRED_SIZE;
+        });
+    }
+
+    /// Deserialize the partition from a buffer read from a vgmo file without
+    /// reading the ring information.
+    fn read_from_buf_without_rings(
+        buf: &[u8],
+    ) -> (SphericalDomain, PartitionScheme, Sph2, usize, usize) {
+        assert!(buf.len() >= 24, "Buffer size mismatch.");
+        let domain = match u32::from_le_bytes(buf[0..4].try_into().unwrap()) {
+            0 => SphericalDomain::Whole,
+            1 => SphericalDomain::Upper,
+            2 => SphericalDomain::Lower,
+            _ => panic!("Invalid domain kind"),
+        };
+        let scheme = match u32::from_le_bytes(buf[4..8].try_into().unwrap()) {
+            0 => PartitionScheme::Beckers,
+            1 => PartitionScheme::EqualAngle,
+            _ => panic!("Invalid scheme kind"),
+        };
+        let precision_theta = rad!(f32::from_le_bytes(buf[8..12].try_into().unwrap()));
+        let precision_phi = rad!(f32::from_le_bytes(buf[12..16].try_into().unwrap()));
+        let n_rings = u32::from_le_bytes(buf[16..20].try_into().unwrap());
+        let n_patches = u32::from_le_bytes(buf[20..24].try_into().unwrap());
+        (
+            domain,
+            scheme,
+            Sph2::new(precision_theta, precision_phi),
+            n_rings as usize,
+            n_patches as usize,
+        )
+    }
+
+    /// As the partition can be reconstructed from the parameters, ring and
+    /// patch information is skipped during deserialization.
+    pub fn read_skipping_rings<R: Read + Seek>(
+        reader: &mut BufReader<R>,
+    ) -> (SphericalDomain, PartitionScheme, Sph2, usize, usize) {
+        let mut buf = [0u8; 24];
+        reader.read_exact(&mut buf).unwrap();
+        let (domain, scheme, precision, n_rings, n_patches) =
+            Self::read_from_buf_without_rings(&buf);
+        // Skip the ring information.
+        reader
+            .seek_relative((n_rings * Ring::REQUIRED_SIZE) as i64)
+            .unwrap();
+        (domain, scheme, precision, n_rings, n_patches)
     }
 }
 

@@ -32,17 +32,12 @@ impl Display for NdfMeasurementParams {
                     zenith.step_count_wrapped(),
                 )
             }
-            NdfMeasurementMode::ByPartition { precision, scheme } => {
+            NdfMeasurementMode::ByPartition { precision } => {
                 write!(
                     f,
-                    "MicrofacetDistributionMeasurement\n    - by-partition\n    - scheme: {:?}\n    \
-                     - precision: {}",
-                    scheme,
-                    if scheme == &PartitionScheme::EqualAngle {
-                        precision.to_string()
-                    } else {
-                        precision.theta.prettified()
-                    }
+                    "MicrofacetDistributionMeasurement\n    - by-partition\n    - scheme: \
+                     Beckers\n    - precision: {}",
+                    precision.prettified()
                 )
             }
         }

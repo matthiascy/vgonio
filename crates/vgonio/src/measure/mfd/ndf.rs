@@ -191,7 +191,7 @@ pub fn measure_area_distribution(
     #[cfg(feature = "bench")]
     {
         let elapsed = start.elapsed();
-        log::info!("ADF measurement took {} ms.", elapsed.as_millis());
+        log::info!("NDF measurement took {} ms.", elapsed.as_millis());
     }
     measurements.into_boxed_slice()
 }
@@ -345,62 +345,6 @@ fn measure_area_distribution_by_points<'a>(
                 }
             }
 
-            // let mut samples =
-            //     vec![0.0f32; azimuth.step_count_wrapped() *
-            // zenith_step_count].into_boxed_slice(); const SAMPLE_CHUNK_SIZE:
-            // usize = 1024; samples
-            //     .par_chunks_mut(SAMPLE_CHUNK_SIZE)
-            //     .enumerate()
-            //     .for_each(|(chunk_idx, spls)| {
-            //         spls.iter_mut().enumerate().for_each(|(i, s)| {
-            //             let sample_idx = chunk_idx * SAMPLE_CHUNK_SIZE + i;
-            //             let azi_idx = sample_idx / zenith_step_count;
-            //             let zen_idx = sample_idx % zenith_step_count;
-            //             let azimuth = azi_idx as f32 * azimuth.step_size;
-            //             let zen = zen_idx as f32 * zenith.step_size;
-            //             let dir = math::sph_to_cart(zen, azimuth);
-            //             let facets = &facets_bins[zen_idx];
-            //             let facets_area = if params.use_facet_area {
-            //                 facets
-            //                     .par_chunks(FACET_CHUNK_SIZE)
-            //                     .map(|idxs| {
-            //                         idxs.iter().fold(0.0, |sum, idx| {
-            //                             let n = &mesh.facet_normals[*idx];
-            //                             let a = mesh.facet_areas[*idx];
-            //                             if n.dot(dir) <= half_zenith_bin_width_cos {
-            //                                 sum
-            //                             } else {
-            //                                 sum + a
-            //                             }
-            //                         })
-            //                     })
-            //                     .sum::<f32>()
-            //             } else {
-            //                 facets
-            //                     .par_chunks(FACET_CHUNK_SIZE)
-            //                     .map(|idxs| {
-            //                         idxs.iter().fold(0, |sum, idx| {
-            //                             let n = &mesh.facet_normals[*idx];
-            //                             if n.dot(dir) <= half_zenith_bin_width_cos {
-            //                                 sum
-            //                             } else {
-            //                                 sum + 1
-            //                             }
-            //                         })
-            //                     })
-            //                     .sum::<u32>() as f32
-            //             };
-            //             *s = facets_area * denom_rcp;
-            //             log::trace!(
-            //                 "-- φ: {}, θ: {}  | facet area: {} => {}",
-            //                 azimuth.prettified(),
-            //                 zen.prettified(),
-            //                 facets_area,
-            //                 *s
-            //             );
-            //         });
-            //     });
-
             Some(Measurement {
                 name: surface.unwrap().file_stem().unwrap().to_owned(),
                 source: MeasurementSource::Measured(*hdl),
@@ -411,6 +355,7 @@ fn measure_area_distribution_by_points<'a>(
         .collect()
 }
 
+// TODO: review the correctness of the implementation.
 /// Measure the microfacet area distribution function by partitioning the
 /// hemisphere into patches and calculating the corresponding values.
 fn measure_area_distribution_by_partition<'a>(
@@ -423,8 +368,13 @@ fn measure_area_distribution_by_partition<'a>(
     params: NdfMeasurementParams,
 ) -> Vec<Measurement> {
     use rayon::prelude::*;
-    let (precision, scheme) = params.mode.as_mode_by_partition().unwrap();
-    let partition = SphericalPartition::new(scheme, SphericalDomain::Upper, precision);
+    let precision = match params.mode {
+        NdfMeasurementMode::ByPoints { .. } => {
+            panic!("The partition mode is not supported for the ByPoints mode.")
+        }
+        NdfMeasurementMode::ByPartition { precision } => precision,
+    };
+    let partition = SphericalPartition::new_beckers(SphericalDomain::Upper, precision);
     log::info!(
         "  -- Partitioning the hemisphere into {} patches.",
         partition.n_patches()

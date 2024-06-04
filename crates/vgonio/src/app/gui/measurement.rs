@@ -12,7 +12,7 @@ use crate::{
         gui::{
             event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
             measurement::{
-                adf::AdfMeasurementTab, bsdf::BsdfMeasurementTab, msf::MsfMeasurementTab,
+                adf::NdfMeasurementTab, bsdf::BsdfMeasurementTab, msf::MsfMeasurementTab,
                 sdf::SdfMeasurementTab,
             },
             misc,
@@ -96,7 +96,7 @@ pub struct MeasurementDialog {
     kind: MeasurementKind,
     selector: SurfaceSelector,
     tab_bsdf: BsdfMeasurementTab,
-    tab_adf: AdfMeasurementTab,
+    tab_adf: NdfMeasurementTab,
     tab_msf: MsfMeasurementTab,
     tab_sdf: SdfMeasurementTab,
     /// Whether the dialog is open.
@@ -128,7 +128,7 @@ impl MeasurementDialog {
             kind: MeasurementKind::Bsdf,
             selector: SurfaceSelector::multiple(),
             tab_bsdf: BsdfMeasurementTab::new(event_loop.clone()),
-            tab_adf: AdfMeasurementTab::new(event_loop.clone()),
+            tab_adf: NdfMeasurementTab::new(event_loop.clone()),
             tab_msf: MsfMeasurementTab::new(event_loop.clone()),
             tab_sdf: SdfMeasurementTab::new(),
             is_open: false,
