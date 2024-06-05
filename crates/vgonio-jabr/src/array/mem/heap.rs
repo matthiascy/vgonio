@@ -240,4 +240,16 @@ mod tests {
         let b = a.into_boxed_slice();
         assert_eq!(b, vec![1, 2, 3].into_boxed_slice());
     }
+
+    #[test]
+    fn dyn_sized_from_vec() {
+        let a = DynSized::from_vec(vec![1, 2, 3]);
+        assert_eq!(a.as_slice(), &[1, 2, 3]);
+    }
+
+    #[test]
+    fn dyn_sized_from_boxed_slice() {
+        let a = DynSized::from_boxed_slice(vec![1, 2, 3].into_boxed_slice());
+        assert_eq!(a.as_slice(), &[1, 2, 3]);
+    }
 }

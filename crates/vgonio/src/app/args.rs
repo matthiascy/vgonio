@@ -94,6 +94,7 @@ pub enum SubCommand {
     /// Computes the difference between measured data.
     Diff(DiffOptions),
 
+    /// Plots the measured data.
     Plot(PlotOptions),
 }
 
