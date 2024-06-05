@@ -47,11 +47,8 @@ impl<T> DynSized<T> {
 
     pub(crate) fn into_vec(self) -> Vec<T> {
         unsafe {
-            let mut data = ManuallyDrop::new(Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                self.ptr.as_ptr(),
-                self.len,
-            )));
-            Vec::from_raw_parts(data.as_mut_ptr(), self.len, self.len)
+            let mut data = ManuallyDrop::new(self);
+            Vec::from_raw_parts(data.as_mut_ptr(), data.len, data.len)
         }
     }
 
@@ -66,13 +63,10 @@ impl<T> DynSized<T> {
 
     pub(crate) fn into_boxed_slice(self) -> Box<[T]> {
         unsafe {
-            let mut data = ManuallyDrop::new(Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                self.ptr.as_ptr(),
-                self.len,
-            )));
+            let mut myself = ManuallyDrop::new(self);
             Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                data.as_mut_ptr(),
-                self.len,
+                myself.as_mut_ptr(),
+                myself.len,
             ))
         }
     }
@@ -231,5 +225,19 @@ mod tests {
         assert_eq!(format!("{:?}", b), "DynSized([1, 2, 3])");
         let c = DynSized::from([1, 2, 3]);
         assert_eq!(format!("{:?}", c), "DynSized([1, 2, 3])");
+    }
+
+    #[test]
+    fn dyn_sized_into_vec() {
+        let a = DynSized::from(vec![1, 2, 3]);
+        let b = a.into_vec();
+        assert_eq!(b, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn dyn_sized_into_boxed_slice() {
+        let a = DynSized::from(vec![1, 2, 3]);
+        let b = a.into_boxed_slice();
+        assert_eq!(b, vec![1, 2, 3].into_boxed_slice());
     }
 }
