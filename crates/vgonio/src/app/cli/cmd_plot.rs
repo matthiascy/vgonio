@@ -10,7 +10,8 @@ use std::path::PathBuf;
 /// Kind of plot to generate.
 #[derive(clap::ValueEnum, Debug, Clone)]
 pub enum PlotKind {
-    SampledBrdf,
+    /// Compare between VgonioBrdf and ClausenBrdf.
+    Comparison,
 }
 
 /// Options for the `plot` command.
@@ -22,8 +23,16 @@ pub struct PlotOptions {
     #[clap(short, long, help = "The kind of plot to generate.")]
     pub kind: PlotKind,
 
-    #[clap(short, long, help = "The level of BRDF to plot.", default_value = "0")]
-    pub level: u32,
+    #[clap(
+        short,
+        long,
+        help = "Whether to sample 4x more points than the original data.",
+        default_value = "false"
+    )]
+    pub dense: bool,
+
+    #[clap(short, long, help = "The level of BRDF to plot.", default_value = "l0")]
+    pub level: MeasuredBrdfLevel,
 }
 
 pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
@@ -31,14 +40,13 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
     cache.write(|cache| {
         cache.load_ior_database(&config);
         match opts.kind {
-            PlotKind::SampledBrdf => {
+            PlotKind::Comparison => {
                 if opts.inputs.len() % 2 != 0 {
                     return Err(VgonioError::new(
                         "The number of input files must be even.",
                         None,
                     ));
                 }
-                let level = MeasuredBrdfLevel::from(opts.level);
                 for input in opts.inputs.chunks(2) {
                     let simulated_hdl = cache.load_micro_surface_measurement(&config, &input[0])?;
                     // Measured by Olaf
@@ -49,29 +57,24 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         .measured
                         .downcast_ref::<MeasuredBsdfData>()
                         .unwrap();
-                    let olaf = cache
+                    let meas = cache
                         .get_measurement(measured_hdl)
                         .unwrap()
                         .measured
                         .downcast_ref::<ClausenBrdf>()
-                        .expect("Expected BSDF measured by Olaf");
-                    let dense = if std::env::var("DENSE")
-                        .ok()
-                        .map(|s| s == "1")
-                        .unwrap_or(false)
-                    {
-                        true
-                    } else {
-                        false
-                    };
+                        .expect("Expected BSDF measured by Clausen");
                     let phi_offset = std::env::var("PHI_OFFSET")
                         .ok()
                         .map(|s| s.parse::<f32>().unwrap())
                         .unwrap_or(0.0)
                         .to_radians();
-                    let itrp =
-                        simulated.resample(&olaf.params, level, dense, Rads::new(phi_offset));
-                    plot_brdf(&itrp, olaf, dense).unwrap();
+                    let itrp = simulated.resample(
+                        &meas.params,
+                        opts.level,
+                        opts.dense,
+                        Rads::new(phi_offset),
+                    );
+                    plot_brdf(&itrp, meas, opts.dense).unwrap();
                 }
                 Ok(())
             }

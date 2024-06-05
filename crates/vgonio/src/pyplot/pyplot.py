@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, TextBox
 import numpy as np
 
+
 # Use this to avoid GUI
 # mpl.use('Agg')
 # mpl.use('qtagg')
@@ -22,24 +23,24 @@ def format_angle_pair(t):
 
 
 def plot_brdf_comparison(
-    n_wi,
-    dense,
-    n_wo_itrp,
-    wi_wo_pairs_itrp,
-    n_wo_olaf,
-    wi_wo_pairs_olaf,
-    brdf_itrp,
-    wavelengths_itrp,
-    brdf_max_itrp,
-    brdf_olaf,
-    wavelengths_olaf,
-    brdf_max_olaf,
+        n_wi,
+        dense,
+        n_wo_itrp,
+        wi_wo_pairs_itrp,
+        n_wo_olaf,
+        wi_wo_pairs_olaf,
+        brdf_itrp,
+        wavelengths_itrp,
+        brdf_max_itrp,
+        brdf_olaf,
+        wavelengths_olaf,
+        brdf_max_olaf,
 ):
     n_wavelengths_itrp = len(wavelengths_itrp)
     n_wavelengths_olaf = len(wavelengths_olaf)
-    print(
-        f"n_wi: {n_wi}, n_wo_itrp: {n_wo_itrp}, n_wo_olaf: {n_wo_olaf}, n_wavelengths_itrp: {n_wavelengths_itrp}, n_wavelengths_olaf: {n_wavelengths_olaf}"
-    )
+    # print(
+    #     f"n_wi: {n_wi}, n_wo_itrp: {n_wo_itrp}, n_wo_olaf: {n_wo_olaf}, n_wavelengths_itrp: {n_wavelengths_itrp}, n_wavelengths_olaf: {n_wavelengths_olaf}"
+    # )
     fig, ax = plt.subplots(1, 3)
     fig.suptitle("BRDF")
     fig.set_figwidth(13)
@@ -54,7 +55,7 @@ def plot_brdf_comparison(
     ax_comp = ax[1]
     ax_itrp = ax[2]
 
-    print(f"n_wo_olaf: {n_wo_olaf}, n_wo_itrp: {n_wo_itrp}")
+    # print(f"n_wo_olaf: {n_wo_olaf}, n_wo_itrp: {n_wo_itrp}")
 
     # from -80 to 80, with step 10
     xs_olaf = np.arange(-n_wo_olaf / 2 * 10, (1 + n_wo_olaf / 2) * 10, 10)
@@ -63,8 +64,8 @@ def plot_brdf_comparison(
         if dense
         else xs_olaf
     )
-    print(f"len: {len(xs_itrp)}, xs_itrp: {xs_itrp}")
-    print(f"len: {len(xs_olaf)}, xs_olaf: {xs_olaf}")
+    # print(f"len: {len(xs_itrp)}, xs_itrp: {xs_itrp}")
+    # print(f"len: {len(xs_olaf)}, xs_olaf: {xs_olaf}")
 
     # rearrange the data to match the xs, NaN for data that is not measured
     # input data is in the form of [λ, ωi, ωo]
@@ -83,7 +84,7 @@ def plot_brdf_comparison(
             for k in np.arange(0, n_wavelengths_olaf):
                 olaf_arranged[k, wi_idx, wo_idx] = brdf_olaf[
                     k * n_wi * n_wo_olaf + wi_idx * n_wo_olaf + wo_idx_org
-                ]
+                    ]
 
     for wi_idx, ((wi_theta, wi_phi), wos) in enumerate(wi_wo_pairs_itrp):
         # print(f"wi idx: {wi_idx}, θi: {np.degrees(wi_theta):>6.2f}, φi: {np.degrees(wi_phi):>6.2f}")
@@ -97,7 +98,7 @@ def plot_brdf_comparison(
             for k in range(n_wavelengths_itrp):
                 itrp_arranged[k, wi_idx, wo_idx] = brdf_itrp[
                     k * n_wi * n_wo_itrp + wi_idx * n_wo_itrp + wo_idx_org
-                ]
+                    ]
 
     cur_wi_idx = 0
     olaf_cur_lambda_idx = 0
@@ -203,18 +204,18 @@ def plot_brdf_comparison(
         fig.canvas.draw_idle()
 
     def update_comp(
-        olaf_lambda_idx, olaf_wi_idx, itrp_lambda_idx, itrp_wi_idx, normalize=False
+            olaf_lambda_idx, olaf_wi_idx, itrp_lambda_idx, itrp_wi_idx, normalize=False
     ):
         if normalize:
             max_measured = brdf_max_olaf[
                 olaf_wi_idx * n_wavelengths_olaf + olaf_lambda_idx
-            ]
+                ]
             olaf_curve_comp[0].set_ydata(
                 olaf_arranged[olaf_lambda_idx, olaf_wi_idx, :] / max_measured
             )
             max_interpolated = brdf_max_itrp[
                 itrp_wi_idx * n_wavelengths_itrp + itrp_lambda_idx
-            ]
+                ]
             itrp_curve_comp[0].set_ydata(
                 itrp_arranged[itrp_lambda_idx, itrp_wi_idx, :] / max_interpolated
             )
