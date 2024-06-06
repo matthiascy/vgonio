@@ -7,13 +7,17 @@ use crate::{
 };
 use num_traits::{Euclid, ToPrimitive};
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, fmt::Display};
+use std::fmt::Display;
 
 use crate::error::VgonioError;
+#[cfg(feature = "io")]
 use exr::prelude::Text;
 #[cfg(feature = "io")]
-use std::io::{BufReader, Read, Seek};
-use std::path::Path;
+use std::{
+    borrow::Cow,
+    io::{BufReader, Read, Seek},
+    path::Path,
+};
 
 /// The domain of the spherical coordinate.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -541,17 +545,33 @@ impl Ring {
 
 /// Beckers partitioning scheme helper functions.
 pub mod beckers {
-    use crate::math::sqr;
+    use crate::{math::sqr, units::Radians};
 
     /// Computes the number of cells inside the external circle of the ring.
     pub fn compute_ks(k0: u32, num_rings: u32) -> Box<[u32]> {
-        let mut ks = vec![0; num_rings as usize];
+        let mut ks = vec![0; num_rings as usize].into_boxed_slice();
         ks[0] = k0;
         let sqrt_pi = std::f32::consts::PI.sqrt();
         for i in 1..num_rings as usize {
             ks[i] = sqr(f32::sqrt(ks[i - 1] as f32) + sqrt_pi).round() as u32;
         }
-        ks.into_boxed_slice()
+        ks
+    }
+
+    /// Computes the number of patches on the hemisphere.
+    pub fn compute_hemisphere_patch_count(precision: Radians) -> u32 {
+        let n_rings = (Radians::HALF_PI / precision).round() as u32;
+        assert_ne!(n_rings, 0, "Precision is too high for the hemisphere.");
+        if n_rings == 1 {
+            1
+        } else {
+            let mut n: u32 = 1;
+            let sqrt_pi = std::f32::consts::PI.sqrt();
+            for _ in 1..n_rings as usize {
+                n = sqr(f32::sqrt(n as f32) + sqrt_pi).round() as u32;
+            }
+            n
+        }
     }
 
     /// Computes the radius of the rings.
@@ -778,6 +798,22 @@ mod tests {
         let angle = deg!(191.0);
         let clamped = domain.clamp_zenith(angle.into());
         assert_eq!(clamped, deg!(180.0));
+    }
+
+    #[test]
+    fn test_beckers_patch_count() {
+        let precisions = [
+            Radians::from_degrees(1.0),
+            Radians::from_degrees(2.0),
+            Radians::from_degrees(5.0),
+            Radians::from_degrees(10.0),
+        ];
+        for p in precisions {
+            let n_ring = (Radians::HALF_PI / p).round() as u32;
+            let ks = beckers::compute_ks(1, n_ring);
+            let n = beckers::compute_hemisphere_patch_count(p);
+            assert_eq!(ks[ks.len() - 1], n);
+        }
     }
 
     #[test]

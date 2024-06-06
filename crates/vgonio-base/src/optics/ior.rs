@@ -9,8 +9,10 @@ use std::{
     collections::HashMap,
     fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut},
-    path::Path,
 };
+
+#[cfg(feature = "io")]
+use std::path::Path;
 
 /// Refractive index database.
 #[derive(Debug)]

@@ -1,4 +1,7 @@
-use base::{Isotropy, MeasurementKind};
+use base::{
+    partition::{beckers, SphericalPartition},
+    Isotropy, MeasurementKind,
+};
 use bxdf::{brdf::BxdfFamily, distro::MicrofacetDistroKind};
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
@@ -224,9 +227,18 @@ impl PropertyInspector {
                                                         ui.end_row()
                                                     }
                                                 }
-                                                NdfMeasurementMode::ByPartition { .. } => {
-                                                    // TODO: Add partition info.
-                                                    log::info!("Partition mode not implemented");
+                                                NdfMeasurementMode::ByPartition { precision } => {
+                                                    ui.label("Precision:");
+                                                    ui.label(format!("{:.4}", precision));
+                                                    ui.end_row();
+
+                                                    ui.label("Patch count:");
+                                                    ui.label(format!(
+                                                        "{}",
+                                                        beckers::compute_hemisphere_patch_count(
+                                                            precision
+                                                        )
+                                                    ));
                                                 }
                                             }
                                         }
