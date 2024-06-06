@@ -1,10 +1,7 @@
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
-    fitting::{err, FittingProblem, FittingReport, MicrofacetBrdfFittingProblem},
-    measure::{
-        bsdf::{receiver::ReceiverParams, MeasuredBrdfLevel, MeasuredBsdfData},
-        Measurement,
-    },
+    fitting::{err, FittingProblem, MicrofacetBrdfFittingProblem},
+    measure::bsdf::{receiver::ReceiverParams, MeasuredBrdfLevel, MeasuredBsdfData},
     pyplot::plot_err,
 };
 use base::{

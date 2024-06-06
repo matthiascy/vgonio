@@ -67,13 +67,6 @@ pub mod vgmo {
         Sdf,
     }
 
-    /// Trait for structs that can be written to and read from VGMO files.
-    pub trait VgmoFile {
-        /// The required size of the buffer to read or write the data without
-        /// any compression.
-        const REQUIRED_SIZE: usize;
-    }
-
     /// Returns the corresponding [`VgmoHeaderExt`] variant for the given
     /// measurement data.
     pub fn vgmo_header_ext_from_data(data: &Box<dyn MeasuredData>) -> VgmoHeaderExt {

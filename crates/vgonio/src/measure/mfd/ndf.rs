@@ -15,7 +15,7 @@ use base::{
     units::{rad, Radians},
     MeasurementKind,
 };
-use std::{borrow::Cow, path::Path};
+use std::path::Path;
 use surf::{MicroSurface, MicroSurfaceMesh};
 
 /// Structure holding the data for microfacet area distribution measurement.
@@ -51,7 +51,6 @@ impl MeasuredNdfData {
         resolution: u32,
     ) -> Result<(), VgonioError> {
         use exr::prelude::*;
-        let (w, h) = (resolution, resolution);
         let partition = SphericalPartition::new(
             self.params.mode.partition_scheme_for_data_collection(),
             SphericalDomain::Upper,

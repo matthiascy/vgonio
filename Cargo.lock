@@ -2104,19 +2104,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ndarray"
-version = "0.15.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adb12d4e967ec485a5f71c6311fe28158e9d6f4bc4a447b474184d0f91a8fa32"
-dependencies = [
- "matrixmultiply",
- "num-complex",
- "num-integer",
- "num-traits",
- "rawpointer",
-]
-
-[[package]]
 name = "ndk"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2224,21 +2211,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.60",
-]
-
-[[package]]
-name = "numpy"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec170733ca37175f5d75a5bea5911d6ff45d2cd52849ce98b685394e4f2f37f4"
-dependencies = [
- "libc",
- "ndarray",
- "num-complex",
- "num-integer",
- "num-traits",
- "pyo3",
- "rustc-hash",
 ]
 
 [[package]]
@@ -2663,16 +2635,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
  "getrandom",
-]
-
-[[package]]
-name = "rand_distr"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
-dependencies = [
- "num-traits",
- "rand",
 ]
 
 [[package]]
@@ -3678,7 +3640,6 @@ dependencies = [
  "bytemuck",
  "chrono",
  "clap",
- "csv",
  "dirs",
  "egui 0.25.0",
  "egui-gizmo",
@@ -3696,20 +3657,15 @@ dependencies = [
  "levenberg-marquardt",
  "log",
  "nalgebra",
- "numpy",
- "paste",
  "pollster",
  "pyo3",
  "rand",
  "rand_chacha",
- "rand_distr",
  "rayon",
  "rfd",
  "serde",
- "serde_json",
  "serde_yaml",
  "shaderc",
- "static_assertions",
  "toml",
  "type-map",
  "uuid",

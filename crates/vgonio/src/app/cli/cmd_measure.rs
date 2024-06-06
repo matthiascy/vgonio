@@ -7,7 +7,6 @@ use crate::{
 use base::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
-    partition::PartitionScheme,
 };
 use std::{path::PathBuf, time::Instant};
 

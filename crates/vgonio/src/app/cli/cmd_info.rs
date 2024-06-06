@@ -8,7 +8,7 @@ use crate::{
         NdfMeasurementMode, NdfMeasurementParams,
     },
 };
-use base::{error::VgonioError, partition::PartitionScheme};
+use base::error::VgonioError;
 use std::{
     fmt::{Display, Formatter},
     path::PathBuf,

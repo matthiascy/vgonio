@@ -49,7 +49,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 }
                 for input in opts.inputs.chunks(2) {
                     let simulated_hdl = cache.load_micro_surface_measurement(&config, &input[0])?;
-                    // Measured by Olaf
+                    // Measured by Clausen
                     let measured_hdl = cache.load_micro_surface_measurement(&config, &input[1])?;
                     let simulated = cache
                         .get_measurement(simulated_hdl)

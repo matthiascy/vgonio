@@ -2,7 +2,6 @@ use crate::{
     app::gui::{event::EventLoopProxy, misc, misc::range_step_size_inclusive_angle_ui},
     measure::params::{NdfMeasurementMode, NdfMeasurementParams},
 };
-use base::partition::PartitionScheme;
 use egui::Widget;
 
 #[derive(Debug)]
@@ -20,7 +19,7 @@ impl NdfMeasurementTab {
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui) {
-        egui::Grid::new("madf_sim_grid")
+        egui::Grid::new("ndf_sim_grid")
             .num_columns(2)
             .show(ui, |ui| {
                 ui.checkbox(&mut self.params.crop_to_disk, "Crop to disk")

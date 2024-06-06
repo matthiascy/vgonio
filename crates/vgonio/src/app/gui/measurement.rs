@@ -1,6 +1,6 @@
-mod adf;
 mod bsdf;
 mod msf;
+mod ndf;
 mod sdf;
 
 #[cfg(any(feature = "visu-dbg", debug_assertions))]
@@ -12,7 +12,7 @@ use crate::{
         gui::{
             event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
             measurement::{
-                adf::NdfMeasurementTab, bsdf::BsdfMeasurementTab, msf::MsfMeasurementTab,
+                bsdf::BsdfMeasurementTab, msf::MsfMeasurementTab, ndf::NdfMeasurementTab,
                 sdf::SdfMeasurementTab,
             },
             misc,
@@ -86,7 +86,7 @@ pub fn measurement_kind_selectable_ui(kind: &mut MeasurementKind, ui: &mut egui:
     ui.horizontal_wrapped(|ui| {
         ui.label("Measurement kind: ");
         ui.selectable_value(kind, MeasurementKind::Bsdf, "BSDF");
-        ui.selectable_value(kind, MeasurementKind::Ndf, "ADF");
+        ui.selectable_value(kind, MeasurementKind::Ndf, "NDF");
         ui.selectable_value(kind, MeasurementKind::Msf, "MSF");
         ui.selectable_value(kind, MeasurementKind::Sdf, "SDF");
     });

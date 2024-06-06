@@ -38,7 +38,7 @@ use jabr::array::DyArr;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    fmt::{write, Debug, Display, Formatter},
+    fmt::{Debug, Display, Formatter},
     mem::MaybeUninit,
     path::Path,
     str::FromStr,

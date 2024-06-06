@@ -72,7 +72,7 @@ use crate::{
         Config,
     },
     io::OutputOptions,
-    measure::{bsdf::MeasuredBsdfData, params::MeasurementParams},
+    measure::params::MeasurementParams,
 };
 
 /// Launches Vgonio GUI application.
@@ -130,7 +130,7 @@ pub fn run(config: Config) -> Result<(), VgonioError> {
 /// Vgonio client application with GUI.
 pub struct VgonioGuiApp {
     /// The time when the application started.
-    pub start_time: Instant,
+    start_time: Instant,
     /// Gui context
     gui_ctx: GuiContext,
     /// Gpu context
@@ -623,6 +623,7 @@ impl VgonioGuiApp {
 
                                 #[cfg(feature = "visu-dbg")]
                                 {
+                                    use crate::measure::bsdf::MeasuredBsdfData;
                                     let measured = self.cache.read(|cache| {
                                         measure::bsdf::measure_bsdf_rt(
                                             params,
