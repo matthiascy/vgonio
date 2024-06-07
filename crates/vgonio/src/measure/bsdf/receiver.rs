@@ -90,7 +90,7 @@ pub struct Receiver {
     /// The parameters of the receiver.
     params: ReceiverParams,
     /// Wavelengths of the measurement.
-    pub spectrum: Vec<Nanometres>,
+    pub spectrum: Box<[Nanometres]>,
     /// Incident medium's refractive indices.
     pub iors_i: Box<[Ior]>,
     /// Transmitted medium's refractive indices.
@@ -127,7 +127,12 @@ impl Receiver {
         meas_params: &BsdfMeasurementParams,
         cache: &RawCache,
     ) -> Self {
-        let spectrum = meas_params.emitter.spectrum.values().collect::<Vec<_>>();
+        let spectrum = meas_params
+            .emitter
+            .spectrum
+            .values()
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         // Retrieve the incident medium's refractive indices for each wavelength.
         let iors_i = cache
             .iors
@@ -401,16 +406,6 @@ enum Energy {
     Absorbed,
     /// The ray of a specific wavelength is reflected by the micro-surface.
     Reflected(f32),
-}
-
-impl Energy {
-    /// Returns the energy of the ray.
-    fn energy(&self) -> f32 {
-        match self {
-            Self::Absorbed => 0.0,
-            Self::Reflected(energy) => *energy,
-        }
-    }
 }
 
 /// Represents the data that a patch can carry.

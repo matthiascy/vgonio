@@ -158,6 +158,10 @@ struct LastHit {
     pub prim_id: u32,
     /// Normal of the last hit primitive.
     pub normal: Vec3A,
+    // /// Ray origin of the last hit.
+    // pub ray_org: Vec3A,
+    // /// Ray direction of the last hit.
+    // pub ray_dir: Vec3A,
 }
 
 /// Records the status of a traced ray.

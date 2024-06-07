@@ -14,7 +14,11 @@ pub fn plot_err(errs: &[f64], alpha_start: f64, alpha_stop: f64, alpha_step: f64
     })
 }
 
-pub fn plot_brdf(itrp: &ClausenBrdf, olaf: &ClausenBrdf, dense: bool) -> PyResult<()> {
+pub fn plot_brdf_vgonio_clausen(
+    itrp: &ClausenBrdf,
+    olaf: &ClausenBrdf,
+    dense: bool,
+) -> PyResult<()> {
     Python::with_gil(|py| {
         let fun: Py<PyAny> =
             PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?

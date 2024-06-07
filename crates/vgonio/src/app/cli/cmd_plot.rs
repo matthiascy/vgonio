@@ -1,7 +1,7 @@
 use crate::{
     app::{cache::Cache, Config},
     measure::bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
-    pyplot::plot_brdf,
+    pyplot::plot_brdf_vgonio_clausen,
 };
 use base::{error::VgonioError, units::Rads};
 use bxdf::brdf::measured::ClausenBrdf;
@@ -11,7 +11,11 @@ use std::path::PathBuf;
 #[derive(clap::ValueEnum, Debug, Clone)]
 pub enum PlotKind {
     /// Compare between VgonioBrdf and ClausenBrdf.
-    Comparison,
+    #[clap(alias = "cmp-vc")]
+    ComparisonVgonioClausen,
+    /// Compare between VgonioBrdf and VgonioBrdf.
+    #[clap(alias = "cmp-vv")]
+    ComparisonVgonio,
 }
 
 /// Options for the `plot` command.
@@ -40,7 +44,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
     cache.write(|cache| {
         cache.load_ior_database(&config);
         match opts.kind {
-            PlotKind::Comparison => {
+            PlotKind::ComparisonVgonioClausen => {
                 if opts.inputs.len() % 2 != 0 {
                     return Err(VgonioError::new(
                         "The number of input files must be even.",
@@ -74,9 +78,12 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         opts.dense,
                         Rads::new(phi_offset),
                     );
-                    plot_brdf(&itrp, meas, opts.dense).unwrap();
+                    plot_brdf_vgonio_clausen(&itrp, meas, opts.dense).unwrap();
                 }
                 Ok(())
+            }
+            PlotKind::ComparisonVgonio => {
+                todo!("Implement comparison between VgonioBrdf and VgonioBrdf.")
             }
         }
     })

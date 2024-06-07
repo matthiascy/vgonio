@@ -19,6 +19,7 @@ use embree::{
     IntersectContextFlags, RayHitNp, RayN, RayNp, Scene, SceneFlags, SoAHit, SoARay, ValidMask,
     ValidityN, INVALID_ID,
 };
+use jabr::array::DyArr;
 use rayon::prelude::*;
 use std::sync::Arc;
 #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
@@ -27,18 +28,27 @@ use surf::MicroSurfaceMesh;
 
 /// Extra data associated with a ray stream.
 ///
-/// This is used to record the trajectory, energy, last hit info and bounce
-/// count of each ray. It will be attached to the intersection context to be
-/// used by the intersection filter.
+/// This is used to record the trajectory, energy, last-hit info and bounce
+/// count of each ray.
+/// It's attached to the intersection context to be used by the intersection
+/// filter.
 #[derive(Debug, Clone)]
 pub struct RayStreamData<'a> {
     /// The micro-surface geometry.
     msurf: Arc<Geometry<'a>>,
     /// The last hit for each ray.
     last_hit: Vec<LastHit>,
+    // #[cfg(not(feature = "visu-dbg"))]
+    // /// Bounce count for each ray.
+    // bounce: Vec<u32>,
+    // /// Energy of each ray per wavelength. The first dimension is the index of
+    // /// the ray, and the second dimension is the wavelength.
+    // #[cfg(not(feature = "visu-dbg"))]
+    // energy: DyArr<f32, 2>,
     /// The trajectory of each ray. Each ray's trajectory is started with the
     /// initial ray and then followed by the rays after each bounce. The cosine
     /// of the incident angle at each bounce is also recorded.
+    // #[cfg(feature = "visu-dbg")]
     trajectory: Vec<RayTrajectory>,
 }
 
@@ -48,8 +58,8 @@ unsafe impl Sync for RayStreamData<'_> {}
 type QueryContext<'a, 'b> = IntersectContextExt<&'b mut RayStreamData<'a>>;
 
 fn intersect_filter_stream<'a>(
-    rays: RayN<'a>,
-    hits: HitN<'a>,
+    mut rays: RayN<'a>,
+    mut hits: HitN<'a>,
     mut valid: ValidityN,
     ctx: &mut QueryContext,
     _user_data: Option<&mut ()>,
@@ -64,21 +74,20 @@ fn intersect_filter_stream<'a>(
         // if the ray hit something
         if hits.is_valid(i) {
             let prim_id = hits.prim_id(i);
-            let ray_id = rays.id(i);
+            let ray_id = rays.id(i) as usize;
             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
             log::trace!("ray {} -- hit: {}", ray_id, prim_id);
-            let last_hit = ctx.ext.last_hit[ray_id as usize];
+            let last_hit = &mut ctx.ext.last_hit[ray_id];
 
             if prim_id != INVALID_ID && prim_id == last_hit.prim_id {
                 #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
                 log::trace!("nudging ray origin");
                 // if the ray hit the same primitive as the previous bounce,
-                // nudging the ray origin slightly along normal direction of
+                // nudging the ray origin slightly along the normal direction of
                 // the last hit point and re-tracing the ray.
                 valid[i] = ValidMask::Valid as i32;
-                let traj_node = ctx.ext.trajectory[ray_id as usize].last_mut().unwrap();
+                let traj_node = ctx.ext.trajectory[ray_id].last_mut().unwrap();
                 traj_node.org += last_hit.normal * 1e-4;
-                continue;
             } else {
                 // calculate the intersection point using the u,v coordinates
                 let [u, v] = hits.uv(i);
@@ -121,14 +130,14 @@ fn intersect_filter_stream<'a>(
                 }
 
                 let new_dir = fresnel::reflect(ray_dir, normal);
-                let last_id = ctx.ext.trajectory[ray_id as usize].len() - 1;
-                ctx.ext.trajectory[ray_id as usize][last_id].cos = Some(ray_dir.dot(normal));
-                ctx.ext.trajectory[ray_id as usize].push(RayTrajectoryNode {
+                let last_id = ctx.ext.trajectory[ray_id].len() - 1;
+                ctx.ext.trajectory[ray_id][last_id].cos = Some(ray_dir.dot(normal));
+                ctx.ext.trajectory[ray_id].push(RayTrajectoryNode {
                     org: point,
                     dir: new_dir,
                     cos: None,
                 });
-                let last_hit = &mut ctx.ext.last_hit[ray_id as usize];
+                let last_hit = &mut ctx.ext.last_hit[ray_id];
                 last_hit.geom_id = hits.geom_id(i);
                 last_hit.prim_id = prim_id;
                 last_hit.normal = normal;
