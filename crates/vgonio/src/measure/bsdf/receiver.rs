@@ -1,9 +1,11 @@
 //! Sensor of the virtual gonio-reflectometer.
 
+#[cfg(feature = "visu-dbg")]
+use crate::measure::bsdf::rtc::RayTrajectory;
 use crate::{
     app::cache::RawCache,
     measure::{
-        bsdf::{rtc::RayTrajectory, SigleSimulationResult, SingleBsdfMeasurementStats},
+        bsdf::{SingleBsdfMeasurementStats, SingleSimulationResult},
         params::BsdfMeasurementParams,
     },
 };
@@ -14,6 +16,7 @@ use base::{
     range::RangeByStepSizeInclusive,
     units::{Nanometres, Radians},
 };
+#[cfg(feature = "visu-dbg")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::sync::{atomic, atomic::AtomicU32};
@@ -168,9 +171,9 @@ impl Receiver {
     /// [`BsdfSnapshotRaw`].
     pub fn collect(
         &self,
-        result: SigleSimulationResult,
-        #[cfg(any(feature = "visu-dbg", debug_assertions))] out_trajs: *mut Vec<RayTrajectory>,
-        #[cfg(any(feature = "visu-dbg", debug_assertions))] out_hpnts: *mut Vec<Vec3>,
+        result: SingleSimulationResult,
+        #[cfg(any(feature = "visu-dbg"))] out_trajs: *mut Vec<RayTrajectory>,
+        #[cfg(any(feature = "visu-dbg"))] out_hpnts: *mut Vec<Vec3>,
         out_stats: *mut SingleBsdfMeasurementStats,
         records: &mut [Option<BounceAndEnergy>],
         orbit_radius: f32,
@@ -187,213 +190,227 @@ impl Receiver {
         #[cfg(feature = "bench")]
         let start = std::time::Instant::now();
 
-        log::debug!(
-            "SingleSimulationResult at {}, {} rays",
-            result.wi,
-            result.trajectories.len()
-        );
+        #[cfg(feature = "visu-dbg")]
+        {
+            log::debug!(
+                "SingleSimulationResult at {}, {} rays",
+                result.wi,
+                result.trajectories.len()
+            );
 
-        let (n_bounce, mut stats, dirs) = {
-            let n_bounce = AtomicU32::new(0);
-            let n_received = AtomicU32::new(0);
-            let n_missed = AtomicU32::new(0);
-            let mut n_reflected = Vec::with_capacity(n_spectrum);
-            let mut n_escaped = Vec::with_capacity(n_spectrum);
-            for _ in 0..n_spectrum {
-                n_reflected.push(AtomicU32::new(0));
-                n_escaped.push(AtomicU32::new(0));
-            }
-            n_reflected.shrink_to_fit();
-            n_escaped.shrink_to_fit();
+            let (n_bounce, mut stats, dirs) = {
+                let n_bounce = AtomicU32::new(0);
+                let n_received = AtomicU32::new(0);
+                let n_missed = AtomicU32::new(0);
+                let mut n_reflected = Vec::with_capacity(n_spectrum);
+                let mut n_escaped = Vec::with_capacity(n_spectrum);
+                for _ in 0..n_spectrum {
+                    n_reflected.push(AtomicU32::new(0));
+                    n_escaped.push(AtomicU32::new(0));
+                }
+                n_reflected.shrink_to_fit();
+                n_escaped.shrink_to_fit();
 
-            #[cfg(any(debug_assertions, feature = "verbose-dbg"))]
-            log::debug!("Initial trajectories count: {}", result.trajectories.len());
+                #[cfg(feature = "visu-dbg")]
+                log::debug!("Initial trajectories count: {}", result.trajectories.len());
 
-            // Convert the last rays of the trajectories into a vector located
-            // at the centre of the collector.
-            let dirs: Box<[OutgoingRay]> = result
-                .trajectories
-                .par_chunks(CHUNK_SIZE)
-                .enumerate()
-                .flat_map(|(chunk_idx, trajectories)| {
-                    trajectories
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, trajectory)| {
-                            let ray_idx = chunk_idx * CHUNK_SIZE + i;
-                            match trajectory.last() {
-                                None => {
-                                    n_missed.fetch_add(1, atomic::Ordering::Relaxed);
-                                    None
-                                }
-                                Some(last) => {
-                                    // 1. Get the outgoing ray direction it's the last ray of the
-                                    //    trajectory.
-                                    let ray_dir = last.dir.normalize();
-                                    // 2. Calculate the energy of the ray per wavelength, the energy
-                                    //    is attenuated by the Fresnel reflectance only if the flag
-                                    //    is set to true. Initially, all types of energy are
-                                    //    reflected and the energy is set to 1.0. Then, the energy
-                                    //    is attenuated by the Fresnel reflectance at each node of
-                                    //    the trajectory, and if the energy is less than or equal to
-                                    //    0.0, the energy will be set as been absorbed.
-                                    let mut energy_per_wavelength =
-                                        vec![Energy::Reflected(1.0); n_spectrum];
-                                    for node in trajectory.iter().take(trajectory.len() - 1) {
-                                        if node.cos.is_none() {
-                                            continue;
-                                        }
-                                        let cos_i_abs = node.cos.unwrap().abs();
-                                        energy_per_wavelength.iter_mut().enumerate().for_each(
-                                            |(i, energy)| match energy {
-                                                Energy::Reflected(e) => {
-                                                    if fresnel {
-                                                        *e *= fresnel::reflectance(
-                                                            cos_i_abs,
-                                                            &self.iors_i[i],
-                                                            &self.iors_t[i],
-                                                        ) * cos_i_abs;
-                                                    } else {
-                                                        *e *= cos_i_abs;
-                                                    }
-                                                    if *e <= 0.0 {
-                                                        *energy = Energy::Absorbed;
-                                                    }
-                                                }
-                                                _ => unreachable!(
-                                                    "energy initially is not reflected"
-                                                ),
-                                            },
-                                        );
+                #[cfg(feature = "visu-dbg")]
+                // Convert the last rays of the trajectories into a vector located
+                // at the centre of the collector.
+                let dirs: Box<[OutgoingRay]> = result
+                    .trajectories
+                    .par_chunks(CHUNK_SIZE)
+                    .enumerate()
+                    .flat_map(|(chunk_idx, trajectories)| {
+                        trajectories
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(i, trajectory)| {
+                                let ray_idx = chunk_idx * CHUNK_SIZE + i;
+                                match trajectory.last() {
+                                    None => {
+                                        n_missed.fetch_add(1, atomic::Ordering::Relaxed);
+                                        None
                                     }
+                                    Some(last) => {
+                                        // 1. Get the outgoing ray direction it's the last ray of
+                                        //    the trajectory.
+                                        let ray_dir = last.dir.normalize();
+                                        // 2. Calculate the energy of the ray per wavelength, the
+                                        //    energy is attenuated by the Fresnel reflectance only
+                                        //    if the flag is set to true. Initially, all types of
+                                        //    energy are reflected and the energy is set to 1.0.
+                                        //    Then, the energy is attenuated by the Fresnel
+                                        //    reflectance at each node of the trajectory, and if the
+                                        //    energy is less than or equal to 0.0, the energy will
+                                        //    be set as been absorbed.
+                                        let mut energy_per_wavelength =
+                                            vec![Energy::Reflected(1.0); n_spectrum];
+                                        for node in trajectory.iter().take(trajectory.len() - 1) {
+                                            if node.cos.is_none() {
+                                                continue;
+                                            }
+                                            let cos_i_abs = node.cos.unwrap().abs();
+                                            energy_per_wavelength.iter_mut().enumerate().for_each(
+                                                |(i, energy)| match energy {
+                                                    Energy::Reflected(e) => {
+                                                        if fresnel {
+                                                            *e *= fresnel::reflectance(
+                                                                cos_i_abs,
+                                                                &self.iors_i[i],
+                                                                &self.iors_t[i],
+                                                            ) * cos_i_abs;
+                                                        } else {
+                                                            *e *= cos_i_abs;
+                                                        }
+                                                        if *e <= 0.0 {
+                                                            *energy = Energy::Absorbed;
+                                                        }
+                                                    }
+                                                    _ => unreachable!(
+                                                        "energy initially is not reflected"
+                                                    ),
+                                                },
+                                            );
+                                        }
 
-                                    // 3. Update the number of received rays.
-                                    n_received.fetch_add(1, atomic::Ordering::Relaxed);
+                                        // 3. Update the number of received rays.
+                                        n_received.fetch_add(1, atomic::Ordering::Relaxed);
 
-                                    // 4. Update the maximum number of bounces.
-                                    let bounce = (trajectory.len() - 1) as u32;
-                                    n_bounce.fetch_max(bounce, atomic::Ordering::Relaxed);
+                                        // 4. Update the maximum number of bounces.
+                                        let bounce = (trajectory.len() - 1) as u32;
+                                        n_bounce.fetch_max(bounce, atomic::Ordering::Relaxed);
 
-                                    // 5. Compute the index of the patch where the ray is collected.
-                                    let patch_idx =
-                                        self.patches.contains(Sph2::from_cartesian(ray_dir.into()));
+                                        // 5. Compute the index of the patch where the ray is
+                                        //    collected.
+                                        let patch_idx = self
+                                            .patches
+                                            .contains(Sph2::from_cartesian(ray_dir.into()));
 
-                                    // 6. Update the number of rays reflected by the surface.
-                                    for (i, energy) in energy_per_wavelength.iter().enumerate() {
-                                        match energy {
-                                            Energy::Absorbed => continue,
-                                            Energy::Reflected(_) => {
-                                                n_reflected[i]
-                                                    .fetch_add(1, atomic::Ordering::Relaxed);
-                                                if patch_idx.is_none() {
-                                                    n_escaped[i]
+                                        // 6. Update the number of rays reflected by the surface.
+                                        for (i, energy) in energy_per_wavelength.iter().enumerate()
+                                        {
+                                            match energy {
+                                                Energy::Absorbed => continue,
+                                                Energy::Reflected(_) => {
+                                                    n_reflected[i]
                                                         .fetch_add(1, atomic::Ordering::Relaxed);
+                                                    if patch_idx.is_none() {
+                                                        n_escaped[i].fetch_add(
+                                                            1,
+                                                            atomic::Ordering::Relaxed,
+                                                        );
+                                                    }
                                                 }
                                             }
                                         }
-                                    }
 
-                                    // Returns the index of the ray, the unit vector pointing to the
-                                    // collector's surface, and the number of bounces.
-                                    patch_idx.and_then(|patch_idx| {
-                                        Some(OutgoingRay {
-                                            ray_idx: ray_idx as u32,
-                                            ray_dir,
-                                            bounce,
-                                            energy_per_wavelength,
-                                            patch_idx,
+                                        // Returns the index of the ray, the unit vector pointing to
+                                        // the collector's
+                                        // surface, and the number of bounces.
+                                        patch_idx.and_then(|patch_idx| {
+                                            Some(OutgoingRay {
+                                                ray_idx: ray_idx as u32,
+                                                ray_dir,
+                                                bounce,
+                                                energy_per_wavelength,
+                                                patch_idx,
+                                            })
                                         })
-                                    })
+                                    }
                                 }
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .collect::<Vec<_>>()
-                .into_boxed_slice();
-            let n_bounce = n_bounce.load(atomic::Ordering::Relaxed) as usize;
-            let n_received = n_received.load(atomic::Ordering::Relaxed);
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                let n_bounce = n_bounce.load(atomic::Ordering::Relaxed) as usize;
+                let n_received = n_received.load(atomic::Ordering::Relaxed);
 
-            // Create the statistics of the BSDF measurement for the current incident point.
-            let mut stats = SingleBsdfMeasurementStats::new(n_spectrum, n_bounce);
-            stats.n_received = n_received;
+                // Create the statistics of the BSDF measurement for the current incident point.
+                let mut stats = SingleBsdfMeasurementStats::new(n_spectrum, n_bounce);
+                stats.n_received = n_received;
 
-            // Update the number of rays statistics including the number of rays absorbed
-            // per wavelength, the number of rays reflected per wavelength.
-            // The number of rays captured per bounce will be updated later.
-            for i in 0..n_spectrum {
-                let reflected = n_reflected[i].load(atomic::Ordering::Relaxed);
-                let absorbed = n_received - reflected;
-                let escaped = n_escaped[i].load(atomic::Ordering::Relaxed);
-                stats.n_absorbed_mut()[i] = absorbed;
-                stats.n_reflected_mut()[i] = reflected;
-                stats.n_escaped_mut()[i] = escaped;
+                // Update the number of rays statistics including the number of rays absorbed
+                // per wavelength, the number of rays reflected per wavelength.
+                // The number of rays captured per bounce will be updated later.
+                for i in 0..n_spectrum {
+                    let reflected = n_reflected[i].load(atomic::Ordering::Relaxed);
+                    let absorbed = n_received - reflected;
+                    let escaped = n_escaped[i].load(atomic::Ordering::Relaxed);
+                    stats.n_absorbed_mut()[i] = absorbed;
+                    stats.n_reflected_mut()[i] = reflected;
+                    stats.n_escaped_mut()[i] = escaped;
+                }
+
+                (n_bounce, stats, dirs)
+            };
+
+            #[cfg(feature = "bench")]
+            let dirs_proc_time = start.elapsed().as_millis();
+            #[cfg(feature = "bench")]
+            log::info!("Collector::collect: dirs: {} ms", dirs_proc_time);
+
+            // Compute the vertex positions of the outgoing rays.
+            #[cfg(feature = "visu-dbg")]
+            let mut hit_points = vec![Vec3::ZERO; dirs.len()];
+
+            for (i, dir) in dirs.iter().enumerate() {
+                #[cfg(feature = "visu-dbg")]
+                {
+                    hit_points[i] = (dir.ray_dir * orbit_radius).into();
+                }
+                let samples_offset = dir.patch_idx * n_spectrum;
+                let patch_samples = &mut records[samples_offset..samples_offset + n_spectrum];
+                let bounce_idx = dir.bounce as usize - 1;
+                dir.energy_per_wavelength
+                    .iter()
+                    .zip(patch_samples.iter_mut())
+                    .enumerate()
+                    .for_each(|(j, (energy, patch))| match energy {
+                        Energy::Absorbed => {}
+                        Energy::Reflected(e) => {
+                            let mut_patch = {
+                                if patch.is_none() {
+                                    *patch = Some(BounceAndEnergy::empty(n_bounce));
+                                }
+                                patch.as_mut().unwrap()
+                            };
+                            mut_patch.energy_per_bounce[0] += *e;
+                            mut_patch.n_ray_per_bounce[0] += 1;
+                            mut_patch.energy_per_bounce[bounce_idx + 1] += e;
+                            mut_patch.n_ray_per_bounce[bounce_idx + 1] += 1;
+                            stats.n_ray_per_bounce[j * n_bounce + bounce_idx] += 1;
+                            stats.n_captured_mut()[j] += 1;
+                            stats.energy_per_bounce[j * n_bounce + bounce_idx] += e;
+                            stats.e_captured[j] += e;
+                        }
+                    });
             }
 
-            (n_bounce, stats, dirs)
-        };
+            debug_assert!(stats.is_valid(), "stats is invalid");
+            #[cfg(all(debug_assertions))]
+            log::debug!("{:?}", stats);
 
-        #[cfg(feature = "bench")]
-        let dirs_proc_time = start.elapsed().as_millis();
-        #[cfg(feature = "bench")]
-        log::info!("Collector::collect: dirs: {} ms", dirs_proc_time);
+            #[cfg(feature = "bench")]
+            let data_time = start.elapsed().as_millis();
+            #[cfg(feature = "bench")]
+            log::info!(
+                "Collector::collect: data: {} ms",
+                data_time - dirs_proc_time
+            );
 
-        // Compute the vertex positions of the outgoing rays.
-        #[cfg(any(feature = "visu-dbg", debug_assertions))]
-        let mut hit_points = vec![Vec3::ZERO; dirs.len()];
-
-        for (i, dir) in dirs.iter().enumerate() {
-            #[cfg(any(feature = "visu-dbg", debug_assertions))]
-            {
-                hit_points[i] = (dir.ray_dir * orbit_radius).into();
+            unsafe {
+                out_stats.write(stats);
+                #[cfg(feature = "visu-dbg")]
+                out_trajs.write(result.trajectories);
+                #[cfg(feature = "visu-dbg")]
+                out_hpnts.write(hit_points);
             }
-            let samples_offset = dir.patch_idx * n_spectrum;
-            let patch_samples = &mut records[samples_offset..samples_offset + n_spectrum];
-            let bounce_idx = dir.bounce as usize - 1;
-            dir.energy_per_wavelength
-                .iter()
-                .zip(patch_samples.iter_mut())
-                .enumerate()
-                .for_each(|(j, (energy, patch))| match energy {
-                    Energy::Absorbed => {}
-                    Energy::Reflected(e) => {
-                        let mut_patch = {
-                            if patch.is_none() {
-                                *patch = Some(BounceAndEnergy::empty(n_bounce));
-                            }
-                            patch.as_mut().unwrap()
-                        };
-                        mut_patch.energy_per_bounce[0] += *e;
-                        mut_patch.n_ray_per_bounce[0] += 1;
-                        mut_patch.energy_per_bounce[bounce_idx + 1] += e;
-                        mut_patch.n_ray_per_bounce[bounce_idx + 1] += 1;
-                        stats.n_ray_per_bounce[j * n_bounce + bounce_idx] += 1;
-                        stats.n_captured_mut()[j] += 1;
-                        stats.energy_per_bounce[j * n_bounce + bounce_idx] += e;
-                        stats.e_captured[j] += e;
-                    }
-                });
         }
 
-        debug_assert!(stats.is_valid(), "stats is invalid");
-        #[cfg(all(debug_assertions))]
-        log::debug!("{:?}", stats);
-
-        #[cfg(feature = "bench")]
-        let data_time = start.elapsed().as_millis();
-        #[cfg(feature = "bench")]
-        log::info!(
-            "Collector::collect: data: {} ms",
-            data_time - dirs_proc_time
-        );
-
-        unsafe {
-            out_stats.write(stats);
-            #[cfg(any(feature = "visu-dbg", debug_assertions))]
-            out_trajs.write(result.trajectories);
-            #[cfg(any(feature = "visu-dbg", debug_assertions))]
-            out_hpnts.write(hit_points);
-        }
+        #[cfg(not(feature = "visu-dbg"))]
+        todo!();
     }
 }
 

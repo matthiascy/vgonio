@@ -4,6 +4,8 @@
 use super::params::BsdfMeasurementParams;
 #[cfg(feature = "embree")]
 use crate::measure::bsdf::rtc::embr;
+#[cfg(feature = "visu-dbg")]
+use crate::measure::bsdf::rtc::RayTrajectory;
 use crate::{
     app::{
         cache::{Handle, RawCache},
@@ -13,18 +15,16 @@ use crate::{
         bsdf::{
             emitter::Emitter,
             receiver::{BounceAndEnergy, Receiver},
-            rtc::{RayTrajectory, RtcMethod},
+            rtc::RtcMethod,
         },
         params::SimulationKind,
         MeasuredData, Measurement, MeasurementSource,
     },
 };
-#[cfg(any(feature = "visu-dbg", debug_assertions))]
-use base::math::Vec3;
 use base::{
     error::VgonioError,
     impl_measured_data_trait,
-    math::{circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2},
+    math::{circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2, Vec3},
     medium::Medium,
     partition::{PartitionScheme, SphericalPartition},
     units::{Degs, Nanometres, Radians, Rads},
@@ -66,10 +66,10 @@ pub struct RawMeasuredBsdfData {
     pub records: DyArr<Option<BounceAndEnergy>, 3>,
     /// The statistics of the measurement per incident direction.
     pub stats: DyArr<SingleBsdfMeasurementStats>,
-    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+    #[cfg(feature = "visu-dbg")]
     /// Extra ray trajectory data per incident direction.
     pub trajectories: Box<[Vec<RayTrajectory>]>,
-    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+    #[cfg(feature = "visu-dbg")]
     /// Hit points on the receiver per incident direction.
     pub hit_points: Box<[Vec<Vec3>]>,
 }
@@ -92,10 +92,10 @@ pub struct RawBsdfSnapshot<'a> {
     /// The statistics of the snapshot.
     pub stats: &'a SingleBsdfMeasurementStats,
     /// Extra ray trajectory data.
-    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+    #[cfg(feature = "visu-dbg")]
     pub trajectories: &'a [RayTrajectory],
     /// Hit points on the receiver.
-    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+    #[cfg(feature = "visu-dbg")]
     pub hit_points: &'a [Vec3],
 }
 
@@ -112,9 +112,9 @@ impl<'a> Iterator for RawBsdfSnapshotIterator<'a> {
                 wi: self.data.incoming[self.idx],
                 records: &self.data.records.as_slice()[idx..idx + n_wo * n_spectrum],
                 stats: &self.data.stats[self.idx],
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                #[cfg(feature = "visu-dbg")]
                 trajectories: &self.data.trajectories[self.idx],
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                #[cfg(feature = "visu-dbg")]
                 hit_points: &self.data.hit_points[self.idx],
             };
             self.idx += 1;
@@ -1265,11 +1265,22 @@ impl Debug for SingleBsdfMeasurementStats {
 }
 
 /// Ray tracing simulation result for a single incident direction of a surface.
-pub struct SigleSimulationResult {
+pub struct SingleSimulationResult {
     /// Incident direction in the unit spherical coordinates.
     pub wi: Sph2,
     /// Trajectories of the rays.
+    #[cfg(feature = "visu-dbg")]
     pub trajectories: Vec<RayTrajectory>,
+
+    /// Number of bounces of the rays.
+    #[cfg(not(feature = "visu-dbg"))]
+    pub bounces: Vec<u32>,
+    /// Final directions of the rays.
+    #[cfg(not(feature = "visu-dbg"))]
+    pub dirs: Vec<Vec3>,
+    /// Energy of the rays per wavelength.
+    #[cfg(not(feature = "visu-dbg"))]
+    pub energy: DyArr<f32, 2>,
 }
 
 /// Measures the BSDF of a surface using geometric ray tracing methods.
@@ -1285,6 +1296,16 @@ pub fn measure_bsdf_rt(
     let receiver = Receiver::new(&params.receiver, &params, cache);
     let n_wi = emitter.measpts.len();
     let n_wo = receiver.patches.n_patches();
+    let n_spectrum = params.emitter.spectrum.step_count();
+    let spectrum = DyArr::from_iterator([-1], params.emitter.spectrum.values());
+    let iors_i = cache
+        .iors
+        .ior_of_spectrum(params.incident_medium, spectrum.as_ref())
+        .unwrap();
+    let iors_t = cache
+        .iors
+        .ior_of_spectrum(params.transmitted_medium, spectrum.as_ref())
+        .unwrap();
 
     log::debug!(
         "Measuring BSDF of {} surfaces from {} measurement points with {} rays",
@@ -1317,7 +1338,9 @@ pub fn measure_bsdf_rt(
                 );
                 match method {
                     #[cfg(feature = "embree")]
-                    RtcMethod::Embree => embr::simulate_bsdf_measurement(&emitter, mesh),
+                    RtcMethod::Embree => {
+                        embr::simulate_bsdf_measurement(&emitter, mesh, &iors_i, &iors_t)
+                    }
                     #[cfg(feature = "optix")]
                     RtcMethod::Optix => rtc_simulation_optix(&params, mesh, &emitter, cache),
                     RtcMethod::Grid => rtc_simulation_grid(&params, surf, mesh, &emitter, cache),
@@ -1337,20 +1360,19 @@ pub fn measure_bsdf_rt(
         log::trace!("Estimated orbit radius: {}", orbit_radius);
 
         let incoming = DyArr::<Sph2>::from_slice([n_wi], &emitter.measpts);
-        let n_spectrum = params.emitter.spectrum.step_count();
 
-        #[cfg(any(feature = "visu-dbg", debug_assertions))]
+        #[cfg(feature = "visu-dbg")]
         let mut trajectories: Box<[MaybeUninit<Vec<RayTrajectory>>]> = Box::new_uninit_slice(n_wi);
-        #[cfg(any(feature = "visu-dbg", debug_assertions))]
+        #[cfg(feature = "visu-dbg")]
         let mut hit_points: Box<[MaybeUninit<Vec<Vec3>>]> = Box::new_uninit_slice(n_wi);
 
         let mut records = DyArr::splat(Option::<BounceAndEnergy>::None, [n_wi, n_wo, n_spectrum]);
         let mut stats: Box<[MaybeUninit<SingleBsdfMeasurementStats>]> = Box::new_uninit_slice(n_wi);
 
         for (i, sim) in sim_results.enumerate() {
-            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+            #[cfg(feature = "visu-dbg")]
             let trjs = trajectories[i].as_mut_ptr();
-            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+            #[cfg(feature = "visu-dbg")]
             let hpts = hit_points[i].as_mut_ptr();
             let recs =
                 &mut records.as_mut_slice()[i * n_wo * n_spectrum..(i + 1) * n_wo * n_spectrum];
@@ -1370,9 +1392,9 @@ pub fn measure_bsdf_rt(
             // Collect the tracing data into raw bsdf snapshots.
             receiver.collect(
                 sim,
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                #[cfg(feature = "visu-dbg")]
                 trjs,
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                #[cfg(feature = "visu-dbg")]
                 hpts,
                 stats[i].as_mut_ptr(),
                 recs,
@@ -1391,14 +1413,14 @@ pub fn measure_bsdf_rt(
         }
 
         let raw = RawMeasuredBsdfData {
-            spectrum: DyArr::from_iterator([-1], params.emitter.spectrum.values()),
+            spectrum: spectrum.clone(),
             incoming,
             outgoing: receiver.patches.clone(),
             records,
             stats: DyArr::from_boxed_slice([n_wi], unsafe { stats.assume_init() }),
-            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+            #[cfg(feature = "visu-dbg")]
             trajectories: unsafe { trajectories.assume_init() },
-            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+            #[cfg(feature = "visu-dbg")]
             hit_points: unsafe { hit_points.assume_init() },
         };
 
@@ -1422,7 +1444,7 @@ fn rtc_simulation_grid(
     _mesh: &MicroSurfaceMesh,
     _emitter: &Emitter,
     _cache: &RawCache,
-) -> Box<dyn Iterator<Item = SigleSimulationResult>> {
+) -> Box<dyn Iterator<Item = SingleSimulationResult>> {
     // for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
     //     if surf.is_none() || mesh.is_none() {
     //         log::debug!("Skipping surface {:?} and its mesh {:?}", surf,

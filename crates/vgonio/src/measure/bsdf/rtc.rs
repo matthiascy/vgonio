@@ -152,19 +152,22 @@ impl RayTriIsect {
 /// Hit information used for avoiding self-intersections.
 #[derive(Debug, Clone, Copy)]
 struct LastHit {
-    /// Geometry ID of the last hit primitive.
+    /// Geometry ID of the last-hit primitive.
     pub geom_id: u32,
-    /// Primitive ID of the last hit primitive.
+    /// Primitive ID of the last-hit primitive.
     pub prim_id: u32,
-    /// Normal of the last hit primitive.
+    /// Normal of the last-hit primitive.
     pub normal: Vec3A,
-    // /// Ray origin of the last hit.
-    // pub ray_org: Vec3A,
-    // /// Ray direction of the last hit.
-    // pub ray_dir: Vec3A,
+    #[cfg(not(feature = "visu-dbg"))]
+    /// Ray origin of the last hit.
+    pub ray_org: Vec3A,
+    #[cfg(not(feature = "visu-dbg"))]
+    /// Ray direction of the last hit.
+    pub ray_dir: Vec3A,
 }
 
 /// Records the status of a traced ray.
+#[cfg(feature = "visu-dbg")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct RayTrajectoryNode {
     /// The origin of the ray.
@@ -176,6 +179,7 @@ pub struct RayTrajectoryNode {
     pub cos: Option<f32>,
 }
 
+#[cfg(feature = "visu-dbg")]
 impl Debug for RayTrajectoryNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -189,19 +193,23 @@ impl Debug for RayTrajectoryNode {
 /// Records the trajectory of a ray from the moment it is spawned.
 ///
 /// The trajectory always starts with the ray that is spawned.
+#[cfg(feature = "visu-dbg")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct RayTrajectory(pub(crate) Vec<RayTrajectoryNode>);
 
+#[cfg(feature = "visu-dbg")]
 impl Deref for RayTrajectory {
     type Target = Vec<RayTrajectoryNode>;
 
     fn deref(&self) -> &Self::Target { &self.0 }
 }
 
+#[cfg(feature = "visu-dbg")]
 impl DerefMut for RayTrajectory {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
+#[cfg(feature = "visu-dbg")]
 impl RayTrajectory {
     /// Returns `true` if the ray did not hit anything.
     pub fn is_missed(&self) -> bool { self.0.len() <= 1 }
@@ -522,14 +530,14 @@ mod tests {
     }
 }
 
-/// Ray tracing simulation result.
-#[derive(Debug, Clone)]
-pub struct RayTracingResult {
-    /// The ray trajectory.
-    pub trajectory: RayTrajectory,
-    /// The hit result.
-    pub hit: Hit,
-}
+// /// Ray tracing simulation result.
+// #[derive(Debug, Clone)]
+// pub struct RayTracingResult {
+//     /// The ray trajectory.
+//     pub trajectory: RayTrajectory,
+//     /// The hit result.
+//     pub hit: Hit,
+// }
 
 /// Computes the number of streams required to trace the given number of rays.
 pub const fn compute_num_of_streams(num_rays: usize) -> usize {

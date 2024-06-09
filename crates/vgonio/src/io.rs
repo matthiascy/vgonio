@@ -1102,9 +1102,9 @@ pub mod vgmo {
                     outgoing: partition,
                     records: DyArr::from_vec([n_wi, n_wo, n_spectrum], records),
                     stats: DyArr::from_boxed_slice_1d(stats.assume_init()),
-                    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                    #[cfg(feature = "visu-dbg")]
                     trajectories: Box::new([]),
-                    #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                    #[cfg(feature = "visu-dbg")]
                     hit_points: Box::new([]),
                 }
             })

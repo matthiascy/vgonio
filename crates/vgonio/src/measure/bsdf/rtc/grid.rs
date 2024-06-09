@@ -2,14 +2,16 @@
 
 // TODO: verification
 
+#[cfg(feature = "visu-dbg")]
+use crate::measure::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
 use crate::{
     app::cli::ansi,
     measure::{
         bsdf::{
             emitter::Emitter,
             rtc,
-            rtc::{Hit, LastHit, Ray, RayTrajectory, RayTrajectoryNode, MAX_RAY_STREAM_SIZE},
-            SigleSimulationResult,
+            rtc::{Hit, LastHit, Ray, MAX_RAY_STREAM_SIZE},
+            SingleSimulationResult,
         },
         params::BsdfMeasurementParams,
     },
@@ -30,6 +32,7 @@ use surf::{MicroSurface, MicroSurfaceMesh};
 pub struct RayStreamData {
     /// The last hit of each ray in the stream.
     last_hit: Vec<LastHit>,
+    #[cfg(feature = "visu-dbg")]
     /// The trajectory of each ray in the stream. The trajectory is a list of
     trajectory: Vec<RayTrajectory>,
 }
@@ -40,7 +43,7 @@ pub fn measure_bsdf(
     surf: &MicroSurface,
     mesh: &MicroSurfaceMesh,
     emitter: &Emitter,
-) -> Vec<SigleSimulationResult> {
+) -> Vec<SingleSimulationResult> {
     // Unify the units of the micro-surface and emitter radius by converting
     // to micrometres.
     let max_bounces = params.emitter.max_bounces;
@@ -93,6 +96,7 @@ pub fn measure_bsdf(
             let mut stream_data = vec![
                 RayStreamData {
                     last_hit: vec![
+                        #[cfg(feature = "visu-dbg")]
                         LastHit {
                             geom_id: u32::MAX,
                             prim_id: u32::MAX,
@@ -161,6 +165,7 @@ pub fn measure_bsdf(
                                 last_node.cos = Some(hit.normal.dot(ray.dir));
                                 let reflected_dir =
                                     fresnel::reflect(ray.dir.into(), hit.normal.into());
+                                #[cfg(feature = "visu-dbg")]
                                 data.trajectory[i].push(RayTrajectoryNode {
                                     org: hit.point.into(),
                                     dir: reflected_dir,
@@ -198,7 +203,7 @@ pub fn measure_bsdf(
                 .flat_map(|data| data.trajectory)
                 .collect::<Vec<_>>();
 
-            SigleSimulationResult {
+            SingleSimulationResult {
                 wi: *w_i,
                 trajectories,
             }
