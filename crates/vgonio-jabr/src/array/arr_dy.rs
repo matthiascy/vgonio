@@ -191,6 +191,80 @@ impl<T, const N: usize, const L: MemLayout> IndexMut<[usize; N]> for DyArr<T, N,
     fn index_mut(&mut self, index: [usize; N]) -> &mut Self::Output { &mut self.0[index] }
 }
 
+// impl<T, const L: MemLayout> Index<(usize,)> for DyArr<T, 1, L> {
+//     type Output = T;
+//
+//     #[inline]
+//     fn index(&self, index: (usize,)) -> &Self::Output { &self.0[index.0] }
+// }
+//
+// impl<T, const L: MemLayout> IndexMut<(usize,)> for DyArr<T, 1, L> {
+//     #[inline]
+//     fn index_mut(&mut self, index: (usize,)) -> &mut Self::Output { &mut
+// self.0[index.0] } }
+//
+// impl<T, const L: MemLayout> Index<(usize, usize)> for DyArr<T, 2, L> {
+//     type Output = T;
+//
+//     #[inline]
+//     fn index(&self, index: (usize, usize)) -> &Self::Output {
+// &self.0[[index.0, index.1]] } }
+//
+// impl<T, const L: MemLayout> IndexMut<(usize, usize)> for DyArr<T, 2, L> {
+//     #[inline]
+//     fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
+//         &mut self.0[[index.0, index.1]]
+//     }
+// }
+
+macro_rules! tuple_len {
+    () => { 0 };
+    ($x:tt $($xs:tt)*) => { 1 + tuple_len!($($xs)*) };
+}
+
+macro_rules! impl_tuple_indexing_inner {
+    ($($idx:tt, $idx_ty:ty),+) => {
+        impl<T, const L: MemLayout> Index<($($idx_ty,)*)> for DyArr<T, {tuple_len!($($idx_ty)*)}, L> {
+            type Output = T;
+
+            #[inline]
+            fn index(&self, index: ($($idx_ty,)*)) -> &Self::Output {
+                &self.0[[$(index.$idx),*]]
+            }
+        }
+
+        impl<T, const L: MemLayout> IndexMut<($($idx_ty,)*)> for DyArr<T, {tuple_len!($($idx_ty)*)}, L> {
+            #[inline]
+            fn index_mut(&mut self, index: ($($idx_ty,)*)) -> &mut Self::Output {
+                &mut self.0[[$(index.$idx),*]]
+            }
+        }
+    };
+}
+
+macro_rules! impl_tuple_indexing {
+    ($($idx:tt),+) => {
+        impl_tuple_indexing_inner!($($idx, usize),+);
+    };
+}
+
+impl_tuple_indexing!(0);
+impl_tuple_indexing!(0, 1);
+impl_tuple_indexing!(0, 1, 2);
+impl_tuple_indexing!(0, 1, 2, 3);
+impl_tuple_indexing!(0, 1, 2, 3, 4);
+impl_tuple_indexing!(0, 1, 2, 3, 4, 5);
+impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6);
+impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7);
+impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8);
+impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
+impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+
 impl<T, const N: usize, const L: MemLayout> Index<usize> for DyArr<T, N, L> {
     type Output = T;
 
@@ -253,19 +327,31 @@ mod tests {
 
     #[test]
     fn test_dyarr_from_iterator() {
-        let arr = DyArr::<i32, 3, { MemLayout::RowMajor }>::from_iterator([2, 3, 2], (0..12));
+        let arr = DyArr::<i32, 3, { MemLayout::RowMajor }>::from_iterator([2, 3, 2], 0..12);
         assert_eq!(arr.shape(), &[2, 3, 2]);
         assert_eq!(arr.strides(), &[6, 2, 1]);
         assert_eq!(arr.as_slice(), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 
-        let arr = DyArr::<i32, 3, { MemLayout::RowMajor }>::from_iterator([-1, 3, 2], (0..12));
+        let arr = DyArr::<i32, 3, { MemLayout::RowMajor }>::from_iterator([-1, 3, 2], 0..12);
         assert_eq!(arr.shape(), &[2, 3, 2]);
         assert_eq!(arr.strides(), &[6, 2, 1]);
         assert_eq!(arr.as_slice(), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 
-        let arr = DyArr::<i32, 1, { MemLayout::RowMajor }>::from_iterator([-1], (0..12));
+        let arr = DyArr::<i32, 1, { MemLayout::RowMajor }>::from_iterator([-1], 0..12);
         assert_eq!(arr.shape(), &[12]);
         assert_eq!(arr.strides(), &[1]);
         assert_eq!(arr.as_slice(), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    }
+
+    #[test]
+    fn test_dyarr_indexing() {
+        let arr = DyArr::<i32, 3>::from_iterator([2, 3, 2], 0..12);
+        assert_eq!(arr[[0, 0, 0]], 0);
+        assert_eq!(arr[[0, 1, 1]], 3);
+        assert_eq!(arr[[1, 2, 1]], 11);
+
+        assert_eq!(arr[[0, 0, 0]], arr[(0, 0, 0)]);
+        assert_eq!(arr[[0, 1, 1]], arr[(0, 1, 1)]);
+        assert_eq!(arr[[1, 2, 1]], arr[(1, 2, 1)]);
     }
 }
