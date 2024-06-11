@@ -11,8 +11,12 @@ use crate::{
 
 #[cfg(feature = "visu-dbg")]
 use crate::measure::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
+#[cfg(not(feature = "visu-dbg"))]
+use crate::measure::params::BsdfMeasurementParams;
+#[cfg(not(feature = "visu-dbg"))]
+use base::optics::ior::Ior;
 use base::{
-    math::{Sph2, Vec3A},
+    math::{Sph2, Vec3, Vec3A},
     optics::fresnel,
 };
 use embree::{
@@ -49,7 +53,7 @@ struct SoARayStreams<'g> {
     /// the initial ray and then followed by the rays after each
     /// bounce. The cosine of the incident angle at each bounce is
     /// also recorded.
-    pub trajectory: Vec<RayTrajectory>,
+    pub trajectory: Box<[RayTrajectory]>,
     #[cfg(not(feature = "visu-dbg"))]
     /// The refractive indices of the incident medium.
     pub iors_i: &'g [Ior],
@@ -74,12 +78,17 @@ impl<'g> SoARayStreams<'g> {
     pub const RAY_STREAM_SIZE: usize = 1024;
 
     /// Create a new instance of the ray stream data.
-    pub fn new(msurf: Arc<Geometry<'g>>, n_ray: usize, max_bounces: u32) -> Self {
+    pub fn new(
+        msurf: Arc<Geometry<'g>>,
+        n_ray: usize,
+        #[cfg(feature = "visu-dbg")] max_bounces: u32,
+        #[cfg(not(feature = "visu-dbg"))] iors_i: &'g [Ior],
+        #[cfg(not(feature = "visu-dbg"))] iors_t: &'g [Ior],
+    ) -> Self {
         let n_stream = compute_num_of_streams(n_ray);
         let last_stream_size = n_ray % Self::RAY_STREAM_SIZE;
         let total_stream_size = n_stream * Self::RAY_STREAM_SIZE;
         let last_hit = vec![HitInfo::new(); n_ray].into_boxed_slice();
-        let trajectory = vec![RayTrajectory(Vec::with_capacity(max_bounces as usize / 2)); n_ray];
         Self {
             n_ray,
             n_stream,
@@ -87,7 +96,17 @@ impl<'g> SoARayStreams<'g> {
             total_stream_size,
             msurf,
             last_hit,
-            trajectory,
+            #[cfg(feature = "visu-dbg")]
+            trajectory: vec![RayTrajectory(Vec::with_capacity(max_bounces as usize / 2)); n_ray]
+                .into_boxed_slice(),
+            #[cfg(not(feature = "visu-dbg"))]
+            iors_i,
+            #[cfg(not(feature = "visu-dbg"))]
+            iors_t,
+            #[cfg(not(feature = "visu-dbg"))]
+            bounce: vec![0; n_ray].into_boxed_slice(),
+            #[cfg(not(feature = "visu-dbg"))]
+            energy: vec![1.0; n_ray * iors_t.len()].into_boxed_slice(),
         }
     }
 
@@ -119,7 +138,7 @@ struct SoARayStreamMut<'a> {
     #[cfg(not(feature = "visu-dbg"))]
     iors_t: &'a [Ior],
     #[cfg(not(feature = "visu-dbg"))]
-    bounces: &'a mut [u32],
+    bounce: &'a mut [u32],
     #[cfg(not(feature = "visu-dbg"))]
     energy: &'a mut [f32],
 }
@@ -139,21 +158,35 @@ impl<'a> Iterator for SoARayStreamsIterMut<'a> {
             };
             let data_range = self.stream_idx * SoARayStreams::RAY_STREAM_SIZE
                 ..self.stream_idx * SoARayStreams::RAY_STREAM_SIZE + stream_size;
-            let stream = SoARayStreamMut {
-                idx: self.stream_idx,
-                size: stream_size,
-                msurf: data.msurf.clone(),
-                last_hit: &mut data.last_hit[data_range.clone()],
+
+            let stream = {
+                #[cfg(not(feature = "visu-dbg"))]
+                {
+                    let n_spectrum = data.iors_t.len();
+                    let energy_range = self.stream_idx * SoARayStreams::RAY_STREAM_SIZE * n_spectrum
+                        ..(self.stream_idx * SoARayStreams::RAY_STREAM_SIZE + stream_size)
+                            * n_spectrum;
+                    SoARayStreamMut {
+                        idx: self.stream_idx,
+                        size: stream_size,
+                        msurf: data.msurf.clone(),
+                        last_hit: &mut data.last_hit[data_range.clone()],
+                        iors_i: data.iors_i,
+                        iors_t: data.iors_t,
+                        bounce: &mut data.bounce[data_range.clone()],
+                        energy: &mut data.energy[energy_range],
+                    }
+                }
                 #[cfg(feature = "visu-dbg")]
-                trajectory: &mut data.trajectory[data_range],
-                #[cfg(not(feature = "visu-dbg"))]
-                iors_i: data.iors_i,
-                #[cfg(not(feature = "visu-dbg"))]
-                iors_t: data.iors_t,
-                #[cfg(not(feature = "visu-dbg"))]
-                bounces: &mut data.bounce[data_range.clone()],
-                #[cfg(not(feature = "visu-dbg"))]
-                energy: &mut data.energy[data_range.clone()],
+                {
+                    SoARayStreamMut {
+                        idx: self.stream_idx,
+                        size: stream_size,
+                        msurf: data.msurf.clone(),
+                        last_hit: &mut data.last_hit[data_range.clone()],
+                        trajectory: &mut data.trajectory[data_range],
+                    }
+                }
             };
             self.stream_idx += 1;
             Some(stream)
@@ -396,7 +429,16 @@ fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
     let n_spectrum = iors_t.len();
 
     // Allocate the stream data for all the rays.
-    let mut stream_data = SoARayStreams::new(geometry.clone(), num_emitted_rays, max_bounces);
+    let mut stream_data = SoARayStreams::new(
+        geometry.clone(),
+        num_emitted_rays,
+        #[cfg(feature = "visu-dbg")]
+        max_bounces,
+        #[cfg(not(feature = "visu-dbg"))]
+        iors_i,
+        #[cfg(not(feature = "visu-dbg"))]
+        iors_t,
+    );
     #[cfg(all(debug_assertions))]
     println!(
         "        {} Trace {} rays ({} streams rays)",
@@ -527,12 +569,12 @@ fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
                             let cos_i_abs = hit_info.factor.abs();
                             if fresnel {
                                 for k in 0..n_spectrum {
-                                    ctx.ext.energy[(i, k)] *=
+                                    ctx.ext.energy[i * n_spectrum + k] *=
                                         fresnel::reflectance(cos_i_abs, &iors_i[k], &iors_t[k]);
                                 }
                             } else {
                                 for k in 0..n_spectrum {
-                                    ctx.ext.energy[(i, k)] *= cos_i_abs;
+                                    ctx.ext.energy[i * n_spectrum + k] *= cos_i_abs;
                                 }
                             }
                         }
@@ -576,31 +618,20 @@ fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
 
     #[cfg(not(feature = "visu-dbg"))]
     {
+        use jabr::array::DyArr;
         // Unpack the stream data into a single result.
-        let bounces = stream_data
-            .iter()
-            .flat_map(|d| d.bounce)
-            .collect::<Vec<_>>();
-
         let dirs = stream_data
+            .last_hit
             .iter()
-            .flat_map(|d| {
-                d.last_hit
-                    .iter()
-                    .map(|h| h.next_dir.into())
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        let energy = stream_data
-            .iter()
-            .flat_map(|d| d.energy.into_vec())
-            .collect::<Vec<_>>();
+            .map(|h| Vec3::from(h.next_dir))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
         // TODO: number of emitted rays should be checked.
         SingleSimulationResult {
             wi: w_i,
-            bounces,
+            bounces: stream_data.bounce,
             dirs,
-            energy: DyArr::from_vec([num_emitted_rays, n_spectrum], energy),
+            energy: DyArr::from_boxed_slice([num_emitted_rays, n_spectrum], stream_data.energy),
         }
     }
 }

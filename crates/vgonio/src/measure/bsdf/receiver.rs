@@ -172,7 +172,7 @@ impl Receiver {
     pub fn collect(
         &self,
         result: SingleSimulationResult,
-        #[cfg(any(feature = "visu-dbg"))] out_trajs: *mut Vec<RayTrajectory>,
+        #[cfg(any(feature = "visu-dbg"))] out_trajs: *mut Box<[RayTrajectory]>,
         #[cfg(any(feature = "visu-dbg"))] out_hpnts: *mut Vec<Vec3>,
         out_stats: *mut SingleBsdfMeasurementStats,
         records: &mut [Option<BounceAndEnergy>],

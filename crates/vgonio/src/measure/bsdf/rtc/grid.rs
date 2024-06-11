@@ -203,16 +203,17 @@ pub fn measure_bsdf(
             let trajectories = stream_data
                 .into_iter()
                 .flat_map(|data| data.trajectory)
-                .collect::<Vec<_>>();
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
 
             SingleSimulationResult {
                 wi: *w_i,
                 #[cfg(feature = "visu-dbg")]
                 trajectories,
                 #[cfg(not(feature = "visu-dbg"))]
-                bounces: Vec::new(),
+                bounces: Box::new([]),
                 #[cfg(not(feature = "visu-dbg"))]
-                dirs: Vec::new(),
+                dirs: Box::new([]),
                 #[cfg(not(feature = "visu-dbg"))]
                 energy: DyArr::zeros([1, 1]),
             }

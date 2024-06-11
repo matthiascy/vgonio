@@ -697,7 +697,7 @@ impl DebugDrawingState {
     pub fn update_ray_trajectories(
         &mut self,
         ctx: &GpuContext,
-        trajectories: &[Vec<RayTrajectory>],
+        trajectories: &[Box<[RayTrajectory]>],
     ) {
         log::debug!("Updating ray trajectories, {} sets", trajectories.len());
         self.measurement_point_index_max = trajectories.len();

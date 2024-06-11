@@ -68,7 +68,7 @@ pub struct RawMeasuredBsdfData {
     pub stats: DyArr<SingleBsdfMeasurementStats>,
     #[cfg(feature = "visu-dbg")]
     /// Extra ray trajectory data per incident direction.
-    pub trajectories: Box<[Vec<RayTrajectory>]>,
+    pub trajectories: Box<[Box<[RayTrajectory]>]>,
     #[cfg(feature = "visu-dbg")]
     /// Hit points on the receiver per incident direction.
     pub hit_points: Box<[Vec<Vec3>]>,
@@ -1270,13 +1270,13 @@ pub struct SingleSimulationResult {
     pub wi: Sph2,
     /// Trajectories of the rays.
     #[cfg(feature = "visu-dbg")]
-    pub trajectories: Vec<RayTrajectory>,
+    pub trajectories: Box<[RayTrajectory]>,
     /// Number of bounces of the rays.
     #[cfg(not(feature = "visu-dbg"))]
-    pub bounces: Vec<u32>,
+    pub bounces: Box<[u32]>,
     /// Final directions of the rays.
     #[cfg(not(feature = "visu-dbg"))]
-    pub dirs: Vec<Vec3>,
+    pub dirs: Box<[Vec3]>,
     /// Energy of the rays per wavelength.
     #[cfg(not(feature = "visu-dbg"))]
     pub energy: DyArr<f32, 2>,
@@ -1370,7 +1370,8 @@ pub fn measure_bsdf_rt(
         let incoming = DyArr::<Sph2>::from_slice([n_wi], &emitter.measpts);
 
         #[cfg(feature = "visu-dbg")]
-        let mut trajectories: Box<[MaybeUninit<Vec<RayTrajectory>>]> = Box::new_uninit_slice(n_wi);
+        let mut trajectories: Box<[MaybeUninit<Box<[RayTrajectory]>>]> =
+            Box::new_uninit_slice(n_wi);
         #[cfg(feature = "visu-dbg")]
         let mut hit_points: Box<[MaybeUninit<Vec<Vec3>>]> = Box::new_uninit_slice(n_wi);
 
