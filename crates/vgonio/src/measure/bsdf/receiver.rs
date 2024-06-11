@@ -5,7 +5,7 @@ use crate::measure::bsdf::rtc::RayTrajectory;
 use crate::{
     app::cache::RawCache,
     measure::{
-        bsdf::{SingleBsdfMeasurementStats, SingleSimulationResult},
+        bsdf::{SingleBsdfMeasurementStats, SingleSimResult},
         params::BsdfMeasurementParams,
     },
 };
@@ -19,7 +19,7 @@ use base::{
 #[cfg(feature = "visu-dbg")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::sync::{atomic, atomic::AtomicU32};
+use std::sync::{atomic, atomic::AtomicU32, RwLock};
 
 /// Description of a receiver collecting the data.
 ///
@@ -171,9 +171,9 @@ impl Receiver {
     /// [`BsdfSnapshotRaw`].
     pub fn collect(
         &self,
-        result: SingleSimulationResult,
-        #[cfg(any(feature = "visu-dbg"))] out_trajs: *mut Box<[RayTrajectory]>,
-        #[cfg(any(feature = "visu-dbg"))] out_hpnts: *mut Vec<Vec3>,
+        result: SingleSimResult,
+        #[cfg(feature = "visu-dbg")] out_trajs: *mut Box<[RayTrajectory]>,
+        #[cfg(feature = "visu-dbg")] out_hpnts: *mut Vec<Vec3>,
         out_stats: *mut SingleBsdfMeasurementStats,
         records: &mut [Option<BounceAndEnergy>],
         orbit_radius: f32,
@@ -195,9 +195,8 @@ impl Receiver {
             log::debug!(
                 "SingleSimulationResult at {}, {} rays",
                 result.wi,
-                result.trajectories.len()
+                result.trajectories.len(),
             );
-
             let (n_bounce, mut stats, dirs) = {
                 let n_bounce = AtomicU32::new(0);
                 let n_received = AtomicU32::new(0);
@@ -410,7 +409,141 @@ impl Receiver {
         }
 
         #[cfg(not(feature = "visu-dbg"))]
-        todo!();
+        {
+            debug_assert_eq!(
+                result.bounces.len(),
+                result.dirs.len(),
+                "bounces and dirs mismatch"
+            );
+            debug_assert_eq!(
+                result.bounces.len(),
+                result.energy.len() / n_spectrum,
+                "bounces and energy mismatch"
+            );
+
+            log::debug!(
+                "SingleSimulationResult at {}, {} rays",
+                result.wi,
+                result.dirs.len()
+            );
+
+            let mut n_bounce = result.bounces.iter().max().copied().unwrap();
+            assert!(n_bounce > 0, "no bounces");
+
+            let n_received = AtomicU32::new(0);
+            let n_missed = AtomicU32::new(0);
+            let mut n_reflected = Vec::with_capacity(n_spectrum);
+            let mut n_escaped = Vec::with_capacity(n_spectrum);
+            for _ in 0..n_spectrum {
+                n_reflected.push(AtomicU32::new(0));
+                n_escaped.push(AtomicU32::new(0));
+            }
+            use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
+            // Create the statistics of the BSDF measurement for the current incident point.
+            let mut stats_rw_lock = RwLock::new(SingleBsdfMeasurementStats::new(
+                n_spectrum,
+                n_bounce as usize,
+            ));
+            let mut records_rw_lock = RwLock::new(records);
+            result
+                .iter_ray_chunks(CHUNK_SIZE)
+                .par_bridge()
+                .for_each(|chunk| {
+                    let mut n_missed_local = 0;
+                    let mut n_received_local = 0;
+                    let mut n_reflected_local = vec![0; n_spectrum].into_boxed_slice();
+                    let mut n_escaped_local = vec![0; n_spectrum].into_boxed_slice();
+                    for ray in chunk {
+                        if ray.bounce == &0 {
+                            n_missed_local += 1;
+                            continue;
+                        }
+
+                        n_received_local += 1;
+
+                        // Compute the index of the patch where the ray is
+                        // collected.
+                        let patch_idx = self
+                            .patches
+                            .contains(Sph2::from_cartesian((*ray.dir).into()));
+
+                        // Update the number of rays reflected by the surface.
+                        for (i, energy) in ray.energy.iter().enumerate() {
+                            if energy <= &0.0 {
+                                continue;
+                            }
+
+                            n_reflected_local[i] += 1;
+                            if patch_idx.is_none() {
+                                n_escaped_local[i] += 1;
+                            }
+                        }
+
+                        // Update the energy of the ray per wavelength.
+                        if patch_idx.is_none() {
+                            continue;
+                        }
+
+                        let patch_idx = patch_idx.unwrap();
+                        let samples_offset = patch_idx * n_spectrum;
+                        let mut records = records_rw_lock.write().unwrap();
+                        let patch_samples =
+                            &mut records[samples_offset..samples_offset + n_spectrum];
+                        let bounce_idx = *ray.bounce as usize - 1;
+                        let mut mut_stats = stats_rw_lock.write().unwrap();
+                        ray.energy
+                            .iter()
+                            .enumerate()
+                            .zip(patch_samples.iter_mut())
+                            .for_each(|((j, e), patch)| {
+                                if e <= &0.0 {
+                                    return;
+                                }
+                                let mut_patch = {
+                                    if patch.is_none() {
+                                        *patch = Some(BounceAndEnergy::empty(n_bounce as usize));
+                                    }
+                                    patch.as_mut().unwrap()
+                                };
+                                mut_patch.energy_per_bounce[0] += e;
+                                mut_patch.n_ray_per_bounce[0] += 1;
+                                mut_patch.energy_per_bounce[bounce_idx + 1] += e;
+                                mut_patch.n_ray_per_bounce[bounce_idx + 1] += 1;
+                                mut_stats.n_ray_per_bounce[j * n_bounce as usize + bounce_idx] += 1;
+                                mut_stats.n_captured_mut()[j] += 1;
+                                mut_stats.energy_per_bounce[j * n_bounce as usize + bounce_idx] +=
+                                    e;
+                                mut_stats.e_captured[j] += e;
+                            })
+                    }
+
+                    n_received.fetch_add(n_received_local, atomic::Ordering::Relaxed);
+                    n_missed.fetch_add(n_missed_local, atomic::Ordering::Relaxed);
+                    for i in 0..n_spectrum {
+                        n_reflected[i].fetch_add(n_reflected_local[i], atomic::Ordering::Relaxed);
+                        n_escaped[i].fetch_add(n_escaped_local[i], atomic::Ordering::Relaxed);
+                    }
+                });
+
+            let mut stats = stats_rw_lock.into_inner().unwrap();
+
+            stats.n_received = n_received.load(atomic::Ordering::Relaxed);
+            // Update the number of rays statistics including the number of rays absorbed
+            // per wavelength, the number of rays reflected per wavelength.
+            // The number of rays captured per bounce will be updated later.
+            for i in 0..n_spectrum {
+                let reflected = n_reflected[i].load(atomic::Ordering::Relaxed);
+                let absorbed = stats.n_received - reflected;
+                let escaped = n_escaped[i].load(atomic::Ordering::Relaxed);
+                stats.n_absorbed_mut()[i] = absorbed;
+                stats.n_reflected_mut()[i] = reflected;
+                stats.n_escaped_mut()[i] = escaped;
+            }
+
+            unsafe {
+                out_stats.write(stats);
+            }
+        }
     }
 }
 

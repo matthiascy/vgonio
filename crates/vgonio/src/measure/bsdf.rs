@@ -1265,7 +1265,7 @@ impl Debug for SingleBsdfMeasurementStats {
 }
 
 /// Ray tracing simulation result for a single incident direction of a surface.
-pub struct SingleSimulationResult {
+pub struct SingleSimResult {
     /// Incident direction in the unit spherical coordinates.
     pub wi: Sph2,
     /// Trajectories of the rays.
@@ -1280,6 +1280,160 @@ pub struct SingleSimulationResult {
     /// Energy of the rays per wavelength.
     #[cfg(not(feature = "visu-dbg"))]
     pub energy: DyArr<f32, 2>,
+}
+
+#[cfg(not(feature = "visu-dbg"))]
+pub struct SingleSimResultRays<'a> {
+    idx: usize,
+    result: &'a SingleSimResult,
+}
+
+#[cfg(not(feature = "visu-dbg"))]
+pub struct SingleSimResultRay<'a> {
+    pub bounce: &'a u32,
+    pub dir: &'a Vec3,
+    pub energy: &'a [f32],
+}
+
+#[cfg(not(feature = "visu-dbg"))]
+impl SingleSimResult {
+    pub fn iter_rays(&self) -> SingleSimResultRays {
+        debug_assert_eq!(self.bounces.len(), self.dirs.len(), "Length mismatch");
+        debug_assert_eq!(
+            self.bounces.len() * self.energy.shape()[1],
+            self.energy.len(),
+            "Length mismatch"
+        );
+
+        SingleSimResultRays {
+            idx: 0,
+            result: self,
+        }
+    }
+
+    pub fn iter_ray_chunks(&self, chunk_size: usize) -> SingleSimResultRayChunks {
+        debug_assert_eq!(self.bounces.len(), self.dirs.len(), "Length mismatch");
+        debug_assert_eq!(
+            self.bounces.len() * self.energy.shape()[1],
+            self.energy.len(),
+            "Length mismatch"
+        );
+
+        SingleSimResultRayChunks {
+            chunk_idx: 0,
+            chunk_size,
+            chunk_count: (self.bounces.len() + chunk_size - 1) / chunk_size,
+            result: self,
+        }
+    }
+}
+
+#[cfg(not(feature = "visu-dbg"))]
+impl<'a> Iterator for SingleSimResultRays<'a> {
+    type Item = SingleSimResultRay<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx < self.result.bounces.len() {
+            let bounce = &self.result.bounces[self.idx];
+            let dir = &self.result.dirs[self.idx];
+            let n_spectrum = self.result.energy.shape()[1];
+            let energy =
+                &self.result.energy.as_slice()[self.idx * n_spectrum..(self.idx + 1) * n_spectrum];
+            self.idx += 1;
+            Some(SingleSimResultRay {
+                bounce,
+                dir,
+                energy,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(feature = "visu-dbg"))]
+impl<'a> ExactSizeIterator for SingleSimResultRays<'a> {
+    fn len(&self) -> usize { self.result.bounces.len() }
+}
+
+#[cfg(not(feature = "visu-dbg"))]
+pub struct SingleSimResultRayChunks<'a> {
+    chunk_idx: usize,
+    chunk_size: usize,
+    chunk_count: usize,
+    result: &'a SingleSimResult,
+}
+
+#[cfg(not(feature = "visu-dbg"))]
+impl<'a> Iterator for SingleSimResultRayChunks<'a> {
+    type Item = SingleSimResultRayChunk<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let n_rays = self.result.bounces.len();
+        if self.chunk_idx < self.chunk_count {
+            let start = self.chunk_idx * self.chunk_size;
+            let end = usize::min((self.chunk_idx + 1) * self.chunk_size, n_rays);
+            let size = self.result.bounces.len().min(end) - start;
+            let bounces = &self.result.bounces[start..start + size];
+            let dirs = &self.result.dirs[start..start + size];
+            let n_spectrum = self.result.energy.shape()[1];
+            let energy = &self.result.energy.as_slice()[start * n_spectrum..end * n_spectrum];
+            self.chunk_idx += 1;
+            Some(SingleSimResultRayChunk {
+                size,
+                n_spectrum,
+                bounces,
+                dirs,
+                energy,
+                curr: 0,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(feature = "visu-dbg"))]
+pub struct SingleSimResultRayChunk<'a> {
+    /// Number of rays in the chunk.
+    pub size: usize,
+    /// Number of wavelengths.
+    pub n_spectrum: usize,
+    /// Bounces of the rays.
+    pub bounces: &'a [u32],
+    /// Directions of the rays.
+    pub dirs: &'a [Vec3],
+    /// Energy of the rays per wavelength.
+    pub energy: &'a [f32],
+    /// Current index of the iterator.
+    pub curr: usize,
+}
+
+#[cfg(not(feature = "visu-dbg"))]
+impl<'a> Iterator for SingleSimResultRayChunk<'a> {
+    type Item = SingleSimResultRay<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.curr < self.size {
+            let idx = self.curr;
+            let bounce = &self.bounces[idx];
+            let dir = &self.dirs[idx];
+            let energy = &self.energy[idx * self.n_spectrum..(idx + 1) * self.n_spectrum];
+            self.curr += 1;
+            Some(SingleSimResultRay {
+                bounce,
+                dir,
+                energy,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(feature = "visu-dbg"))]
+impl<'a> ExactSizeIterator for SingleSimResultRayChunk<'a> {
+    fn len(&self) -> usize { self.size }
 }
 
 /// Measures the BSDF of a surface using geometric ray tracing methods.
@@ -1329,6 +1483,10 @@ pub fn measure_bsdf_rt(
             "Measuring surface {}",
             surf.path.as_ref().unwrap().display()
         );
+
+        // TODO: do not wait until all the simulation results are collected to
+        // start processing them. Instead, process them as soon as they are
+        // available.
 
         let sim_results = match sim_kind {
             SimulationKind::GeomOptics(method) => {
@@ -1453,7 +1611,7 @@ fn rtc_simulation_grid(
     _mesh: &MicroSurfaceMesh,
     _emitter: &Emitter,
     _cache: &RawCache,
-) -> Box<[SingleSimulationResult]> {
+) -> Box<[SingleSimResult]> {
     // for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
     //     if surf.is_none() || mesh.is_none() {
     //         log::debug!("Skipping surface {:?} and its mesh {:?}", surf,
@@ -1484,7 +1642,7 @@ fn rtc_simulation_optix(
     _surf: &MicroSurfaceMesh,
     _emitter: &Emitter,
     _cache: &RawCache,
-) -> Box<[SingleSimulationResult]> {
+) -> Box<[SingleSimResult]> {
     todo!()
 }
 

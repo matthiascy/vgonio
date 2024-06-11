@@ -5,7 +5,7 @@ use crate::{
     measure::bsdf::{
         emitter::Emitter,
         rtc::{compute_num_of_streams, HitInfo, MAX_RAY_STREAM_SIZE},
-        SingleSimulationResult,
+        SingleSimResult,
     },
 };
 
@@ -332,7 +332,7 @@ pub fn simulate_bsdf_measurement<'a, 'b: 'a>(
     mesh: &'a MicroSurfaceMesh,
     #[cfg(not(feature = "visu-dbg"))] iors_i: &'b [Ior],
     #[cfg(not(feature = "visu-dbg"))] iors_t: &'b [Ior],
-) -> Box<[SingleSimulationResult]> {
+) -> Box<[SingleSimResult]> {
     #[cfg(feature = "bench")]
     let t = std::time::Instant::now();
 
@@ -401,7 +401,7 @@ fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
     #[cfg(not(feature = "visu-dbg"))] fresnel: bool,
     #[cfg(not(feature = "visu-dbg"))] iors_i: &'b [Ior],
     #[cfg(not(feature = "visu-dbg"))] iors_t: &'b [Ior],
-) -> SingleSimulationResult {
+) -> SingleSimResult {
     println!(
         "      {}>{} Emit rays from {}",
         ansi::BRIGHT_YELLOW,
@@ -610,7 +610,7 @@ fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
     // Extract the trajectory of each ray.
     #[cfg(feature = "visu-dbg")]
     {
-        SingleSimulationResult {
+        SingleSimResult {
             wi: w_i,
             trajectories: stream_data.trajectory,
         }
@@ -627,7 +627,7 @@ fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
             .collect::<Vec<_>>()
             .into_boxed_slice();
         // TODO: number of emitted rays should be checked.
-        SingleSimulationResult {
+        SingleSimResult {
             wi: w_i,
             bounces: stream_data.bounce,
             dirs,

@@ -11,7 +11,7 @@ use crate::{
             emitter::Emitter,
             rtc,
             rtc::{Hit, HitInfo, Ray, MAX_RAY_STREAM_SIZE},
-            SingleSimulationResult,
+            SingleSimResult,
         },
         params::BsdfMeasurementParams,
     },
@@ -44,7 +44,7 @@ pub fn measure_bsdf(
     surf: &MicroSurface,
     mesh: &MicroSurfaceMesh,
     emitter: &Emitter,
-) -> Vec<SingleSimulationResult> {
+) -> Vec<SingleSimResult> {
     // Unify the units of the micro-surface and emitter radius by converting
     // to micrometres.
     let max_bounces = params.emitter.max_bounces;
@@ -206,7 +206,7 @@ pub fn measure_bsdf(
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
 
-            SingleSimulationResult {
+            SingleSimResult {
                 wi: *w_i,
                 #[cfg(feature = "visu-dbg")]
                 trajectories,
