@@ -896,8 +896,10 @@ impl MicroSurfaceMesh {
 
     /// Constructs an embree geometry from the `MicroSurfaceMesh`.
     #[cfg(feature = "embree")]
-    pub fn as_embree_geometry<'g>(&self, device: &Device) -> Geometry<'g> {
-        let mut geom = device.create_geometry(GeometryKind::TRIANGLE).unwrap();
+    pub fn as_embree_geometry<'g>(&'g self, device: &Device) -> Geometry<'g> {
+        let mut geom = device
+            .create_geometry::<'g>(GeometryKind::TRIANGLE)
+            .unwrap();
         geom.set_new_buffer(BufferUsage::VERTEX, 0, Format::FLOAT3, 16, self.num_verts)
             .unwrap()
             .view_mut::<[f32; 4]>()

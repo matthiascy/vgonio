@@ -2,6 +2,7 @@
 
 use approx::RelativeEq;
 use base::math::{Aabb, Vec3, Vec3A};
+use embree::INVALID_ID;
 use std::{
     fmt::{Debug, Formatter},
     ops::{Add, Deref, DerefMut, Mul},
@@ -151,19 +152,41 @@ impl RayTriIsect {
 
 /// Hit information used for avoiding self-intersections.
 #[derive(Debug, Clone, Copy)]
-struct LastHit {
+struct HitInfo {
     /// Geometry ID of the last-hit primitive.
-    pub geom_id: u32,
+    pub last_geom_id: u32,
     /// Primitive ID of the last-hit primitive.
-    pub prim_id: u32,
+    pub last_prim_id: u32,
     /// Normal of the last-hit primitive.
-    pub normal: Vec3A,
+    pub last_normal: Vec3A,
     #[cfg(not(feature = "visu-dbg"))]
-    /// Ray origin of the last hit.
-    pub ray_org: Vec3A,
+    /// Hit point of the last hit; also the origin of the next ray.
+    pub last_pos: Vec3A,
     #[cfg(not(feature = "visu-dbg"))]
-    /// Ray direction of the last hit.
-    pub ray_dir: Vec3A,
+    /// Ray direction of the next ray.
+    pub next_dir: Vec3A,
+    #[cfg(not(feature = "visu-dbg"))]
+    /// Energy coefficient of the last hit used for calculating the energy
+    /// attenuation; in case of a valid hit, this is the cosine of the incident
+    /// angle; in case of self-intersection, this is a negative value.
+    pub factor: f32,
+}
+
+impl HitInfo {
+    /// Creates a new `HitInfo` with invalid values.
+    pub fn new() -> Self {
+        Self {
+            last_geom_id: INVALID_ID,
+            last_prim_id: INVALID_ID,
+            last_normal: Vec3A::ZERO,
+            #[cfg(not(feature = "visu-dbg"))]
+            last_pos: Vec3A::ZERO,
+            #[cfg(not(feature = "visu-dbg"))]
+            next_dir: Vec3A::ZERO,
+            #[cfg(not(feature = "visu-dbg"))]
+            factor: 0.0,
+        }
+    }
 }
 
 /// Records the status of a traced ray.

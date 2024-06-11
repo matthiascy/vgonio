@@ -10,7 +10,7 @@ use crate::{
         bsdf::{
             emitter::Emitter,
             rtc,
-            rtc::{Hit, LastHit, Ray, MAX_RAY_STREAM_SIZE},
+            rtc::{Hit, HitInfo, Ray, MAX_RAY_STREAM_SIZE},
             SingleSimulationResult,
         },
         params::BsdfMeasurementParams,
@@ -21,6 +21,7 @@ use base::{
     math::{IVec2, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles},
     optics::fresnel,
 };
+use jabr::array::DyArr;
 use rayon::prelude::*;
 use std::time::Instant;
 use surf::{MicroSurface, MicroSurfaceMesh};
@@ -31,7 +32,7 @@ use surf::{MicroSurface, MicroSurfaceMesh};
 #[derive(Debug, Clone)]
 pub struct RayStreamData {
     /// The last hit of each ray in the stream.
-    last_hit: Vec<LastHit>,
+    last_hit: Vec<HitInfo>,
     #[cfg(feature = "visu-dbg")]
     /// The trajectory of each ray in the stream. The trajectory is a list of
     trajectory: Vec<RayTrajectory>,
@@ -95,15 +96,8 @@ pub fn measure_bsdf(
 
             let mut stream_data = vec![
                 RayStreamData {
-                    last_hit: vec![
-                        #[cfg(feature = "visu-dbg")]
-                        LastHit {
-                            geom_id: u32::MAX,
-                            prim_id: u32::MAX,
-                            normal: Vec3A::ZERO,
-                        };
-                        stream_size
-                    ],
+                    last_hit: vec![HitInfo::new(); stream_size],
+                    #[cfg(feature = "visu-dbg")]
                     trajectory: vec![
                         RayTrajectory(Vec::with_capacity(max_bounces as usize));
                         stream_size
@@ -152,41 +146,48 @@ pub fn measure_bsdf(
                                 continue;
                             }
 
-                            if hit.prim_id == data.last_hit[i].prim_id {
+                            if hit.prim_id == data.last_hit[i].last_prim_id {
                                 // Hit the same primitive as the last hit.
                                 log::trace!("self-intersection: nudging the ray origin");
-                                let traj_node = data.trajectory[i].last_mut().unwrap();
-                                traj_node.org += data.last_hit[i].normal * 1e-6;
+                                #[cfg(feature = "visu-dbg")]
+                                {
+                                    let traj_node = data.trajectory[i].last_mut().unwrap();
+                                    traj_node.org += data.last_hit[i].last_normal * 1e-6;
+                                }
                                 continue;
                             } else {
                                 // Hit a different primitive.
                                 // Record the cos of the last hit.
-                                let last_node = data.trajectory[i].last_mut().unwrap();
-                                last_node.cos = Some(hit.normal.dot(ray.dir));
-                                let reflected_dir =
-                                    fresnel::reflect(ray.dir.into(), hit.normal.into());
                                 #[cfg(feature = "visu-dbg")]
-                                data.trajectory[i].push(RayTrajectoryNode {
-                                    org: hit.point.into(),
-                                    dir: reflected_dir,
-                                    cos: None,
-                                });
-                                // Update the last hit.
-                                let last_hit = &mut data.last_hit[i];
-                                last_hit.geom_id = hit.geom_id;
-                                last_hit.prim_id = hit.prim_id;
-                                last_hit.normal = hit.normal.into();
+                                {
+                                    let last_node = data.trajectory[i].last_mut().unwrap();
+                                    last_node.cos = Some(hit.normal.dot(ray.dir));
+                                    let reflected_dir =
+                                        fresnel::reflect(ray.dir.into(), hit.normal.into());
+                                    data.trajectory[i].push(RayTrajectoryNode {
+                                        org: hit.point.into(),
+                                        dir: reflected_dir,
+                                        cos: None,
+                                    });
 
-                                // Update the ray and hit.
-                                ray.org = hit.point;
-                                ray.dir = reflected_dir.into();
-                                hit.invalidate();
+                                    // Update the last hit.
+                                    let last_hit = &mut data.last_hit[i];
+                                    last_hit.last_geom_id = hit.geom_id;
+                                    last_hit.last_prim_id = hit.prim_id;
+                                    last_hit.last_normal = hit.normal.into();
+
+                                    // Update the ray and hit.
+                                    ray.org = hit.point;
+                                    ray.dir = reflected_dir.into();
+                                    hit.invalidate();
+                                }
                             }
                         }
 
                         bounces += 1;
                     }
 
+                    #[cfg(feature = "visu-dbg")]
                     log::trace!(
                         "------------ result {}, active rays {}\n {:?} | {:?}\n{:?}",
                         bounces,
@@ -197,6 +198,7 @@ pub fn measure_bsdf(
                     );
                 });
 
+            #[cfg(feature = "visu-dbg")]
             // Extract the trajectory of each ray.
             let trajectories = stream_data
                 .into_iter()
@@ -205,7 +207,14 @@ pub fn measure_bsdf(
 
             SingleSimulationResult {
                 wi: *w_i,
+                #[cfg(feature = "visu-dbg")]
                 trajectories,
+                #[cfg(not(feature = "visu-dbg"))]
+                bounces: Vec::new(),
+                #[cfg(not(feature = "visu-dbg"))]
+                dirs: Vec::new(),
+                #[cfg(not(feature = "visu-dbg"))]
+                energy: DyArr::zeros([1, 1]),
             }
         })
         .collect()

@@ -1271,7 +1271,6 @@ pub struct SingleSimulationResult {
     /// Trajectories of the rays.
     #[cfg(feature = "visu-dbg")]
     pub trajectories: Vec<RayTrajectory>,
-
     /// Number of bounces of the rays.
     #[cfg(not(feature = "visu-dbg"))]
     pub bounces: Vec<u32>,
@@ -1298,10 +1297,12 @@ pub fn measure_bsdf_rt(
     let n_wo = receiver.patches.n_patches();
     let n_spectrum = params.emitter.spectrum.step_count();
     let spectrum = DyArr::from_iterator([-1], params.emitter.spectrum.values());
+    #[cfg(not(feature = "visu-dbg"))]
     let iors_i = cache
         .iors
         .ior_of_spectrum(params.incident_medium, spectrum.as_ref())
         .unwrap();
+    #[cfg(not(feature = "visu-dbg"))]
     let iors_t = cache
         .iors
         .ior_of_spectrum(params.transmitted_medium, spectrum.as_ref())
@@ -1338,9 +1339,16 @@ pub fn measure_bsdf_rt(
                 );
                 match method {
                     #[cfg(feature = "embree")]
-                    RtcMethod::Embree => {
-                        embr::simulate_bsdf_measurement(&emitter, mesh, &iors_i, &iors_t)
-                    }
+                    RtcMethod::Embree => embr::simulate_bsdf_measurement(
+                        #[cfg(not(feature = "visu-dbg"))]
+                        &params,
+                        &emitter,
+                        mesh,
+                        #[cfg(not(feature = "visu-dbg"))]
+                        &iors_i,
+                        #[cfg(not(feature = "visu-dbg"))]
+                        &iors_t,
+                    ),
                     #[cfg(feature = "optix")]
                     RtcMethod::Optix => rtc_simulation_optix(&params, mesh, &emitter, cache),
                     RtcMethod::Grid => rtc_simulation_grid(&params, surf, mesh, &emitter, cache),
@@ -1369,7 +1377,7 @@ pub fn measure_bsdf_rt(
         let mut records = DyArr::splat(Option::<BounceAndEnergy>::None, [n_wi, n_wo, n_spectrum]);
         let mut stats: Box<[MaybeUninit<SingleBsdfMeasurementStats>]> = Box::new_uninit_slice(n_wi);
 
-        for (i, sim) in sim_results.enumerate() {
+        for (i, sim) in sim_results.into_vec().into_iter().enumerate() {
             #[cfg(feature = "visu-dbg")]
             let trjs = trajectories[i].as_mut_ptr();
             #[cfg(feature = "visu-dbg")]
@@ -1444,7 +1452,7 @@ fn rtc_simulation_grid(
     _mesh: &MicroSurfaceMesh,
     _emitter: &Emitter,
     _cache: &RawCache,
-) -> Box<dyn Iterator<Item = SingleSimulationResult>> {
+) -> Box<[SingleSimulationResult]> {
     // for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
     //     if surf.is_none() || mesh.is_none() {
     //         log::debug!("Skipping surface {:?} and its mesh {:?}", surf,
@@ -1475,7 +1483,7 @@ fn rtc_simulation_optix(
     _surf: &MicroSurfaceMesh,
     _emitter: &Emitter,
     _cache: &RawCache,
-) -> Box<dyn Iterator<Item = SingleSimulationResult>> {
+) -> Box<[SingleSimulationResult]> {
     todo!()
 }
 
