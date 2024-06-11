@@ -1,7 +1,4 @@
-use base::{
-    partition::{beckers, SphericalPartition},
-    Isotropy, MeasurementKind,
-};
+use base::{partition::beckers, Isotropy, MeasurementKind};
 use bxdf::{brdf::BxdfFamily, distro::MicrofacetDistroKind};
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;

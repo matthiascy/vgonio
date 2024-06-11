@@ -13,31 +13,37 @@ use crate::{
 use crate::measure::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
 use base::{
     math::{Sph2, Vec3A},
-    optics::{fresnel, ior::Ior},
-    units::Nanometres,
+    optics::fresnel,
 };
 use embree::{
     BufferUsage, Config, Device, Geometry, HitN, IntersectContext, IntersectContextExt,
     IntersectContextFlags, RayHitNp, RayN, RayNp, Scene, SceneFlags, SoAHit, SoARay, ValidMask,
     ValidityN, INVALID_ID,
 };
-use jabr::array::DyArr;
 use rayon::prelude::*;
 use std::sync::Arc;
 #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
 use std::time::Instant;
 use surf::MicroSurfaceMesh;
 
-/// Extra data associated with a ray stream attached to the intersection
-/// context.
-///
-/// The trajectory of each ray is stored in this data structure.
+/// SoA ray stream data for the whole ray stream.
 #[derive(Debug, Clone)]
-pub struct RayStreamData<'a> {
+struct SoARayStreams<'g> {
+    /// The total number of rays in the stream.
+    pub n_ray: usize,
+    /// The number of sub-streams, each with a maximum size of
+    /// [`Self::RAY_STREAM_SIZE`].
+    pub n_stream: usize,
+    /// The number of rays in the last stream in case the total number of rays
+    /// is not a multiple of [`Self::RAY_STREAM_SIZE`].
+    pub last_stream_size: usize,
+    /// The total size of the ray stream in the whole stream; should be equal to
+    /// or greater than `n_ray`.
+    pub total_stream_size: usize,
     /// The micro-surface geometry.
-    pub msurf: Arc<Geometry<'a>>,
+    pub msurf: Arc<Geometry<'g>>,
     /// The last hit for each ray.
-    pub last_hit: Vec<HitInfo>,
+    pub last_hit: Box<[HitInfo]>,
     #[cfg(feature = "visu-dbg")]
     /// The trajectory of each ray. Each ray's trajectory is started with
     /// the initial ray and then followed by the rays after each
@@ -46,30 +52,126 @@ pub struct RayStreamData<'a> {
     pub trajectory: Vec<RayTrajectory>,
     #[cfg(not(feature = "visu-dbg"))]
     /// The refractive indices of the incident medium.
-    pub iors_i: &'a [Ior],
+    pub iors_i: &'g [Ior],
     #[cfg(not(feature = "visu-dbg"))]
     /// The refractive indices of the transmitted medium.
-    pub iors_t: &'a [Ior],
+    pub iors_t: &'g [Ior],
     #[cfg(not(feature = "visu-dbg"))]
     /// Bounce count for each ray.
-    pub bounce: Vec<u32>,
+    pub bounce: Box<[u32]>,
     #[cfg(not(feature = "visu-dbg"))]
     /// Energy of each ray per wavelength. The first dimension is the index
     /// of the ray, and the second dimension is the wavelength index
     /// [id, wl].
-    pub energy: DyArr<f32, 2>,
+    pub energy: Box<[f32]>,
 }
 
-use crate::{app::cache::RawCache, measure::params::BsdfMeasurementParams};
+unsafe impl Send for SoARayStreams<'_> {}
+unsafe impl Sync for SoARayStreams<'_> {}
 
-unsafe impl Send for RayStreamData<'_> {}
-unsafe impl Sync for RayStreamData<'_> {}
+impl<'g> SoARayStreams<'g> {
+    /// Maximum number of rays that can be traced in a single stream.
+    pub const RAY_STREAM_SIZE: usize = 1024;
 
-type QueryContext<'a, 'b> = IntersectContextExt<&'b mut RayStreamData<'a>>;
+    /// Create a new instance of the ray stream data.
+    pub fn new(msurf: Arc<Geometry<'g>>, n_ray: usize, max_bounces: u32) -> Self {
+        let n_stream = compute_num_of_streams(n_ray);
+        let last_stream_size = n_ray % Self::RAY_STREAM_SIZE;
+        let total_stream_size = n_stream * Self::RAY_STREAM_SIZE;
+        let last_hit = vec![HitInfo::new(); n_ray].into_boxed_slice();
+        let trajectory = vec![RayTrajectory(Vec::with_capacity(max_bounces as usize / 2)); n_ray];
+        Self {
+            n_ray,
+            n_stream,
+            last_stream_size,
+            total_stream_size,
+            msurf,
+            last_hit,
+            trajectory,
+        }
+    }
+
+    /// Returns a mutable iterator over the ray streams.
+    pub fn streams_mut(&mut self) -> SoARayStreamsIterMut<'g> {
+        SoARayStreamsIterMut {
+            data: self as *mut Self,
+            stream_idx: 0,
+        }
+    }
+}
+
+struct SoARayStreamsIterMut<'g> {
+    data: *mut SoARayStreams<'g>,
+    stream_idx: usize,
+}
+
+unsafe impl Send for SoARayStreamsIterMut<'_> {}
+
+struct SoARayStreamMut<'a> {
+    idx: usize,
+    size: usize,
+    msurf: Arc<Geometry<'a>>,
+    last_hit: &'a mut [HitInfo],
+    #[cfg(feature = "visu-dbg")]
+    trajectory: &'a mut [RayTrajectory],
+    #[cfg(not(feature = "visu-dbg"))]
+    iors_i: &'a [Ior],
+    #[cfg(not(feature = "visu-dbg"))]
+    iors_t: &'a [Ior],
+    #[cfg(not(feature = "visu-dbg"))]
+    bounces: &'a mut [u32],
+    #[cfg(not(feature = "visu-dbg"))]
+    energy: &'a mut [f32],
+}
+
+unsafe impl Send for SoARayStreamMut<'_> {}
+
+impl<'a> Iterator for SoARayStreamsIterMut<'a> {
+    type Item = SoARayStreamMut<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let data = unsafe { &mut *self.data };
+        if self.stream_idx < data.n_stream {
+            let stream_size = if self.stream_idx == data.n_stream - 1 {
+                data.last_stream_size
+            } else {
+                SoARayStreams::RAY_STREAM_SIZE
+            };
+            let data_range = self.stream_idx * SoARayStreams::RAY_STREAM_SIZE
+                ..self.stream_idx * SoARayStreams::RAY_STREAM_SIZE + stream_size;
+            let stream = SoARayStreamMut {
+                idx: self.stream_idx,
+                size: stream_size,
+                msurf: data.msurf.clone(),
+                last_hit: &mut data.last_hit[data_range.clone()],
+                #[cfg(feature = "visu-dbg")]
+                trajectory: &mut data.trajectory[data_range],
+                #[cfg(not(feature = "visu-dbg"))]
+                iors_i: data.iors_i,
+                #[cfg(not(feature = "visu-dbg"))]
+                iors_t: data.iors_t,
+                #[cfg(not(feature = "visu-dbg"))]
+                bounces: &mut data.bounce[data_range.clone()],
+                #[cfg(not(feature = "visu-dbg"))]
+                energy: &mut data.energy[data_range.clone()],
+            };
+            self.stream_idx += 1;
+            Some(stream)
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> ExactSizeIterator for SoARayStreamsIterMut<'a> {
+    fn len(&self) -> usize { unsafe { &*self.data }.n_stream }
+}
+
+type QueryContext<'a> = IntersectContextExt<SoARayStreamMut<'a>>;
 
 fn intersect_filter_stream<'a>(
-    mut rays: RayN<'a>,
-    mut hits: HitN<'a>,
+    rays: RayN<'a>,
+    hits: HitN<'a>,
     mut valid: ValidityN,
     ctx: &mut QueryContext,
     _user_data: Option<&mut ()>,
@@ -289,63 +391,57 @@ fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
         w_i,
         elapsed.as_secs_f64(),
     );
-    let num_streams = compute_num_of_streams(num_emitted_rays);
-    // In case the number of rays is less than one stream, we need to
-    // adjust the stream size to match the number of rays.
-    let stream_size = if num_streams == 1 {
-        num_emitted_rays
-    } else {
-        MAX_RAY_STREAM_SIZE
-    };
-    let last_stream_size = num_emitted_rays % MAX_RAY_STREAM_SIZE;
+
     #[cfg(not(feature = "visu-dbg"))]
     let n_spectrum = iors_t.len();
 
-    // TODO: use SOA for the stream data.
-    let mut stream_data = {
-        let mut data = Box::new_uninit_slice(num_streams);
-        for i in 0..num_streams {
-            let stream_size = if i == num_streams - 1 {
-                last_stream_size
-            } else {
-                stream_size
-            };
-            data[i].write(RayStreamData {
-                msurf: geometry.clone(),
-                last_hit: vec![HitInfo::new(); stream_size],
-                #[cfg(not(feature = "visu-dbg"))]
-                iors_i,
-                #[cfg(not(feature = "visu-dbg"))]
-                iors_t,
-                #[cfg(not(feature = "visu-dbg"))]
-                bounce: vec![0; stream_size],
-                #[cfg(not(feature = "visu-dbg"))]
-                energy: DyArr::ones([stream_size, n_spectrum]),
-                #[cfg(feature = "visu-dbg")]
-                trajectory: vec![
-                    RayTrajectory(Vec::with_capacity(max_bounces as usize));
-                    stream_size
-                ],
-            });
-        }
-        unsafe { data.assume_init().into_vec() }
-    };
-
+    // Allocate the stream data for all the rays.
+    let mut stream_data = SoARayStreams::new(geometry.clone(), num_emitted_rays, max_bounces);
     #[cfg(all(debug_assertions))]
     println!(
         "        {} Trace {} rays ({} streams rays)",
         ansi::YELLOW_GT,
         emitted_rays.len(),
-        stream_size * num_streams
+        stream_data.total_stream_size
     );
 
+    // // TODO: use SOA for the stream data.
+    // let mut stream_data = {
+    //     let mut data = Box::new_uninit_slice(num_streams);
+    //     for i in 0..num_streams {
+    //         let stream_size = if i == num_streams - 1 {
+    //             last_stream_size
+    //         } else {
+    //             stream_size
+    //         };
+    //         data[i].write(RayStreamData {
+    //             msurf: geometry.clone(),
+    //             last_hit: vec![HitInfo::new(); stream_size],
+    //             #[cfg(not(feature = "visu-dbg"))]
+    //             iors_i,
+    //             #[cfg(not(feature = "visu-dbg"))]
+    //             iors_t,
+    //             #[cfg(not(feature = "visu-dbg"))]
+    //             bounce: vec![0; stream_size],
+    //             #[cfg(not(feature = "visu-dbg"))]
+    //             energy: DyArr::ones([stream_size, n_spectrum]),
+    //             #[cfg(feature = "visu-dbg")]
+    //             trajectory: vec![
+    //                 RayTrajectory(Vec::with_capacity(max_bounces as usize));
+    //                 stream_size
+    //             ],
+    //         });
+    //     }
+    //     unsafe { data.assume_init().into_vec() }
+    // };
+
     emitted_rays
-        .par_chunks(MAX_RAY_STREAM_SIZE)
-        .zip(stream_data.par_iter_mut())
-        .enumerate()
-        .for_each(|(_stream_idx, (rays, data))| {
+        .chunks(MAX_RAY_STREAM_SIZE)
+        .zip(stream_data.streams_mut())
+        .par_bridge()
+        .for_each(|(rays, data)| {
             #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-            log::trace!("stream {} of {}", _stream_idx, num_streams);
+            log::trace!("stream {} of {}", data.idx, stream_data.n_stream);
 
             // Populate embree ray stream with generated rays.
             let chunk_size = rays.len();
@@ -366,8 +462,8 @@ fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
                         dir: ray.dir.into(),
                         cos: None,
                     });
+                    data.trajectory[i].shrink_to_fit();
                 }
-                data.trajectory.shrink_to_fit();
             }
 
             // Trace primary rays with coherent context
@@ -472,13 +568,9 @@ fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
     // Extract the trajectory of each ray.
     #[cfg(feature = "visu-dbg")]
     {
-        let trajectories = stream_data
-            .into_iter()
-            .flat_map(|d| d.trajectory.to_vec())
-            .collect::<Vec<_>>();
         SingleSimulationResult {
             wi: w_i,
-            trajectories,
+            trajectories: stream_data.trajectory,
         }
     }
 
