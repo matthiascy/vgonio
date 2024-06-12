@@ -438,36 +438,6 @@ fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
         stream_data.total_stream_size
     );
 
-    // // TODO: use SOA for the stream data.
-    // let mut stream_data = {
-    //     let mut data = Box::new_uninit_slice(num_streams);
-    //     for i in 0..num_streams {
-    //         let stream_size = if i == num_streams - 1 {
-    //             last_stream_size
-    //         } else {
-    //             stream_size
-    //         };
-    //         data[i].write(RayStreamData {
-    //             msurf: geometry.clone(),
-    //             last_hit: vec![HitInfo::new(); stream_size],
-    //             #[cfg(not(feature = "visu-dbg"))]
-    //             iors_i,
-    //             #[cfg(not(feature = "visu-dbg"))]
-    //             iors_t,
-    //             #[cfg(not(feature = "visu-dbg"))]
-    //             bounce: vec![0; stream_size],
-    //             #[cfg(not(feature = "visu-dbg"))]
-    //             energy: DyArr::ones([stream_size, n_spectrum]),
-    //             #[cfg(feature = "visu-dbg")]
-    //             trajectory: vec![
-    //                 RayTrajectory(Vec::with_capacity(max_bounces as usize));
-    //                 stream_size
-    //             ],
-    //         });
-    //     }
-    //     unsafe { data.assume_init().into_vec() }
-    // };
-
     emitted_rays
         .chunks(MAX_RAY_STREAM_SIZE)
         .zip(stream_data.streams_mut())

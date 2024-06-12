@@ -1555,14 +1555,15 @@ pub fn measure_bsdf_rt(
             // Collect the tracing data into raw bsdf snapshots.
             receiver.collect(
                 sim,
+                stats[i].as_mut_ptr(),
+                recs,
+                orbit_radius,
+                #[cfg(feature = "visu-dbg")]
+                params.fresnel,
                 #[cfg(feature = "visu-dbg")]
                 trjs,
                 #[cfg(feature = "visu-dbg")]
                 hpts,
-                stats[i].as_mut_ptr(),
-                recs,
-                orbit_radius,
-                params.fresnel,
             );
 
             #[cfg(feature = "bench")]

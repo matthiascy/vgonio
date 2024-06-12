@@ -148,7 +148,7 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
 impl<T, const N: usize, const L: MemLayout> DyArr<MaybeUninit<T>, N, L> {
     /// Assumes that the array is fully initialised and returns a new array with
     /// the same shape but with the data assumed to be initialised.
-    unsafe fn assume_init(self) -> DyArr<T, N, L> {
+    pub unsafe fn assume_init(self) -> DyArr<T, N, L> {
         let mut shape = [0; N];
         shape.copy_from_slice(self.0.shape());
         let ArrCore { data, .. } = self.0;

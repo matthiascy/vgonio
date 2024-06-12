@@ -270,7 +270,7 @@ impl ClausenBrdf {
         let n_wi = wi_wo_pairs.len();
         let n_wo = wi_wo_pairs[0].1.len();
 
-        #[cfg(any(debug_assertions, verbose_debug))]
+        #[cfg(debug_assertions)]
         log::debug!(
             "Load Clausen BRDF with {} wavelengths, {} incident directions, {} outgoing directions",
             n_spectrum,
@@ -298,7 +298,7 @@ impl ClausenBrdf {
         });
 
         debug_assert_eq!(params.incoming.len(), n_wi, "Number of incident directions");
-        #[cfg(any(debug_assertions, verbose_debug))]
+        #[cfg(debug_assertions)]
         log::debug!(
             "Load Clausen BRDF with {} wavelengths, parameters: {:?}",
             n_spectrum,

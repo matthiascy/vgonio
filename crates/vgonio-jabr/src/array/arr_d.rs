@@ -85,7 +85,6 @@ where
     fn index(&self, index: [usize; N]) -> &Self::Output { &self.0[index] }
 }
 
-use crate::array::shape::s;
 /// A macro to create a fixed-size array on the heap with type level fixed
 /// shape.
 pub macro darr($($n:expr),+ $(,)*; [$($x:expr),* $(,)*]) {{

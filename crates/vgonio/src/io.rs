@@ -728,36 +728,26 @@ pub mod vgmo {
         }
     }
 
-    pub trait EndianRead: Sized {
+    pub trait LittleEndianRead: Sized {
         fn read_le_bytes(src: &[u8]) -> Self;
-        fn read_be_bytes(src: &[u8]) -> Self;
     }
 
-    pub trait EndianWrite: Sized {
+    pub trait LittleEndianWrite: Sized {
         fn write_le_bytes(&self, dst: &mut [u8]);
-        fn write_be_bytes(&self, dst: &mut [u8]);
     }
 
     macro_rules! impl_endian_read_write {
         ($($t:ty),*) => {
             $(
-                impl EndianRead for $t {
+                impl LittleEndianRead for $t {
                     fn read_le_bytes(src: &[u8]) -> Self {
                         Self::from_le_bytes(src.try_into().expect("Invalid byte slice, expected 4 bytes"))
                     }
-
-                    fn read_be_bytes(src: &[u8]) -> Self {
-                        Self::from_be_bytes(src.try_into().expect("Invalid byte slice, expected 4 bytes"))
-                    }
                 }
 
-                impl EndianWrite for $t {
+                impl LittleEndianWrite for $t {
                     fn write_le_bytes(&self, dst: &mut [u8]) {
                         dst.copy_from_slice(&self.to_le_bytes())
-                    }
-
-                    fn write_be_bytes(&self, dst: &mut [u8]) {
-                        dst.copy_from_slice(&self.to_be_bytes())
                     }
                 }
             )*
@@ -768,7 +758,7 @@ pub mod vgmo {
 
     /// Writes the given slice to the buffer in little-endian format.
     #[track_caller]
-    pub fn write_slice_to_buf<T: EndianWrite>(src: &[T], dst: &mut [u8]) {
+    pub fn write_slice_to_buf<T: LittleEndianWrite>(src: &[T], dst: &mut [u8]) {
         let size: usize = mem::size_of::<T>();
         debug_assert!(
             dst.len() >= src.len() * size,
@@ -789,7 +779,7 @@ pub mod vgmo {
     /// * `len` - The number of elements to read.
     /// * `dst` - The destination slice to write to.
     #[track_caller]
-    pub fn read_slice_from_buf<T: EndianRead>(src: &[u8], dst: &mut [T], len: usize) {
+    pub fn read_slice_from_buf<T: LittleEndianRead>(src: &[u8], dst: &mut [T], len: usize) {
         let size: usize = mem::size_of::<T>();
         assert_eq!(
             src.len(),

@@ -20,7 +20,7 @@ where
     [(); S::N_ELEMS]:;
 
 /// One-dimensional array on the stack.
-type Arr<T, const N: usize, const L: MemLayout = C> = Array<T, s![N], L>;
+pub type Arr<T, const N: usize, const L: MemLayout = C> = Array<T, s![N], L>;
 
 impl<T, S, const L: MemLayout> Array<T, S, L>
 where

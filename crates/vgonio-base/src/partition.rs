@@ -5,7 +5,7 @@ use crate::{
     units::{rad, Radians, Rads, SolidAngle},
     utils,
 };
-use num_traits::{Euclid, ToPrimitive};
+use num_traits::Euclid;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 

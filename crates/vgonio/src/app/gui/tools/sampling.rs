@@ -141,7 +141,7 @@ impl Tool for SamplingInspector {
     fn as_any(&self) -> &dyn std::any::Any { self }
 }
 
-struct Vertex([f32; 3]);
+struct Vertex(#[allow(dead_code)] [f32; 3]);
 
 impl SamplingInspector {
     pub fn new(

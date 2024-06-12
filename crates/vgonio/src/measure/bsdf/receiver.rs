@@ -11,15 +11,13 @@ use crate::{
 };
 use base::{
     math::{Sph2, Vec3, Vec3A},
-    optics::{fresnel, ior::Ior},
+    optics::ior::Ior,
     partition::{PartitionScheme, SphericalDomain, SphericalPartition},
     range::RangeByStepSizeInclusive,
     units::{Nanometres, Radians},
 };
-#[cfg(feature = "visu-dbg")]
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::sync::{atomic, atomic::AtomicU32, RwLock};
+use std::sync::{atomic, atomic::AtomicU32};
 
 /// Description of a receiver collecting the data.
 ///
@@ -105,6 +103,7 @@ pub struct Receiver {
 /// Outgoing ray of a trajectory [`RayTrajectory`].
 ///
 /// Used during the data collection process.
+#[cfg(feature = "visu-dbg")]
 #[derive(Debug, Clone)]
 struct OutgoingRay {
     /// Index of the ray in the trajectory.
@@ -172,12 +171,12 @@ impl Receiver {
     pub fn collect(
         &self,
         result: SingleSimResult,
-        #[cfg(feature = "visu-dbg")] out_trajs: *mut Box<[RayTrajectory]>,
-        #[cfg(feature = "visu-dbg")] out_hpnts: *mut Vec<Vec3>,
         out_stats: *mut SingleBsdfMeasurementStats,
         records: &mut [Option<BounceAndEnergy>],
         orbit_radius: f32,
-        fresnel: bool,
+        #[cfg(feature = "visu-dbg")] fresnel: bool,
+        #[cfg(feature = "visu-dbg")] out_trajs: *mut Box<[RayTrajectory]>,
+        #[cfg(feature = "visu-dbg")] out_hpnts: *mut Vec<Vec3>,
     ) {
         debug_assert!(
             records.len() == self.patches.n_patches() * self.spectrum.len(),
@@ -192,8 +191,11 @@ impl Receiver {
 
         #[cfg(feature = "visu-dbg")]
         {
+            use base::optics::fresnel;
+            use rayon::prelude::*;
+
             log::debug!(
-                "SingleSimulationResult at {}, {} rays",
+                "SingleSimResult at {}, {} rays",
                 result.wi,
                 result.trajectories.len(),
             );
@@ -210,10 +212,8 @@ impl Receiver {
                 n_reflected.shrink_to_fit();
                 n_escaped.shrink_to_fit();
 
-                #[cfg(feature = "visu-dbg")]
                 log::debug!("Initial trajectories count: {}", result.trajectories.len());
 
-                #[cfg(feature = "visu-dbg")]
                 // Convert the last rays of the trajectories into a vector located
                 // at the centre of the collector.
                 let dirs: Box<[OutgoingRay]> = result
@@ -351,14 +351,10 @@ impl Receiver {
             log::info!("Collector::collect: dirs: {} ms", dirs_proc_time);
 
             // Compute the vertex positions of the outgoing rays.
-            #[cfg(feature = "visu-dbg")]
             let mut hit_points = vec![Vec3::ZERO; dirs.len()];
 
             for (i, dir) in dirs.iter().enumerate() {
-                #[cfg(feature = "visu-dbg")]
-                {
-                    hit_points[i] = (dir.ray_dir * orbit_radius).into();
-                }
+                hit_points[i] = (dir.ray_dir * orbit_radius).into();
                 let samples_offset = dir.patch_idx * n_spectrum;
                 let patch_samples = &mut records[samples_offset..samples_offset + n_spectrum];
                 let bounce_idx = dir.bounce as usize - 1;
@@ -410,6 +406,8 @@ impl Receiver {
 
         #[cfg(not(feature = "visu-dbg"))]
         {
+            use std::sync::RwLock;
+
             debug_assert_eq!(
                 result.bounces.len(),
                 result.dirs.len(),
@@ -438,7 +436,7 @@ impl Receiver {
                 n_reflected.push(AtomicU32::new(0));
                 n_escaped.push(AtomicU32::new(0));
             }
-            use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
+            use rayon::iter::{ParallelBridge, ParallelIterator};
             // Create the statistics of the BSDF measurement for the current incident point.
             let mut stats_rw_lock = RwLock::new(SingleBsdfMeasurementStats::new(
                 n_spectrum,
@@ -539,6 +537,9 @@ impl Receiver {
                 stats.n_reflected_mut()[i] = reflected;
                 stats.n_escaped_mut()[i] = escaped;
             }
+
+            #[cfg(all(debug_assertions))]
+            log::debug!("{:?}", stats);
 
             unsafe {
                 out_stats.write(stats);

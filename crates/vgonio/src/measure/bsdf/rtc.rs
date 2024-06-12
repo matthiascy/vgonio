@@ -4,8 +4,14 @@ use approx::RelativeEq;
 use base::math::{Aabb, Vec3, Vec3A};
 use embree::INVALID_ID;
 use std::{
-    fmt::{Debug, Formatter},
-    ops::{Add, Deref, DerefMut, Mul},
+    fmt::Debug,
+    ops::{Add, Mul},
+};
+
+#[cfg(feature = "visu-dbg")]
+use std::{
+    fmt::Formatter,
+    ops::{Deref, DerefMut},
 };
 
 #[cfg(feature = "embree")]
