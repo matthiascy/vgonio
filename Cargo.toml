@@ -35,12 +35,11 @@ egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "o
 egui_plot = "~0.25"
 egui-toast = "~0.11"
 env_logger = "~0.10"
-#embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own" }
-embree = { path = "../embree-rs" }
+embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own" }
 exr = { git = "https://github.com/matthiascy/exr.git", branch = "main" }
 flate2 = { version = "~1.0", features = ["zlib-ng-compat"], default-features = false }
 futures-intrusive = "0.5"
-glam = { version = "~0.24", features = ["serde", "bytemuck"] }
+glam = { version = "~0.28", features = ["serde", "bytemuck"] }
 image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
 levenberg-marquardt = "0.13"
 nalgebra = "0.32"

@@ -26,8 +26,6 @@ use embree::{
 };
 use rayon::prelude::*;
 use std::sync::Arc;
-#[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-use std::time::Instant;
 use surf::MicroSurfaceMesh;
 
 /// SoA ray stream data for the whole ray stream.
@@ -332,7 +330,7 @@ pub fn simulate_bsdf_measurement<'a, 'b: 'a>(
     mesh: &'a MicroSurfaceMesh,
     #[cfg(not(feature = "visu-dbg"))] iors_i: &'b [Ior],
     #[cfg(not(feature = "visu-dbg"))] iors_t: &'b [Ior],
-) -> Box<[SingleSimResult]> {
+) -> Box<dyn Iterator<Item = SingleSimResult> + 'a> {
     #[cfg(feature = "bench")]
     let t = std::time::Instant::now();
 
@@ -354,41 +352,34 @@ pub fn simulate_bsdf_measurement<'a, 'b: 'a>(
         log::debug!("embree scene creation took {} secs.", elapsed.as_secs_f64());
     }
 
-    let mut results = Box::new_uninit_slice(emitter.measpts.len());
+    Box::new(emitter.measpts.iter().map(move |w_i| {
+        #[cfg(feature = "bench")]
+        let t = std::time::Instant::now();
 
-    for (i, w_i) in emitter.measpts.iter().enumerate() {
-        #[cfg(feature = "visu-dbg")]
-        results[i].write(simulate_bsdf_measurement_single_point(
+        let result = simulate_bsdf_measurement_single_point(
             *w_i,
             emitter,
             mesh,
             Arc::new(geometry.clone()),
             &scene,
-        ));
-
-        #[cfg(not(feature = "visu-dbg"))]
-        results[i].write(simulate_bsdf_measurement_single_point(
-            *w_i,
-            emitter,
-            mesh,
-            Arc::new(geometry.clone()),
-            &scene,
+            #[cfg(not(feature = "visu-dbg"))]
             params.fresnel,
+            #[cfg(not(feature = "visu-dbg"))]
             iors_i,
+            #[cfg(not(feature = "visu-dbg"))]
             iors_t,
-        ));
-    }
-
-    #[cfg(feature = "bench")]
-    {
-        let elapsed = t.elapsed();
-        log::debug!(
-            "bsdf measurement simulation (one snapshot) took {} secs.",
-            elapsed.as_secs_f64()
         );
-    }
 
-    unsafe { results.assume_init() }
+        #[cfg(feature = "bench")]
+        {
+            let elapsed = t.elapsed();
+            log::debug!(
+                "bsdf measurement simulation (one snapshot) took {} secs.",
+                elapsed.as_secs_f64()
+            );
+        }
+        result
+    }))
 }
 
 /// Simulates the BSDF measurement for a single incident direction (point).
@@ -409,7 +400,7 @@ fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
         w_i
     );
     #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
-    let t = Instant::now();
+    let t = std::time::Instant::now();
     let emitted_rays = emitter.emit_rays(w_i, mesh);
     let num_emitted_rays = emitted_rays.len();
     #[cfg(all(debug_assertions, feature = "verbose-dbg"))]

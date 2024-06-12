@@ -1484,10 +1484,6 @@ pub fn measure_bsdf_rt(
             surf.path.as_ref().unwrap().display()
         );
 
-        // TODO: do not wait until all the simulation results are collected to
-        // start processing them. Instead, process them as soon as they are
-        // available.
-
         let sim_results = match sim_kind {
             SimulationKind::GeomOptics(method) => {
                 println!(
@@ -1536,7 +1532,7 @@ pub fn measure_bsdf_rt(
         let mut records = DyArr::splat(Option::<BounceAndEnergy>::None, [n_wi, n_wo, n_spectrum]);
         let mut stats: Box<[MaybeUninit<SingleBsdfMeasurementStats>]> = Box::new_uninit_slice(n_wi);
 
-        for (i, sim) in sim_results.into_vec().into_iter().enumerate() {
+        for (i, sim) in sim_results.into_iter().enumerate() {
             #[cfg(feature = "visu-dbg")]
             let trjs = trajectories[i].as_mut_ptr();
             #[cfg(feature = "visu-dbg")]
@@ -1605,13 +1601,13 @@ pub fn measure_bsdf_rt(
 }
 
 /// Brdf measurement of a microfacet surface using the grid ray tracing.
-fn rtc_simulation_grid(
-    _params: &BsdfMeasurementParams,
-    _surf: &MicroSurface,
-    _mesh: &MicroSurfaceMesh,
-    _emitter: &Emitter,
-    _cache: &RawCache,
-) -> Box<[SingleSimResult]> {
+fn rtc_simulation_grid<'a>(
+    _params: &'a BsdfMeasurementParams,
+    _surf: &'a MicroSurface,
+    _mesh: &'a MicroSurfaceMesh,
+    _emitter: &'a Emitter,
+    _cache: &'a RawCache,
+) -> Box<dyn Iterator<Item = SingleSimResult>> {
     // for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
     //     if surf.is_none() || mesh.is_none() {
     //         log::debug!("Skipping surface {:?} and its mesh {:?}", surf,
@@ -1632,17 +1628,17 @@ fn rtc_simulation_grid(
     //     //     t.elapsed().as_secs_f32()
     //     // );
     // }
-    todo!("Grid ray tracing is not yet implemented");
+    todo!("Grid ray tracing is not yet implemented")
 }
 
 /// Brdf measurement of a microfacet surface using the OptiX ray tracing.
 #[cfg(feature = "optix")]
-fn rtc_simulation_optix(
-    _params: &BsdfMeasurementParams,
-    _surf: &MicroSurfaceMesh,
-    _emitter: &Emitter,
-    _cache: &RawCache,
-) -> Box<[SingleSimResult]> {
+fn rtc_simulation_optix<'a>(
+    _params: &'a BsdfMeasurementParams,
+    _surf: &'a MicroSurfaceMesh,
+    _emitter: &'a Emitter,
+    _cache: &'a RawCache,
+) -> Box<dyn Iterator<Item = SingleSimResult>> {
     todo!()
 }
 

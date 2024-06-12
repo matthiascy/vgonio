@@ -1012,7 +1012,7 @@ version = "0.10.0"
 source = "git+https://github.com/matthiascy/egui-gizmo.git?branch=own#b830a12e6e6bfe79aa538018cea8728843a575e6"
 dependencies = [
  "egui 0.23.0",
- "glam",
+ "glam 0.24.2",
 ]
 
 [[package]]
@@ -1115,6 +1115,7 @@ dependencies = [
 [[package]]
 name = "embree"
 version = "0.3.7"
+source = "git+https://github.com/matthiascy/embree-rs.git?branch=own#be36911a21ce1d64207e6ecc282a47559aead986"
 
 [[package]]
 name = "endi"
@@ -1525,6 +1526,12 @@ name = "glam"
 version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5418c17512bdf42730f9032c74e1ae39afc408745ebb2acf72fbc4691c17945"
+
+[[package]]
+name = "glam"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "779ae4bf7e8421cf91c0b3b64e7e8b40b862fba4d393f59150042de7c4965a94"
 dependencies = [
  "bytemuck",
  "serde",
@@ -3689,7 +3696,7 @@ dependencies = [
  "csv",
  "exr",
  "flate2",
- "glam",
+ "glam 0.28.0",
  "log",
  "num-traits",
  "paste",
@@ -3748,7 +3755,7 @@ dependencies = [
  "clap",
  "embree",
  "flate2",
- "glam",
+ "glam 0.28.0",
  "log",
  "rand",
  "rayon",
