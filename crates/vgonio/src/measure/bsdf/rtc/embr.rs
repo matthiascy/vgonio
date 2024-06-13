@@ -298,7 +298,8 @@ fn intersect_filter_stream<'a>(
                 {
                     hit_info.last_pos = point;
                     hit_info.next_dir = new_dir;
-                    hit_info.factor = cos_i;
+                    // The incident direction is oriented towards the surface.
+                    hit_info.factor = -cos_i;
                 }
                 hit_info.last_geom_id = hits.geom_id(i);
                 hit_info.last_prim_id = prim_id;
@@ -522,16 +523,17 @@ fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
                         // Reset the hit information.
                         ray_hit_n.hit.set_geom_id(i, INVALID_ID);
                         ray_hit_n.hit.set_prim_id(i, INVALID_ID);
-                        ctx.ext.bounce[i] += 1;
 
-                        // Only update the energy if we are not dealing with the
-                        // self-intersection case.
+                        // Only update the energy and the bounce count if we are not dealing with
+                        // the self-intersection case.
                         if hit_info.factor >= 0.0 {
+                            ctx.ext.bounce[i] += 1;
                             let cos_i_abs = hit_info.factor.abs();
                             if fresnel {
                                 for k in 0..n_spectrum {
                                     ctx.ext.energy[i * n_spectrum + k] *=
-                                        fresnel::reflectance(cos_i_abs, &iors_i[k], &iors_t[k]);
+                                        fresnel::reflectance(cos_i_abs, &iors_i[k], &iors_t[k])
+                                            * cos_i_abs;
                                 }
                             } else {
                                 for k in 0..n_spectrum {

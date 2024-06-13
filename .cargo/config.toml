@@ -5,6 +5,8 @@ bdbg = "build --features debug,embree,fitting,verbose-dbg"
 r = "run"
 ref = "build --features embree,fitting"
 rdbg = "build --features debug,embree,fitting,verbose-dbg"
+opt = "build --features embree,fitting"
+vis = "build --features embree,visu-dbg"
 
 [build]
 rustc-wrapper = "sccache"

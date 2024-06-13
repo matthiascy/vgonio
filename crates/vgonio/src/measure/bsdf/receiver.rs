@@ -425,7 +425,7 @@ impl Receiver {
                 result.dirs.len()
             );
 
-            let mut n_bounce = result.bounces.iter().max().copied().unwrap();
+            let n_bounce = result.bounces.iter().max().copied().unwrap();
             assert!(n_bounce > 0, "no bounces");
 
             let n_received = AtomicU32::new(0);
@@ -438,11 +438,11 @@ impl Receiver {
             }
             use rayon::iter::{ParallelBridge, ParallelIterator};
             // Create the statistics of the BSDF measurement for the current incident point.
-            let mut stats_rw_lock = RwLock::new(SingleBsdfMeasurementStats::new(
+            let stats_rw_lock = RwLock::new(SingleBsdfMeasurementStats::new(
                 n_spectrum,
                 n_bounce as usize,
             ));
-            let mut records_rw_lock = RwLock::new(records);
+            let records_rw_lock = RwLock::new(records);
             result
                 .iter_ray_chunks(CHUNK_SIZE)
                 .par_bridge()
@@ -485,6 +485,7 @@ impl Receiver {
                         let patch_idx = patch_idx.unwrap();
                         let samples_offset = patch_idx * n_spectrum;
                         let mut records = records_rw_lock.write().unwrap();
+
                         let patch_samples =
                             &mut records[samples_offset..samples_offset + n_spectrum];
                         let bounce_idx = *ray.bounce as usize - 1;
@@ -493,7 +494,7 @@ impl Receiver {
                             .iter()
                             .enumerate()
                             .zip(patch_samples.iter_mut())
-                            .for_each(|((j, e), patch)| {
+                            .for_each(|((k, e), patch)| {
                                 if e <= &0.0 {
                                     return;
                                 }
@@ -507,11 +508,11 @@ impl Receiver {
                                 mut_patch.n_ray_per_bounce[0] += 1;
                                 mut_patch.energy_per_bounce[bounce_idx + 1] += e;
                                 mut_patch.n_ray_per_bounce[bounce_idx + 1] += 1;
-                                mut_stats.n_ray_per_bounce[j * n_bounce as usize + bounce_idx] += 1;
-                                mut_stats.n_captured_mut()[j] += 1;
-                                mut_stats.energy_per_bounce[j * n_bounce as usize + bounce_idx] +=
+                                mut_stats.n_ray_per_bounce[k * n_bounce as usize + bounce_idx] += 1;
+                                mut_stats.n_captured_mut()[k] += 1;
+                                mut_stats.energy_per_bounce[k * n_bounce as usize + bounce_idx] +=
                                     e;
-                                mut_stats.e_captured[j] += e;
+                                mut_stats.e_captured[k] += e;
                             })
                     }
 

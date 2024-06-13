@@ -1282,12 +1282,14 @@ pub struct SingleSimResult {
     pub energy: DyArr<f32, 2>,
 }
 
+/// Iterator over the rays in the simulation result.
 #[cfg(not(feature = "visu-dbg"))]
 pub struct SingleSimResultRays<'a> {
     idx: usize,
     result: &'a SingleSimResult,
 }
 
+/// Single ray information in the simulation result.
 #[cfg(not(feature = "visu-dbg"))]
 pub struct SingleSimResultRay<'a> {
     pub bounce: &'a u32,
@@ -1356,6 +1358,9 @@ impl<'a> ExactSizeIterator for SingleSimResultRays<'a> {
     fn len(&self) -> usize { self.result.bounces.len() }
 }
 
+/// Chunks of rays in the simulation result.
+///
+/// This is useful for processing the rays in parallel.
 #[cfg(not(feature = "visu-dbg"))]
 pub struct SingleSimResultRayChunks<'a> {
     chunk_idx: usize,
@@ -1393,6 +1398,7 @@ impl<'a> Iterator for SingleSimResultRayChunks<'a> {
     }
 }
 
+/// A chunk of rays in the simulation result.
 #[cfg(not(feature = "visu-dbg"))]
 pub struct SingleSimResultRayChunk<'a> {
     /// Number of rays in the chunk.
