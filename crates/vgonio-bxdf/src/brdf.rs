@@ -55,9 +55,9 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Arguments
     ///
-    /// * `wi` - The incident direction (normalized).
-    /// * `wo` - The outgoing direction (normalized).
-    fn eval(&self, wi: &Vec3, wo: &Vec3) -> f64;
+    /// * `i` - The incident direction (normalized).
+    /// * `o` - The outgoing direction (normalized).
+    fn eval(&self, i: &Vec3, o: &Vec3) -> f64;
 
     #[rustfmt::skip]
     /// Evaluates the BRDF ($f_r$) with the Rusinkiewicz parameterization.
@@ -71,9 +71,9 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Arguments
     ///
-    /// * `wh` - The half vector.
-    /// * `wd` - The difference vector.
-    fn eval_hd(&self, wh: &Vec3, wd: &Vec3) -> f64;
+    /// * `h` - The half vector.
+    /// * `d` - The difference vector.
+    fn eval_hd(&self, h: &Vec3, d: &Vec3) -> f64;
 
     /// Evaluates the projected BRDF with the classical parameterization.
     ///
@@ -81,9 +81,9 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Arguments
     ///
-    /// * `wi` - The incident direction.
-    /// * `wo` - The outgoing direction.
-    fn evalp(&self, wi: &Vec3, wo: &Vec3) -> f64;
+    /// * `i` - The incident direction.
+    /// * `o` - The outgoing direction.
+    fn evalp(&self, i: &Vec3, o: &Vec3) -> f64;
 
     /// Evaluates the projected BRDF with the Rusinkiewicz parameterization.
     ///
@@ -91,9 +91,9 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Arguments
     ///
-    /// * `wh` - The half vector.
-    /// * `wd` - The difference vector.
-    fn evalp_hd(&self, wh: &Vec3, wd: &Vec3) -> f64;
+    /// * `h` - The half vector.
+    /// * `d` - The difference vector.
+    fn evalp_hd(&self, h: &Vec3, d: &Vec3) -> f64;
 
     /// Evaluates the projected BRDF with importance sampling.
     fn evalp_is(&self, u: f32, v: f32, o: &Vec3, i: &mut Vec3, pdf: &mut f32) -> f64;
@@ -104,11 +104,11 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// * `u` - The first uniform variate.
     /// * `v` - The second uniform variate.
-    /// * `wo` - The outgoing direction.
-    fn sample(&self, u: f32, v: f32, wo: &Vec3) -> f64;
+    /// * `o` - The outgoing direction.
+    fn sample(&self, u: f32, v: f32, o: &Vec3) -> f64;
 
     /// Evaluates the PDF of a sample.
-    fn pdf(&self, wi: &Vec3, wo: &Vec3) -> f64;
+    fn pdf(&self, i: &Vec3, o: &Vec3) -> f64;
 
     #[cfg(feature = "fitting")]
     /// Computes the partial derivatives of the BRDF model with respect to the
@@ -116,8 +116,8 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Arguments
     ///
-    /// * `wis` - The incident directions.
-    /// * `wos` - The outgoing directions.
+    /// * `i` - The incident directions.
+    /// * `o` - The outgoing directions.
     ///
     /// # Returns
     ///
@@ -127,16 +127,16 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     /// # Note
     ///
     /// The returned vector has the length of the number of parameters times the
-    /// length of `wis` times the length of `wos`. For each incident direction
-    /// `wi`, the derivatives with respect to params are evaluated for each
-    /// outgoing direction `wo`.
-    fn pds(&self, wis: &[Vec3], wos: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
+    /// length of `i` times the length of `o`. For each incident direction
+    /// `i`, the derivatives with respect to params are evaluated for each
+    /// outgoing direction `o`.
+    fn pds(&self, i: &[Vec3], o: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
 
     /// Computes the partial derivatives of the BRDF model with respect to the
     /// roughness parameters of the model for a single incident and outgoing
     /// direction pair.
     #[cfg(feature = "fitting")]
-    fn pd(&self, wi: &Vec3, wo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> [f64; 2];
+    fn pd(&self, i: &Vec3, o: &Vec3, ior_i: &Ior, ior_t: &Ior) -> [f64; 2];
 
     #[cfg(feature = "fitting")]
     /// Computes the partial derivatives of the BRDF model with respect to the
@@ -144,8 +144,8 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Arguments
     ///
-    /// * `wis` - The incident directions.
-    /// * `wos` - The outgoing directions.
+    /// * `i` - The incident directions.
+    /// * `o` - The outgoing directions.
     ///
     /// # Returns
     ///
@@ -157,14 +157,14 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     /// For each incident direction wi, the derivatives with respect to params
     /// are evaluated for each outgoing direction wo.
     /// The returned vector has the length of number of parameters times the
-    /// length of `wis` times the length of `wos`.
-    fn pds_iso(&self, wis: &[Vec3], wos: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
+    /// length of `i` times the length of `o`.
+    fn pds_iso(&self, i: &[Vec3], o: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
 
     /// Computes the partial derivatives of the BRDF model with respect to the
     /// roughness parameters of the model for a single incident and outgoing
     /// direction pair for isotropic materials.
     #[cfg(feature = "fitting")]
-    fn pd_iso(&self, wi: &Vec3, wo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> f64;
+    fn pd_iso(&self, i: &Vec3, o: &Vec3, ior_i: &Ior, ior_t: &Ior) -> f64;
 }
 
 impl<P: 'static + Clone> Clone for Box<dyn Bxdf<Params = P>> {
@@ -186,9 +186,9 @@ impl<P: 'static + Clone> Clone for Box<dyn Bxdf<Params = P>> {
 /// 
 /// # Arguments
 ///
-/// * `wi` - The incident direction.
-/// * `wo` - The outgoing direction.
-pub fn io2hd(wi: &Vec3, wo: &Vec3) -> (Vec3, Vec3) {
+/// * `i` - The incident direction.
+/// * `o` - The outgoing direction.
+pub fn io2hd(i: &Vec3, o: &Vec3) -> (Vec3, Vec3) {
     todo!()
 }
 
@@ -207,9 +207,9 @@ pub fn io2hd(wi: &Vec3, wo: &Vec3) -> (Vec3, Vec3) {
 ///
 /// # Arguments
 ///
-/// * `wh` - The half vector.
-/// * `wd` - The difference vector.
-pub fn hd2io(wh: &Vec3, wd: &Vec3) -> (Vec3, Vec3) { todo!("hd2io") }
+/// * `h` - The half vector.
+/// * `d` - The difference vector.
+pub fn hd2io(h: &Vec3, d: &Vec3) -> (Vec3, Vec3) { todo!("hd2io") }
 
 /// The data generated by the analytical BxDF.
 pub struct AnalyticalBxdfData<F: Float> {
