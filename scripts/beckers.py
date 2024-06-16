@@ -1,6 +1,10 @@
 import math
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
+import argparse
+
+sns.set_theme(style="whitegrid", color_codes=True)
 
 
 def compute_ring_radius(count, index, radius):
@@ -90,12 +94,12 @@ def becker_compute_theta(ks, rs, N):
     return 2.0 * np.arcsin(rs / 2.0)
 
 
-def becker_plot_hemisphere(ks, rs, ts, N, ax):
+def becker_plot_hemisphere(ks, ts, ax):
     # ax.set_aspect("equal")
-    ax.set_box_aspect([1, 1, 1])
+    ax.set_box_aspect([1, 1, 0.5])
     ax.set_xlim(-1.1, 1.1)
     ax.set_ylim(-1.1, 1.1)
-    ax.set_zlim(0.0, 2.0)
+    ax.set_zlim(0.0, 1.0)
     angles = np.linspace(0, 2 * math.pi, 128)
 
     for (i, (t, k)) in enumerate(zip(ts, ks)):
@@ -103,7 +107,7 @@ def becker_plot_hemisphere(ks, rs, ts, N, ax):
         r = np.sin(t)
         xs = np.cos(angles) * r
         ys = np.sin(angles) * r
-        ax.plot(xs, ys, zs, color="green")
+        ax.plot(xs, ys, zs, color="b", linewidth=0.8)
         if k > 1:
             k_prev = ks[i - 1] if i - 1 >= 0 else 0
             n = k - k_prev
@@ -114,25 +118,72 @@ def becker_plot_hemisphere(ks, rs, ts, N, ax):
                 xs = np.cos(f) * np.array([r_prev, r])
                 ys = np.sin(f) * np.array([r_prev, r])
                 zs = np.cos(np.array([t_prev, t]))
-                ax.plot(xs, ys, zs, color="blue")
+                ax.plot(xs, ys, zs, color="b", linewidth=0.8)
+
+
+def plot_figure(ks, ts):
+    fig, ax = plt.subplots(subplot_kw={'projection': '3d'}, figsize=(8, 8))
+    fig.tight_layout()
+    # hide gridlines
+    ax.grid(False)
+    # hide y and z plane
+    ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    # hide x and z plane
+    ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    # hide ticks
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_zticks([])
+    # hide axis line
+    ax.xaxis.line.set_visible(False)
+    ax.yaxis.line.set_visible(False)
+    ax.zaxis.line.set_visible(False)  # cause error when tight_layout is used
+    # ax.xaxis.line.set_color("white")
+    # ax.yaxis.line.set_color("white")
+    # ax.zaxis.line.set_color("white")
+    becker_plot_hemisphere(ks, ts, ax)
+    ax.set_proj_type('ortho')
+    ax.view_init(elev=52, azim=30)
+    # plt.subplots_adjust(left=0.125, right=0.9, top=1.0, bottom=0.21)
+    plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0, wspace=0.0, hspace=0.0)
+
+
+def generate_figure(n, ks, ts):
+    plot_figure(ks, ts)
+    deg = 90 / n
+    plt.savefig(f"beckers_{deg:.2f}°_{n}.pdf")
 
 
 if __name__ == "__main__":
-    figure = plt.figure()
-    # plot_disk_rings(8, 1, figure.add_subplot(1, 3, 1))
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--gen", action="store_true")
+    parser.add_argument("--n", type=int, default=10)
+    parser.add_argument("--single", action="store_true")
+    args = parser.parse_args()
 
-    N = 2
     R = np.sqrt(2.0)
-    ks = becker_compute_ks(1, N)
-    rs = becker_compute_rs(ks, N, R)
-    ts = becker_compute_theta(ks, rs, N)
-    print("ks: ", ks)
-    print("rs: ", rs)
-    print("dr: ", rs[1:] - rs[:-1])
-    print("ns: ", ks[1:] - ks[:-1])
-    print("ts: ", ts)
-    print("total number of patches: ", ks[-1])
-    becker_plot_rings(ks, rs, figure.add_subplot(1, 2, 1))
-    becker_plot_hemisphere(ks, rs, ts, N, figure.add_subplot(1, 2, 2, projection="3d"))
 
-    plt.show()
+    if args.gen:
+        for n in [5, 6, 8, 9, 10, 12, 15, 18, 20]:
+            ks = becker_compute_ks(1, n)
+            rs = becker_compute_rs(ks, n, R)
+            ts = becker_compute_theta(ks, rs, n)
+            generate_figure(n, ks, ts)
+    else:
+        N = args.n
+        ks = becker_compute_ks(1, N)
+        rs = becker_compute_rs(ks, N, R)
+        ts = becker_compute_theta(ks, rs, N)
+        print("ks: ", ks)
+        print("rs: ", rs)
+        print("dr: ", rs[1:] - rs[:-1])
+        print("ns: ", ks[1:] - ks[:-1])
+        print("ts: ", ts)
+        print("total number of patches: ", ks[-1])
+        if args.single:
+            plot_figure(ks, ts)
+        else:
+            figure = plt.figure()
+            becker_plot_rings(ks, rs, figure.add_subplot(1, 2, 1))
+            becker_plot_hemisphere(ks, ts, figure.add_subplot(1, 2, 2, projection="3d"))
+        plt.show()

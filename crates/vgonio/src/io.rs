@@ -1070,6 +1070,7 @@ pub mod vgmo {
             n_wi: usize,
             n_wo: usize,
             n_spectrum: usize,
+            n_zenith_in: usize,
             spectrum: &[Nanometres],
             incoming: &[Sph2],
             partition: SphericalPartition,
@@ -1087,6 +1088,7 @@ pub mod vgmo {
 
             Ok(unsafe {
                 RawMeasuredBsdfData {
+                    n_zenith_in,
                     spectrum: DyArr::from_slice_1d(spectrum),
                     incoming: DyArr::from_slice_1d(incoming),
                     outgoing: partition,
@@ -1134,6 +1136,7 @@ pub mod vgmo {
                         n_wi,
                         n_wo,
                         n_spectrum,
+                        params.emitter.measurement_points_zenith_count(),
                         &spectrum,
                         &incoming,
                         partition,
@@ -1142,6 +1145,7 @@ pub mod vgmo {
                         Self::read_measured_bsdf_data(&mut decoder, n_wi, n_wo, n_spectrum)?;
 
                     let parameterisation = VgonioBrdfParameterisation {
+                        n_zenith_i: params.emitter.measurement_points_zenith_count(),
                         incoming: DyArr::from_boxed_slice_1d(
                             params.emitter.generate_measurement_points().0,
                         ),

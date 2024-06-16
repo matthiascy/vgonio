@@ -94,6 +94,12 @@ impl EmitterParams {
         self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()
     }
 
+    /// Returns the number of measurement points in the zenith direction.
+    pub fn measurement_points_zenith_count(&self) -> usize { self.zenith.step_count_wrapped() }
+
+    /// Returns the number of measurement points in the azimuth direction.
+    pub fn measurement_points_azimuth_count(&self) -> usize { self.azimuth.step_count_wrapped() }
+
     /// Transforms the samples from the sampling space to the desired position
     /// in the world coordinate system.
     pub(crate) fn transform_samples(

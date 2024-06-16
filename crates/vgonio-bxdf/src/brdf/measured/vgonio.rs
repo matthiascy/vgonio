@@ -21,9 +21,15 @@ use chrono::{DateTime, Local};
 use jabr::array::DyArr;
 use std::{borrow::Cow, collections::HashMap, ops::Index, path::Path};
 
+/// Parameterisation of the VGonio BRDF.
 #[derive(Clone, PartialEq, Debug)]
 pub struct VgonioBrdfParameterisation {
-    /// The incident directions of the BRDF.
+    /// Number of incident directions along the polar angle.
+    pub n_zenith_i: usize,
+    /// The incident directions of the BRDF. The directions are stored in
+    /// spherical coordinates, i.e. azimuthal and zenith angles; the azimuthal
+    /// angle is in the range `[0, 2π]` and the zenith angle is in the range
+    /// `[0, π/2]`; the zenith angle increases first.
     pub incoming: DyArr<Sph2>,
     /// The outgoing directions of the BRDF.
     pub outgoing: SphericalPartition,
@@ -55,6 +61,12 @@ impl VgonioBrdfParameterisation {
 
     /// Returns the number of incoming directions.
     pub fn n_wi(&self) -> usize { self.incoming.len() }
+
+    /// Returns the number of incident directions along the zenith angle.
+    pub fn n_wi_zenith(&self) -> usize { self.n_zenith_i }
+
+    /// Returns the number of incident directions along the azimuthal angle.
+    pub fn n_wi_azimuth(&self) -> usize { self.incoming.len() / self.n_zenith_i }
 }
 
 /// BRDF from the VGonio simulator.

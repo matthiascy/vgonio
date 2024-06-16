@@ -1,7 +1,9 @@
 //! Sensor of the virtual gonio-reflectometer.
-
 #[cfg(feature = "visu-dbg")]
 use crate::measure::bsdf::rtc::RayTrajectory;
+#[cfg(feature = "visu-dbg")]
+use base::math::{Vec3, Vec3A};
+
 use crate::{
     app::cache::RawCache,
     measure::{
@@ -10,7 +12,7 @@ use crate::{
     },
 };
 use base::{
-    math::{Sph2, Vec3, Vec3A},
+    math::Sph2,
     optics::ior::Ior,
     partition::{PartitionScheme, SphericalDomain, SphericalPartition},
     range::RangeByStepSizeInclusive,
@@ -173,7 +175,7 @@ impl Receiver {
         result: SingleSimResult,
         out_stats: *mut SingleBsdfMeasurementStats,
         records: &mut [Option<BounceAndEnergy>],
-        orbit_radius: f32,
+        #[cfg(feature = "visu-dbg")] orbit_radius: f32,
         #[cfg(feature = "visu-dbg")] fresnel: bool,
         #[cfg(feature = "visu-dbg")] out_trajs: *mut Box<[RayTrajectory]>,
         #[cfg(feature = "visu-dbg")] out_hpnts: *mut Vec<Vec3>,
@@ -549,6 +551,7 @@ impl Receiver {
     }
 }
 
+#[cfg(feature = "visu-dbg")]
 /// Energy after a ray is reflected by the micro-surface.
 ///
 /// Used during the data collection process.
@@ -559,9 +562,6 @@ enum Energy {
     /// The ray of a specific wavelength is reflected by the micro-surface.
     Reflected(f32),
 }
-
-/// Represents the data that a patch can carry.
-pub trait PerPatchData: Sized + Clone + Send + Sync + 'static {}
 
 /// Bounce and energy of a patch for each bounce.
 ///
@@ -601,5 +601,3 @@ impl PartialEq for BounceAndEnergy {
             && self.energy_per_bounce == other.energy_per_bounce
     }
 }
-
-impl PerPatchData for BounceAndEnergy {}

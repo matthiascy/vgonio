@@ -95,6 +95,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                 }
             }
             let params = VgonioBrdfParameterisation {
+                n_zenith_i: zenith.step_count_wrapped(),
                 incoming,
                 outgoing: ReceiverParams {
                     domain: SphericalDomain::Upper,

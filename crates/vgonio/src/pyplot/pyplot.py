@@ -2,11 +2,13 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, TextBox
 import numpy as np
-
+import seaborn as sns
 
 # Use this to avoid GUI
 # mpl.use('Agg')
 # mpl.use('qtagg')
+
+sns.set_theme(style="whitegrid", color_codes=True)
 
 
 def plot_err(xstart, xend, xstep, errs):
@@ -270,5 +272,94 @@ def plot_brdf_comparison(
     compare_norm_button.on_clicked(on_compare_norm)
     prev_wi_button.on_clicked(on_btn_prev_wi)
     next_wi_button.on_clicked(on_btn_next_wi)
+    plt.show()
 
+
+def plot_brdf_slice(phi_o_deg, phi_o_deg_opp, brdf_slices, wavelengths):
+    # sns.set_theme()
+    fig, ax = plt.subplots()
+    fig.suptitle("BRDF Slice")
+    ax.set_xlabel("θ [deg]")
+    ax.set_ylabel("BRDF [sr^-1]")
+    n_spectrum = len(wavelengths)
+    for slice_phi_o, slice_phi_o_opp, theta, legend in brdf_slices:
+        xs = np.append(np.flip(-np.array(theta)), np.array(theta))
+        slice_phi_o = np.array(slice_phi_o).reshape((-1, n_spectrum))
+        slice_phi_o_opp = np.array(slice_phi_o_opp).reshape((-1, n_spectrum))
+        for l in range(1):
+            ys = np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l])
+            ax.plot(xs, ys, label=f"{legend} λ = {wavelengths[l]:.0f} nm")
+    ax.legend()
+
+    # new polar plot
+    fig_polar, ax_polar = plt.subplots(subplot_kw={'projection': 'polar'})
+    fig_polar.suptitle("BRDF Polar")
+    ax_polar.set_theta_zero_location("N")
+    ax_polar.set_theta_direction(-1)
+    # set the theta limits to -90, 90
+    ax_polar.set_thetamin(-90)
+    ax_polar.set_thetamax(90)
+    # set labels to show every 15 degrees
+    ax_polar.set_thetagrids(range(-90, 90, 15))
+    # set the radius limits to 0, 1.2
+    # ax_polar.set_rlim(0, 1.2)
+    # set y labels to be on the right
+    # ax_polar.set_ylabel("BRDF [sr^-1]")
+    for slice_phi_o, slice_phi_o_opp, theta, legend in brdf_slices:
+        xs = np.append(np.flip(-np.radians(np.array(theta))), np.radians(np.array(theta)))
+        slice_phi_o = np.array(slice_phi_o).reshape((-1, n_spectrum))
+        slice_phi_o_opp = np.array(slice_phi_o_opp).reshape((-1, n_spectrum))
+        for l in range(1):
+            ys = np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l])
+            ax_polar.plot(xs, ys, label=f"{legend} λ = {wavelengths[l]:.0f} nm")
+    ax_polar.legend(loc='upper right')
+    plt.show()
+
+
+def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices, wavelengths):
+    fig, ax = plt.subplots()
+    fig.suptitle("BRDF Slice")
+    ax.set_xlabel(r"$θ_o\;[\degree]$")
+    ax.set_ylabel(r"$BRDF\;[sr^{-1}]$")
+    n_spectrum = len(wavelengths)
+    for slices_phi, slices_phi_opp, theta_i, theta_o in slices:
+        xs = np.append(np.flip(-np.array(theta_o)), np.array(theta_o))
+        for i, (slice_phi, slice_phi_opp, ti) in enumerate(zip(slices_phi, slices_phi_opp, theta_i)):
+            if i % 3 == 0:
+                slice_phi_o = np.array(slice_phi).reshape((-1, n_spectrum))
+                slice_phi_o_opp = np.array(slice_phi_opp).reshape((-1, n_spectrum))
+                for l in range(1):
+                    ys = np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l])
+                    ax.plot(xs, ys, label=fr'$θ_i = {ti:2.0f}\;\degree, λ = {wavelengths[l]:3.0f}\;nm$')
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.legend()
+
+    # new polar plot
+    fig_polar, ax_polar = plt.subplots(subplot_kw={'projection': 'polar'})
+    fig_polar.suptitle(f"BRDF Polar, In-plane, φ = {phi_deg:.2f}°")
+    ax_polar.set_theta_zero_location("N")
+    ax_polar.set_theta_direction(-1)
+    # set the theta limits to -90, 90
+    ax_polar.set_thetamin(-90)
+    ax_polar.set_thetamax(90)
+    # set labels to show every 15 degrees
+    ax_polar.set_thetagrids(range(-90, 90, 15))
+    ax_polar.set_rlabel_position(0)
+    # set the radius limits to 0, 1.2
+    # ax_polar.set_rlim(0, 1.2)
+    # set y labels to be on the right
+    # ax_polar.set_ylabel("BRDF [sr^-1]")
+    n_spectrum = len(wavelengths)
+    for slices_phi, slices_phi_opp, theta_i, theta_o in slices:
+        xs = np.append(np.flip(-np.radians(np.array(theta_o))), np.radians(np.array(theta_o)))
+        for i, (slice_phi, slice_phi_opp, ti) in enumerate(zip(slices_phi, slices_phi_opp, theta_i)):
+            if i % 3 == 0:
+                slice_phi_o = np.array(slice_phi).reshape((-1, n_spectrum))
+                slice_phi_o_opp = np.array(slice_phi_opp).reshape((-1, n_spectrum))
+                for l in range(1):
+                    ys = np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l])
+                    ax_polar.plot(xs, ys, label=fr"$θ_i = {ti:>3.0f}\;\degree, λ = {wavelengths[l]:>3.0f}\;nm$")
+    ax_polar.legend(loc='upper right', bbox_to_anchor=(1.1, 1.1))
+    ax_polar.spines['polar'].set_visible(False)
     plt.show()

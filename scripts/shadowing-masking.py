@@ -110,7 +110,8 @@ def geometric_term_ggx_smith(n, m, v, a):
 
 if __name__ == "__main__":
     if len(sys.argv) < 5:
-        print("Usage: {} <measurement_file> <surface_name> <roughness_beckmann> <roughness_ggx>".format(os.path.basename(sys.argv[0])),
+        print("Usage: {} <measurement_file> <surface_name> <roughness_beckmann> <roughness_ggx>".format(
+            os.path.basename(sys.argv[0])),
               file=sys.stderr)
         exit(-1)
 
@@ -158,7 +159,7 @@ if __name__ == "__main__":
         # select the data for the current phi
         df_slice = df[(df.phi == phi_0) | (df.phi == phi_1)]
         # negate the theta values for phi greater than 180
-        df_slice.loc[df_slice.phi > 180.0, 'theta'] *= -1.0
+        df_slice.loc[df_slice.theta > 180.0, 'theta'] *= -1.0
         df_slice.sort_values(by=['theta'], inplace=True)
         # plot the masking function
         fig, ax = plt.subplots()
@@ -176,7 +177,7 @@ if __name__ == "__main__":
         ax.plot(df_G_beckmann_smith.theta, df_G_beckmann_smith.ratio, '--r',
                 label=r'beckmann-smith $\alpha$ = {}'.format(a_beckmann))
         ax.plot(df_G_ggx_smith.theta, df_G_ggx_smith.ratio, '--g', label=r'ggx-smith $\alpha$ = {}'.format(a_ggx))
-        ax.plot(df_slice.theta, df_slice.ratio, '-b', label='measured')
+        ax.plot(df_slice.phi, df_slice.ratio, '-b', label='measured')
         legend = ax.legend(loc='lower center')
         fig.savefig(f'geometric_term_{surface_name}-phi_{phi_0}_{phi_1}-ab_{a_beckmann}-ag_{a_ggx}.pdf')
 

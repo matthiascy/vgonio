@@ -44,6 +44,9 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
         Self(ArrCore::new(shape, DynSized::from_boxed_slice(slice)))
     }
 
+    /// Consumes the array and returns the underlying data as a boxed slice.
+    pub fn into_boxed_slice(self) -> Box<[T]> { self.0.data.into_boxed_slice() }
+
     /// Creates a new array from an iterator.
     ///
     /// # Arguments

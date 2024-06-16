@@ -43,7 +43,6 @@ glam = { version = "~0.28", features = ["serde", "bytemuck"] }
 image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
 levenberg-marquardt = "0.13"
 nalgebra = "0.32"
-numpy = "0.21"
 libm = "0.2"
 log = "0.4"
 num-traits = "0.2"

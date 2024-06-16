@@ -1,7 +1,7 @@
 //! Measurement of the BSDF (Bidirectional Scattering Distribution Function) of
 //! micro-surfaces.
 
-use super::params::BsdfMeasurementParams;
+use super::{params::BsdfMeasurementParams, DataCarriedOnHemisphereSampler};
 #[cfg(feature = "embree")]
 use crate::measure::bsdf::rtc::embr;
 #[cfg(feature = "visu-dbg")]
@@ -24,9 +24,9 @@ use crate::{
 use base::{
     error::VgonioError,
     impl_measured_data_trait,
-    math::{circular_angle_dist, projected_barycentric_coords, rcp_f32, Sph2, Vec3},
+    math::{rcp_f32, Sph2, Vec3},
     medium::Medium,
-    partition::{PartitionScheme, SphericalPartition},
+    partition::SphericalPartition,
     units::{Degs, Nanometres, Radians, Rads},
     MeasurementKind,
 };
@@ -55,6 +55,8 @@ pub mod rtc;
 /// Raw data of the BSDF measurement.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RawMeasuredBsdfData {
+    /// The number of incident directions along the zenith.
+    pub n_zenith_in: usize,
     /// The spectrum of the emitter.
     pub spectrum: DyArr<Nanometres>,
     /// The incident directions of the emitter.
@@ -227,6 +229,7 @@ impl RawMeasuredBsdfData {
                         medium_i,
                         medium_t,
                         VgonioBrdfParameterisation {
+                            n_zenith_i: self.n_zenith_in,
                             incoming: self.incoming.clone(),
                             outgoing: self.outgoing.clone(),
                         },
@@ -243,6 +246,7 @@ impl RawMeasuredBsdfData {
                 medium_i,
                 medium_t,
                 VgonioBrdfParameterisation {
+                    n_zenith_i: self.n_zenith_in,
                     incoming: self.incoming.clone(),
                     outgoing: self.outgoing.clone(),
                 },
@@ -520,13 +524,15 @@ impl MeasuredBsdfData {
             params.clone()
         };
 
+        let brdf = self.bsdfs.get(&level).unwrap();
+        let sampler = DataCarriedOnHemisphereSampler::new(brdf);
+
         // Get the interpolated samples for wi, wo, and spectrum.
         new_params.wi_wos_iter().for_each(|(i, (wi, wos))| {
             let samples_offset_wi = i * n_wo_dense * n_spectrum;
             for (j, wo) in wos.iter().enumerate() {
                 let samples_offset = samples_offset_wi + j * n_spectrum;
-                self.sample_at(
-                    level.0,
+                sampler.sample_point_at(
                     *wi,
                     *wo,
                     &mut samples[samples_offset..samples_offset + n_spectrum],
@@ -541,269 +547,6 @@ impl MeasuredBsdfData {
             params: Box::new(new_params),
             spectrum: DyArr::from_vec_1d(spectrum),
             samples: DyArr::<f32, 3>::from_vec([n_wi, n_wo_dense, n_spectrum], samples),
-        }
-    }
-
-    // TODO: merge this method to [`MeasuredDataSampler`]
-    /// Retrieve the BSDF sample data (full wavelength) at the given position.
-    ///
-    /// The position is given in the unit spherical coordinates. The returned
-    /// data is the BSDF values for each snapshot and each wavelength at the
-    /// given position.
-    ///
-    /// # Arguments
-    ///
-    /// * `wi` - The incident direction.
-    /// * `wo` - The outgoing direction.
-    /// * `interpolated` - The interpolated BSDF values at the given position.
-    ///
-    /// # Panics
-    ///
-    /// Panic if the number of wavelengths in the interpolated data does not
-    /// match the number of wavelengths in the BSDF data.
-    pub fn sample_at(&self, level: u32, wi: Sph2, wo: Sph2, interpolated: &mut [f32]) {
-        log::trace!(
-            "Sampling at wi: ({}, {}), wo: ({} {})",
-            wi.theta.to_degrees().prettified(),
-            wi.phi.to_degrees().prettified(),
-            wo.theta.to_degrees().prettified(),
-            wo.phi.to_degrees().prettified()
-        );
-        assert_eq!(
-            interpolated.len(),
-            self.params.emitter.spectrum.step_count(),
-            "Mismatch in the number of wavelengths."
-        );
-        let snapshot_idx = self
-            .raw
-            .incoming
-            .as_slice()
-            .iter()
-            .position(|snap| wi.approx_eq(snap))
-            .expect(
-                "The incident direction is not found in the BSDF snapshots. The incident \
-                 direction must be one of the directions of the emitter.",
-            );
-        log::trace!("  - Found snapshot at wi: {}", wi);
-        let n_spectrum = self.raw.n_spectrum();
-        let n_wo = self.raw.n_wo();
-        let brdf = self.bsdfs.get(&MeasuredBrdfLevel(level)).unwrap();
-        let snapshot_samples = &brdf.samples.as_slice()
-            [snapshot_idx * n_wo * n_spectrum..(snapshot_idx + 1) * n_wo * n_spectrum];
-        match self.params.receiver.scheme {
-            PartitionScheme::Beckers => {
-                let partition = SphericalPartition::new(
-                    self.params.receiver.scheme,
-                    self.params.receiver.domain,
-                    self.params.receiver.precision,
-                );
-                // 1. Find the upper and lower ring where the position is located.
-                // The Upper ring is the ring with the smallest zenith angle.
-                let (upper_ring_idx, lower_ring_idx) = partition.find_rings(wo);
-                log::trace!(
-                    "  - Upper ring: {}, Lower ring: {}",
-                    upper_ring_idx,
-                    lower_ring_idx
-                );
-
-                // 2. Find the patch where the position is located inside the ring.
-                if lower_ring_idx == 0 || lower_ring_idx == 1 {
-                    // Interpolate inside a triangle.
-                    let lower_ring = partition.rings[1];
-                    let patch_idx = {
-                        let patch_idx = lower_ring.find_patch_indices(wo.phi);
-                        (
-                            0,
-                            lower_ring.base_index + patch_idx.0,
-                            lower_ring.base_index + patch_idx.1,
-                        )
-                    };
-                    let center = (
-                        partition.patches[patch_idx.0].center(),
-                        partition.patches[patch_idx.1].center(),
-                        partition.patches[patch_idx.2].center(),
-                    );
-                    let (u, v, w) = projected_barycentric_coords(
-                        wo.to_cartesian(),
-                        center.0.to_cartesian(),
-                        center.1.to_cartesian(),
-                        center.2.to_cartesian(),
-                    );
-                    let patch0_samples =
-                        &snapshot_samples[patch_idx.0 * n_spectrum..(patch_idx.0 + 1) * n_spectrum];
-                    let patch1_samples =
-                        &snapshot_samples[patch_idx.1 * n_spectrum..(patch_idx.1 + 1) * n_spectrum];
-                    let patch2_samples =
-                        &snapshot_samples[patch_idx.2 * n_spectrum..(patch_idx.2 + 1) * n_spectrum];
-                    log::trace!(
-                        "  - Interpolating inside a triangle between patches #{} ({}, {} | {:?}), \
-                         #{} ({}, {} | {:?}), and #{} ({}, {} | {:?})",
-                        patch_idx.0,
-                        center.0,
-                        center.0.to_cartesian(),
-                        patch0_samples,
-                        patch_idx.1,
-                        center.1,
-                        center.1.to_cartesian(),
-                        patch1_samples,
-                        patch_idx.2,
-                        center.2,
-                        center.2.to_cartesian(),
-                        patch2_samples
-                    );
-                    log::trace!("  - Barycentric coordinates: ({}, {}, {})", u, v, w);
-                    interpolated.iter_mut().enumerate().for_each(|(i, spl)| {
-                        *spl =
-                            u * patch0_samples[i] + v * patch1_samples[i] + w * patch2_samples[i];
-                    });
-                } else if upper_ring_idx == lower_ring_idx
-                    && upper_ring_idx == partition.n_rings() - 1
-                {
-                    // This should be the last ring.
-                    // Interpolate between two patches.
-                    let ring = partition.rings[upper_ring_idx];
-                    let patch_idx = ring.find_patch_indices(wo.phi);
-                    let patch0_idx = ring.base_index + patch_idx.0;
-                    let patch1_idx = ring.base_index + patch_idx.1;
-                    let patch0 = partition.patches[patch0_idx];
-                    let patch1 = partition.patches[patch1_idx];
-                    let center = (patch0.center(), patch1.center());
-                    let patch0_samples =
-                        &snapshot_samples[patch0_idx * n_spectrum..(patch0_idx + 1) * n_spectrum];
-                    let patch1_samples =
-                        &snapshot_samples[patch1_idx * n_spectrum..(patch1_idx + 1) * n_spectrum];
-                    log::trace!(
-                        "  - Interpolating between two patches: #{} ({}, {} | {:?}) and #{} ({}, \
-                         {} | {:?}) at ring #{}",
-                        patch0_idx,
-                        center.0,
-                        center.0.to_cartesian(),
-                        patch0_samples,
-                        patch1_idx,
-                        center.1,
-                        center.1.to_cartesian(),
-                        patch1_samples,
-                        upper_ring_idx
-                    );
-                    let t = (circular_angle_dist(wo.phi, center.0.phi)
-                        / circular_angle_dist(center.1.phi, center.0.phi))
-                    .clamp(0.0, 1.0);
-                    interpolated.iter_mut().enumerate().for_each(|(i, spl)| {
-                        *spl = (1.0 - t) * patch0_samples[i] + t * patch1_samples[i];
-                    });
-                } else {
-                    // Interpolate inside a quadrilateral.
-                    let (upper_t, upper_patch_center, upper_patch_idx) = {
-                        let upper_ring = partition.rings[upper_ring_idx];
-                        let upper_patch_idx = {
-                            let patches = upper_ring.find_patch_indices(wo.phi);
-                            (
-                                upper_ring.base_index + patches.0,
-                                upper_ring.base_index + patches.1,
-                            )
-                        };
-                        let upper_patch_center = (
-                            partition.patches[upper_patch_idx.0].center(),
-                            partition.patches[upper_patch_idx.1].center(),
-                        );
-                        log::trace!(
-                            "        - upper_#{} center: {}",
-                            upper_patch_idx.0,
-                            upper_patch_center.0
-                        );
-                        log::trace!(
-                            "        - upper_#{} center: {}",
-                            upper_patch_idx.1,
-                            upper_patch_center.1
-                        );
-                        let upper_t = (circular_angle_dist(wo.phi, upper_patch_center.0.phi)
-                            / circular_angle_dist(
-                                upper_patch_center.1.phi,
-                                upper_patch_center.0.phi,
-                            ))
-                        .clamp(0.0, 1.0);
-                        log::trace!("          - upper_t: {}", upper_t);
-                        (upper_t, upper_patch_center, upper_patch_idx)
-                    };
-
-                    let (lower_t, lower_patch_center, lower_patch_idx) = {
-                        let lower_ring = partition.rings[lower_ring_idx];
-                        let lower_patch_idx = {
-                            let patches = lower_ring.find_patch_indices(wo.phi);
-                            (
-                                lower_ring.base_index + patches.0,
-                                lower_ring.base_index + patches.1,
-                            )
-                        };
-                        let lower_patch_center = (
-                            partition.patches[lower_patch_idx.0].center(),
-                            partition.patches[lower_patch_idx.1].center(),
-                        );
-                        log::trace!(
-                            "        - lower_#{} center: {}",
-                            lower_patch_idx.0,
-                            lower_patch_center.0,
-                        );
-                        log::trace!(
-                            "        - lower_#{} center: {}",
-                            lower_patch_idx.1,
-                            lower_patch_center.1
-                        );
-                        let lower_t = (circular_angle_dist(wo.phi, lower_patch_center.0.phi)
-                            / circular_angle_dist(
-                                lower_patch_center.1.phi,
-                                lower_patch_center.0.phi,
-                            ))
-                        .clamp(0.0, 1.0);
-                        log::trace!("          - lower_t: {}", lower_t);
-                        (lower_t, lower_patch_center, lower_patch_idx)
-                    };
-                    let s = (circular_angle_dist(wo.theta, upper_patch_center.0.theta)
-                        / circular_angle_dist(
-                            lower_patch_center.0.theta,
-                            upper_patch_center.0.theta,
-                        ))
-                    .clamp(0.0, 1.0);
-                    // Bilateral interpolation.
-                    let upper_patch0_samples = &snapshot_samples
-                        [upper_patch_idx.0 * n_spectrum..(upper_patch_idx.0 + 1) * n_spectrum];
-                    let upper_patch1_samples = &snapshot_samples
-                        [upper_patch_idx.1 * n_spectrum..(upper_patch_idx.1 + 1) * n_spectrum];
-                    let lower_patch0_samples = &snapshot_samples
-                        [lower_patch_idx.0 * n_spectrum..(lower_patch_idx.0 + 1) * n_spectrum];
-                    let lower_patch1_samples = &snapshot_samples
-                        [lower_patch_idx.1 * n_spectrum..(lower_patch_idx.1 + 1) * n_spectrum];
-                    log::trace!(
-                        "  - Interpolating inside a quadrilateral between rings #{} (#{} vals \
-                         {:?}, #{} vals {:?} | t = {}), and #{} (#{} vals {:?}, #{} vals {:?} | t \
-                         = {}), v = {}",
-                        upper_ring_idx,
-                        upper_patch_idx.0,
-                        upper_patch0_samples,
-                        upper_patch_idx.1,
-                        upper_patch1_samples,
-                        upper_t,
-                        lower_ring_idx,
-                        lower_patch_idx.0,
-                        lower_patch0_samples,
-                        lower_patch_idx.1,
-                        lower_patch1_samples,
-                        lower_t,
-                        s
-                    );
-                    interpolated.iter_mut().enumerate().for_each(|(i, spl)| {
-                        let upper_interp = (1.0 - upper_t) * upper_patch0_samples[i]
-                            + upper_t * upper_patch1_samples[i];
-                        let lower_interp = (1.0 - lower_t) * lower_patch0_samples[i]
-                            + lower_t * lower_patch1_samples[i];
-                        *spl = (1.0 - s) * upper_interp + s * lower_interp;
-                    });
-                }
-                log::trace!("  - Sampled: {:?}", &interpolated);
-            }
-            PartitionScheme::EqualAngle => {
-                unimplemented!()
-            }
         }
     }
 }
@@ -1046,9 +789,6 @@ pub struct SingleBsdfMeasurementStats {
     /// `ABSORBED_IDX`, `REFLECTED_IDX`, and `CAPTURED_IDX`, `ESCAPED_IDX`.
     /// The total number of elements in the array is `4 * n_wavelength`.
     pub n_ray_stats: Box<[u32]>,
-    // TODO: verify if this is the correct way to store the energy captured by
-    // the collector. Check if the energy is the sum of the energy of the rays
-    // that were captured in each patch. After that, this could be removed.
     /// Energy captured by the collector; variant over wavelength.
     pub e_captured: Box<[f32]>,
     /// Histogram of reflected rays by number of bounces, variant over
@@ -1292,13 +1032,17 @@ pub struct SingleSimResultRays<'a> {
 /// Single ray information in the simulation result.
 #[cfg(not(feature = "visu-dbg"))]
 pub struct SingleSimResultRay<'a> {
+    /// Bounce of the ray.
     pub bounce: &'a u32,
+    /// Direction of the ray.
     pub dir: &'a Vec3,
+    /// Energy of the ray per wavelength.
     pub energy: &'a [f32],
 }
 
 #[cfg(not(feature = "visu-dbg"))]
 impl SingleSimResult {
+    /// Returns an iterator over the rays in the simulation result.
     pub fn iter_rays(&self) -> SingleSimResultRays {
         debug_assert_eq!(self.bounces.len(), self.dirs.len(), "Length mismatch");
         debug_assert_eq!(
@@ -1313,6 +1057,7 @@ impl SingleSimResult {
         }
     }
 
+    /// Returns an iterator over the rays in the simulation result in chunks.
     pub fn iter_ray_chunks(&self, chunk_size: usize) -> SingleSimResultRayChunks {
         debug_assert_eq!(self.bounces.len(), self.dirs.len(), "Length mismatch");
         debug_assert_eq!(
@@ -1563,6 +1308,7 @@ pub fn measure_bsdf_rt(
                 sim,
                 stats[i].as_mut_ptr(),
                 recs,
+                #[cfg(feature = "visu-dbg")]
                 orbit_radius,
                 #[cfg(feature = "visu-dbg")]
                 params.fresnel,
@@ -1583,6 +1329,7 @@ pub fn measure_bsdf_rt(
         }
 
         let raw = RawMeasuredBsdfData {
+            n_zenith_in: emitter.params.zenith.step_count_wrapped(),
             spectrum: spectrum.clone(),
             incoming,
             outgoing: receiver.patches.clone(),

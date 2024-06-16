@@ -434,7 +434,7 @@ macro_rules! impl_angle_related_common_methods {
 impl<A: AngleUnit> RangeByStepSizeInclusive<Angle<A>> {
     /// Returns the number of steps in this range of angles.
     /// If the range's stop value is the same as the start value after wrapping
-    /// it to the range [0, 2π), the range is considered to be a full circle.
+    /// it to the range `[0, 2π)`, the range is considered to be a full circle.
     pub fn step_count_wrapped(&self) -> usize {
         if self.start.as_f32().abs_diff_eq(&self.stop.as_f32(), 1e-6) {
             return 1;
