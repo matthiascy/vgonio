@@ -47,24 +47,24 @@ def setup_hemisphere_figure(with_surface=True):
     return fig, ax
 
 
-def plot_points(ax, r):
+def plot_points(ax, extra=False):
+    r = 1
     # generate a set of points with phi and theta
     theta, phi = np.mgrid[0.0:np.pi / 2:10j, 0.0:2.0 * np.pi:20j]
     x = r * np.sin(theta) * np.cos(phi)
     y = r * np.sin(theta) * np.sin(phi)
     z = r * np.cos(theta)
     ax.scatter(x, y, z, color='m', s=15)
-    ax.scatter(r * np.sin(theta[0:, 0]) * np.cos(phi[0:, 0]), r * np.sin(theta[0:, 0]) * np.sin(phi[0:, 0]),
-               r * np.cos(theta[0:, 0]),
-               color='r', s=850, marker='o', alpha=0.4)
+    if extra:
+        ax.scatter(r * np.sin(theta[0:, 0]) * np.cos(phi[0:, 0]),
+                   r * np.sin(theta[0:, 0]) * np.sin(phi[0:, 0]),
+                   r * np.cos(theta[0:, 0]),
+                   color='r', s=850, marker='o', alpha=0.4)
 
 
-def plot_patches(ax, r):
-    from beckers import becker_plot_hemisphere, becker_compute_ks, becker_compute_rs, becker_compute_theta
-    sqrt_2 = np.sqrt(2)
-    ks = becker_compute_ks(1, 10)
-    rs = becker_compute_rs(ks, 10, sqrt_2)
-    ts = becker_compute_theta(ks, rs, 10)
+def plot_patches(ax):
+    from beckers import becker_plot_hemisphere, compute_becker
+    ks, rs, ts = compute_becker(1, 10)
     becker_plot_hemisphere(ks, ts, ax)
 
 
@@ -73,6 +73,7 @@ if __name__ == "__main__":
     parser.add_argument("--pnt", action="store_true", help="Plot points")
     parser.add_argument("--pch", action="store_true", help="Plot patches")
     parser.add_argument("--gen", action="store_true", help="Generate figures")
+    parser.add_argument("--extra", action="store_true", help="Extra points")
 
     args = parser.parse_args()
 
@@ -80,36 +81,17 @@ if __name__ == "__main__":
 
     if args.pnt:
         fig, ax = setup_hemisphere_figure()
-        plot_points(ax, 1)
+        plot_points(ax, args.extra)
         plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0, wspace=0.0, hspace=0.0)
         if args.gen:
             plt.savefig("hemi-points.pdf")
 
     if args.pch:
         fig, ax = setup_hemisphere_figure()
-        plot_patches(ax, 1)
+        plot_patches(ax)
         plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0, wspace=0.0, hspace=0.0)
         if args.gen:
             plt.savefig("hemi-patches.pdf")
 
     if (args.pch or args.pnt) and not args.gen:
         plt.show()
-
-    # if args.gen:
-    #     fig, ax = setup_hemisphere_figure()
-    #     plot_points(ax, 1)
-    #     plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0, wspace=0.0, hspace=0.0)
-    #     plt.savefig("hemi-points.pdf")
-    #
-    #     fig, ax = setup_hemisphere_figure()
-    #     plot_patches(ax, 1)
-    #     plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0, wspace=0.0, hspace=0.0)
-    #     plt.savefig("hemi-patches.pdf")
-    # else:
-    #     if args.pnt:
-    #         fig, ax = setup_hemisphere_figure(True)
-    #         plot_points(ax, 1)
-    #     elif args.pch:
-    #         fig, ax = setup_hemisphere_figure(True)
-    #         plot_patches(ax, 1)
-    #     plt.show()

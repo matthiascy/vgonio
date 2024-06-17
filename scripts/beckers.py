@@ -135,16 +135,15 @@ def plot_figure(ks, ts):
     ax.set_yticks([])
     ax.set_zticks([])
     # hide axis line
-    ax.xaxis.line.set_visible(False)
-    ax.yaxis.line.set_visible(False)
-    ax.zaxis.line.set_visible(False)  # cause error when tight_layout is used
-    # ax.xaxis.line.set_color("white")
-    # ax.yaxis.line.set_color("white")
-    # ax.zaxis.line.set_color("white")
+    # ax.xaxis.line.set_visible(False)
+    # ax.yaxis.line.set_visible(False)
+    # ax.zaxis.line.set_visible(False)  # cause error when tight_layout is used
+    ax.xaxis.line.set_color("white")
+    ax.yaxis.line.set_color("white")
+    ax.zaxis.line.set_color("white")
     becker_plot_hemisphere(ks, ts, ax)
     ax.set_proj_type('ortho')
     ax.view_init(elev=52, azim=30)
-    # plt.subplots_adjust(left=0.125, right=0.9, top=1.0, bottom=0.21)
     plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0, wspace=0.0, hspace=0.0)
 
 
@@ -154,32 +153,34 @@ def generate_figure(n, ks, ts):
     plt.savefig(f"beckers_{deg:.2f}°_{n}.pdf")
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--gen", action="store_true")
-    parser.add_argument("--n", type=int, default=10)
-    parser.add_argument("--single", action="store_true")
-    args = parser.parse_args()
-
-    R = np.sqrt(2.0)
-
-    if args.gen:
-        for n in [5, 6, 8, 9, 10, 12, 15, 18, 20]:
-            ks = becker_compute_ks(1, n)
-            rs = becker_compute_rs(ks, n, R)
-            ts = becker_compute_theta(ks, rs, n)
-            generate_figure(n, ks, ts)
-    else:
-        N = args.n
-        ks = becker_compute_ks(1, N)
-        rs = becker_compute_rs(ks, N, R)
-        ts = becker_compute_theta(ks, rs, N)
+def compute_becker(n, print_info=False):
+    ks = becker_compute_ks(1, n)
+    rs = becker_compute_rs(ks, n, np.sqrt(2.0))
+    ts = becker_compute_theta(ks, rs, n)
+    if print_info:
         print("ks: ", ks)
         print("rs: ", rs)
         print("dr: ", rs[1:] - rs[:-1])
         print("ns: ", ks[1:] - ks[:-1])
         print("ts: ", ts)
         print("total number of patches: ", ks[-1])
+    return ks, rs, ts
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--gen", action="store_true")
+    parser.add_argument("--n", type=int, default=10)
+    parser.add_argument("--single", action="store_true")
+    parser.add_argument("--print", action="store_true")
+    args = parser.parse_args()
+
+    if args.gen:
+        for n in [5, 6, 8, 9, 10, 12, 15, 18, 20]:
+            ks, rs, ts = compute_becker(n)
+            generate_figure(n, ks, ts)
+    else:
+        ks, rs, ts = compute_becker(args.n)
         if args.single:
             plot_figure(ks, ts)
         else:

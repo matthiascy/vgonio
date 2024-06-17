@@ -9,3 +9,4 @@ reflectance_*.csv
 debug_*/
 **.png
 **/__pycache__
+**.so**
