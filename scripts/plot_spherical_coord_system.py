@@ -178,7 +178,7 @@ if __name__ == "__main__":
 
     sns.set_theme(style="whitegrid", color_codes=True)
 
-    fig, ax = new_hemisphere_figure(elev=25, azim=-40, with_axes=True, with_surface=False, color='c', opacity=0.2,
+    fig, ax = new_hemisphere_figure(elev=25, azim=-40, with_axes=True, with_surface=False, c='c', opacity=0.2,
                                     annotate=args.annotate)
 
     draw_direction(ax, np.pi / 4, np.pi / 4, with_solid_angle=args.solid, annotate=args.annotate,
