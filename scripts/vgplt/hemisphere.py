@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def hemi_coord_figure(elev=45, azim=-30, axes='xyz', hc='g', sc='b', ha=0.3, surf=False, annotate=False,
+def hemi_coord_figure(elev=45, azim=-30, axes='xyz', hc='g', sc='b', ss=1.0, ha=0.3, surf=False, annotate=False,
                       hide=False, hshade=True, **kwargs):
     """
     Create a new hemisphere figure.
@@ -12,6 +12,7 @@ def hemi_coord_figure(elev=45, azim=-30, axes='xyz', hc='g', sc='b', ha=0.3, sur
     :param axes: axes to draw, 'xyz' for all.
     :param hc: colour of the hemisphere.
     :param sc: colour of the surface.
+    :param ss: scale of the surface.
     :param ha: alpha (opacity) of the hemisphere.
     :param annotate: if True, annotate the hemisphere domain.
     :param hide: if True, hide the hemisphere.
@@ -81,8 +82,8 @@ def hemi_coord_figure(elev=45, azim=-30, axes='xyz', hc='g', sc='b', ha=0.3, sur
     if surf:
         x = np.outer(np.linspace(-0.28, 0.28, 20), np.ones(20))
         y = x.copy().T
-        z = (np.sin(x ** 2) + np.cos(y ** 2)) / 4 - 0.25
-        ax.plot_surface(x, y, z, color=sc, alpha=0.3, linewidth=0)
+        z = ((np.sin(x ** 2) + np.cos(y ** 2)) / 4 - 0.25)
+        ax.plot_surface(x * ss, y * ss, z, color=sc, alpha=0.3, linewidth=0)
 
     if annotate:
         # annotate the hemisphere domain

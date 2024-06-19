@@ -94,7 +94,7 @@ def becker_compute_theta(ks, rs, N):
     return 2.0 * np.arcsin(rs / 2.0)
 
 
-def becker_plot_hemisphere(ks, ts, ax):
+def becker_plot_hemisphere(ks, ts, ax, c='b', linewidth=0.8, alpha=1.0):
     # ax.set_aspect("equal")
     ax.set_box_aspect([1, 1, 0.5])
     ax.set_xlim(-1.1, 1.1)
@@ -107,7 +107,7 @@ def becker_plot_hemisphere(ks, ts, ax):
         r = np.sin(t)
         xs = np.cos(angles) * r
         ys = np.sin(angles) * r
-        ax.plot(xs, ys, zs, color="b", linewidth=0.8)
+        ax.plot(xs, ys, zs, color=c, linewidth=linewidth, alpha=alpha)
         if k > 1:
             k_prev = ks[i - 1] if i - 1 >= 0 else 0
             n = k - k_prev
@@ -118,7 +118,7 @@ def becker_plot_hemisphere(ks, ts, ax):
                 xs = np.cos(f) * np.array([r_prev, r])
                 ys = np.sin(f) * np.array([r_prev, r])
                 zs = np.cos(np.array([t_prev, t]))
-                ax.plot(xs, ys, zs, color="b", linewidth=0.8)
+                ax.plot(xs, ys, zs, color=c, linewidth=linewidth, alpha=alpha)
 
 
 def plot_figure(ks, ts):

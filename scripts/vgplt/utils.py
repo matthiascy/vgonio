@@ -39,6 +39,14 @@ def path_patch_2d_to_3d(pathpatch, m=np.eye(3), z=0):
     pathpatch._segment3d = np.array([np.matmul(m, (x, y, z)) for x, y in mpath._vertices])
 
 
+def spherical_to_cartesian(r, theta, phi):
+    """Convert spherical coordinates to Cartesian coordinates."""
+    x = r * np.sin(theta) * np.cos(phi)
+    y = r * np.sin(theta) * np.sin(phi)
+    z = r * np.cos(theta)
+    return x, y, z
+
+
 def points_on_hemisphere(r=1.0, ntheta=10, nphi=20):
     """
     Generate a set of points with theta in [0, pi/2] and phi in [0, 2pi].
