@@ -5,54 +5,12 @@ import seaborn as sns
 from matplotlib.patches import Circle, Arc, FancyArrowPatch
 import mpl_toolkits.mplot3d.art3d as art3d
 
-from plot_hemisphere import new_hemisphere_figure
-
-
-def rotate_x(t):
-    """Compute the rotation matrix for a given theta."""
-    cos = np.cos(t)
-    sin = np.sin(t)
-
-    return np.array([[1, 0, 0],
-                     [0, cos, -sin],
-                     [0, sin, cos]])
-
-
-def rotate_y(t):
-    """Compute the rotation matrix for a given theta."""
-    cos = np.cos(t)
-    sin = np.sin(t)
-
-    return np.array([[cos, 0, sin],
-                     [0, 1, 0],
-                     [-sin, 0, cos]])
-
-
-def rotate_z(t):
-    """Compute the rotation matrix for a given theta."""
-    cos = np.cos(t)
-    sin = np.sin(t)
-
-    return np.array([[cos, -sin, 0],
-                     [sin, cos, 0],
-                     [0, 0, 1]])
+from vgplt.utils import rotate, path_patch_2d_to_3d
+from vgplt.hemisphere import hemi_coord_figure
 
 
 def solid_angle_rotation_matrix(theta, phi):
-    return np.matmul(rotate_z(phi), rotate_y(theta))
-
-
-def customised_path_patch_2d_to_3d(pathpatch, m=np.eye(3), z=0):
-    """Convert a 2D Patch to a 3D patch using the given z level."""
-    path = pathpatch.get_path()
-    trans = pathpatch.get_patch_transform()
-
-    mpath = trans.transform_path(path)
-    pathpatch.__class__ = art3d.PathPatch3D
-    pathpatch.set_3d_properties(mpath, z, zdir='z')
-
-    pathpatch._code3d = mpath.codes
-    pathpatch._segment3d = np.array([np.matmul(m, (x, y, z)) for x, y in mpath._vertices])
+    return np.matmul(rotate(phi, 'z'), rotate(theta, 'y'))
 
 
 def draw_solid_angle(ax, theta, phi, c='b', r=0.12, text=r'$\omega$', annotate=False):
@@ -60,7 +18,7 @@ def draw_solid_angle(ax, theta, phi, c='b', r=0.12, text=r'$\omega$', annotate=F
     circle = Circle((0, 0), r, color=c, alpha=0.35, linewidth=1.2)
     ax.add_patch(circle)
     m = solid_angle_rotation_matrix(theta, phi)
-    customised_path_patch_2d_to_3d(circle, m, z=1)
+    path_patch_2d_to_3d(circle, m, z=1)
     circle_i_upper_pnt = (-r, 0.0, 1)
     circle_i_lower_pnt = (r, 0.0, 1)
     circle_i_upper_pnt_3d = np.matmul(m, circle_i_upper_pnt)
@@ -118,7 +76,7 @@ def draw_direction_angle_auxiliary(ax, dir, theta, phi, theta_radius=1.0, phi_ra
     arc_theta = Arc((0, 0), width=theta_radius, height=theta_radius, angle=0, theta1=np.degrees(np.pi / 2 - theta),
                     theta2=np.degrees(np.pi / 2), color='k', linestyle='dashdot', linewidth=1.5, alpha=0.8)
     ax.add_patch(arc_theta)
-    customised_path_patch_2d_to_3d(arc_theta, m=np.matmul(rotate_z(phi), rotate_x(np.pi / 2)), z=0)
+    path_patch_2d_to_3d(arc_theta, m=np.matmul(rotate(phi, 'z'), rotate(np.pi / 2, 'x')), z=0)
     # Draw the end of the arc
     start_angle_theta = (np.pi * 0.5 - theta) + np.radians(5)
     end_angle_theta = (np.pi * 0.5 - theta)
@@ -130,7 +88,7 @@ def draw_direction_angle_auxiliary(ax, dir, theta, phi, theta_radius=1.0, phi_ra
                                   color='k', arrowstyle='->', alpha=0.8, linewidth=1.5, connectionstyle="arc3,rad=0.0",
                                   fill=True)
     ax.add_patch(arrow_theta)
-    customised_path_patch_2d_to_3d(arrow_theta, m=np.matmul(rotate_z(phi), rotate_x(np.pi / 2)), z=0)
+    path_patch_2d_to_3d(arrow_theta, m=np.matmul(rotate(phi, 'z'), rotate(np.pi / 2, 'x')), z=0)
     if annotate:
         # Draw the zenith angle annotation
         ax.text(x + zen_text_offset[0], y + zen_text_offset[1], z + zen_text_offset[2], zen_text, fontsize=15,
@@ -178,8 +136,7 @@ if __name__ == "__main__":
 
     sns.set_theme(style="whitegrid", color_codes=True)
 
-    fig, ax = new_hemisphere_figure(elev=25, azim=-40, with_axes=True, with_surface=False, c='c', opacity=0.2,
-                                    annotate=args.annotate)
+    fig, ax = hemi_coord_figure(elev=25, azim=-40, surf=False, hc='c', ha=0.15, annotate=args.annotate)
 
     draw_direction(ax, np.pi / 4, np.pi / 4, with_solid_angle=args.solid, annotate=args.annotate,
                    auxiliary=args.aux, phi_aux_radius=1.0, theta_aux_radius=0.8, text=r'$\mathbf{i}$',

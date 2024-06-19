@@ -5,8 +5,8 @@ import seaborn as sns
 from matplotlib.patches import Circle, Arc, FancyArrowPatch
 import mpl_toolkits.mplot3d.art3d as art3d
 
-from plot_hemisphere import new_hemisphere_figure
-from plot_spherical_coord_system import rotate_z, rotate_y, customised_path_patch_2d_to_3d, rotate_x
+from vgplt.hemisphere import hemi_coord_figure
+from vgplt.utils import rotate, path_patch_2d_to_3d
 
 
 def plot_sphere(ax):
@@ -20,7 +20,7 @@ def plot_sphere(ax):
 
 
 def plot_cylinder(ax, mtheta, mphi, radius=0.05, height=0.2, center=(0, 0, 1), c='orange'):
-    m = np.matmul(rotate_z(mphi), rotate_y(mtheta))
+    m = np.matmul(rotate(mphi, 'z'), rotate(mtheta, 'y'))
 
     (x_center, y_center, z_center) = center
 
@@ -75,7 +75,7 @@ def plot_cylinder(ax, mtheta, mphi, radius=0.05, height=0.2, center=(0, 0, 1), c
     arc_phi = Arc((0, 0), width=2.0, height=2.0, angle=0, theta1=-20,
                   theta2=20, color='k', linewidth=1, alpha=0.8, linestyle='dashdot')
     ax.add_patch(arc_phi)
-    customised_path_patch_2d_to_3d(arc_phi, m=np.matmul(rotate_z(mphi), rotate_y(-(np.pi / 2 - mtheta))), z=0)
+    path_patch_2d_to_3d(arc_phi, m=np.matmul(rotate(mphi, 'z'), rotate(-(np.pi / 2 - mtheta), 'y')), z=0)
 
     start_angle_phi = -15
     end_angle_phi = -20
@@ -87,7 +87,7 @@ def plot_cylinder(ax, mtheta, mphi, radius=0.05, height=0.2, center=(0, 0, 1), c
                                 color='k', arrowstyle='->', alpha=0.8, linewidth=1.2, connectionstyle="arc3,rad=0.0",
                                 fill=False)
     ax.add_patch(arrow_phi)
-    customised_path_patch_2d_to_3d(arrow_phi, m=np.matmul(rotate_z(mphi), rotate_y(-(np.pi / 2 - mtheta))), z=0)
+    path_patch_2d_to_3d(arrow_phi, m=np.matmul(rotate(mphi, 'z'), rotate(-(np.pi / 2 - mtheta), 'y')), z=0)
 
     start_angle_phi = 15
     end_angle_phi = 20
@@ -99,13 +99,13 @@ def plot_cylinder(ax, mtheta, mphi, radius=0.05, height=0.2, center=(0, 0, 1), c
                                 color='k', arrowstyle='->', alpha=0.8, linewidth=1.2, connectionstyle="arc3,rad=0.0",
                                 fill=False)
     ax.add_patch(arrow_phi)
-    customised_path_patch_2d_to_3d(arrow_phi, m=np.matmul(rotate_z(mphi), rotate_y(-(np.pi / 2 - mtheta))), z=0)
+    path_patch_2d_to_3d(arrow_phi, m=np.matmul(rotate(mphi, 'z'), rotate(-(np.pi / 2 - mtheta), 'y')), z=0)
 
     arc_theta = Arc((0, 0), width=2.0, height=2.0, angle=0, theta1=np.degrees((np.pi / 2 - mtheta)) - 20,
                     theta2=np.degrees((np.pi / 2 - mtheta)) + 20, color='k', linewidth=1, alpha=0.8,
                     linestyle='dashdot')
     ax.add_patch(arc_theta)
-    customised_path_patch_2d_to_3d(arc_theta, m=np.matmul(rotate_z(mphi), rotate_x(np.pi / 2)), z=0)
+    path_patch_2d_to_3d(arc_theta, m=np.matmul(rotate(mphi, 'z'), rotate(np.pi / 2, 'x')), z=0)
 
     start_angle_theta = np.degrees((np.pi / 2 - mtheta)) - 15
     end_angle_theta = np.degrees((np.pi / 2 - mtheta)) - 20
@@ -117,7 +117,7 @@ def plot_cylinder(ax, mtheta, mphi, radius=0.05, height=0.2, center=(0, 0, 1), c
                                   color='k', arrowstyle='->', alpha=0.8, linewidth=1.2, connectionstyle="arc3,rad=0.0",
                                   fill=False)
     ax.add_patch(arrow_theta)
-    customised_path_patch_2d_to_3d(arrow_theta, m=np.matmul(rotate_z(mphi), rotate_x(np.pi / 2)), z=0)
+    path_patch_2d_to_3d(arrow_theta, m=np.matmul(rotate(mphi, 'z'), rotate(np.pi / 2, 'x')), z=0)
 
     start_angle_theta = np.degrees((np.pi / 2 - mtheta)) + 15
     end_angle_theta = np.degrees((np.pi / 2 - mtheta)) + 20
@@ -129,7 +129,7 @@ def plot_cylinder(ax, mtheta, mphi, radius=0.05, height=0.2, center=(0, 0, 1), c
                                   color='k', arrowstyle='->', alpha=0.8, linewidth=1.2, connectionstyle="arc3,rad=0.0",
                                   fill=False)
     ax.add_patch(arrow_theta)
-    customised_path_patch_2d_to_3d(arrow_theta, m=np.matmul(rotate_z(mphi), rotate_x(np.pi / 2)), z=0)
+    path_patch_2d_to_3d(arrow_theta, m=np.matmul(rotate(mphi, 'z'), rotate(np.pi / 2, 'x')), z=0)
 
     return x_center_bot, y_center_bot, z_center_bot
 
@@ -143,10 +143,8 @@ if __name__ == "__main__":
 
     sns.set_theme(style="whitegrid", color_codes=True)
 
-    fig, ax = new_hemisphere_figure(elev=38, azim=-50, with_axes=True, with_surface=True, c='c',
-                                    sc='g', opacity=0.05, annotate=False, hide_hemisphere=False, arrow_length=0.1,
-                                    arrow_length_ratio=0.6,
-                                    x_axis_label='', y_axis_label='', z_axis_label=r'$\hat{n}$', z_axis_length=0.5)
+    fig, ax = hemi_coord_figure(elev=38, azim=-50, surf=True, c='c', sc='g', ha=0.05, arrow_length=0.1,
+                                arrow_length_ratio=0.6, axes_labels=('', '', r'$\hat{n}$'), zlen=0.5)
     ax.text(0.4, -0.4, 0.0, r'specimen', fontsize=15, color='k')
 
     # Plot the light source
