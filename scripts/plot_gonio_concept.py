@@ -146,6 +146,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--virtual", action="store_true", help="Plot the virtual gonio-reflecmetor concept.")
     parser.add_argument("--gen", action="store_true", help="Generate figures")
+    parser.add_argument("--fz", help="Fontzie", type=int, default=15)
     args = parser.parse_args()
 
     sns.set_theme(style="whitegrid", color_codes=True)
@@ -163,16 +164,18 @@ if __name__ == "__main__":
         'ss': 0.4,
     }
 
-    fig, ax = hemi_coord_figure(azim=-50, surf=True, hc='c', sc='g', **params)
+    fontsize = args.fz
+
+    fig, ax = hemi_coord_figure(azim=-50, surf=True, hc='c', sc='g', fontsize=fontsize, **params)
 
     if not args.virtual:
-        ax.text(0.4, -0.4, 0.0, r'specimen', fontsize=15, color='k')
+        ax.text(0.3, -0.5, 0.0, r'specimen', fontsize=fontsize, color='k')
 
         # Plot the light source
         theta = np.pi / 4
         phi = np.pi / 6 + np.pi
         l_bot_x, l_bot_y, l_bot_z = plot_cylinder(ax, theta, phi, auxiliary=True)
-        ax.text(-0.7, -0.8, 1.2, r'light source', fontsize=15, color='k')
+        ax.text(-0.7, -0.8, 1.2, r'light source', fontsize=fontsize, color='k')
         ax.quiver(l_bot_x, l_bot_y, l_bot_z, -l_bot_x, -l_bot_y, -l_bot_z, color='orangered', arrow_length_ratio=0.1,
                   alpha=0.8, linewidth=2.0)
 
@@ -181,7 +184,7 @@ if __name__ == "__main__":
         phi_o = np.pi / 4
         l_bot_x, l_bot_y, l_bot_z = plot_cylinder(ax, theta_o, phi_o, c='darkorchid', height=0.1, radius=0.08,
                                                   auxiliary=True)
-        ax.text(0.65, 0.55, 0.8, r'sensor', fontsize=15, color='k')
+        ax.text(0.65, 0.55, 0.8, r'sensor', fontsize=fontsize, color='k')
         ax.quiver(0, 0, 0, l_bot_x, l_bot_y, l_bot_z, color='orangered', arrow_length_ratio=0.1,
                   alpha=0.8, linewidth=2.0)
 
@@ -193,14 +196,14 @@ if __name__ == "__main__":
     else:
         ks, rs, ts = compute_becker(16)
         becker_plot_hemisphere(ks, ts, ax, alpha=0.2)
-        ax.text(0.75, 0.75, 0.2, r'detector', fontsize=15, color='k')
+        ax.text(0.75, 0.75, 0.2, r'detector', fontsize=fontsize, color='k')
 
         # Plot the light source
         radius = 0.15
         theta = np.pi / 4
         phi = np.pi / 6 + np.pi
         l_bot_x, l_bot_y, l_bot_z = plot_cylinder(ax, theta, phi, height=0.08, radius=radius, alpha=0.4)
-        ax.text(-0.7, -0.8, 1.2, r'emitter', fontsize=15, color='k')
+        ax.text(-0.7, -0.8, 1.2, r'emitter', fontsize=fontsize, color='k')
 
         # Shot rays from the bottom caps of the cylinder
         dir = np.array([l_bot_x, l_bot_y, l_bot_z])

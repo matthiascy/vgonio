@@ -27,6 +27,7 @@ def hemi_coord_figure(elev=45, azim=-30, axes='xyz', hc='g', sc='b', ss=1.0, ha=
         * 'xlinestyle': line style of the x-axis.
         * 'ylinestyle': line style of the y-axis.
         * 'zlinestyle': line style of the z-axis.
+        * 'fontsize': font size of the annotations.
         * 'arrow_length': length of the arrow, default 0.3.
         * 'arrow_length_ratio': length of the arrowhead relative to the arrow, default 0.3.
     :return: fig, ax
@@ -62,6 +63,7 @@ def hemi_coord_figure(elev=45, azim=-30, axes='xyz', hc='g', sc='b', ss=1.0, ha=
     arrow_length = kwargs.get('arrow_length', 0.3)
     arrow_length_ratio = kwargs.get('arrow_length_ratio', 0.3)
     axes_alpha = kwargs.get('axes_alpha', (0.7, 0.7, 0.7))
+    fontsize = kwargs.get('fontsize', 15)
 
     if 'x' in axes:
         ax.plot([-xlen, xlen], [0, 0], [0, 0], xlinestyle, alpha=axes_alpha[0])  # x-axis
@@ -87,7 +89,7 @@ def hemi_coord_figure(elev=45, azim=-30, axes='xyz', hc='g', sc='b', ss=1.0, ha=
 
     if annotate:
         # annotate the hemisphere domain
-        ax.text(-0.8, -0.8, 0.0, r'$\Omega$', fontsize=15, color='k')
+        ax.text(-0.8, -0.8, 0.0, r'$\Omega$', fontsize=fontsize, color='k')
 
     # hide gridlines
     ax.grid(False)
