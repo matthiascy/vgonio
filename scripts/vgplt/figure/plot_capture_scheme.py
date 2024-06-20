@@ -3,8 +3,8 @@ import numpy as np
 import seaborn as sns
 import argparse
 
-from vgplt.utils import points_on_hemisphere
-from vgplt.hemisphere import hemi_coord_figure
+from ..utils import points_on_hemisphere
+from ..hemisphere import hemi_coord_figure
 
 
 def plot_points(ax, r=1.0, c='m', s=15, extra=False):

@@ -2,13 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 import seaborn as sns
-from matplotlib.patches import Circle, Arc, FancyArrowPatch
-import mpl_toolkits.mplot3d.art3d as art3d
+from matplotlib.patches import Arc, FancyArrowPatch
 
 from plot_beckers import compute_becker, becker_plot_hemisphere
-from disk_sampling import uniform_disk_samples
-from vgplt.hemisphere import hemi_coord_figure
-from vgplt.utils import rotate, path_patch_2d_to_3d, points_on_hemisphere, spherical_to_cartesian
+from ..hemisphere import hemi_coord_figure
+from ..utils import rotate, path_patch_2d_to_3d, spherical_to_cartesian, uniform_disk_samples
 
 
 def plot_sphere(ax):

@@ -2,7 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def hemi_coord_figure(elev=45, azim=-30, axes='xyz', hc='g', sc='b', ss=1.0, ha=0.3, surf=False, annotate=False,
+def hemi_coord_figure(elev=45, azim=-30, roll=None, axes='xyz', hc='g', sc='b', ss=1.0, ha=0.3, surf=False,
+                      annotate=False,
                       hide=False, hshade=True, **kwargs):
     """
     Create a new hemisphere figure.
@@ -51,7 +52,7 @@ def hemi_coord_figure(elev=45, azim=-30, axes='xyz', hc='g', sc='b', ss=1.0, ha=
         z = r * np.cos(theta)
         ax.plot_surface(x, y, z, rstride=1, cstride=1, color=hc, alpha=ha, linewidth=0, shade=hshade)
 
-    ax.view_init(elev=elev, azim=azim)
+    ax.view_init(elev=elev, azim=azim, roll=roll)
 
     axes_labels = kwargs.get('axes_labels', ['X', 'Y', 'Z'])
     xlen = kwargs.get('xlen', 1.0)
@@ -69,17 +70,17 @@ def hemi_coord_figure(elev=45, azim=-30, axes='xyz', hc='g', sc='b', ss=1.0, ha=
         ax.plot([-xlen, xlen], [0, 0], [0, 0], xlinestyle, alpha=axes_alpha[0])  # x-axis
         ax.quiver(xlen, 0, 0, arrow_length, 0, 0, color='k',
                   arrow_length_ratio=arrow_length_ratio)  # arrowhead
-        ax.text(1.4, 0, 0, axes_labels[0], fontsize=15, color='k')
+        ax.text(1.4, 0, 0, axes_labels[0], fontsize=fontsize, color='k')
     if 'y' in axes:
         ax.plot([0, 0], [-ylen, ylen], [0, 0], ylinestyle, alpha=axes_alpha[1])  # y-axis
         ax.quiver(0, ylen, 0, 0, arrow_length, 0, color='k',
                   arrow_length_ratio=arrow_length_ratio)  # arrowhead
-        ax.text(0, 1.4, 0, axes_labels[1], fontsize=15, color='k')
+        ax.text(0, 1.4, 0, axes_labels[1], fontsize=fontsize, color='k')
     if 'z' in axes:
         ax.plot([0, 0], [0, 0], [0, zlen], zlinestyle, alpha=axes_alpha[2])  # z-axis
         ax.quiver(0, 0, zlen, 0, 0, arrow_length, color='k',
                   arrow_length_ratio=arrow_length_ratio)  # arrowhead
-        ax.text(0, 0, zlen * 1.4, axes_labels[2], fontsize=15, color='k')
+        ax.text(0, 0, zlen * 1.4, axes_labels[2], fontsize=fontsize, color='k')
 
     if surf:
         x = np.outer(np.linspace(-0.28, 0.28, 20), np.ones(20))

@@ -3,6 +3,7 @@ import random
 import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
+
 POINT_SIZE = 2
 
 
@@ -31,17 +32,6 @@ def rotate_3d(xs, ys, zs, theta, phi):
     rotated = rotate_y(xs, ys, zs, theta)
     rotated = rotate_z(rotated[0], rotated[1], rotated[2], phi)
     return rotated
-
-
-def uniform_disk_samples(count):
-    xs = np.zeros(count)
-    ys = np.zeros(count)
-    for i in range(count):
-        r = math.sqrt(random.uniform(0, 1))
-        a = random.uniform(0, math.tau)
-        xs[i] = r * math.cos(a)
-        ys[i] = r * math.sin(a)
-    return xs, ys
 
 
 def non_uniform_disk_samples(count):

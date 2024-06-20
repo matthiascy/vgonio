@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import patches
 
-from disk_sampling import uniform_disk_samples
+from ..utils import uniform_disk_samples
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

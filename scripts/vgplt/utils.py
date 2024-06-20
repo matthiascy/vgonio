@@ -68,3 +68,14 @@ def points_on_hemisphere(r=1.0, ntheta=10, nphi=20):
     y = r * np.sin(ts) * np.sin(ps)
     z = r * np.cos(ts)
     return x, y, z, ts, ps
+
+
+def uniform_disk_samples(count):
+    xs = np.zeros(count)
+    ys = np.zeros(count)
+    for i in range(count):
+        r = np.sqrt(np.random.uniform(0, 1))
+        a = np.random.uniform(0, np.pi * 2)
+        xs[i] = r * np.cos(a)
+        ys[i] = r * np.sin(a)
+    return xs, ys

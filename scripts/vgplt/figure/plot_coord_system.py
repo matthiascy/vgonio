@@ -5,8 +5,8 @@ import seaborn as sns
 from matplotlib.patches import Circle, Arc, FancyArrowPatch
 import mpl_toolkits.mplot3d.art3d as art3d
 
-from vgplt.utils import rotate, path_patch_2d_to_3d
-from vgplt.hemisphere import hemi_coord_figure
+from ..utils import rotate, path_patch_2d_to_3d
+from ..hemisphere import hemi_coord_figure
 
 
 def solid_angle_rotation_matrix(theta, phi):

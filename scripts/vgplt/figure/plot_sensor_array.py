@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 import seaborn as sns
 
-from vgplt.utils import points_on_hemisphere, rotate, path_patch_2d_to_3d
-from vgplt.hemisphere import hemi_coord_figure
+from ..utils import points_on_hemisphere, rotate, path_patch_2d_to_3d
+from ..hemisphere import hemi_coord_figure
 
 
 def plot_circle(ax, theta, phi, r=0.1, **kwargs):
