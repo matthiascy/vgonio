@@ -374,13 +374,9 @@ def plot_ndf_slice(phi, phi_opp, ndf_slices):
 
     for theta, slice, slice_opp in ndf_slices:
         fig, ax = plt.subplots(figsize=(8, 8))
-        # equal aspect ratio
-        # ax.set_aspect('equal', adjustable='box')
-        # fig.suptitle("NDF Slice")
         ax.set_aspect('auto')
         ax.set_xlabel(r"$θ_m$", fontsize=18)
         ax.set_ylabel(r"$NDF\;[sr^{-1}]$", fontsize=18)
-        # ax.set_facecolor(plt.get_cmap('BuPu')(0))
 
         # Combine theta and its filpped negative counterpart for x-axis
         xs = np.append(np.flip(-np.array(theta)), np.array(theta))
@@ -409,8 +405,11 @@ def plot_ndf_slice(phi, phi_opp, ndf_slices):
         ax.set_xticks(rad_ticks)
         ax.set_xticklabels([f"{int(deg)}°" for deg in deg_ticks])
 
-        # plt.subplots_adjust(left=0.002, right=0.998, top=0.998, bottom=0.002, wspace=0.1, hspace=0.0)
         plt.tight_layout()
-        # # save as pdf
+        # save as pdf
         plt.savefig('./ndf_slice.pdf', format='pdf', bbox_inches='tight')
         plt.show()
+
+
+def plot_gaf_slice():
+    pass

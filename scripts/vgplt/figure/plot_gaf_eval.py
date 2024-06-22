@@ -132,13 +132,18 @@ def plot_shadow_map_generation(ax, theta=45, phi=45, filter=True, scale=0.2, tol
 
     # Draw normals of filtered triangles
     if filter:
+        avg = np.empty((0, 3))
         for tri in close_triangles:
             tri_pts = points[tri]
             tri_centre = np.mean(tri_pts, axis=0)
             tri_normal = calculate_normals(tri_pts, np.array([[0, 1, 2]]))[0]
+            avg = np.vstack((avg, tri_normal))
             ax.quiver(tri_centre[0], tri_centre[1], tri_centre[2],
                       tri_normal[0], tri_normal[1], tri_normal[2],
                       color='r', alpha=0.6, length=0.2)
+        avg_normal = np.mean(avg, axis=0)
+        ax.quiver(0, 0, 0, avg_normal[0], avg_normal[1], avg_normal[2], color='g', alpha=0.8, length=0.6, linewidth=2.5)
+        ax.text(avg_normal[0] * 0.4, avg_normal[1] * 0.4, avg_normal[2] * 0.4, r'$\hat{m}$', fontsize=20, color='k')
 
     # Project filtered triangles onto the plane
     plane_normal = dir_vector
@@ -176,7 +181,7 @@ def plot_shadow_map_generation(ax, theta=45, phi=45, filter=True, scale=0.2, tol
     ax.quiver(plane_point[0], plane_point[1], plane_point[2],
               plane_normal[0], plane_normal[1], plane_normal[2],
               linewidth=2, color='k', alpha=0.8, length=0.4)
-    ax.text(plane_point[0], plane_point[1], plane_point[2] + 0.4, r'$\hat{m}$', fontsize=20, color='k')
+    ax.text(plane_point[0], plane_point[1], plane_point[2] + 0.4, r'$\hat{v}$', fontsize=20, color='k')
 
 
 if __name__ == "__main__":
