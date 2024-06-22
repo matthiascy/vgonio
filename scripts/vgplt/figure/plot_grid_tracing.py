@@ -60,7 +60,7 @@ def plot_grid(ax):
 
     # Highlight the cells
     for cell in cells[1:]:
-        rect = patches.Rectangle((cell[0], cell[1]), 1, 1, edgecolor='none', facecolor='lightcyan', alpha=0.5)
+        rect = patches.Rectangle((cell[0], cell[1]), 1, 1, edgecolor='none', facecolor='lightcyan', alpha=0.3)
         ax.add_patch(rect)
 
     # Calculate and plot the intersection points
@@ -69,7 +69,7 @@ def plot_grid(ax):
     highlighted_cells = set((int(x), int(y)) for x, y in intersections)
     for cell in highlighted_cells:
         if cell not in cells:
-            rect = patches.Rectangle((cell[0], cell[1]), 1, 1, edgecolor='none', facecolor='honeydew', alpha=0.5)
+            rect = patches.Rectangle((cell[0], cell[1]), 1, 1, edgecolor='none', facecolor='honeydew', alpha=0.3)
             ax.add_patch(rect)
 
     # Calculate the slope of the line then the end point

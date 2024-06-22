@@ -1,9 +1,16 @@
 use crate::{
     app::{cache::Cache, Config},
-    measure::bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
-    pyplot::{plot_brdf_slice, plot_brdf_slice_in_plane, plot_brdf_vgonio_clausen},
+    measure::{
+        bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
+        mfd::MeasuredNdfData,
+    },
+    pyplot::{plot_brdf_slice, plot_brdf_slice_in_plane, plot_brdf_vgonio_clausen, plot_ndf},
 };
-use base::{error::VgonioError, math::Sph2, units::Rads};
+use base::{
+    error::VgonioError,
+    math::Sph2,
+    units::{Radians, Rads},
+};
 use bxdf::brdf::measured::ClausenBrdf;
 use std::path::PathBuf;
 
@@ -22,6 +29,10 @@ pub enum PlotKind {
 
     #[clap(alias = "slice-in-plane")]
     SliceInPlane,
+
+    /// Plot the NDF from saved *.vgmo file
+    #[clap(alias = "ndf")]
+    Ndf,
 }
 
 /// Options for the `plot` command.
@@ -60,10 +71,11 @@ pub struct PlotOptions {
 
     #[clap(
         long,
-        help = "The azimuthal angle to plot the BRDF at.",
+        help = "The azimuthal angle to plot the BRDF at. (in degrees)",
         default_value = "0.0",
         required_if_eq("kind", "slice"),
-        required_if_eq("kind", "slice-in-plane")
+        required_if_eq("kind", "slice-in-plane"),
+        required_if_eq("kind", "ndf")
     )]
     pub phi_i: f32,
 
@@ -168,6 +180,26 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     let spectrum = brdfs[0].spectrum.clone().into_vec();
                     plot_brdf_slice_in_plane(&brdfs, phi_i, spectrum).unwrap();
                 }
+                Ok(())
+            }
+            PlotKind::Ndf => {
+                // TODO: unload if the input is not ndf
+                let hdls = opts
+                    .inputs
+                    .iter()
+                    .map(|input| cache.load_micro_surface_measurement(&config, input))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let ndfs = hdls
+                    .into_iter()
+                    .filter_map(|hdl| {
+                        cache
+                            .get_measurement(hdl)
+                            .unwrap()
+                            .measured
+                            .downcast_ref::<MeasuredNdfData>()
+                    })
+                    .collect::<Vec<_>>();
+                plot_ndf(&ndfs, Radians::from_degrees(opts.phi_i)).unwrap();
                 Ok(())
             }
         }

@@ -99,47 +99,6 @@ impl Measurement {
     /// Returns the kind of the measurement data.
     pub fn kind(&self) -> MeasurementKind { self.measured.kind() }
 
-    /// Returns the Area Distribution Function data slice for the given
-    /// azimuthal angle in radians.
-    ///
-    /// The returned slice contains two elements, the first one is the
-    /// data slice for the given azimuthal angle, the second one is the
-    /// data slice for the azimuthal angle that is 180 degrees away from
-    /// the given azimuthal angle, if exists.
-    ///
-    /// Azimuthal angle will be wrapped around to the range [0, 2π).
-    ///
-    /// 2π will be mapped to 0.
-    ///
-    /// # Arguments
-    ///
-    /// * `azimuth_m` - Azimuthal angle of the microfacet normal in radians.
-    pub fn ndf_data_slice(&self, azimuth_m: Radians) -> Option<(&[f32], Option<&[f32]>)> {
-        debug_assert!(self.kind() == MeasurementKind::Ndf);
-        self.measured
-            .downcast_ref::<MeasuredNdfData>()
-            .and_then(|ndf| {
-                let (azi, zen) = ndf.measurement_range().unwrap();
-                let azimuth_m = azimuth_m.wrap_to_tau();
-                let azimuth_m_idx = azi.index_of(azimuth_m);
-                let opposite_azimuth_m = azimuth_m.opposite();
-                let opposite_index =
-                    if azi.start <= opposite_azimuth_m && opposite_azimuth_m <= azi.stop {
-                        Some(azi.index_of(opposite_azimuth_m))
-                    } else {
-                        None
-                    };
-                let zen_step_count = zen.step_count_wrapped();
-                Some((
-                    &ndf.samples
-                        [azimuth_m_idx * zen_step_count..(azimuth_m_idx + 1) * zen_step_count],
-                    opposite_index.map(|index| {
-                        &ndf.samples[index * zen_step_count..(index + 1) * zen_step_count]
-                    }),
-                ))
-            })
-    }
-
     /// Returns the Masking Shadowing Function data slice for the given
     /// microfacet normal and azimuthal angle of the incident direction.
     ///
@@ -466,9 +425,24 @@ pub fn estimate_orbit_radius(mesh: &MicroSurfaceMesh) -> f32 {
 pub fn estimate_disc_radius(mesh: &MicroSurfaceMesh) -> f32 { mesh.bounds.max_extent() * 0.7 }
 
 /// Trait for the data carried on the hemisphere.
-pub trait DataCarriedOnHemisphere: Sized {}
+pub trait DataCarriedOnHemisphere: Sized {
+    /// Checks if the data is carried by the patches on the hemisphere.
+    /// The main reason for this is that the `MeasuredNdfData` may not
+    /// necessarily be measured by patches on the hemisphere.
+    fn is_carried_by_hemisphere(&self) -> bool { true }
+}
 
 impl DataCarriedOnHemisphere for VgonioBrdf {}
+
+impl DataCarriedOnHemisphere for MeasuredNdfData {
+    fn is_carried_by_hemisphere(&self) -> bool {
+        if self.params.mode.is_by_points() {
+            false
+        } else {
+            true
+        }
+    }
+}
 
 /// Structure for sampling the data carried on the hemisphere.
 pub struct DataCarriedOnHemisphereSampler<'a, D>
@@ -484,7 +458,13 @@ where
     D: DataCarriedOnHemisphere,
 {
     /// Creates a new sampler for the data carried on the hemisphere.
-    pub fn new(data: &'a D) -> Self { Self { data } }
+    pub fn new(data: &'a D) -> Option<Self> {
+        if data.is_carried_by_hemisphere() {
+            Some(Self { data })
+        } else {
+            None
+        }
+    }
 }
 
 impl<'a> DataCarriedOnHemisphereSampler<'a, VgonioBrdf> {

@@ -1,11 +1,12 @@
-import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 from matplotlib.widgets import Button, TextBox
 import numpy as np
 import seaborn as sns
 
 # Use this to avoid GUI
 # mpl.use('Agg')
+
 # mpl.use('qtagg')
 
 sns.set_theme(style="whitegrid", color_codes=True)
@@ -363,3 +364,44 @@ def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices, wavelengths):
     ax_polar.legend(loc='upper right', bbox_to_anchor=(1.1, 1.1))
     ax_polar.spines['polar'].set_visible(False)
     plt.show()
+
+
+def plot_ndf_slice(phi, phi_opp, ndf_slices):
+    deg_ticks = np.arange(-90, 91, 30)
+    rad_ticks = np.radians(deg_ticks)
+    # each slice is a tuple of (slice, slice_opp, theta) of one measurement
+    for theta, slice, slice_opp in ndf_slices:
+        fig, ax = plt.subplots()
+        # fig.suptitle("NDF Slice")
+        ax.set_xlabel(r"$θ_m$", fontsize=18)
+        ax.set_ylabel(r"$NDF\;[sr^{-1}]$", fontsize=18)
+
+        # Combine theta and its filpped negative counterpart for x-axis
+        xs = np.append(np.flip(-np.array(theta)), np.array(theta))
+        slice_phi = np.array(slice)
+        slice_phi_opp = np.array(slice_opp)
+
+        ys = np.append(np.flip(slice_phi_opp), slice_phi)
+        ax.plot(xs, ys, color='b', linestyle='-', linewidth=2)
+
+        # Annotation
+        ax.annotate(fr'$\phi_m={np.degrees(phi_opp):.0f}\degree$', xy=(xs[0], ys[0]), xycoords='data',
+                    xytext=(-10, 20), textcoords='offset points',
+                    arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.5"),
+                    fontsize=14, color='k', fontweight='bold')
+        ax.annotate(fr'$\phi_m={np.degrees(phi):.0f}\degree$', xy=(xs[-1], ys[-1]), xycoords='data',
+                    xytext=(-40, 20), textcoords='offset points',
+                    arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=-.5"),
+                    fontsize=14, color='k', fontweight='bold')
+
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+
+        ax.set_xticks(rad_ticks)
+        ax.set_xticklabels([f"{int(deg)}°" for deg in deg_ticks])
+
+        plt.tight_layout()
+        plt.show()

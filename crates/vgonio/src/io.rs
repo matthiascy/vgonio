@@ -116,6 +116,7 @@ pub mod vgmo {
                     Self::Ndf { params } => {
                         match &params.mode {
                             NdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                                log::debug!("Writing NDF header ext (by points) to VGMO file");
                                 writer.write_all(&[
                                     MeasurementKind::Ndf as u8,
                                     0, // by points
@@ -125,6 +126,7 @@ pub mod vgmo {
                                 write_adf_or_msf_params_to_vgmo(azimuth, zenith, writer, true)?;
                             }
                             NdfMeasurementMode::ByPartition { precision } => {
+                                log::debug!("Writing NDF header ext (by partition) to VGMO file");
                                 writer.write_all(&[
                                     MeasurementKind::Ndf as u8,
                                     1, // by partition
@@ -557,18 +559,27 @@ pub mod vgmo {
                     let mut common_info = [0u8; 3];
                     // Read `measurement mode`, `crop to disk`, and `use facet area`
                     reader.read_exact(&mut common_info)?;
+                    log::debug!(
+                        "Reading NDF measurement params from VGMO file: {}, crop: {}, facet-area: \
+                         {}",
+                        if common_info[0] == 0 {
+                            "By points"
+                        } else {
+                            "By partition"
+                        },
+                        common_info[1] != 0,
+                        common_info[2] != 0
+                    );
                     let mode = match common_info[0] {
+                        /// By points
                         0 => {
                             let mut buf = [0u8; 36];
                             reader.read_exact(&mut buf)?;
-                            let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(
-                                &common_info[0..16],
-                            );
-                            let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(
-                                &common_info[16..32],
-                            );
-                            let sample_count =
-                                u32::from_le_bytes(common_info[32..36].try_into().unwrap());
+                            let azimuth =
+                                RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[0..16]);
+                            let zenith =
+                                RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[16..32]);
+                            let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
                             debug_assert_eq!(
                                 sample_count as usize,
                                 NdfMeasurementParams::expected_samples_count_by_points(

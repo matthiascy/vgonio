@@ -51,6 +51,14 @@ pub enum NdfMeasurementMode {
     },
 }
 
+impl NdfMeasurementMode {
+    /// Returns true if the measurement mode is `ByPoints`.
+    pub fn is_by_points(&self) -> bool { matches!(self, NdfMeasurementMode::ByPoints { .. }) }
+
+    /// Returns true if the measurement mode is `ByPartition`.
+    pub fn is_by_partition(&self) -> bool { matches!(self, NdfMeasurementMode::ByPartition { .. }) }
+}
+
 impl Default for NdfMeasurementMode {
     fn default() -> Self {
         NdfMeasurementMode::ByPoints {

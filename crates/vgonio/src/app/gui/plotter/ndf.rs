@@ -112,7 +112,7 @@ impl VariantData for AreaDistributionExtra {
         self.azimuth_range = azimuth;
         self.zenith_range = zenith;
         for phi in self.azimuth_range.values_wrapped() {
-            let (starting, opposite) = measurement.ndf_data_slice(phi).unwrap();
+            let (starting, opposite) = ndf.slice_at(phi);
             let first_part_points = starting
                 .iter()
                 .zip(self.zenith_range.values())

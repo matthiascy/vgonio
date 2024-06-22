@@ -1,9 +1,12 @@
-use crate::measure::DataCarriedOnHemisphereSampler;
+use crate::measure::{
+    mfd::MeasuredNdfData, params::NdfMeasurementMode, DataCarriedOnHemisphereSampler,
+};
 use base::{
     math::Sph2,
     units::{Nanometres, Radians, Rads},
 };
 use bxdf::brdf::measured::{ClausenBrdf, VgonioBrdf};
+use log::log;
 use pyo3::{prelude::*, types::PyList};
 
 pub fn plot_err(errs: &[f64], alpha_start: f64, alpha_stop: f64, alpha_step: f64) -> PyResult<()> {
@@ -160,7 +163,7 @@ pub fn plot_brdf_slice(
             py,
             brdf.into_iter()
                 .map(|(brdf, legend)| {
-                    let sampler = DataCarriedOnHemisphereSampler::new(*brdf);
+                    let sampler = DataCarriedOnHemisphereSampler::new(*brdf).unwrap();
                     let theta = brdf
                         .params
                         .outgoing
@@ -210,7 +213,7 @@ pub fn plot_brdf_slice_in_plane(
             py,
             brdf.into_iter()
                 .map(|&brdf| {
-                    let sampler = DataCarriedOnHemisphereSampler::new(brdf);
+                    let sampler = DataCarriedOnHemisphereSampler::new(brdf).unwrap();
                     let mut theta_i = brdf
                         .params
                         .incoming
@@ -249,6 +252,41 @@ pub fn plot_brdf_slice_in_plane(
             phi_opp.to_degrees().as_f32(),
             brdfs,
             wavelengths,
+        );
+        fun.call1(py, args)?;
+        Ok(())
+    })
+}
+
+pub fn plot_ndf(ndf: &[&MeasuredNdfData], phi: Radians) -> PyResult<()> {
+    Python::with_gil(|py| {
+        let fun: Py<PyAny> =
+            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
+                .getattr("plot_ndf_slice")?
+                .into();
+        let slices = PyList::new_bound(
+            py,
+            ndf.into_iter()
+                .map(|&ndf| {
+                    // let sampler = DataCarriedOnHemisphereSampler::new(ndf);
+                    let theta = match ndf.params.mode {
+                        NdfMeasurementMode::ByPoints { zenith, .. } => zenith
+                            .values_wrapped()
+                            .map(|x| x.as_f32())
+                            .collect::<Vec<_>>(),
+                        NdfMeasurementMode::ByPartition { .. } => {
+                            todo!()
+                        }
+                    };
+                    let (spls, opp_spls) = ndf.slice_at(phi);
+                    (theta, spls.to_vec(), opp_spls.unwrap().to_vec())
+                })
+                .collect::<Vec<_>>(),
+        );
+        let args = (
+            phi.as_f32(),
+            (phi + Radians::PI).wrap_to_tau().as_f32(),
+            slices,
         );
         fun.call1(py, args)?;
         Ok(())

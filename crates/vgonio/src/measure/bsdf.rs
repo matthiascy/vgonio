@@ -525,7 +525,7 @@ impl MeasuredBsdfData {
         };
 
         let brdf = self.bsdfs.get(&level).unwrap();
-        let sampler = DataCarriedOnHemisphereSampler::new(brdf);
+        let sampler = DataCarriedOnHemisphereSampler::new(brdf).unwrap();
 
         // Get the interpolated samples for wi, wo, and spectrum.
         new_params.wi_wos_iter().for_each(|(i, (wi, wos))| {

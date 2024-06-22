@@ -43,6 +43,44 @@ pub struct MeasuredNdfData {
 impl_measured_data_trait!(MeasuredNdfData, Ndf, false);
 
 impl MeasuredNdfData {
+    /// Returns the Area Distribution Function data slice for the given
+    /// azimuthal angle in radians.
+    ///
+    /// The returned slice contains two elements, the first one is the
+    /// data slice for the given azimuthal angle, the second one is the
+    /// data slice for the azimuthal angle that is 180 degrees away from
+    /// the given azimuthal angle, if exists.
+    ///
+    /// Azimuthal angle will be wrapped around to the range [0, 2π).
+    ///
+    /// 2π will be mapped to 0.
+    ///
+    /// # Arguments
+    ///
+    /// * `azim` - Azimuthal angle of the microfacet normal in radians.
+    pub fn slice_at(&self, azim: Radians) -> (&[f32], Option<&[f32]>) {
+        if self.params.mode.is_by_points() {
+            let (azi, zen) = self.measurement_range().unwrap();
+            let azim_m = azim.wrap_to_tau();
+            let azim_m_idx = azi.index_of(azim_m);
+            let opposite_azim_m = azim_m.opposite();
+            let opposite_azim_idx = if azi.start <= opposite_azim_m && opposite_azim_m <= azi.stop {
+                Some(azi.index_of(opposite_azim_m))
+            } else {
+                None
+            };
+            let zen_step_count = zen.step_count_wrapped();
+            (
+                &self.samples[azim_m_idx * zen_step_count..(azim_m_idx + 1) * zen_step_count],
+                opposite_azim_idx.map(|index| {
+                    &self.samples[index * zen_step_count..(index + 1) * zen_step_count]
+                }),
+            )
+        } else {
+            todo!("Implement slice_at for the partition mode.")
+        }
+    }
+
     /// Writes the measured data as an EXR file.
     pub fn write_as_exr(
         &self,
