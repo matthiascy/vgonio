@@ -127,7 +127,8 @@ impl VisibilityEstimation {
 /// function estimation.
 impl VisibilityEstimator {
     /// Texture format used for the color attachment.
-    pub const COLOR_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgb10a2Unorm;
+    pub const COLOR_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+    // wgpu::TextureFormat::Rgb10a2Unorm;
 
     /// Bytes per pixel of the color attachment.
     pub const COLOR_ATTACHMENT_FORMAT_BPP: u32 = tex_fmt_bpp(Self::COLOR_ATTACHMENT_FORMAT);
@@ -499,6 +500,11 @@ impl VisibilityEstimator {
             label: Some("ve_bake_depth_maps_encoder"),
         });
 
+        log::debug!(
+            "Baking depth maps... {} measurement points",
+            self.num_measurement_points
+        );
+
         // encoder.push_debug_group("oc_depth_maps_bake");
 
         for i in 0..self.num_measurement_points {
@@ -632,11 +638,25 @@ impl VisibilityEstimator {
         &self,
         device: &wgpu::Device,
         dir: &Path,
+        names: &[String],
+        remap: bool,
         as_image: bool,
     ) -> Result<(), VgonioError> {
         log::info!("Saving color attachment to {:?}", dir);
-        self.color_attachments[0].save(device, &dir.join("visible_projected_area"), as_image)?;
-        self.color_attachments[1].save(device, &dir.join("total_projected_area"), as_image)
+        self.color_attachments[0].save(
+            device,
+            &dir.join("visible_projected_area"),
+            names,
+            remap,
+            as_image,
+        )?;
+        self.color_attachments[1].save(
+            device,
+            &dir.join("total_projected_area"),
+            names,
+            remap,
+            as_image,
+        )
     }
 
     /// Saves the depth estimation outputs to the given directory.
@@ -644,10 +664,11 @@ impl VisibilityEstimator {
         &self,
         device: &wgpu::Device,
         dir: &Path,
+        names: &[String],
         as_image: bool,
     ) -> Result<(), VgonioError> {
         log::info!("Saving depth attachment to {:?}", dir);
-        self.depth_attachment.save(device, dir, as_image)
+        self.depth_attachment.save(device, dir, &names, as_image)
     }
 
     fn compute_area(&self, device: &wgpu::Device, color_attachment: &ColorAttachment) -> Vec<u32> {
@@ -986,6 +1007,7 @@ impl DepthAttachment {
         &self,
         device: &wgpu::Device,
         dir: &Path,
+        names: &[String],
         as_image: bool,
     ) -> Result<(), VgonioError> {
         self.textures
@@ -1022,8 +1044,8 @@ impl DepthAttachment {
                                 *pixel = Luma([(layer[index] * 255.0) as u8]);
                             }
                             let path = dir.join(format!(
-                                "depth_layer_{:04}.png",
-                                storage_texture_index * self.layers_per_texture as usize + i
+                                "depth_layer_{}.png",
+                                names[storage_texture_index * self.layers_per_texture as usize + i]
                             ));
                             img.save(path).expect("Failed to save image");
                         }
@@ -1031,8 +1053,8 @@ impl DepthAttachment {
                         use std::io::Write;
                         for (i, layer) in data.chunks_exact(num_pixels).enumerate() {
                             let mut file = std::fs::File::create(dir.join(format!(
-                                "depth_layer_{:04}.txt",
-                                storage_texture_index * self.layers_per_texture as usize + i
+                                "depth_layer_{}.txt",
+                                names[storage_texture_index * self.layers_per_texture as usize + i]
                             )))
                             .unwrap();
                             for (j, val) in layer.iter().enumerate() {
@@ -1185,6 +1207,8 @@ impl ColorAttachment {
         &self,
         device: &wgpu::Device,
         dir: &Path,
+        names: &[String],
+        remap: bool,
         as_image: bool,
     ) -> Result<(), VgonioError> {
         self.textures
@@ -1222,18 +1246,33 @@ impl ColorAttachment {
                             if !is_8bit {
                                 panic!("Saving 10-bit color textures as images is not supported.");
                             } else {
-                                let img =
-                                    ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, layer)
+                                let mut px_data = vec![0u8; layer.len()];
+                                px_data.copy_from_slice(layer);
+                                let mut img =
+                                    ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, px_data)
                                         .ok_or(VgonioError::new(
                                             "Failed to create image buffer",
                                             None,
                                         ))
                                         .unwrap();
+                                // Remap the values from min-max to 0-255.
+                                if remap {
+                                    let min = *layer.iter().step_by(4).min().unwrap() as f32;
+                                    let max = *layer.iter().step_by(4).max().unwrap() as f32;
+                                    img.pixels_mut().for_each(|px| {
+                                        let remapped = ((px[0] as f32 - min) * 255.0 / max) as u8;
+                                        px[0] = remapped;
+                                        px[1] = remapped;
+                                        px[2] = remapped;
+                                        px[3] = 255;
+                                    });
+                                }
                                 img.save(dir.join(format!(
-                                    "color_layer_{:04}.png",
-                                    storage_texture_index * self.layers_per_texture as usize + i
+                                    "color_layer_{}.png",
+                                    names[storage_texture_index * self.layers_per_texture as usize
+                                        + i],
                                 )))
-                                .unwrap()
+                                .unwrap();
                             }
                         }
                     } else {
@@ -1525,6 +1564,10 @@ pub fn measure_masking_shadowing_function(
                 MeasurementPoint::new(azimuth, zenith, view_dir, proj_view_mat, i as u32)
             })
             .collect::<Vec<_>>();
+        let names = meas_points
+            .iter()
+            .map(|p| format!("ph{}_th{}", p.azimuth.prettified(), p.zenith.prettified()))
+            .collect::<Vec<_>>();
 
         // Upload measurement points to GPU.
         estimator.update_measurement_points(&gpu.queue, &meas_points);
@@ -1540,7 +1583,7 @@ pub fn measure_masking_shadowing_function(
         #[cfg(debug_assertions)]
         {
             estimator
-                .save_depth_attachment(&gpu.device, Path::new("debug_depth_maps"), true)
+                .save_depth_attachment(&gpu.device, Path::new("debug_depth_maps"), &names, true)
                 .expect("Failed to save depth attachment");
         }
 
@@ -1607,7 +1650,7 @@ pub fn measure_masking_shadowing_function(
                         mp.zenith.prettified()
                     );
                     estimator
-                        .save_color_attachment(&gpu.device, Path::new(&dir), true)
+                        .save_color_attachment(&gpu.device, Path::new(&dir), &names, false, true)
                         .expect("Failed to save color attachment");
                 }
 
@@ -1618,21 +1661,6 @@ pub fn measure_masking_shadowing_function(
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();
-
-        #[cfg(debug_assertions)]
-        {
-            estimator.estimate(
-                &gpu.device,
-                &gpu.queue,
-                &facets_vtx_buf,
-                &facets_idx_buf,
-                facets_idx_num,
-            );
-
-            estimator
-                .save_color_attachment(&gpu.device, Path::new("debug_occlusion_maps"), true)
-                .expect("Failed to save color attachment");
-        }
 
         results.push(Measurement {
             name: surface.unwrap().file_stem().unwrap().to_owned(),
