@@ -2,9 +2,11 @@ use crate::{
     app::{cache::Cache, Config},
     measure::{
         bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
-        mfd::MeasuredNdfData,
+        mfd::{MeasuredMsfData, MeasuredNdfData},
     },
-    pyplot::{plot_brdf_slice, plot_brdf_slice_in_plane, plot_brdf_vgonio_clausen, plot_ndf},
+    pyplot::{
+        plot_brdf_slice, plot_brdf_slice_in_plane, plot_brdf_vgonio_clausen, plot_gaf, plot_ndf,
+    },
 };
 use base::{
     error::VgonioError,
@@ -33,6 +35,9 @@ pub enum PlotKind {
     /// Plot the NDF from saved *.vgmo file
     #[clap(alias = "ndf")]
     Ndf,
+
+    #[clap(alias = "gaf")]
+    Gaf,
 }
 
 /// Options for the `plot` command.
@@ -54,7 +59,7 @@ pub struct PlotOptions {
     pub kind: PlotKind,
 
     #[clap(
-        long,
+        long = "po",
         help = "The azimuthal angle to plot the BRDF at.",
         default_value = "0.0",
         required_if_eq("kind", "slice")
@@ -70,7 +75,7 @@ pub struct PlotOptions {
     pub theta_i: f32,
 
     #[clap(
-        long,
+        long = "pi",
         help = "The azimuthal angle to plot the BRDF at. (in degrees)",
         default_value = "0.0",
         required_if_eq("kind", "slice"),
@@ -78,6 +83,31 @@ pub struct PlotOptions {
         required_if_eq("kind", "ndf")
     )]
     pub phi_i: f32,
+
+    #[clap(
+        long = "pv",
+        help = "The azimuthal angle of the view direction to plot the GAF at. (in degrees)",
+        default_value = "0.0",
+        required_if_eq("kind", "gaf")
+    )]
+    pub phi_v: f32,
+
+    #[clap(
+        long = "pm",
+        help = "The azimuthal angle of microfacet normal direction to plot the GAF at. (in \
+                degrees)",
+        default_value = "0.0",
+        required_if_eq("kind", "gaf")
+    )]
+    pub phi_m: f32,
+
+    #[clap(
+        long = "tm",
+        help = "The polar angle of the view direction to plot the GAF at. (in degrees)",
+        default_value = "0.0",
+        required_if_eq("kind", "gaf")
+    )]
+    pub theta_m: f32,
 
     #[clap(
         short,
@@ -200,6 +230,29 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     })
                     .collect::<Vec<_>>();
                 plot_ndf(&ndfs, Radians::from_degrees(opts.phi_i)).unwrap();
+                Ok(())
+            }
+            PlotKind::Gaf => {
+                let hdls = opts
+                    .inputs
+                    .iter()
+                    .map(|input| cache.load_micro_surface_measurement(&config, input))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let gafs = hdls
+                    .into_iter()
+                    .filter_map(|hdl| {
+                        cache
+                            .get_measurement(hdl)
+                            .unwrap()
+                            .measured
+                            .downcast_ref::<MeasuredMsfData>()
+                    })
+                    .collect::<Vec<_>>();
+                let wm = Sph2::new(
+                    Radians::from_degrees(opts.theta_m),
+                    Radians::from_degrees(opts.phi_m),
+                );
+                plot_gaf(&gafs, wm, Radians::from_degrees(opts.phi_v)).unwrap();
                 Ok(())
             }
         }

@@ -87,7 +87,7 @@ impl VariantData for MaskingShadowingExtra {
         for phi_m in self.azimuth_range.values_wrapped() {
             for theta_m in self.zenith_range.values() {
                 for phi_v in self.azimuth_range.values_wrapped() {
-                    let (starting, opposite) = measurement.msf_data_slice(phi_m, theta_m, phi_v);
+                    let (starting, opposite) = msf.slice_at(phi_m, theta_m, phi_v);
                     let first_part_points = starting
                         .iter()
                         .zip(self.zenith_range.values())

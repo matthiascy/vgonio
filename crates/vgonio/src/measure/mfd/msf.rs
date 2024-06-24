@@ -1423,13 +1423,13 @@ impl MeasuredMsfData {
     /// the given azimuthal angle, if it exists.
     pub fn slice_at(
         &self,
-        azimuth_m: Radians,
-        zenith_m: Radians,
-        azimuth_i: Radians,
+        azim_m: Radians,
+        zeni_m: Radians,
+        azim_i: Radians,
     ) -> (&[f32], Option<&[f32]>) {
-        let azimuth_m = azimuth_m.wrap_to_tau();
-        let azimuth_i = azimuth_i.wrap_to_tau();
-        let zenith_m = zenith_m.clamp(self.params.zenith.start, self.params.zenith.stop);
+        let azimuth_m = azim_m.wrap_to_tau();
+        let azimuth_i = azim_i.wrap_to_tau();
+        let zenith_m = zeni_m.clamp(self.params.zenith.start, self.params.zenith.stop);
         let azimuth_m_idx = self.params.azimuth.index_of(azimuth_m);
         let zenith_m_idx = self.params.zenith.index_of(zenith_m);
         let azimuth_i_idx = self.params.azimuth.index_of(azimuth_i);

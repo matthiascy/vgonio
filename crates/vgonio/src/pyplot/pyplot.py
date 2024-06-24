@@ -411,5 +411,40 @@ def plot_ndf_slice(phi, phi_opp, ndf_slices):
         plt.show()
 
 
-def plot_gaf_slice():
-    pass
+def plot_gaf_slice(tm, pm, pv, pv_opp, gaf_slices):
+    print(f"Plotting GAF slice with wm = ({np.degrees(tm)}, {np.degrees(pm)}) at pv = {np.degrees(pv)}")
+
+    deg_ticks = np.arange(-90, 91, 30)
+    rad_ticks = np.radians(deg_ticks)
+
+    for theta, slice, slice_opp in gaf_slices:
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.set_aspect('auto')
+        ax.set_xlabel(r"$θ_v$", fontsize=18)
+        ax.set_ylabel(r"$GAF$", fontsize=18)
+
+        # Combine theta and its filpped negative counterpart for x-axis
+        xs = np.append(np.flip(-np.array(theta)), np.array(theta))
+        slice_phi = np.array(slice)
+        slice_phi_opp = np.array(slice_opp)
+
+        ys = np.append(np.flip(slice_phi_opp), slice_phi)
+        ax.plot(xs, ys, color='b', linestyle='-', linewidth=2)
+
+        # Annotation
+        ax.text(-1.5, 0.05, fr'$\phi_v={np.degrees(pv_opp):.0f}\degree$', fontsize=20, color='k', fontweight='bold')
+        ax.text(1.0, 0.05, fr'$\phi_v={np.degrees(pv):.0f}\degree$', fontsize=20, color='k', fontweight='bold')
+
+        # ax.spines['right'].set_visible(False)
+        # ax.spines['top'].set_visible(False)
+        # ax.spines['left'].set_visible(False)
+        # ax.spines['bottom'].set_visible(False)
+        ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+
+        ax.set_xticks(rad_ticks)
+        ax.set_xticklabels([f"{int(deg)}°" for deg in deg_ticks])
+
+        plt.tight_layout()
+        # save as pdf
+        plt.savefig('./gaf-slice.pdf', format='pdf', bbox_inches='tight')
+        plt.show()

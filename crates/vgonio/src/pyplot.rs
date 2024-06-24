@@ -1,12 +1,13 @@
 use crate::measure::{
-    mfd::MeasuredNdfData, params::NdfMeasurementMode, DataCarriedOnHemisphereSampler,
+    mfd::{MeasuredMsfData, MeasuredNdfData},
+    params::NdfMeasurementMode,
+    DataCarriedOnHemisphereSampler,
 };
 use base::{
     math::Sph2,
     units::{Nanometres, Radians, Rads},
 };
 use bxdf::brdf::measured::{ClausenBrdf, VgonioBrdf};
-use log::log;
 use pyo3::{prelude::*, types::PyList};
 
 pub fn plot_err(errs: &[f64], alpha_start: f64, alpha_stop: f64, alpha_step: f64) -> PyResult<()> {
@@ -286,6 +287,40 @@ pub fn plot_ndf(ndf: &[&MeasuredNdfData], phi: Radians) -> PyResult<()> {
         let args = (
             phi.as_f32(),
             (phi + Radians::PI).wrap_to_tau().as_f32(),
+            slices,
+        );
+        fun.call1(py, args)?;
+        Ok(())
+    })
+}
+
+pub fn plot_gaf(gaf: &[&MeasuredMsfData], wm: Sph2, phi_v: Radians) -> PyResult<()> {
+    Python::with_gil(|py| {
+        let fun: Py<PyAny> =
+            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
+                .getattr("plot_gaf_slice")?
+                .into();
+        let slices = PyList::new_bound(
+            py,
+            gaf.into_iter()
+                .map(|&gaf| {
+                    let theta = gaf
+                        .params
+                        .zenith
+                        .values_wrapped()
+                        .map(|x| x.as_f32())
+                        .collect::<Vec<_>>();
+                    let (spls, opp_spls) = gaf.slice_at(wm.phi, wm.theta, phi_v);
+                    (theta, spls.to_vec(), opp_spls.unwrap().to_vec())
+                })
+                .collect::<Vec<_>>(),
+        );
+
+        let args = (
+            wm.theta.as_f32(),
+            wm.phi.as_f32(),
+            phi_v.as_f32(),
+            (phi_v + Radians::PI).wrap_to_tau().as_f32(),
             slices,
         );
         fun.call1(py, args)?;

@@ -1,7 +1,7 @@
 ---
 type: !msf # !microfacet-masking-shadowing-function
-  azimuth: 0 rad .. =360 deg / 60 deg
-  zenith: 0 rad .. =90 deg / 10 deg
+  azimuth: 0 rad .. =360 deg / 30 deg
+  zenith: 0 rad .. =90 deg / 2 deg
   resolution: 1024
   strict: true
 surfaces:

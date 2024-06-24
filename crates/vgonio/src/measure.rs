@@ -99,27 +99,6 @@ impl Measurement {
     /// Returns the kind of the measurement data.
     pub fn kind(&self) -> MeasurementKind { self.measured.kind() }
 
-    /// Returns the Masking Shadowing Function data slice for the given
-    /// microfacet normal and azimuthal angle of the incident direction.
-    ///
-    /// The returned slice contains two elements, the first one is the
-    /// data slice for the given azimuthal angle, the second one is the
-    /// data slice for the azimuthal angle that is 180 degrees away from
-    /// the given azimuthal angle, if exists.
-    pub fn msf_data_slice(
-        &self,
-        azimuth_m: Radians,
-        zenith_m: Radians,
-        azimuth_i: Radians,
-    ) -> (&[f32], Option<&[f32]>) {
-        debug_assert!(
-            self.kind() == MeasurementKind::Msf,
-            "measurement data kind should be MicrofacetMaskingShadowing"
-        );
-        let msf = self.measured.downcast_ref::<MeasuredMsfData>().unwrap();
-        msf.slice_at(azimuth_m, zenith_m, azimuth_i)
-    }
-
     /// Writes the measurement data to a file in VGMO format.
     pub fn write_to_file(
         &self,
