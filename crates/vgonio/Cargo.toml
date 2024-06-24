@@ -45,6 +45,7 @@ dirs.workspace = true
 futures-intrusive.workspace = true
 image.workspace = true
 levenberg-marquardt.workspace = true
+numpy.workspace = true
 nalgebra.workspace = true
 pollster.workspace = true
 pyo3.workspace = true

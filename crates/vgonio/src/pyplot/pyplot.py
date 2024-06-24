@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from matplotlib.widgets import Button, TextBox
@@ -448,3 +450,15 @@ def plot_gaf_slice(tm, pm, pv, pv_opp, gaf_slices):
         # save as pdf
         plt.savefig('./gaf-slice.pdf', format='pdf', bbox_inches='tight')
         plt.show()
+
+
+def plot_brdf_map(name: str, pixels: np.ndarray, size: Tuple[int, int], cmap='BuPu', cbar=False, coord=False):
+    print(f"Plotting BRDF map with size: {size}, cmap: {cmap}, cbar: {cbar}, coord: {coord}, pixels: {len(pixels)}")
+    from tone_mapping import tone_mapping
+
+    print(f"Pixels shape: {pixels.shape}")
+    pxls = np.array(pixels, dtype=np.float32)
+    fig, ax = tone_mapping(pxls, size, cmap=cmap, cbar=cbar, coord=coord, cbar_label=r'BRDF [$\mathrm{sr^{-1}}$]')
+    plt.show()
+
+    fig.savefig(f'{name}.pdf', format='pdf', bbox_inches='tight')

@@ -5,9 +5,14 @@ use crate::measure::{
 };
 use base::{
     math::Sph2,
-    units::{Nanometres, Radians, Rads},
+    units::{Degrees, Nanometres, Radians, Rads},
 };
 use bxdf::brdf::measured::{ClausenBrdf, VgonioBrdf};
+use exr::{
+    image::{FlatImage, FlatSamples},
+    prelude::Text,
+};
+use numpy::PyArrayMethods;
 use pyo3::{prelude::*, types::PyList};
 
 pub fn plot_err(errs: &[f64], alpha_start: f64, alpha_stop: f64, alpha_step: f64) -> PyResult<()> {
@@ -326,4 +331,79 @@ pub fn plot_gaf(gaf: &[&MeasuredMsfData], wm: Sph2, phi_v: Radians) -> PyResult<
         fun.call1(py, args)?;
         Ok(())
     })
+}
+
+pub fn plot_brdf_map(
+    imgs: &[FlatImage],
+    theta_i: Degrees,
+    phi_i: Degrees,
+    lamda: Nanometres,
+    cmap: String,
+    cbar: bool,
+    coord: bool,
+) -> PyResult<()> {
+    let theta_i_str = format!("{:4.2}", theta_i.as_f32()).replace(".", "_");
+    let phi_i_str = format!("{:4.2}", phi_i.as_f32()).replace(".", "_");
+    let layer_name = Text::new_or_panic(format!("θ{}.φ{}", theta_i_str, phi_i_str));
+    let channel_name = Text::new_or_panic(format!("{}", lamda));
+    imgs.iter().for_each(|img| {
+        let size = img.attributes.display_window.size;
+        let layer = img
+            .layer_data
+            .iter()
+            .find(|(layer)| layer.attributes.layer_name.as_ref() == Some(&layer_name))
+            .unwrap();
+        let data = layer
+            .channel_data
+            .list
+            .iter()
+            .find(|chn| chn.name == channel_name)
+            .unwrap();
+        match &data.sample_data {
+            FlatSamples::F32(pixels) => {
+                Python::with_gil(|py| {
+                    let mut img_data =
+                        numpy::PyArray2::zeros_bound(py, (size.0 as usize, size.1 as usize), false);
+                    unsafe {
+                        img_data.as_slice_mut().unwrap().copy_from_slice(&pixels);
+                    }
+                    PyModule::from_code_bound(
+                        py,
+                        include_str!("./pyplot/tone_mapping.py"),
+                        "tone_mapping.py",
+                        "tone_mapping",
+                    )
+                    .unwrap();
+                    let fun: Py<PyAny> = PyModule::from_code_bound(
+                        py,
+                        include_str!("./pyplot/pyplot.py"),
+                        "pyplot.py",
+                        "vgp",
+                    )
+                    .unwrap()
+                    .getattr("plot_brdf_map")
+                    .unwrap()
+                    .into();
+                    let name = format!(
+                        "brdf_θ{:4.2}_φ{:4.2}_λ{:.2}",
+                        theta_i.as_f32(),
+                        phi_i.as_f32(),
+                        lamda.as_f32()
+                    );
+                    let args = (
+                        name,
+                        img_data,
+                        (size.0 as u32, size.1 as u32),
+                        cmap.clone(),
+                        cbar,
+                        coord,
+                    );
+                    fun.call1(py, args).unwrap();
+                });
+            }
+            _ => panic!("Only f32 data is supported!"),
+        }
+    });
+
+    Ok(())
 }

@@ -5,13 +5,14 @@ use crate::{
         mfd::{MeasuredMsfData, MeasuredNdfData},
     },
     pyplot::{
-        plot_brdf_slice, plot_brdf_slice_in_plane, plot_brdf_vgonio_clausen, plot_gaf, plot_ndf,
+        plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane, plot_brdf_vgonio_clausen,
+        plot_gaf, plot_ndf,
     },
 };
 use base::{
     error::VgonioError,
     math::Sph2,
-    units::{Radians, Rads},
+    units::{Degs, Nanometres, Radians, Rads},
 };
 use bxdf::brdf::measured::ClausenBrdf;
 use std::path::PathBuf;
@@ -35,9 +36,12 @@ pub enum PlotKind {
     /// Plot the NDF from saved *.vgmo file
     #[clap(alias = "ndf")]
     Ndf,
-
+    /// Plot the GAF from saved *.vgmo file
     #[clap(alias = "gaf")]
     Gaf,
+    /// Plot the BRDF from saved *.exr file
+    #[clap(alias = "brdf-map")]
+    BrdfMap,
 }
 
 /// Options for the `plot` command.
@@ -67,10 +71,11 @@ pub struct PlotOptions {
     pub phi_o: f32,
 
     #[clap(
-        long,
+        long = "ti",
         help = "The polar angle to plot the BRDF at.",
         default_value = "0.0",
-        required_if_eq("kind", "slice")
+        required_if_eq("kind", "slice"),
+        required_if_eq("kind", "brdf-map")
     )]
     pub theta_i: f32,
 
@@ -80,7 +85,8 @@ pub struct PlotOptions {
         default_value = "0.0",
         required_if_eq("kind", "slice"),
         required_if_eq("kind", "slice-in-plane"),
-        required_if_eq("kind", "ndf")
+        required_if_eq("kind", "ndf"),
+        required_if_eq("kind", "brdf-map")
     )]
     pub phi_i: f32,
 
@@ -110,6 +116,14 @@ pub struct PlotOptions {
     pub theta_m: f32,
 
     #[clap(
+        long = "lambda",
+        help = "The wavelength to plot the BRDF at.",
+        default_value = "550.0",
+        required_if_eq("kind", "brdf-map")
+    )]
+    pub lambda: f32,
+
+    #[clap(
         short,
         long,
         help = "Whether to sample 4x more points than the original data.",
@@ -119,6 +133,19 @@ pub struct PlotOptions {
 
     #[clap(short, long, help = "The level of BRDF to plot.", default_value = "l0")]
     pub level: MeasuredBrdfLevel,
+
+    #[clap(long, help = "The colormap to use.")]
+    pub cmap: Option<String>,
+
+    #[clap(long, default_value = "false", help = "Whether to show the colorbar.")]
+    pub cbar: bool,
+
+    #[clap(
+        long,
+        default_value = "false",
+        help = "Whether to show the ploar coordinate."
+    )]
+    pub coord: bool,
 }
 
 pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
@@ -253,6 +280,27 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     Radians::from_degrees(opts.phi_m),
                 );
                 plot_gaf(&gafs, wm, Radians::from_degrees(opts.phi_v)).unwrap();
+                Ok(())
+            }
+            PlotKind::BrdfMap => {
+                use exr::prelude::*;
+                let imgs = opts
+                    .inputs
+                    .iter()
+                    .map(|input| read_all_flat_layers_from_file(input).unwrap())
+                    .collect::<Vec<_>>();
+
+                plot_brdf_map(
+                    &imgs,
+                    Degs::new(opts.theta_i),
+                    Degs::new(opts.phi_i),
+                    Nanometres::new(opts.lambda),
+                    opts.cmap.unwrap_or("viridis".to_string()),
+                    opts.cbar,
+                    opts.coord,
+                )
+                .unwrap();
+
                 Ok(())
             }
         }
