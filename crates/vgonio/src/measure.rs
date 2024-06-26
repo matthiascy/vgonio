@@ -12,7 +12,7 @@ use crate::{
     },
     measure::{
         bsdf::MeasuredBsdfData,
-        mfd::{MeasuredMsfData, MeasuredNdfData, MeasuredSdfData},
+        mfd::{MeasuredNdfData, MeasuredSdfData},
     },
 };
 use base::{

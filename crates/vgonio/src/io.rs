@@ -571,7 +571,7 @@ pub mod vgmo {
                         common_info[2] != 0
                     );
                     let mode = match common_info[0] {
-                        /// By points
+                        // By points
                         0 => {
                             let mut buf = [0u8; 36];
                             reader.read_exact(&mut buf)?;

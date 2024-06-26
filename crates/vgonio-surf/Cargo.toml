@@ -1,8 +1,8 @@
 [package]
 name = "vgonio-surf"
-version.workspace = true
-authors.workspace = true
-edition.workspace = true
+version = "0.1.0"
+authors = ["Yang Chen <y.chen-14@tudelft.nl>"]
+edition = "2021"
 description = "Library for manipulating, reading and writing micro-surfaces."
 
 [features]
@@ -11,6 +11,11 @@ bench = []
 embree = ["dep:embree"]
 surf-gen = []
 surf-obj = ["dep:tobj", "dep:ahash"]
+pybind = ["dep:pyo3"]
+
+[lib]
+name = "vgonio_surf"
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 ahash = { workspace = true, optional = true }
@@ -20,6 +25,7 @@ clap.workspace = true
 flate2.workspace = true
 glam.workspace = true
 log.workspace = true
+pyo3 = { workspace = true, optional = true, features = ["extension-module"] }
 rand.workspace = true
 rayon.workspace = true
 serde.workspace = true

@@ -1,0 +1,7 @@
+pillow~=10.3.0
+numpy~=2.0.0
+scipy~=1.13.1
+matplotlib~=3.9.0
+seaborn~=0.13.2
+OpenEXR~=3.2.4
+maturin~=1.6.0

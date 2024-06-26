@@ -75,6 +75,7 @@ impl HeightOffset {
 
 // TODO: support f64
 /// Representation of the micro-surface.
+#[cfg_attr(feature = "pybind", pyo3::pyclass)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MicroSurface {
     /// Generated unique identifier.
@@ -1132,6 +1133,7 @@ impl MicroSurfaceMesh {
 }
 
 /// Origin of the micro-geometry height field.
+#[cfg_attr(feature = "pybind", pyo3::pyclass)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MicroSurfaceOrigin {
     /// Micro-geometry height field from the paper
@@ -1306,5 +1308,21 @@ impl MicroSurface {
                 "Failed to flush VGMS file.",
             )
         })
+    }
+}
+
+#[cfg(feature = "pybind")]
+mod pybind {
+    use crate::MicroSurface;
+    use pyo3::prelude::*;
+
+    #[pyfunction]
+    fn sum_as_string(a: i32, b: i32) -> PyResult<String> { Ok((a + b).to_string()) }
+
+    #[pymodule]
+    fn vgonio_surf(module: &Bound<'_, PyModule>) -> PyResult<()> {
+        module.add_function(wrap_pyfunction!(sum_as_string, module)?)?;
+        module.add_class::<MicroSurface>();
+        Ok(())
     }
 }

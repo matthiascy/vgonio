@@ -14,6 +14,7 @@ use exr::{
 };
 use numpy::PyArrayMethods;
 use pyo3::{prelude::*, types::PyList};
+use surf::MicroSurface;
 
 pub fn plot_err(errs: &[f64], alpha_start: f64, alpha_stop: f64, alpha_step: f64) -> PyResult<()> {
     Python::with_gil(|py| {
@@ -351,7 +352,7 @@ pub fn plot_brdf_map(
         let layer = img
             .layer_data
             .iter()
-            .find(|(layer)| layer.attributes.layer_name.as_ref() == Some(&layer_name))
+            .find(|layer| layer.attributes.layer_name.as_ref() == Some(&layer_name))
             .unwrap();
         let data = layer
             .channel_data
@@ -406,4 +407,33 @@ pub fn plot_brdf_map(
     });
 
     Ok(())
+}
+
+pub fn plot_surfaces(surfaces: &[&MicroSurface], downsample: u32, cmap: String) -> PyResult<()> {
+    Python::with_gil(|py| {
+        let fun: Py<PyAny> =
+            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
+                .getattr("plot_surfaces")?
+                .into();
+        let surfaces = PyList::new_bound(
+            py,
+            surfaces
+                .iter()
+                .map(|&surface| {
+                    let samples =
+                        numpy::PyArray2::zeros_bound(py, (surface.rows, surface.cols), false);
+                    unsafe {
+                        samples
+                            .as_slice_mut()
+                            .unwrap()
+                            .copy_from_slice(&surface.samples);
+                    }
+                    log::debug!("rows: {}, cols: {}", surface.rows, surface.cols);
+                    (surface.dv, surface.du, samples, surface.name.clone())
+                })
+                .collect::<Vec<_>>(),
+        );
+        fun.call1(py, (surfaces, cmap, downsample))?;
+        Ok(())
+    })
 }

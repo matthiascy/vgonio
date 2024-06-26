@@ -2,6 +2,7 @@ from typing import Tuple
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
+from matplotlib.tri import Triangulation
 from matplotlib.widgets import Button, TextBox
 import numpy as np
 import seaborn as sns
@@ -462,3 +463,79 @@ def plot_brdf_map(name: str, pixels: np.ndarray, size: Tuple[int, int], cmap='Bu
     plt.show()
 
     fig.savefig(f'{name}.pdf', format='pdf', bbox_inches='tight')
+
+
+def downsample_surface(xx, yy, surface, factor):
+    xx = xx[::factor, ::factor]
+    yy = yy[::factor, ::factor]
+    return surface[::factor, ::factor]
+
+
+def plot_surfaces(surfaces, cmap, ds_factor=4):
+    for dv, du, surface, name in surfaces:
+        print(f"Plotting surface: {surface.shape}, du: {du}, dv: {dv}")
+        cols = surface.shape[1]
+        rows = surface.shape[0]
+        w = cols * du
+        h = rows * dv
+
+        z_downsampled = surface[::ds_factor, ::ds_factor]
+        cols_downsampled = int(cols / ds_factor)
+        rows_downsampled = int(rows / ds_factor)
+
+        print("Downsampled shape: ", z_downsampled.shape)
+        print("Downsampled cols: ", cols_downsampled)
+        print("Downsampled rows: ", rows_downsampled)
+
+        x = np.linspace(-w / 2, w / 2, cols_downsampled)
+        y = np.linspace(-h / 2, h / 2, rows_downsampled)
+        print(f"X: {x.shape}, Y: {y.shape}")
+        xx, yy = np.meshgrid(x, y)
+
+        # Compute the min and max of the surface
+        min_val = np.min(surface)
+        max_val = np.max(surface)
+        range = max_val - min_val
+        if range == 0:
+            range = 1
+
+        z_downsampled = (z_downsampled - min_val) / range / max(w, h)
+
+        x_flat = xx.flatten()
+        y_flat = yy.flatten()
+        z_flat = z_downsampled.flatten()
+
+        tris = Triangulation(x_flat, y_flat)
+
+        fig = plt.figure(figsize=(8, 8))
+        ax = fig.add_subplot(111, projection='3d')
+        print("z max: ", np.max(z_downsampled))
+        max_z = np.max(z_downsampled)
+        zlim = 0.01 if max_z == 0.0 else max_z * 10.0
+        ax.set_zlim(0, zlim)
+
+        # plot surface
+        # ax.plot_trisurf(x_flat, y_flat, z_flat, triangles=tris.triangles, cmap=cmap, edgecolor='none', linewidth=0,
+        #                 alpha=0.8)
+
+        ax.plot_surface(xx, yy, z_downsampled, color='gray', alpha=0.8, edgecolor='none', linewidth=0)
+
+        # hide gridlines
+        ax.grid(False)
+        # hide y and z plane
+        ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+        # hide x and z plane
+        ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+        # hide axis line
+        ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+        ax.xaxis.line.set_color("white")
+        ax.yaxis.line.set_color("white")
+        ax.zaxis.line.set_color("white")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_zticks([])
+        ax.view_init(elev=50)
+
+        plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0, wspace=0.0, hspace=0.0)
+        fig.savefig(f'{name}_plot.png', format='png', bbox_inches='tight', dpi=100)
+        # plt.show()

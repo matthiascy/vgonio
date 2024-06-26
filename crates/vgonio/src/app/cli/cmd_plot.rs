@@ -6,7 +6,7 @@ use crate::{
     },
     pyplot::{
         plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane, plot_brdf_vgonio_clausen,
-        plot_gaf, plot_ndf,
+        plot_gaf, plot_ndf, plot_surfaces,
     },
 };
 use base::{
@@ -16,6 +16,7 @@ use base::{
 };
 use bxdf::brdf::measured::ClausenBrdf;
 use std::path::PathBuf;
+use surf::TriangulationPattern;
 
 /// Kind of plot to generate.
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +43,9 @@ pub enum PlotKind {
     /// Plot the BRDF from saved *.exr file
     #[clap(alias = "brdf-map")]
     BrdfMap,
+    /// Plot the micro-surfaces from saved *.vgmo file
+    #[clap(alias = "surf")]
+    Surface,
 }
 
 /// Options for the `plot` command.
@@ -146,6 +150,14 @@ pub struct PlotOptions {
         help = "Whether to show the ploar coordinate."
     )]
     pub coord: bool,
+
+    #[clap(
+        long,
+        help = "The downsample factor for the surface plot.",
+        default_value_t = 1,
+        required_if_eq("kind", "surf")
+    )]
+    pub downsample: u32,
 }
 
 pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
@@ -298,6 +310,26 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     opts.cmap.unwrap_or("viridis".to_string()),
                     opts.cbar,
                     opts.coord,
+                )
+                .unwrap();
+
+                Ok(())
+            }
+            PlotKind::Surface => {
+                let hdls = cache.load_micro_surfaces(
+                    &config,
+                    &opts.inputs,
+                    TriangulationPattern::BottomLeftToTopRight,
+                )?;
+                let surfaces = hdls
+                    .into_iter()
+                    .map(|hdl| cache.get_micro_surface(hdl).unwrap())
+                    .collect::<Vec<_>>();
+
+                plot_surfaces(
+                    &surfaces,
+                    opts.downsample,
+                    opts.cmap.unwrap_or("viridis".to_string()),
                 )
                 .unwrap();
 

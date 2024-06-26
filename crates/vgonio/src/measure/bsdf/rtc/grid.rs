@@ -16,10 +16,11 @@ use crate::{
         params::BsdfMeasurementParams,
     },
 };
+#[cfg(feature = "visu-dbg")]
+use base::optics::fresnel;
 use base::{
     math,
-    math::{IVec2, UVec2, Vec2, Vec3, Vec3A, Vec3Swizzles},
-    optics::fresnel,
+    math::{IVec2, UVec2, Vec2, Vec3, Vec3Swizzles},
 };
 use jabr::array::DyArr;
 use rayon::prelude::*;
