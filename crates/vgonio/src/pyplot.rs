@@ -265,7 +265,12 @@ pub fn plot_brdf_slice_in_plane(
     })
 }
 
-pub fn plot_ndf(ndf: &[&MeasuredNdfData], phi: Radians, labels: Vec<String>) -> PyResult<()> {
+pub fn plot_ndf(
+    ndf: &[&MeasuredNdfData],
+    phi: Radians,
+    labels: Vec<String>,
+    ylim: Option<f32>,
+) -> PyResult<()> {
     Python::with_gil(|py| {
         let fun: Py<PyAny> =
             PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
@@ -325,6 +330,7 @@ pub fn plot_ndf(ndf: &[&MeasuredNdfData], phi: Radians, labels: Vec<String>) -> 
             phi.as_f32(),
             (phi + Radians::PI).wrap_to_tau().as_f32(),
             slices,
+            ylim,
         );
         fun.call1(py, args)?;
         Ok(())

@@ -372,7 +372,7 @@ def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices, wavelengths):
 linestyles = ['-', '--', '-.', ':']
 
 
-def plot_ndf_slice(phi, phi_opp, ndf_slices: list[tuple[np.ndarray, np.ndarray, np.ndarray]]):
+def plot_ndf_slice(phi, phi_opp, ndf_slices: list[tuple[np.ndarray, np.ndarray, np.ndarray]], ylim):
     # Angles are in radians
     print(f"Plotting NDF slice with wm = ({np.degrees(phi)}, {np.degrees(phi_opp)})")
     deg_ticks = np.arange(-90, 91, 30)
@@ -415,6 +415,9 @@ def plot_ndf_slice(phi, phi_opp, ndf_slices: list[tuple[np.ndarray, np.ndarray, 
                         xytext=(-40, 20), textcoords='offset points',
                         arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=-.5"),
                         fontsize=14, color='k', fontweight='bold')
+
+    if ylim is not None:
+        ax.set_ylim(0, ylim)
 
     if len(ndf_slices) > 1:
         ax.legend()

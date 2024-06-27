@@ -166,6 +166,9 @@ pub struct PlotOptions {
         value_delimiter = ' ',
     )]
     pub labels: Vec<String>,
+
+    #[clap(long, help = "The y-axis limits.")]
+    pub ylim: Option<f32>,
 }
 
 pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
@@ -276,7 +279,13 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                             .downcast_ref::<MeasuredNdfData>()
                     })
                     .collect::<Vec<_>>();
-                plot_ndf(&ndfs, Radians::from_degrees(opts.phi_i), opts.labels).unwrap();
+                plot_ndf(
+                    &ndfs,
+                    Radians::from_degrees(opts.phi_i),
+                    opts.labels,
+                    opts.ylim,
+                )
+                .unwrap();
                 Ok(())
             }
             PlotKind::Gaf => {
