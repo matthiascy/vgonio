@@ -369,10 +369,10 @@ def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices, wavelengths):
     plt.show()
 
 
-linestyles = ['-', '--', '-.', ':']
+linestyles = ['solid', 'dashed', 'dashdot', 'dotted']
 
 
-def plot_ndf_slice(phi, phi_opp, ndf_slices: list[tuple[np.ndarray, np.ndarray, np.ndarray]], ylim):
+def plot_ndf_slice(phi, phi_opp, ndf_slices: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]], ylim):
     # Angles are in radians
     print(f"Plotting NDF slice with wm = ({np.degrees(phi)}, {np.degrees(phi_opp)})")
     deg_ticks = np.arange(-90, 91, 30)
@@ -396,7 +396,6 @@ def plot_ndf_slice(phi, phi_opp, ndf_slices: list[tuple[np.ndarray, np.ndarray, 
     ax.set_xticklabels([f"{int(deg)}°" for deg in deg_ticks])
 
     for i, (label, theta, slice, slice_opp) in enumerate(ndf_slices):
-        print("label: ", label)
         # Combine theta and its filpped negative counterpart for x-axis
         xs = np.append(np.flip(-np.array(theta)), np.array(theta))
         ys = np.append(np.flip(slice_opp), slice)
@@ -428,43 +427,49 @@ def plot_ndf_slice(phi, phi_opp, ndf_slices: list[tuple[np.ndarray, np.ndarray, 
     plt.show()
 
 
-def plot_gaf_slice(tm, pm, pv, pv_opp, gaf_slices):
+def plot_gaf_slice(tm, pm, pv, pv_opp, gaf_slices: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]]):
     print(f"Plotting GAF slice with wm = ({np.degrees(tm)}, {np.degrees(pm)}) at pv = {np.degrees(pv)}")
-
     deg_ticks = np.arange(-90, 91, 30)
     rad_ticks = np.radians(deg_ticks)
 
-    for theta, slice, slice_opp in gaf_slices:
-        fig, ax = plt.subplots(figsize=(8, 6))
-        ax.set_aspect('auto')
-        ax.set_xlabel(r"$θ_v$", fontsize=18)
-        ax.set_ylabel(r"$GAF$", fontsize=18)
+    multi = len(gaf_slices) > 1
 
+    figsize = (8, 8) if multi else (8, 6)
+    fig, ax = plt.subplots(figsize=figsize)
+
+    ax.set_aspect('auto')
+    ax.set_xlabel(r"$θ_v$", fontsize=18)
+    ax.set_ylabel(r"$GAF$", fontsize=18)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+    ax.set_xticks(rad_ticks)
+    ax.set_xticklabels([f"{int(deg)}°" for deg in deg_ticks])
+
+    for i, (label, theta, slice, slice_opp) in enumerate(gaf_slices):
         # Combine theta and its filpped negative counterpart for x-axis
-        xs = np.append(np.flip(-np.array(theta)), np.array(theta))
-        slice_phi = np.array(slice)
-        slice_phi_opp = np.array(slice_opp)
+        xs = np.append(np.flip(-theta), theta)
+        ys = np.append(np.flip(slice_opp), slice)
 
-        ys = np.append(np.flip(slice_phi_opp), slice_phi)
-        ax.plot(xs, ys, color='b', linestyle='-', linewidth=2)
+        if multi:
+            ax.plot(xs, ys, linestyle=linestyles[i], linewidth=1.6, label=label)
+        else:
+            ax.plot(xs, ys, color='b', linestyle='-', linewidth=2)
 
-        # Annotation
-        ax.text(-1.5, 0.05, fr'$\phi_v={np.degrees(pv_opp):.0f}\degree$', fontsize=20, color='k', fontweight='bold')
-        ax.text(1.0, 0.05, fr'$\phi_v={np.degrees(pv):.0f}\degree$', fontsize=20, color='k', fontweight='bold')
+        if i == 0:
+            # Annotation
+            ax.text(-1.5, 0.05, fr'$\phi_v={np.degrees(pv_opp):.0f}\degree$', fontsize=20, color='k', fontweight='bold')
+            ax.text(1.0, 0.05, fr'$\phi_v={np.degrees(pv):.0f}\degree$', fontsize=20, color='k', fontweight='bold')
 
-        # ax.spines['right'].set_visible(False)
-        # ax.spines['top'].set_visible(False)
-        # ax.spines['left'].set_visible(False)
-        # ax.spines['bottom'].set_visible(False)
-        ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+    if multi:
+        ax.legend()
 
-        ax.set_xticks(rad_ticks)
-        ax.set_xticklabels([f"{int(deg)}°" for deg in deg_ticks])
-
-        plt.tight_layout()
-        # save as pdf
-        plt.savefig('./gaf-slice.pdf', format='pdf', bbox_inches='tight')
-        plt.show()
+    plt.tight_layout()
+    # save as pdf
+    plt.savefig('./gaf-slice.pdf', format='pdf', bbox_inches='tight')
+    plt.show()
 
 
 def plot_brdf_map(name: str, pixels: np.ndarray, size: Tuple[int, int], cmap='BuPu', cbar=False, coord=False):

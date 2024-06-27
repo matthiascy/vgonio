@@ -337,7 +337,12 @@ pub fn plot_ndf(
     })
 }
 
-pub fn plot_gaf(gaf: &[&MeasuredMsfData], wm: Sph2, phi_v: Radians) -> PyResult<()> {
+pub fn plot_gaf(
+    gaf: &[&MeasuredMsfData],
+    wm: Sph2,
+    phi_v: Radians,
+    labels: Vec<String>,
+) -> PyResult<()> {
     Python::with_gil(|py| {
         let fun: Py<PyAny> =
             PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
@@ -346,15 +351,26 @@ pub fn plot_gaf(gaf: &[&MeasuredMsfData], wm: Sph2, phi_v: Radians) -> PyResult<
         let slices = PyList::new_bound(
             py,
             gaf.into_iter()
-                .map(|&gaf| {
+                .enumerate()
+                .map(|(i, &gaf)| {
+                    let label = labels
+                        .get(i)
+                        .cloned()
+                        .unwrap_or_else(|| format!("GAF {}", i));
                     let theta = gaf
                         .params
                         .zenith
                         .values_wrapped()
                         .map(|x| x.as_f32())
                         .collect::<Vec<_>>();
+
                     let (spls, opp_spls) = gaf.slice_at(wm.phi, wm.theta, phi_v);
-                    (theta, spls.to_vec(), opp_spls.unwrap().to_vec())
+                    (
+                        label,
+                        numpy::PyArray1::from_vec_bound(py, theta),
+                        numpy::PyArray1::from_slice_bound(py, spls),
+                        numpy::PyArray1::from_slice_bound(py, opp_spls.unwrap()),
+                    )
                 })
                 .collect::<Vec<_>>(),
         );

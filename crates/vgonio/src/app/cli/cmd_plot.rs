@@ -308,7 +308,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     Radians::from_degrees(opts.theta_m),
                     Radians::from_degrees(opts.phi_m),
                 );
-                plot_gaf(&gafs, wm, Radians::from_degrees(opts.phi_v)).unwrap();
+                plot_gaf(&gafs, wm, Radians::from_degrees(opts.phi_v), opts.labels).unwrap();
                 Ok(())
             }
             PlotKind::BrdfMap => {
