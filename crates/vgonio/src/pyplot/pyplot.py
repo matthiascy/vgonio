@@ -369,49 +369,60 @@ def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices, wavelengths):
     plt.show()
 
 
-def plot_ndf_slice(phi, phi_opp, ndf_slices):
+linestyles = ['-', '--', '-.', ':']
+
+
+def plot_ndf_slice(phi, phi_opp, ndf_slices: list[tuple[np.ndarray, np.ndarray, np.ndarray]]):
+    # Angles are in radians
+    print(f"Plotting NDF slice with wm = ({np.degrees(phi)}, {np.degrees(phi_opp)})")
     deg_ticks = np.arange(-90, 91, 30)
     rad_ticks = np.radians(deg_ticks)
     # each slice is a tuple of (slice, slice_opp, theta) of one measurement
     sns.set_theme(style="whitegrid", color_codes=True)
 
-    for theta, slice, slice_opp in ndf_slices:
-        fig, ax = plt.subplots(figsize=(8, 8))
-        ax.set_aspect('auto')
-        ax.set_xlabel(r"$θ_m$", fontsize=18)
-        ax.set_ylabel(r"$NDF\;[sr^{-1}]$", fontsize=18)
+    figsize = (8, 8) if len(ndf_slices) == 1 else (8, 6)
 
+    fig, ax = plt.subplots(figsize=figsize)
+
+    ax.set_aspect('auto')
+    ax.set_xlabel(r"$θ_m$", fontsize=18)
+    ax.set_ylabel(r"$NDF\;[sr^{-1}]$", fontsize=18)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+    ax.set_xticks(rad_ticks)
+    ax.set_xticklabels([f"{int(deg)}°" for deg in deg_ticks])
+
+    for i, (label, theta, slice, slice_opp) in enumerate(ndf_slices):
+        print("label: ", label)
         # Combine theta and its filpped negative counterpart for x-axis
         xs = np.append(np.flip(-np.array(theta)), np.array(theta))
-        slice_phi = np.array(slice)
-        slice_phi_opp = np.array(slice_opp)
+        ys = np.append(np.flip(slice_opp), slice)
+        if len(ndf_slices) > 1:
+            ax.plot(xs, ys, linestyle=linestyles[i], linewidth=2, label=label)
+        else:
+            ax.plot(xs, ys, color='b', linestyle='-', linewidth=2)
 
-        ys = np.append(np.flip(slice_phi_opp), slice_phi)
-        ax.plot(xs, ys, color='b', linestyle='-', linewidth=2)
+        if i == 0:
+            # Annotation
+            ax.annotate(fr'$\phi_m={np.degrees(phi_opp):.0f}\degree$', xy=(xs[0], ys[0]), xycoords='data',
+                        xytext=(-10, 20), textcoords='offset points',
+                        arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.5"),
+                        fontsize=14, color='k', fontweight='bold')
+            ax.annotate(fr'$\phi_m={np.degrees(phi):.0f}\degree$', xy=(xs[-1], ys[-1]), xycoords='data',
+                        xytext=(-40, 20), textcoords='offset points',
+                        arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=-.5"),
+                        fontsize=14, color='k', fontweight='bold')
 
-        # Annotation
-        ax.annotate(fr'$\phi_m={np.degrees(phi_opp):.0f}\degree$', xy=(xs[0], ys[0]), xycoords='data',
-                    xytext=(-10, 20), textcoords='offset points',
-                    arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.5"),
-                    fontsize=14, color='k', fontweight='bold')
-        ax.annotate(fr'$\phi_m={np.degrees(phi):.0f}\degree$', xy=(xs[-1], ys[-1]), xycoords='data',
-                    xytext=(-40, 20), textcoords='offset points',
-                    arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=-.5"),
-                    fontsize=14, color='k', fontweight='bold')
+    if len(ndf_slices) > 1:
+        ax.legend()
 
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        ax.spines['bottom'].set_visible(False)
-        ax.grid(True, which='both', linestyle='--', linewidth=0.5)
-
-        ax.set_xticks(rad_ticks)
-        ax.set_xticklabels([f"{int(deg)}°" for deg in deg_ticks])
-
-        plt.tight_layout()
-        # save as pdf
-        plt.savefig('./ndf_slice.pdf', format='pdf', bbox_inches='tight')
-        plt.show()
+    plt.tight_layout()
+    # save as pdf
+    plt.savefig('./ndf_slice.pdf', format='pdf', bbox_inches='tight')
+    plt.show()
 
 
 def plot_gaf_slice(tm, pm, pv, pv_opp, gaf_slices):

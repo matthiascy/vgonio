@@ -13,6 +13,7 @@ use crate::{
     measure::{
         bsdf::MeasuredBsdfData,
         mfd::{MeasuredNdfData, MeasuredSdfData},
+        params::NdfMeasurementMode,
     },
 };
 use base::{
@@ -21,6 +22,7 @@ use base::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
     },
     math::{self, Mat3, Sph2, Sph3, Vec3},
+    partition::{SphericalDomain, SphericalPartition},
     units::{rad, Radians},
     Asset, MeasuredData, MeasurementKind, Version,
 };
@@ -405,20 +407,37 @@ pub fn estimate_disc_radius(mesh: &MicroSurfaceMesh) -> f32 { mesh.bounds.max_ex
 
 /// Trait for the data carried on the hemisphere.
 pub trait DataCarriedOnHemisphere: Sized {
+    /// The extra data that may be used during sampling.
+    type Extra: ?Sized;
     /// Checks if the data is carried by the patches on the hemisphere.
     /// The main reason for this is that the `MeasuredNdfData` may not
     /// necessarily be measured by patches on the hemisphere.
     fn is_carried_by_hemisphere(&self) -> bool { true }
+    /// Constructs the extra data used during sampling.
+    fn new_extra(&self) -> Option<Box<Self::Extra>> { None }
 }
 
-impl DataCarriedOnHemisphere for VgonioBrdf {}
+impl DataCarriedOnHemisphere for VgonioBrdf {
+    type Extra = ();
+}
 
 impl DataCarriedOnHemisphere for MeasuredNdfData {
+    type Extra = SphericalPartition;
+
     fn is_carried_by_hemisphere(&self) -> bool {
         if self.params.mode.is_by_points() {
             false
         } else {
             true
+        }
+    }
+
+    fn new_extra(&self) -> Option<Box<SphericalPartition>> {
+        match self.params.mode {
+            NdfMeasurementMode::ByPoints { .. } => None,
+            NdfMeasurementMode::ByPartition { precision } => Some(Box::new(
+                SphericalPartition::new_beckers(SphericalDomain::Upper, precision),
+            )),
         }
     }
 }
@@ -429,7 +448,9 @@ where
     D: DataCarriedOnHemisphere,
 {
     /// The data carried on the hemisphere to sample from.
-    data: &'a D,
+    pub data: &'a D,
+    /// Potential extra data used during sampling.
+    pub extra: Option<Box<D::Extra>>,
 }
 
 impl<'a, D> DataCarriedOnHemisphereSampler<'a, D>
@@ -439,12 +460,15 @@ where
     /// Creates a new sampler for the data carried on the hemisphere.
     pub fn new(data: &'a D) -> Option<Self> {
         if data.is_carried_by_hemisphere() {
-            Some(Self { data })
+            let extra = data.new_extra();
+            Some(Self { data, extra })
         } else {
             None
         }
     }
 }
+
+// TODO: extract the common code between the VgonioBrdf and MeasuredNdfData
 
 impl<'a> DataCarriedOnHemisphereSampler<'a, VgonioBrdf> {
     /// Retrieve the BSDF sample data at the given position;
@@ -709,5 +733,207 @@ impl<'a> DataCarriedOnHemisphereSampler<'a, VgonioBrdf> {
             );
         }
         Some(out)
+    }
+}
+
+impl<'a> DataCarriedOnHemisphereSampler<'a, MeasuredNdfData> {
+    pub fn sample_point_at(&self, wm: Sph2) -> f32 {
+        log::trace!("Sampling NDF at wm: {}", wm,);
+
+        let partition = self.extra.as_ref().unwrap();
+        // 1. Find the upper and lower ring where the position is located.
+        // The Upper ring is the ring with the smallest zenith angle.
+        let (upper_ring_idx, lower_ring_idx) = partition.find_rings(wm);
+        log::trace!(
+            "  - Upper ring: {}, Lower ring: {}",
+            upper_ring_idx,
+            lower_ring_idx
+        );
+        let samples = &self.data.samples;
+        // 2. Find the patch where the position is located inside the ring.
+        if lower_ring_idx == 0 || lower_ring_idx == 1 {
+            // Interpolate inside a triangle.
+            let lower_ring = partition.rings[1];
+            let patch_idx = {
+                let patch_idx = lower_ring.find_patch_indices(wm.phi);
+                (
+                    0,
+                    lower_ring.base_index + patch_idx.0,
+                    lower_ring.base_index + patch_idx.1,
+                )
+            };
+            let center = (
+                partition.patches[patch_idx.0].center(),
+                partition.patches[patch_idx.1].center(),
+                partition.patches[patch_idx.2].center(),
+            );
+            let (u, v, w) = math::projected_barycentric_coords(
+                wm.to_cartesian(),
+                center.0.to_cartesian(),
+                center.1.to_cartesian(),
+                center.2.to_cartesian(),
+            );
+            let patch0_sample = samples[patch_idx.0];
+            let patch1_sample = samples[patch_idx.1];
+            let patch2_sample = samples[patch_idx.2];
+            log::trace!(
+                "  - Interpolating inside a triangle between patches #{} ({}, {} | {:?}), #{} \
+                 ({}, {} | {:?}), and #{} ({}, {} | {:?})",
+                patch_idx.0,
+                center.0,
+                center.0.to_cartesian(),
+                patch0_sample,
+                patch_idx.1,
+                center.1,
+                center.1.to_cartesian(),
+                patch1_sample,
+                patch_idx.2,
+                center.2,
+                center.2.to_cartesian(),
+                patch2_sample
+            );
+            log::trace!("  - Barycentric coordinates: ({}, {}, {})", u, v, w);
+            return u * patch0_sample + v * patch1_sample + w * patch2_sample;
+        } else if upper_ring_idx == lower_ring_idx && upper_ring_idx == partition.n_rings() - 1 {
+            // This should be the last ring.
+            // Interpolate between two patches.
+            let ring = partition.rings[upper_ring_idx];
+            let patch_idx = ring.find_patch_indices(wm.phi);
+            let patch0_idx = ring.base_index + patch_idx.0;
+            let patch1_idx = ring.base_index + patch_idx.1;
+            let patch0 = partition.patches[patch0_idx];
+            let patch1 = partition.patches[patch1_idx];
+            let center = (patch0.center(), patch1.center());
+            let patch0_samples = samples[patch0_idx];
+            let patch1_samples = samples[patch1_idx];
+            log::trace!(
+                "  - Interpolating between two patches: #{} ({}, {} | {:?}) and #{} ({}, {} | \
+                 {:?}) at ring #{}",
+                patch0_idx,
+                center.0,
+                center.0.to_cartesian(),
+                patch0_samples,
+                patch1_idx,
+                center.1,
+                center.1.to_cartesian(),
+                patch1_samples,
+                upper_ring_idx
+            );
+            let t = (math::circular_angle_dist(wm.phi, center.0.phi)
+                / math::circular_angle_dist(center.1.phi, center.0.phi))
+            .clamp(0.0, 1.0);
+            return (1.0 - t) * patch0_samples + t * patch1_samples;
+        } else {
+            // Interpolate inside a quadrilateral.
+            let (upper_t, upper_patch_center, upper_patch_idx) = {
+                let upper_ring = partition.rings[upper_ring_idx];
+                let upper_patch_idx = {
+                    let patches = upper_ring.find_patch_indices(wm.phi);
+                    (
+                        upper_ring.base_index + patches.0,
+                        upper_ring.base_index + patches.1,
+                    )
+                };
+                let upper_patch_center = (
+                    partition.patches[upper_patch_idx.0].center(),
+                    partition.patches[upper_patch_idx.1].center(),
+                );
+                log::trace!(
+                    "        - upper_#{} center: {}",
+                    upper_patch_idx.0,
+                    upper_patch_center.0
+                );
+                log::trace!(
+                    "        - upper_#{} center: {}",
+                    upper_patch_idx.1,
+                    upper_patch_center.1
+                );
+                let upper_t = (math::circular_angle_dist(wm.phi, upper_patch_center.0.phi)
+                    / math::circular_angle_dist(
+                        upper_patch_center.1.phi,
+                        upper_patch_center.0.phi,
+                    ))
+                .clamp(0.0, 1.0);
+                log::trace!("          - upper_t: {}", upper_t);
+                (upper_t, upper_patch_center, upper_patch_idx)
+            };
+
+            let (lower_t, lower_patch_center, lower_patch_idx) = {
+                let lower_ring = partition.rings[lower_ring_idx];
+                let lower_patch_idx = {
+                    let patches = lower_ring.find_patch_indices(wm.phi);
+                    (
+                        lower_ring.base_index + patches.0,
+                        lower_ring.base_index + patches.1,
+                    )
+                };
+                let lower_patch_center = (
+                    partition.patches[lower_patch_idx.0].center(),
+                    partition.patches[lower_patch_idx.1].center(),
+                );
+                log::trace!(
+                    "        - lower_#{} center: {}",
+                    lower_patch_idx.0,
+                    lower_patch_center.0,
+                );
+                log::trace!(
+                    "        - lower_#{} center: {}",
+                    lower_patch_idx.1,
+                    lower_patch_center.1
+                );
+                let lower_t = (math::circular_angle_dist(wm.phi, lower_patch_center.0.phi)
+                    / math::circular_angle_dist(
+                        lower_patch_center.1.phi,
+                        lower_patch_center.0.phi,
+                    ))
+                .clamp(0.0, 1.0);
+                log::trace!("          - lower_t: {}", lower_t);
+                (lower_t, lower_patch_center, lower_patch_idx)
+            };
+            let s = (math::circular_angle_dist(wm.theta, upper_patch_center.0.theta)
+                / math::circular_angle_dist(
+                    lower_patch_center.0.theta,
+                    upper_patch_center.0.theta,
+                ))
+            .clamp(0.0, 1.0);
+            // Bilateral interpolation.
+            let upper_patch0_sample = &samples[upper_patch_idx.0];
+            let upper_patch1_samples = samples[upper_patch_idx.1];
+            let lower_patch0_samples = samples[lower_patch_idx.0];
+            let lower_patch1_samples = samples[lower_patch_idx.1];
+            log::trace!(
+                "  - Interpolating inside a quadrilateral between rings #{} (#{} vals {:?}, #{} \
+                 vals {:?} | t = {}), and #{} (#{} vals {:?}, #{} vals {:?} | t = {}), v = {}",
+                upper_ring_idx,
+                upper_patch_idx.0,
+                upper_patch0_sample,
+                upper_patch_idx.1,
+                upper_patch1_samples,
+                upper_t,
+                lower_ring_idx,
+                lower_patch_idx.0,
+                lower_patch0_samples,
+                lower_patch_idx.1,
+                lower_patch1_samples,
+                lower_t,
+                s
+            );
+            let upper_interp =
+                (1.0 - upper_t) * upper_patch0_sample + upper_t * upper_patch1_samples;
+            let lower_interp =
+                (1.0 - lower_t) * lower_patch0_samples + lower_t * lower_patch1_samples;
+            return (1.0 - s) * upper_interp + s * lower_interp;
+        }
+    }
+
+    pub fn sample_slice_at(&self, phi: Radians) -> Box<[f32]> {
+        let partition = self.extra.as_ref().unwrap();
+        let n_theta = partition.n_rings();
+        let mut out = vec![0.0; n_theta].into_boxed_slice();
+        for (i, ring) in partition.rings.iter().enumerate() {
+            let theta_o = ring.zenith_center();
+            out[i] = self.sample_point_at(Sph2::new(theta_o, phi));
+        }
+        out
     }
 }

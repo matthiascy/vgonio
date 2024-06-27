@@ -158,6 +158,14 @@ pub struct PlotOptions {
         required_if_eq("kind", "surf")
     )]
     pub downsample: u32,
+
+    #[clap(
+        long,
+        help = "The labels for potential legends.",
+        num_args = 0..,
+        value_delimiter = ' ',
+    )]
+    pub labels: Vec<String>,
 }
 
 pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
@@ -268,7 +276,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                             .downcast_ref::<MeasuredNdfData>()
                     })
                     .collect::<Vec<_>>();
-                plot_ndf(&ndfs, Radians::from_degrees(opts.phi_i)).unwrap();
+                plot_ndf(&ndfs, Radians::from_degrees(opts.phi_i), opts.labels).unwrap();
                 Ok(())
             }
             PlotKind::Gaf => {

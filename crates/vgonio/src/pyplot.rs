@@ -265,7 +265,7 @@ pub fn plot_brdf_slice_in_plane(
     })
 }
 
-pub fn plot_ndf(ndf: &[&MeasuredNdfData], phi: Radians) -> PyResult<()> {
+pub fn plot_ndf(ndf: &[&MeasuredNdfData], phi: Radians, labels: Vec<String>) -> PyResult<()> {
     Python::with_gil(|py| {
         let fun: Py<PyAny> =
             PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
@@ -274,19 +274,50 @@ pub fn plot_ndf(ndf: &[&MeasuredNdfData], phi: Radians) -> PyResult<()> {
         let slices = PyList::new_bound(
             py,
             ndf.into_iter()
-                .map(|&ndf| {
-                    // let sampler = DataCarriedOnHemisphereSampler::new(ndf);
-                    let theta = match ndf.params.mode {
-                        NdfMeasurementMode::ByPoints { zenith, .. } => zenith
-                            .values_wrapped()
-                            .map(|x| x.as_f32())
-                            .collect::<Vec<_>>(),
-                        NdfMeasurementMode::ByPartition { .. } => {
-                            todo!()
+                .enumerate()
+                .map(|(i, &ndf)| {
+                    let label = labels
+                        .get(i)
+                        .cloned()
+                        .unwrap_or_else(|| format!("NDF {}", i));
+                    match ndf.params.mode {
+                        NdfMeasurementMode::ByPoints { zenith, .. } => {
+                            let theta = zenith
+                                .values_wrapped()
+                                .map(|x| x.as_f32())
+                                .collect::<Vec<_>>();
+                            let (spls, opp_spls) = ndf.slice_at(phi);
+                            (
+                                label,
+                                numpy::PyArray1::from_vec_bound(py, theta),
+                                numpy::PyArray1::from_slice_bound(py, spls),
+                                numpy::PyArray1::from_slice_bound(py, opp_spls.unwrap()),
+                            )
                         }
-                    };
-                    let (spls, opp_spls) = ndf.slice_at(phi);
-                    (theta, spls.to_vec(), opp_spls.unwrap().to_vec())
+                        NdfMeasurementMode::ByPartition { .. } => {
+                            let sampler = DataCarriedOnHemisphereSampler::new(ndf).unwrap();
+                            let partition = sampler.extra.as_ref().unwrap();
+                            let mut theta =
+                                numpy::PyArray1::zeros_bound(py, [partition.n_rings()], false);
+                            partition
+                                .rings
+                                .iter()
+                                .enumerate()
+                                .for_each(|(i, ring)| unsafe {
+                                    theta.as_slice_mut().unwrap()[i] = ring.zenith_center().as_f32()
+                                });
+                            let phi_opp = (phi + Radians::PI).wrap_to_tau();
+                            let slice_phi = numpy::PyArray1::from_vec_bound(
+                                py,
+                                sampler.sample_slice_at(phi).into_vec(),
+                            );
+                            let slice_phi_opp = numpy::PyArray1::from_vec_bound(
+                                py,
+                                sampler.sample_slice_at(phi_opp).into_vec(),
+                            );
+                            (label, theta, slice_phi, slice_phi_opp)
+                        }
+                    }
                 })
                 .collect::<Vec<_>>(),
         );
