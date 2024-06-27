@@ -18,6 +18,14 @@ use bxdf::brdf::measured::ClausenBrdf;
 use std::path::PathBuf;
 use surf::TriangulationPattern;
 
+#[rustfmt::skip]
+// Same BRDF but different incident angles
+// vgonio plot -i file -k slice-in-plane --ti 0.0 --pi 0.0 --po 0.0
+// Mutiple BRDF
+// vgonio plot -i f0 f1 f2 -k slice --ti 0.0 --pi 0.0 --po 0.0 --labels f0 f1 f2
+// Single BRDF
+// vgonio plot -i f0 -k slice --ti 0.0 --pi 0.0 --po 0.0
+
 /// Kind of plot to generate.
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlotKind {
@@ -54,14 +62,16 @@ pub struct PlotOptions {
     #[clap(short, long, num_args = 1.., value_delimiter = ' ', help = "Input files to plot.")]
     pub inputs: Vec<PathBuf>,
 
+    #[clap(long, help = "Whether to show the legend.", default_value = "false")]
+    pub legend: bool,
+
     #[clap(
         long,
-        help = "The legends for the input files.",
+        help = "The labels for potential legends.",
         num_args = 0..,
         value_delimiter = ' ',
-        required_if_eq("kind", "slice")
     )]
-    pub legends: Vec<String>,
+    pub labels: Vec<String>,
 
     #[clap(short, long, help = "The kind of plot to generate.")]
     pub kind: PlotKind,
@@ -159,14 +169,6 @@ pub struct PlotOptions {
     )]
     pub downsample: u32,
 
-    #[clap(
-        long,
-        help = "The labels for potential legends.",
-        num_args = 0..,
-        value_delimiter = ' ',
-    )]
-    pub labels: Vec<String>,
-
     #[clap(long, help = "The y-axis limits.")]
     pub ylim: Option<f32>,
 }
@@ -228,10 +230,14 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 let wi = Sph2::new(theta_i, phi_i);
                 let phi_o = Rads::from_degrees(opts.phi_o);
                 if slc == PlotKind::Slice {
-                    assert_eq!(opts.inputs.len(), opts.legends.len(), "Mismatched legends.");
+                    let labels = if opts.labels.is_empty() {
+                        vec!["".to_string(); brdf_hdls.len()]
+                    } else {
+                        opts.labels.clone()
+                    };
                     let brdfs = brdf_hdls
                         .into_iter()
-                        .zip(opts.legends.into_iter())
+                        .zip(labels.into_iter())
                         .filter_map(|(hdl, legend)| {
                             cache
                                 .get_measurement(hdl)
@@ -244,7 +250,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         })
                         .collect::<Vec<_>>();
                     let spectrum = brdfs[0].0.spectrum.clone().into_vec();
-                    plot_brdf_slice(&brdfs, wi, phi_o, spectrum).unwrap();
+                    plot_brdf_slice(&brdfs, wi, phi_o, spectrum, opts.legend).unwrap();
                 } else {
                     let brdfs = brdf_hdls
                         .into_iter()

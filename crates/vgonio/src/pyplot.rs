@@ -12,7 +12,7 @@ use exr::{
     image::{FlatImage, FlatSamples},
     prelude::Text,
 };
-use numpy::PyArrayMethods;
+use numpy::{PyArray1, PyArray2, PyArrayMethods};
 use pyo3::{prelude::*, types::PyList};
 use surf::MicroSurface;
 
@@ -159,6 +159,7 @@ pub fn plot_brdf_slice(
     wi: Sph2,
     phi_o: Radians,
     spectrum: Vec<Nanometres>,
+    legend: bool,
 ) -> PyResult<()> {
     let opposite_phi_o = (phi_o + Radians::PI).wrap_to_tau();
     Python::with_gil(|py| {
@@ -169,7 +170,7 @@ pub fn plot_brdf_slice(
         let brdfs = PyList::new_bound(
             py,
             brdf.into_iter()
-                .map(|(brdf, legend)| {
+                .map(|(brdf, label)| {
                     let sampler = DataCarriedOnHemisphereSampler::new(*brdf).unwrap();
                     let theta = brdf
                         .params
@@ -178,21 +179,43 @@ pub fn plot_brdf_slice(
                         .iter()
                         .map(|x| x.zenith_center().to_degrees().as_f32())
                         .collect::<Vec<_>>();
-                    let slice_phi = sampler.sample_slice_at(wi, phi_o).unwrap().into_vec();
-                    let slice_opposite_phi = sampler
-                        .sample_slice_at(wi, opposite_phi_o)
-                        .unwrap()
-                        .into_vec();
-                    (slice_phi, slice_opposite_phi, theta, legend)
+                    let slice_phi = {
+                        let data = sampler.sample_slice_at(wi, phi_o).unwrap();
+                        let mut slice =
+                            PyArray2::zeros_bound(py, [theta.len(), spectrum.len()], false);
+                        unsafe {
+                            slice.as_slice_mut().unwrap().copy_from_slice(&data);
+                        }
+                        slice
+                    };
+                    let slice_opposite_phi = {
+                        let data = sampler
+                            .sample_slice_at(wi, opposite_phi_o)
+                            .unwrap()
+                            .into_vec();
+                        let mut slice =
+                            PyArray2::zeros_bound(py, [theta.len(), spectrum.len()], false);
+                        unsafe {
+                            slice.as_slice_mut().unwrap().copy_from_slice(&data);
+                        }
+                        slice
+                    };
+                    (
+                        slice_phi,
+                        slice_opposite_phi,
+                        PyArray1::from_vec_bound(py, theta),
+                        legend,
+                    )
                 })
                 .collect::<Vec<_>>(),
         );
-        let wavelengths = PyList::new_bound(py, spectrum.iter().map(|x| x.as_f32()));
+        let wavelengths = PyArray1::from_iter_bound(py, spectrum.iter().map(|x| x.as_f32()));
         let args = (
             phi_o.to_degrees().as_f32(),
             opposite_phi_o.to_degrees().as_f32(),
             brdfs,
             wavelengths,
+            legend,
         );
         fun.call1(py, args)?;
         Ok(())
