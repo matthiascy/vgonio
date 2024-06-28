@@ -9,8 +9,8 @@ type: !bsdf
     num_rays: 10000000
     max_bounces: 8
     zenith: 0deg .. =80deg / 5deg
-    azimuth: 0deg .. =360deg / 60deg
-    spectrum: 400 nm .. = 700 nm / 300 nm # 379.71 nm .. =799.55 nm / 0.774612546 nm
+    azimuth: 0deg .. =360deg / 45deg
+    spectrum: 400 nm .. = 700 nm / 150 nm # 379.71 nm .. =799.55 nm / 0.774612546 nm
   receiver:
     domain: upper_hemisphere
     precision:
@@ -19,15 +19,20 @@ type: !bsdf
     scheme: beckers
 surfaces:
   - usr://surfaces/olaf/aluminium65bar100.vgms
-#  - usr://surfaces/olaf/aluminium4bar100.vgms
-#  - usr://surfaces/olaf/aluminium1bar100.vgms
-#  - usr://surfaces/olaf/aluminiummirror.vgms
-#  - usr://surfaces/olaf/aluminium2bar100.vgms
-#  - usr://surfaces/olaf/aluminium3bar100.vgms
-#  - usr://surfaces/olaf/aluminium1bar100.vgms
-# - usr://surfaces/gaussian_sigma_0.5.vgms
-# - usr://surfaces/8x8_flat.vgms
-# - usr://surfaces/generated/8x8_flat.txt
-#  - usr://surfaces/ribardiere/beckmann-sigma-0-25-0-25_0512-it-150.vgms
-#  - usr://surfaces/Al#4_394.txt
-# - usr://surfaces/generated/random/msurf_random_white_noise_h0.5.vgms
+    #  - usr://surfaces/olaf/aluminium4bar100.vgms
+    #  - usr://surfaces/olaf/aluminium1bar100.vgms
+    #  - usr://surfaces/olaf/aluminiummirror.vgms
+    #  - usr://surfaces/al032.txt
+    #  - usr://surfaces/al016.txt
+    #  - usr://surfaces/al064.txt
+  #  - usr://surfaces/generated/128x128.txt
+
+  #  - usr://surfaces/olaf/aluminium2bar100.vgms
+  #  - usr://surfaces/olaf/aluminium3bar100.vgms
+  #  - usr://surfaces/olaf/aluminium1bar100.vgms
+  # - usr://surfaces/gaussian_sigma_0.5.vgms
+  # - usr://surfaces/8x8_flat.vgms
+  # - usr://surfaces/generated/8x8_flat.txt
+  #  - usr://surfaces/ribardiere/beckmann-sigma-0-25-0-25_0512-it-150.vgms
+  #  - usr://surfaces/Al#4_394.txt
+  # - usr://surfaces/generated/random/msurf_random_white_noise_h0.5.vgms

@@ -58,7 +58,7 @@ def tone_mapping(pixels, size, cmap='BuPu', cbar=False, coord=False, cbar_label=
     # Plot the image
     fig = plt.figure(figsize=(8, 8))
     ax = fig.add_subplot(111)
-    ax.imshow(mapped, extent=(-size[0] / 2, size[0] / 2, -size[1] / 2, size[1] / 2), origin='lower')
+    ax.imshow(mapped, extent=(-size[0] / 2, size[0] / 2, -size[1] / 2, size[1] / 2), origin='upper')
 
     # Customize the plot for better aesthetics
     ax.set_xlim(-size[0] / 2, size[0] / 2)

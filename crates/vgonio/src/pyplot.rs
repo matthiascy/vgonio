@@ -411,78 +411,81 @@ pub fn plot_gaf(
 }
 
 pub fn plot_brdf_map(
-    imgs: &[FlatImage],
+    imgs: &[(FlatImage, String)],
     theta_i: Degrees,
     phi_i: Degrees,
     lamda: Nanometres,
     cmap: String,
     cbar: bool,
     coord: bool,
+    diff: bool,
+    fc: String,
 ) -> PyResult<()> {
     let theta_i_str = format!("{:4.2}", theta_i.as_f32()).replace(".", "_");
     let phi_i_str = format!("{:4.2}", phi_i.as_f32()).replace(".", "_");
     let layer_name = Text::new_or_panic(format!("θ{}.φ{}", theta_i_str, phi_i_str));
     let channel_name = Text::new_or_panic(format!("{}", lamda));
-    imgs.iter().for_each(|img| {
-        let size = img.attributes.display_window.size;
-        let layer = img
-            .layer_data
-            .iter()
-            .find(|layer| layer.attributes.layer_name.as_ref() == Some(&layer_name))
-            .unwrap();
-        let data = layer
-            .channel_data
-            .list
-            .iter()
-            .find(|chn| chn.name == channel_name)
-            .unwrap();
-        match &data.sample_data {
-            FlatSamples::F32(pixels) => {
-                Python::with_gil(|py| {
-                    let mut img_data =
-                        numpy::PyArray2::zeros_bound(py, (size.0 as usize, size.1 as usize), false);
-                    unsafe {
-                        img_data.as_slice_mut().unwrap().copy_from_slice(&pixels);
-                    }
-                    PyModule::from_code_bound(
-                        py,
-                        include_str!("./pyplot/tone_mapping.py"),
-                        "tone_mapping.py",
-                        "tone_mapping",
-                    )
-                    .unwrap();
-                    let fun: Py<PyAny> = PyModule::from_code_bound(
-                        py,
-                        include_str!("./pyplot/pyplot.py"),
-                        "pyplot.py",
-                        "vgp",
-                    )
-                    .unwrap()
-                    .getattr("plot_brdf_map")
-                    .unwrap()
-                    .into();
+    log::debug!("layer_name: {}, channel_name: {}", layer_name, channel_name);
+    Python::with_gil(|py| {
+        PyModule::from_code_bound(
+            py,
+            include_str!("./pyplot/tone_mapping.py"),
+            "tone_mapping.py",
+            "tone_mapping",
+        )
+        .unwrap();
+        let fun: Py<PyAny> =
+            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")
+                .unwrap()
+                .getattr("plot_brdf_map")
+                .unwrap()
+                .into();
+        let images = PyList::new_bound(
+            py,
+            imgs.iter()
+                .map(|(img, name)| {
+                    let size = img.attributes.display_window.size;
+                    let layer = img
+                        .layer_data
+                        .iter()
+                        .find(|layer| layer.attributes.layer_name.as_ref() == Some(&layer_name))
+                        .unwrap();
+                    let data = layer
+                        .channel_data
+                        .list
+                        .iter()
+                        .find(|chn| chn.name == channel_name)
+                        .unwrap();
+
+                    let pixels = match &data.sample_data {
+                        FlatSamples::F32(pixels) => {
+                            let mut img_data = PyArray2::zeros_bound(
+                                py,
+                                (size.0 as usize, size.1 as usize),
+                                false,
+                            );
+                            unsafe {
+                                img_data.as_slice_mut().unwrap().copy_from_slice(&pixels);
+                            }
+                            img_data
+                        }
+                        _ => panic!("Only f32 data is supported!"),
+                    };
                     let name = format!(
-                        "brdf_θ{:4.2}_φ{:4.2}_λ{:.2}",
+                        "brdf_θ{:4.2}_φ{:4.2}_λ{:.2}_{}",
                         theta_i.as_f32(),
                         phi_i.as_f32(),
-                        lamda.as_f32()
-                    );
-                    let args = (
+                        lamda.as_f32(),
                         name,
-                        img_data,
-                        (size.0 as u32, size.1 as u32),
-                        cmap.clone(),
-                        cbar,
-                        coord,
                     );
-                    fun.call1(py, args).unwrap();
-                });
-            }
-            _ => panic!("Only f32 data is supported!"),
-        }
-    });
-
-    Ok(())
+                    (name, (size.0 as u32, size.1 as u32), pixels)
+                })
+                .collect::<Vec<_>>(),
+        );
+        let args = (images, cmap.clone(), cbar, coord, diff, fc);
+        fun.call1(py, args).unwrap();
+        Ok(())
+    })
 }
 
 pub fn plot_surfaces(surfaces: &[&MicroSurface], downsample: u32, cmap: String) -> PyResult<()> {

@@ -499,16 +499,30 @@ def plot_gaf_slice(tm, pm, pv, pv_opp, gaf_slices: list[tuple[str, np.ndarray, n
     plt.show()
 
 
-def plot_brdf_map(name: str, pixels: np.ndarray, size: Tuple[int, int], cmap='BuPu', cbar=False, coord=False):
-    print(f"Plotting BRDF map with size: {size}, cmap: {cmap}, cbar: {cbar}, coord: {coord}, pixels: {len(pixels)}")
+def plot_brdf_map(images: list[str, Tuple[int, int], np.ndarray], cmap='BuPu', cbar=False, coord=False, diff=False,
+                  fc='black'):
+    print("")
     from tone_mapping import tone_mapping
 
-    print(f"Pixels shape: {pixels.shape}")
-    pxls = np.array(pixels, dtype=np.float32)
-    fig, ax = tone_mapping(pxls, size, cmap=cmap, cbar=cbar, coord=coord, cbar_label=r'BRDF [$\mathrm{sr^{-1}}$]')
-    plt.show()
-
-    fig.savefig(f'{name}.pdf', format='pdf', bbox_inches='tight')
+    if diff:
+        for i in range(0, len(images), 2):
+            (name1, size1, pixels1) = images[i]
+            (name2, size2, pixels2) = images[i + 1]
+            diff_pixels = np.abs(pixels1 - pixels2)
+            mse = np.mean(np.square(diff_pixels))
+            fig, ax = tone_mapping(diff_pixels, size1, cmap=cmap, cbar=cbar, coord=coord, cbar_label='Difference',
+                                   color=fc)
+            print('C')
+            ax.text(-size1[0] / 2 + 50, size1[1] / 2 - 10, f'MSE: {mse:.4f}', color=fc, fontsize=14, ha='center',
+                    va='center', alpha=0.8)
+            fig.savefig(f'{name1}_{name2}_diff.pdf', format='pdf', bbox_inches='tight')
+            plt.show()
+    else:
+        for i, (name, size, pixels) in enumerate(images):
+            fig, ax = tone_mapping(pixels, size, cmap=cmap, cbar=cbar, coord=coord,
+                                   cbar_label=r'BRDF [$\mathrm{sr^{-1}}$]')
+            fig.savefig(f'{name}.pdf', format='pdf', bbox_inches='tight')
+            plt.show()
 
 
 def downsample_surface(xx, yy, surface, factor):

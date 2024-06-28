@@ -21,10 +21,17 @@ use surf::TriangulationPattern;
 #[rustfmt::skip]
 // Same BRDF but different incident angles
 // vgonio plot -i file -k slice-in-plane --ti 0.0 --pi 0.0 --po 0.0
+
 // Mutiple BRDF
 // vgonio plot -i f0 f1 f2 -k slice --ti 0.0 --pi 0.0 --po 0.0 --labels f0 f1 f2
+
 // Single BRDF
 // vgonio plot -i f0 -k slice --ti 0.0 --pi 0.0 --po 0.0
+
+// Plot BRDF map
+// vgonio plot -i f.exr -k brdf-map --ti 0 --pi 0 --lambda 400 --cmap BuPu
+
+// python tone_mapping.py --input a.exr  b.exr --channel '400 nm' --cbar --cmap plasma --diff --fc w --coord
 
 /// Kind of plot to generate.
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -160,6 +167,16 @@ pub struct PlotOptions {
         help = "Whether to show the ploar coordinate."
     )]
     pub coord: bool,
+
+    #[clap(
+        long,
+        default_value = "false",
+        help = "Whether to show the difference."
+    )]
+    pub diff: bool,
+
+    #[clap(long, help = "The font color.", default_value = "w")]
+    pub fc: Option<String>,
 
     #[clap(
         long,
@@ -322,7 +339,12 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 let imgs = opts
                     .inputs
                     .iter()
-                    .map(|input| read_all_flat_layers_from_file(input).unwrap())
+                    .map(|input| {
+                        (
+                            read_all_flat_layers_from_file(input).unwrap(),
+                            input.file_name().unwrap().to_str().unwrap().to_string(),
+                        )
+                    })
                     .collect::<Vec<_>>();
 
                 plot_brdf_map(
@@ -333,6 +355,8 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     opts.cmap.unwrap_or("viridis".to_string()),
                     opts.cbar,
                     opts.coord,
+                    opts.diff,
+                    opts.fc.unwrap_or("w".to_string()),
                 )
                 .unwrap();
 
