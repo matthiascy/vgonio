@@ -625,12 +625,7 @@ impl VgonioGuiApp {
                                 {
                                     use crate::measure::bsdf::MeasuredBsdfData;
                                     let measured = self.cache.read(|cache| {
-                                        measure::bsdf::measure_bsdf_rt(
-                                            params,
-                                            &surfaces,
-                                            params.sim_kind,
-                                            cache,
-                                        )
+                                        measure::bsdf::measure_bsdf_rt(params, &surfaces, cache)
                                     });
                                     let bsdf = measured[0]
                                         .measured
@@ -647,12 +642,7 @@ impl VgonioGuiApp {
 
                                 #[cfg(not(feature = "visu-dbg"))]
                                 self.cache.read(|cache| {
-                                    measure::bsdf::measure_bsdf_rt(
-                                        params,
-                                        &surfaces,
-                                        params.sim_kind,
-                                        cache,
-                                    )
+                                    measure::bsdf::measure_bsdf_rt(params, &surfaces, cache)
                                 })
                             }
                             MeasurementParams::Sdf(params) => self.cache.read(|cache| {
@@ -662,7 +652,6 @@ impl VgonioGuiApp {
                         if let Some(opts @ OutputOptions { .. }) = output_opts {
                             crate::io::write_measured_data_to_file(
                                 &data,
-                                &surfaces,
                                 &self.cache,
                                 &self.config,
                                 opts,

@@ -129,6 +129,8 @@ impl Display for Version {
 
 /// Utility functions.
 pub mod utils {
+    use chrono::{DateTime, Local};
+
     /// Returns the current time as an ISO 8601 (RFC 3339) timestamp.
     pub fn iso_timestamp() -> String {
         chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false)
@@ -136,8 +138,8 @@ pub mod utils {
 
     /// Returns the current time as an ISO 8601 (RFC 3339) timestamp without the
     /// timezone and the colon in the time field.
-    pub fn iso_timestamp_short() -> String {
-        chrono::Local::now().format("%Y-%m-%dT%H-%M-%S").to_string()
+    pub fn iso_timestamp_short(datetime: DateTime<Local>) -> String {
+        datetime.format("%Y-%m-%dT%H-%M-%S").to_string()
     }
 
     /// Converts a date time to an ISO 8601 (RFC 3339) timestamp.

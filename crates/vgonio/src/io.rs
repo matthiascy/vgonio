@@ -15,6 +15,8 @@ use base::{
     io::{CompressionScheme, FileEncoding},
     math,
 };
+use chrono::DateTime;
+use egui_gizmo::GizmoOrientation::Local;
 use std::{
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
@@ -59,7 +61,7 @@ pub mod vgmo {
     };
 
     /// The VGMO header extension.
-    #[derive(Debug, Clone, Copy, PartialEq)]
+    #[derive(Debug, Clone, PartialEq)]
     pub enum VgmoHeaderExt {
         Bsdf { params: BsdfMeasurementParams },
         Ndf { params: NdfMeasurementParams },
@@ -196,12 +198,13 @@ pub mod vgmo {
         reader: &mut BufReader<R>,
         header: &Header<VgmoHeaderExt>,
     ) -> Result<Box<dyn MeasuredData>, ReadFileErrorKind> {
-        match header.extra {
+        // TODO: Handle multiple receivers
+        match &header.extra {
             VgmoHeaderExt::Bsdf { params } => {
                 log::debug!(
                     "Reading BSDF data of {} measurement points {} samples from VGMO file",
                     params.emitter.measurement_points_count(),
-                    params.samples_count()
+                    params.samples_count(0).unwrap()
                 );
                 Ok(Box::new(MeasuredBsdfData::read_from_vgmo(
                     reader,
@@ -222,7 +225,10 @@ pub mod vgmo {
                     header.meta.compression,
                 )
                 .map_err(ReadFileErrorKind::Parse)?;
-                Ok(Box::new(MeasuredNdfData { params, samples }))
+                Ok(Box::new(MeasuredNdfData {
+                    params: *params,
+                    samples,
+                }))
             }
             VgmoHeaderExt::Gaf { params } => {
                 log::debug!(
@@ -236,7 +242,10 @@ pub mod vgmo {
                     header.meta.compression,
                 )
                 .map_err(ReadFileErrorKind::Parse)?;
-                Ok(Box::new(MeasuredMsfData { params, samples }))
+                Ok(Box::new(MeasuredMsfData {
+                    params: *params,
+                    samples,
+                }))
             }
             VgmoHeaderExt::Sdf => {
                 log::debug!("Reading SDF data from VGMO file");
@@ -499,7 +508,7 @@ pub mod vgmo {
                         SphericalPartition::read_skipping_rings(reader);
                     let params = ReceiverParams {
                         domain,
-                        precision,
+                        precision: precision,
                         scheme,
                     };
                     let expected_num_rings = params.num_rings();
@@ -682,6 +691,7 @@ pub mod vgmo {
                     let sim_kind = SimulationKind::try_from(buf[7]).unwrap();
                     let fresnel = buf[8] != 0; // 9/10 are padding bytes
                     let emitter = EmitterParams::read_from_buf(version, &buf[11..]);
+                    // TODO: read multiple receivers
                     let receiver = ReceiverParams::read(version, reader);
                     Ok(Self {
                         kind,
@@ -689,7 +699,7 @@ pub mod vgmo {
                         transmitted_medium,
                         sim_kind,
                         emitter,
-                        receiver,
+                        receivers: vec![receiver],
                         fresnel,
                     })
                 }
@@ -709,6 +719,8 @@ pub mod vgmo {
             version: Version,
             writer: &mut BufWriter<W>,
         ) -> Result<(), std::io::Error> {
+            // TODO: write multiple receivers
+            let receiver = &self.receivers[0];
             let buf_size = match version {
                 Version {
                     major: 0,
@@ -716,7 +728,7 @@ pub mod vgmo {
                     patch: 0,
                 } => {
                     11 + EmitterParams::required_size(version).unwrap()
-                        + ReceiverParams::required_size(version, self.receiver.num_rings()).unwrap()
+                        + ReceiverParams::required_size(version, receiver.num_rings()).unwrap()
                 }
                 _ => {
                     log::error!("Unsupported VGMO version: {}", version.as_string());
@@ -733,8 +745,7 @@ pub mod vgmo {
 
             let n_written = self.emitter.write_to_buf(version, &mut buf[11..]);
             log::debug!("Written {} bytes for emitter", n_written);
-            self.receiver
-                .write_to_buf(version, &mut buf[n_written + 11..]);
+            receiver.write_to_buf(version, &mut buf[n_written + 11..]);
             writer.write_all(&buf)
         }
     }
@@ -1120,6 +1131,7 @@ pub mod vgmo {
             encoding: FileEncoding,
             compression: CompressionScheme,
         ) -> Result<Self, ReadFileErrorKind> {
+            // TODO: handle multiple receivers
             match encoding {
                 FileEncoding::Ascii => Err(ReadFileErrorKind::UnsupportedEncoding),
                 FileEncoding::Binary => {
@@ -1138,9 +1150,10 @@ pub mod vgmo {
                     };
                     let spectrum = params.emitter.spectrum.values().collect::<Vec<_>>();
                     let incoming = params.emitter.generate_measurement_points().0;
-                    let partition = params.receiver.partitioning();
+                    let receiver = &params.receivers[0];
+                    let partition = receiver.partitioning();
                     let n_wi = params.n_wi();
-                    let n_wo = params.n_wo();
+                    let n_wo = receiver.num_patches();
                     let n_spectrum = params.n_spectrum();
                     let raw = Self::read_raw_measured_data(
                         &mut decoder,
@@ -1150,7 +1163,7 @@ pub mod vgmo {
                         params.emitter.measurement_points_zenith_count(),
                         &spectrum,
                         &incoming,
-                        partition,
+                        partition.clone(),
                     )?;
                     let mut bsdfs =
                         Self::read_measured_bsdf_data(&mut decoder, n_wi, n_wo, n_spectrum)?;
@@ -1160,7 +1173,7 @@ pub mod vgmo {
                         incoming: DyArr::from_boxed_slice_1d(
                             params.emitter.generate_measurement_points().0,
                         ),
-                        outgoing: params.receiver.partitioning(),
+                        outgoing: partition,
                     };
 
                     for bsdf in bsdfs.values_mut() {
@@ -1181,7 +1194,7 @@ pub mod vgmo {
                     }
 
                     Ok(Self {
-                        params: *params,
+                        params: params.clone(),
                         raw,
                         bsdfs: unsafe {
                             mem::transmute::<
@@ -1273,7 +1286,7 @@ mod tests {
                 azimuth: RangeByStepSizeInclusive::new(rad!(0.0), rad!(0.0), rad!(0.0)),
                 spectrum: RangeByStepSizeInclusive::new(nm!(400.0), nm!(700.0), nm!(100.0)),
             },
-            receiver: ReceiverParams {
+            receivers: ReceiverParams {
                 domain: SphericalDomain::Upper,
                 precision: Sph2::new(rad!(0.1), rad!(0.1)),
                 scheme: PartitionScheme::Beckers,
@@ -1523,7 +1536,7 @@ mod tests {
                 incident_medium: Medium::Vacuum,
                 transmitted_medium: Medium::Aluminium,
                 emitter: emitter_params,
-                receiver: ReceiverParams {
+                receivers: ReceiverParams {
                     domain: SphericalDomain::Upper,
                     precision: Sph2 {
                         theta: Rads::from_degrees(45.0),
@@ -1635,22 +1648,21 @@ pub enum OutputFileFormatOption {
 /// Writes the measured data to a file.
 pub fn write_measured_data_to_file(
     data: &[Measurement],
-    surfaces: &[Handle<MicroSurface>],
     cache: &Cache,
     config: &Config,
     output: OutputOptions,
 ) -> Result<(), VgonioError> {
     println!(
-        "    {}>{} Saving measurement data...",
+        "    {}>{} Saving {} measurement data...",
         ansi::BRIGHT_YELLOW,
-        ansi::RESET
+        ansi::RESET,
+        data.len()
     );
     let output_dir = config.resolve_output_dir(output.dir.as_deref())?;
-    for (measurement, surface) in data.iter().zip(surfaces.iter()) {
-        let datetime = base::utils::iso_timestamp_short();
+    for (i, measurement) in data.iter().enumerate() {
         let filepath = cache.read(|cache| {
             let surf_name = cache
-                .get_micro_surface_filepath(*surface)
+                .get_micro_surface_filepath(measurement.source.micro_surface().unwrap())
                 .unwrap()
                 .file_stem()
                 .unwrap()
@@ -1659,7 +1671,9 @@ pub fn write_measured_data_to_file(
                 "{}_{}_{}",
                 measurement.kind().ascii_str(),
                 surf_name.to_str().unwrap(),
-                datetime
+                base::utils::iso_timestamp_short(
+                    measurement.timestamp + chrono::Duration::seconds(i as i64)
+                ),
             ))
         });
         println!(
@@ -1673,17 +1687,19 @@ pub fn write_measured_data_to_file(
             match measurement.write_to_file(&filepath, format) {
                 Ok(_) => {
                     println!(
-                        "      {} Successfully saved to \"{}\"",
+                        "      {} Successfully saved to \"{}\", format: {:?}",
                         ansi::CYAN_CHECK,
-                        output_dir.display()
+                        output_dir.display(),
+                        format
                     );
                 }
                 Err(err) => {
                     eprintln!(
-                        "        {} Failed to save to \"{}\": {}",
+                        "        {} Failed to save to \"{}\" with format {:?}: {}",
                         ansi::RED_EXCLAMATION,
                         filepath.display(),
-                        err
+                        format,
+                        err,
                     );
                 }
             }

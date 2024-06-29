@@ -54,7 +54,7 @@ impl SimulationKind {
 }
 
 /// Parameters for BSDF measurement.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BsdfMeasurementParams {
     /// The measurement kind.
     pub kind: BsdfKind,
@@ -72,7 +72,7 @@ pub struct BsdfMeasurementParams {
     pub emitter: EmitterParams,
 
     /// Description of the detector.
-    pub receiver: ReceiverParams,
+    pub receivers: Vec<ReceiverParams>,
 
     /// Whether to apply the Fresnel equations during the simulation.
     pub fresnel: bool,
@@ -103,11 +103,11 @@ impl Default for BsdfMeasurementParams {
                 ),
                 spectrum: RangeByStepSizeInclusive::new(nm!(400.0), nm!(700.0), nm!(100.0)),
             },
-            receiver: ReceiverParams {
+            receivers: vec![ReceiverParams {
                 domain: SphericalDomain::Upper,
                 precision: Sph2::new(deg!(2.0).in_radians(), deg!(5.0).in_radians()),
                 scheme: PartitionScheme::Beckers,
-            },
+            }],
             fresnel: true,
         }
     }
@@ -116,9 +116,6 @@ impl Default for BsdfMeasurementParams {
 impl BsdfMeasurementParams {
     /// Returns the number of measurement points.
     pub fn n_wi(&self) -> usize { self.emitter.measurement_points_count() }
-
-    /// Returns the number of patches on the receiver.
-    pub fn n_wo(&self) -> usize { self.receiver.num_patches() }
 
     /// Returns the number of wavelengths in the spectrum.
     pub fn n_spectrum(&self) -> usize { self.emitter.spectrum.step_count() }
@@ -162,20 +159,23 @@ impl BsdfMeasurementParams {
             ));
         }
 
-        let collector = &self.receiver;
-        if !collector.precision.is_positive() {
-            return Err(VgonioError::new(
-                "Detector's precision must be positive",
-                Some(Box::new(RuntimeError::InvalidDetector)),
-            ));
+        for collector in &self.receivers {
+            if !collector.precision.is_positive() {
+                return Err(VgonioError::new(
+                    "Detector's precision must be positive",
+                    Some(Box::new(RuntimeError::InvalidDetector)),
+                ));
+            }
         }
 
         Ok(self)
     }
 
     /// Returns the total number of samples that will be collected.
-    pub fn samples_count(&self) -> usize {
-        self.emitter.measurement_points_count() * self.receiver.num_patches()
+    pub fn samples_count(&self, i: usize) -> Option<usize> {
+        self.receivers
+            .get(i)
+            .map(|r| r.num_patches() * self.emitter.measurement_points_count())
     }
 
     /// Checks if the incident and transmitted media are air.
@@ -188,6 +188,7 @@ impl BsdfMeasurementParams {
         &self,
     ) -> std::collections::HashMap<exr::meta::attribute::Text, exr::meta::attribute::AttributeValue>
     {
+        // TODO: handle multiple receivers
         use exr::meta::attribute::{AttributeValue, Text};
         let mut hash_map = std::collections::HashMap::new();
         hash_map.insert(
@@ -259,20 +260,26 @@ impl BsdfMeasurementParams {
         );
         hash_map.insert(
             Text::new_or_panic("vg.detector.domain"),
-            AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.receiver.domain))),
+            AttributeValue::Text(Text::new_or_panic(format!(
+                "{:?}",
+                self.receivers[0].domain
+            ))),
         );
         hash_map.insert(
             Text::new_or_panic("vg.detector.scheme"),
-            AttributeValue::Text(Text::new_or_panic(format!("{:?}", self.receiver.scheme))),
+            AttributeValue::Text(Text::new_or_panic(format!(
+                "{:?}",
+                self.receivers[0].scheme
+            ))),
         );
         hash_map.insert(
             Text::new_or_panic("vg.detector.precision_theta"),
-            AttributeValue::F32(self.receiver.precision.theta.in_degrees().as_f32()),
+            AttributeValue::F32(self.receivers[0].precision.theta.in_degrees().as_f32()),
         );
-        if self.receiver.scheme == PartitionScheme::EqualAngle {
+        if self.receivers[0].scheme == PartitionScheme::EqualAngle {
             hash_map.insert(
                 Text::new_or_panic("vg.detector.precision_phi"),
-                AttributeValue::F32(self.receiver.precision.phi.in_degrees().as_f32()),
+                AttributeValue::F32(self.receivers[0].precision.phi.in_degrees().as_f32()),
             );
         }
         hash_map

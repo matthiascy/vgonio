@@ -356,85 +356,90 @@ impl BsdfMeasurementTab {
                         }
                     }
                 });
-                self.params.receiver.ui(ui, |params, ui| {
-                    #[cfg(feature = "visu-dbg")]
-                    {
-                        if debug_draw {
-                            ui.label("Dome:");
-                            ui.horizontal_wrapped(|ui| {
-                                if ui.button("update").clicked() {
-                                    self.event_loop.send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::UpdateDetectorPatches(
-                                            params.partitioning(),
-                                        ),
-                                    ));
-                                }
+                // TODO: Add multiple receivers
+                for receiver in &mut self.params.receivers {
+                    receiver.ui(ui, |params, ui| {
+                        #[cfg(feature = "visu-dbg")]
+                        {
+                            if debug_draw {
+                                ui.label("Dome:");
+                                ui.horizontal_wrapped(|ui| {
+                                    if ui.button("update").clicked() {
+                                        self.event_loop.send_event(VgonioEvent::Debugging(
+                                            DebuggingEvent::UpdateDetectorPatches(
+                                                params.partitioning(),
+                                            ),
+                                        ));
+                                    }
+                                    if ui
+                                        .add(ToggleSwitch::new(
+                                            &mut self.debug.detector_dome_drawing,
+                                        ))
+                                        .changed()
+                                    {
+                                        self.event_loop.send_event(VgonioEvent::Debugging(
+                                            DebuggingEvent::ToggleDetectorDomeDrawing(
+                                                self.debug.detector_dome_drawing,
+                                            ),
+                                        ));
+                                    }
+                                });
+                                ui.end_row();
+
+                                ui.label("Trajectories:");
+                                ui.horizontal_wrapped(|ui| {
+                                    let mut ray_trajectory_index_changed = false;
+                                    if ui.button("\u{25C0}").clicked() {
+                                        self.debug.ray_trajectory_index =
+                                            (self.debug.ray_trajectory_index - 1).max(0);
+                                        ray_trajectory_index_changed = true;
+                                    }
+                                    if ui.button("\u{25B6}").clicked() {
+                                        self.debug.ray_trajectory_index =
+                                            (self.debug.ray_trajectory_index + 1).max(0);
+                                        ray_trajectory_index_changed = true;
+                                    }
+                                    ui.label("reflected");
+                                    let changed0 = ui
+                                        .add(ToggleSwitch::new(
+                                            &mut self.debug.ray_trajectories_drawing_reflected,
+                                        ))
+                                        .changed();
+                                    ui.label("missed");
+                                    let changed1 = ui
+                                        .add(ToggleSwitch::new(
+                                            &mut self.debug.ray_trajectories_drawing_missed,
+                                        ))
+                                        .changed();
+                                    if changed0 || changed1 || ray_trajectory_index_changed {
+                                        self.event_loop.send_event(VgonioEvent::Debugging(
+                                            DebuggingEvent::UpdateRayTrajectoriesDrawing {
+                                                index: self.debug.ray_trajectory_index as usize,
+                                                missed: self.debug.ray_trajectories_drawing_missed,
+                                                reflected: self
+                                                    .debug
+                                                    .ray_trajectories_drawing_reflected,
+                                            },
+                                        ));
+                                    }
+                                });
+                                ui.end_row();
+
+                                ui.label("Collected rays:");
                                 if ui
-                                    .add(ToggleSwitch::new(&mut self.debug.detector_dome_drawing))
+                                    .add(ToggleSwitch::new(&mut self.debug.ray_hit_points_drawing))
                                     .changed()
                                 {
                                     self.event_loop.send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::ToggleDetectorDomeDrawing(
-                                            self.debug.detector_dome_drawing,
+                                        DebuggingEvent::ToggleCollectedRaysDrawing(
+                                            self.debug.ray_hit_points_drawing,
                                         ),
                                     ));
                                 }
-                            });
-                            ui.end_row();
-
-                            ui.label("Trajectories:");
-                            ui.horizontal_wrapped(|ui| {
-                                let mut ray_trajectory_index_changed = false;
-                                if ui.button("\u{25C0}").clicked() {
-                                    self.debug.ray_trajectory_index =
-                                        (self.debug.ray_trajectory_index - 1).max(0);
-                                    ray_trajectory_index_changed = true;
-                                }
-                                if ui.button("\u{25B6}").clicked() {
-                                    self.debug.ray_trajectory_index =
-                                        (self.debug.ray_trajectory_index + 1).max(0);
-                                    ray_trajectory_index_changed = true;
-                                }
-                                ui.label("reflected");
-                                let changed0 = ui
-                                    .add(ToggleSwitch::new(
-                                        &mut self.debug.ray_trajectories_drawing_reflected,
-                                    ))
-                                    .changed();
-                                ui.label("missed");
-                                let changed1 = ui
-                                    .add(ToggleSwitch::new(
-                                        &mut self.debug.ray_trajectories_drawing_missed,
-                                    ))
-                                    .changed();
-                                if changed0 || changed1 || ray_trajectory_index_changed {
-                                    self.event_loop.send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::UpdateRayTrajectoriesDrawing {
-                                            index: self.debug.ray_trajectory_index as usize,
-                                            missed: self.debug.ray_trajectories_drawing_missed,
-                                            reflected: self
-                                                .debug
-                                                .ray_trajectories_drawing_reflected,
-                                        },
-                                    ));
-                                }
-                            });
-                            ui.end_row();
-
-                            ui.label("Collected rays:");
-                            if ui
-                                .add(ToggleSwitch::new(&mut self.debug.ray_hit_points_drawing))
-                                .changed()
-                            {
-                                self.event_loop.send_event(VgonioEvent::Debugging(
-                                    DebuggingEvent::ToggleCollectedRaysDrawing(
-                                        self.debug.ray_hit_points_drawing,
-                                    ),
-                                ));
                             }
                         }
-                    }
-                });
+                    });
+                }
             });
     }
 }

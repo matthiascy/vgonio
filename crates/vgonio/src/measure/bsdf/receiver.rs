@@ -32,9 +32,7 @@ use std::sync::{atomic, atomic::AtomicU32};
 pub struct ReceiverParams {
     /// Domain of the collector.
     pub domain: SphericalDomain,
-    /// Step size of the zenith and azimuth angles.
-    /// Azimuth angle precision is only used for the EqualAngle partitioning
-    /// scheme.
+    /// Angular resolution of the collector.
     pub precision: Sph2,
     /// Partitioning schema of the globe.
     pub scheme: PartitionScheme,
@@ -156,6 +154,9 @@ impl Receiver {
         }
     }
 
+    /// Returns the number of outgoing directions of the receiver.
+    pub const fn n_wo(&self) -> usize { self.patches.n_patches() }
+
     /// Collects the ray-tracing data of one measurement point.
     ///
     /// Returns the collected data and the statistics of the BSDF.
@@ -172,7 +173,7 @@ impl Receiver {
     /// [`BsdfSnapshotRaw`].
     pub fn collect(
         &self,
-        result: SingleSimResult,
+        result: &SingleSimResult,
         out_stats: *mut SingleBsdfMeasurementStats,
         records: &mut [Option<BounceAndEnergy>],
         #[cfg(feature = "visu-dbg")] orbit_radius: f32,

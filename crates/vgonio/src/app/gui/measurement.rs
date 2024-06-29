@@ -385,7 +385,9 @@ impl MeasurementDialog {
                             });
                         }
                         let params = match self.kind {
-                            MeasurementKind::Bsdf => MeasurementParams::Bsdf(self.tab_bsdf.params),
+                            MeasurementKind::Bsdf => {
+                                MeasurementParams::Bsdf(self.tab_bsdf.params.clone())
+                            }
                             MeasurementKind::Ndf => MeasurementParams::Adf(self.tab_adf.params),
                             MeasurementKind::Msf => MeasurementParams::Msf(self.tab_msf.params),
                             MeasurementKind::Sdf => MeasurementParams::Sdf(self.tab_sdf.params),

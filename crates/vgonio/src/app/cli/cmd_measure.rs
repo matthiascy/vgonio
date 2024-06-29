@@ -136,11 +136,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         - max bounces: {}
         - spectrum: {}
         - polar angle: {}
-        - azimuthal angle: {}
-      + receiver:
-        - domain: {}
-        - scheme: {:?}
-        - precision: {}",
+        - azimuthal angle: {}",
                     ansi::BRIGHT_YELLOW,
                     ansi::RESET,
                     chrono::DateTime::<chrono::Utc>::from(measurement_start_time),
@@ -151,13 +147,17 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     params.emitter.spectrum,
                     params.emitter.zenith.pretty_print(),
                     params.emitter.azimuth.pretty_print(),
-                    params.receiver.domain,
-                    params.receiver.scheme,
-                    params.receiver.precision
                 );
-                cache.read(|cache| {
-                    measure::bsdf::measure_bsdf_rt(params, &surfaces, params.sim_kind, cache)
-                })
+                for receiver in &params.receivers {
+                    println!(
+                        "      + receiver:
+        - domain: {}
+        - scheme: {:?}
+        - precision: {}",
+                        receiver.domain, receiver.scheme, receiver.precision
+                    );
+                }
+                cache.read(|cache| measure::bsdf::measure_bsdf_rt(params, &surfaces, cache))
             }
             MeasurementParams::Adf(measurement) => {
                 match &measurement.mode {
@@ -257,7 +257,6 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
 
         crate::io::write_measured_data_to_file(
             &measured,
-            &surfaces,
             &cache,
             &config,
             OutputOptions {

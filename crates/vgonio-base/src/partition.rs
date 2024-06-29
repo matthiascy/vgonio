@@ -281,7 +281,7 @@ impl SphericalPartition {
     }
 
     /// Returns the number of patches.
-    pub fn n_patches(&self) -> usize { self.patches.len() }
+    pub const fn n_patches(&self) -> usize { self.patches.len() }
 
     /// Returns the number of rings.
     pub fn n_rings(&self) -> usize { self.rings.len() }
