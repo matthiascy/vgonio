@@ -137,6 +137,20 @@ pub struct PlotOptions {
     pub theta_m: f32,
 
     #[clap(
+        long = "pstep",
+        help = "The step size for the phi angle (in degrees) in the polar coordinate system.",
+        default_value = "45"
+    )]
+    pub pstep: f32,
+
+    #[clap(
+        long = "tstep",
+        help = "The step size for the theta angle (in degrees) in the polar coordinate system.",
+        default_value = "30"
+    )]
+    pub tstep: f32,
+
+    #[clap(
         long = "lambda",
         help = "The wavelength to plot the BRDF at.",
         default_value = "550.0",
@@ -255,15 +269,13 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     let brdfs = brdf_hdls
                         .into_iter()
                         .zip(labels.into_iter())
-                        .filter_map(|(hdl, legend)| {
+                        .filter_map(|(hdl, label)| {
                             cache
                                 .get_measurement(hdl)
                                 .unwrap()
                                 .measured
                                 .downcast_ref::<MeasuredBsdfData>()
-                                .and_then(|meas| {
-                                    meas.brdf_at(opts.level).map(|brdf| (brdf, legend))
-                                })
+                                .and_then(|meas| meas.brdf_at(opts.level).map(|brdf| (brdf, label)))
                         })
                         .collect::<Vec<_>>();
                     let spectrum = brdfs[0].0.spectrum.clone().into_vec();
@@ -357,6 +369,8 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     opts.coord,
                     opts.diff,
                     opts.fc.unwrap_or("w".to_string()),
+                    Degs::new(opts.pstep),
+                    Degs::new(opts.tstep),
                 )
                 .unwrap();
 

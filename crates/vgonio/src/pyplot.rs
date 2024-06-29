@@ -204,7 +204,7 @@ pub fn plot_brdf_slice(
                         slice_phi,
                         slice_opposite_phi,
                         PyArray1::from_vec_bound(py, theta),
-                        legend,
+                        label,
                     )
                 })
                 .collect::<Vec<_>>(),
@@ -420,6 +420,8 @@ pub fn plot_brdf_map(
     coord: bool,
     diff: bool,
     fc: String,
+    pstep: Degrees,
+    tstep: Degrees,
 ) -> PyResult<()> {
     let theta_i_str = format!("{:4.2}", theta_i.as_f32()).replace(".", "_");
     let phi_i_str = format!("{:4.2}", phi_i.as_f32()).replace(".", "_");
@@ -482,7 +484,16 @@ pub fn plot_brdf_map(
                 })
                 .collect::<Vec<_>>(),
         );
-        let args = (images, cmap.clone(), cbar, coord, diff, fc);
+        let args = (
+            images,
+            cmap.clone(),
+            cbar,
+            coord,
+            diff,
+            fc,
+            pstep.as_f32(),
+            tstep.as_f32(),
+        );
         fun.call1(py, args).unwrap();
         Ok(())
     })

@@ -279,6 +279,39 @@ def plot_brdf_comparison(
     plt.show()
 
 
+def new_polar_brdf_plot():
+    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 8))
+    ax.set_theta_zero_location("N")
+    ax.set_theta_direction(-1)
+    ax.set_thetamin(-90)
+    ax.set_thetamax(90)
+    ax.set_thetagrids(range(-90, 91, 15))
+    # Custom grid
+    ax.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
+    ax.xaxis.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
+    ax.yaxis.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
+    # Hide spines
+    ax.spines['polar'].set_visible(False)
+    return fig, ax
+
+
+def custom_polar_brdf_plot_radial_ticks(ax, ymax):
+    # Custom radial ticks and labels
+    delta = np.round(ymax * 1.2, 0) / 4
+    rticks = np.arange(0, ymax + delta, delta)
+    ax.set_rticks(rticks)
+    ax.set_rlabel_position(-22.5)  # Position of the radial labels
+
+
+def add_polar_brdf_plot_phi_o_text(ax, ymax, phi_o_deg, phi_o_deg_opp):
+    ax.text(np.radians(-85), ymax * 0.95, fr'$\phi_o={int(round(phi_o_deg_opp))}\degree$',
+            horizontalalignment='center',
+            verticalalignment='center', fontsize=14)
+    ax.text(np.radians(85), ymax, fr'$\phi_o={int(round(phi_o_deg))}\degree$',
+            horizontalalignment='center',
+            verticalalignment='center', fontsize=14)
+
+
 def plot_brdf_slice(phi_o_deg, phi_o_deg_opp, brdf_slices: list[tuple[np.ndarray, np.ndarray, np.ndarray, str]],
                     wavelengths: np.ndarray, legend=False):
     sns.set_theme(style="whitegrid", color_codes=True)
@@ -296,48 +329,19 @@ def plot_brdf_slice(phi_o_deg, phi_o_deg_opp, brdf_slices: list[tuple[np.ndarray
     # ax.legend()
 
     # new polar plot
-    fig_polar, ax_polar = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 8))
-
-    # fig_polar.suptitle(f"BRDF Polar, Out-of-plane, φ = {phi_o_deg:.2f}°")
-
-    ax_polar.set_theta_zero_location("N")
-    ax_polar.set_theta_direction(-1)
-    ax_polar.set_thetamin(-90)
-    ax_polar.set_thetamax(90)
-    ax_polar.set_thetagrids(range(-90, 91, 15))
-
-    # Custom grid
-    ax_polar.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
-    ax_polar.xaxis.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
-    ax_polar.yaxis.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
-
-    # Hide spines
-    ax_polar.spines['polar'].set_visible(False)
-
-    # ax_polar.set_rlim(0, 1.2)
-    # ax_polar.set_ylabel("BRDF [sr^-1]")
+    fig_polar, ax_polar = new_polar_brdf_plot()
 
     ymax = 0
-    for i, (slice_phi_o, slice_phi_o_opp, theta, legend) in enumerate(brdf_slices):
+    for i, (slice_phi_o, slice_phi_o_opp, theta, label) in enumerate(brdf_slices):
         xs = np.append(np.flip(-np.radians(theta)), np.radians(theta))
         for l in range(1):
             ys = np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l])
-            ax_polar.plot(xs, ys, label=f"{legend} λ = {wavelengths[l]:.0f} nm", linewidth=1.8)
+            ax_polar.plot(xs, ys, label=f"{label}", linewidth=1.8)
+            # λ = {wavelengths[l]:.0f} nm
             ymax = max(ymax, np.max(ys))
 
-    ax_polar.text(np.radians(-85), ymax * 0.95, fr'$\phi_o={int(round(phi_o_deg_opp))}\degree$',
-                  horizontalalignment='center',
-                  verticalalignment='center', fontsize=14)
-    ax_polar.text(np.radians(85), ymax, fr'$\phi_o={int(round(phi_o_deg))}\degree$',
-                  horizontalalignment='center',
-                  verticalalignment='center', fontsize=14)
-
-    # Custom radial ticks and labels
-    delta = np.round(ymax * 1.2, 0) / 4
-    rticks = np.arange(0, ymax + delta, delta)
-    ax_polar.set_rticks(rticks)
-    # ax_polar.set_rticks(np.linspace(0, ymax * 1.2, 7))  # Set radial ticks
-    ax_polar.set_rlabel_position(-22.5)  # Position of the radial labels
+    add_polar_brdf_plot_phi_o_text(ax_polar, ymax, phi_o_deg, phi_o_deg_opp)
+    custom_polar_brdf_plot_radial_ticks(ax_polar, ymax)
 
     if legend:
         ax_polar.legend(loc='upper right', fontsize=12)
@@ -348,40 +352,30 @@ def plot_brdf_slice(phi_o_deg, phi_o_deg_opp, brdf_slices: list[tuple[np.ndarray
 
 
 def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices, wavelengths):
-    fig, ax = plt.subplots()
-    fig.suptitle("BRDF Slice")
-    ax.set_xlabel(r"$θ_o\;[\degree]$")
-    ax.set_ylabel(r"$BRDF\;[sr^{-1}]$")
-    n_spectrum = len(wavelengths)
-    for slices_phi, slices_phi_opp, theta_i, theta_o in slices:
-        xs = np.append(np.flip(-np.array(theta_o)), np.array(theta_o))
-        for i, (slice_phi, slice_phi_opp, ti) in enumerate(zip(slices_phi, slices_phi_opp, theta_i)):
-            if i % 3 == 0:
-                slice_phi_o = np.array(slice_phi).reshape((-1, n_spectrum))
-                slice_phi_o_opp = np.array(slice_phi_opp).reshape((-1, n_spectrum))
-                for l in range(1):
-                    ys = np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l])
-                    ax.plot(xs, ys, label=fr'$θ_i = {ti:2.0f}\;\degree, λ = {wavelengths[l]:3.0f}\;nm$', linewidth=1.8)
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.legend()
+    # fig, ax = plt.subplots()
+    # fig.suptitle("BRDF Slice")
+    # ax.set_xlabel(r"$θ_o\;[\degree]$")
+    # ax.set_ylabel(r"$BRDF\;[sr^{-1}]$")
+    # n_spectrum = len(wavelengths)
+    # for slices_phi, slices_phi_opp, theta_i, theta_o in slices:
+    #     xs = np.append(np.flip(-np.array(theta_o)), np.array(theta_o))
+    #     for i, (slice_phi, slice_phi_opp, ti) in enumerate(zip(slices_phi, slices_phi_opp, theta_i)):
+    #         if i % 3 == 0:
+    #             slice_phi_o = np.array(slice_phi).reshape((-1, n_spectrum))
+    #             slice_phi_o_opp = np.array(slice_phi_opp).reshape((-1, n_spectrum))
+    #             for l in range(1):
+    #                 ys = np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l])
+    #                 ax.plot(xs, ys, label=fr'$θ_i = {ti:2.0f}\;\degree, λ = {wavelengths[l]:3.0f}\;nm$', linewidth=1.8)
+    # ax.spines['right'].set_visible(False)
+    # ax.spines['top'].set_visible(False)
+    # ax.legend()
 
     # new polar plot
-    fig_polar, ax_polar = plt.subplots(subplot_kw={'projection': 'polar'})
-    fig_polar.suptitle(f"BRDF Polar, In-plane, φ = {phi_deg:.2f}°")
-    ax_polar.set_theta_zero_location("N")
-    ax_polar.set_theta_direction(-1)
-    # set the theta limits to -90, 90
-    ax_polar.set_thetamin(-90)
-    ax_polar.set_thetamax(90)
-    # set labels to show every 15 degrees
-    ax_polar.set_thetagrids(range(-90, 90, 15))
+    fig_polar, ax_polar = new_polar_brdf_plot()
     ax_polar.set_rlabel_position(0)
-    # set the radius limits to 0, 1.2
-    # ax_polar.set_rlim(0, 1.2)
-    # set y labels to be on the right
-    # ax_polar.set_ylabel("BRDF [sr^-1]")
     n_spectrum = len(wavelengths)
+
+    ymax = 0
     for slices_phi, slices_phi_opp, theta_i, theta_o in slices:
         xs = np.append(np.flip(-np.radians(np.array(theta_o))), np.radians(np.array(theta_o)))
         for i, (slice_phi, slice_phi_opp, ti) in enumerate(zip(slices_phi, slices_phi_opp, theta_i)):
@@ -390,9 +384,13 @@ def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices, wavelengths):
                 slice_phi_o_opp = np.array(slice_phi_opp).reshape((-1, n_spectrum))
                 for l in range(1):
                     ys = np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l])
-                    ax_polar.plot(xs, ys, label=fr"$θ_i = {ti:>3.0f}\;\degree, λ = {wavelengths[l]:>3.0f}\;nm$")
+                    ax_polar.plot(xs, ys, label=fr"$θ_i = {ti:>3.0f}\;\degree$")
+                    # , λ = {wavelengths[l]:>3.0f}\;nm
+                    ymax = max(ymax, np.max(ys))
+
+    add_polar_brdf_plot_phi_o_text(ax_polar, ymax, phi_deg, phi_opp_deg)
+    custom_polar_brdf_plot_radial_ticks(ax_polar, ymax)
     ax_polar.legend(loc='upper right', bbox_to_anchor=(1.1, 1.1))
-    ax_polar.spines['polar'].set_visible(False)
     plt.show()
 
 
@@ -500,8 +498,8 @@ def plot_gaf_slice(tm, pm, pv, pv_opp, gaf_slices: list[tuple[str, np.ndarray, n
 
 
 def plot_brdf_map(images: list[str, Tuple[int, int], np.ndarray], cmap='BuPu', cbar=False, coord=False, diff=False,
-                  fc='black'):
-    print("")
+                  fc='black', pstep=45, tstep=30):
+    print("params: ", cmap, cbar, coord, diff, fc, pstep, tstep)
     from tone_mapping import tone_mapping
 
     if diff:
@@ -511,7 +509,7 @@ def plot_brdf_map(images: list[str, Tuple[int, int], np.ndarray], cmap='BuPu', c
             diff_pixels = np.abs(pixels1 - pixels2)
             mse = np.mean(np.square(diff_pixels))
             fig, ax = tone_mapping(diff_pixels, size1, cmap=cmap, cbar=cbar, coord=coord, cbar_label='Difference',
-                                   color=fc)
+                                   color=fc, pstep=pstep, tstep=tstep)
             print('C')
             ax.text(-size1[0] / 2 + 50, size1[1] / 2 - 10, f'MSE: {mse:.4f}', color=fc, fontsize=14, ha='center',
                     va='center', alpha=0.8)
@@ -520,7 +518,7 @@ def plot_brdf_map(images: list[str, Tuple[int, int], np.ndarray], cmap='BuPu', c
     else:
         for i, (name, size, pixels) in enumerate(images):
             fig, ax = tone_mapping(pixels, size, cmap=cmap, cbar=cbar, coord=coord,
-                                   cbar_label=r'BRDF [$\mathrm{sr^{-1}}$]')
+                                   cbar_label=r'BRDF [$\mathrm{sr^{-1}}$]', color=fc, pstep=pstep, tstep=tstep)
             fig.savefig(f'{name}.pdf', format='pdf', bbox_inches='tight')
             plt.show()
 

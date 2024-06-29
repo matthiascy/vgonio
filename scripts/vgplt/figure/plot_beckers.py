@@ -173,18 +173,22 @@ if __name__ == "__main__":
     parser.add_argument("--n", type=int, default=10)
     parser.add_argument("--single", action="store_true")
     parser.add_argument("--print", action="store_true")
+    parser.add_argument("--info", action="store_true")
     args = parser.parse_args()
 
-    if args.gen:
-        for n in [5, 6, 8, 9, 10, 12, 15, 18, 20]:
-            ks, rs, ts = compute_becker(n)
-            generate_figure(n, ks, ts)
+    if args.info:
+        _, _, _ = compute_becker(args.n, print_info=args.print)
     else:
-        ks, rs, ts = compute_becker(args.n)
-        if args.single:
-            plot_figure(ks, ts)
+        if args.gen:
+            for n in [5, 6, 8, 9, 10, 12, 15, 18, 20]:
+                ks, rs, ts = compute_becker(n)
+                generate_figure(n, ks, ts)
         else:
-            figure = plt.figure()
-            becker_plot_rings(ks, rs, figure.add_subplot(1, 2, 1))
-            becker_plot_hemisphere(ks, ts, figure.add_subplot(1, 2, 2, projection="3d"))
-        plt.show()
+            ks, rs, ts = compute_becker(args.n)
+            if args.single:
+                plot_figure(ks, ts)
+            else:
+                figure = plt.figure()
+                becker_plot_rings(ks, rs, figure.add_subplot(1, 2, 1))
+                becker_plot_hemisphere(ks, ts, figure.add_subplot(1, 2, 2, projection="3d"))
+            plt.show()

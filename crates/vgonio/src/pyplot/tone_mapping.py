@@ -25,13 +25,17 @@ def load_exr_channel(exr_file, channel, size):
     return values
 
 
-def draw_polar_grid(ax, size, num_lines=8, num_circles=4, color='k'):
+def draw_polar_grid(ax, size, pstep=45.0, tstep=30.0, color='k'):
+    num_lines = int(360 / pstep)
+    num_circles = int(90 / tstep) + 1
+    print(f"Drawing polar grid with {num_lines} radial lines and {num_circles} circles")
     # Draw circles, each representing a certain angle
     # Do not draw the text of the angle if it is 0 or 90 degrees
-    for r in np.linspace(0, size[1] / 2, num_circles):
-        circle = plt.Circle((0, 0), r * 0.999, color=color, linestyle='-', linewidth=1.0, fill=False, alpha=0.10)
+    for theta in np.linspace(0, 90, num_circles):
+        r = size[1] / 2 * 2 * np.sin(np.radians(theta) / 2) / np.sqrt(2)
+        # for r in np.linspace(0, size[1] / 2, num_circles):
+        circle = plt.Circle((0, 0), r, color=color, linestyle='-', linewidth=1.0, fill=False, alpha=0.10)
         ax.add_artist(circle)
-        theta = r / (size[1] / 2) * 90
         if theta not in [0.0, 90.0]:
             ax.text(0, r, fr'{theta:.0f}$\degree$', color=color, fontsize=12, ha='center', va='center', alpha=0.8)
             if theta == 30.0:
@@ -48,7 +52,8 @@ def draw_polar_grid(ax, size, num_lines=8, num_circles=4, color='k'):
             ax.text(x[1] * 0.85, y[1], r'$\phi_m$', color=color, fontsize=17, ha='center', va='center', alpha=0.8)
 
 
-def tone_mapping(pixels, size, cmap='BuPu', cbar=False, coord=False, cbar_label='NDF [$sr^{-1}$]', color='k'):
+def tone_mapping(pixels, size, cmap='BuPu', cbar=False, coord=False, cbar_label='NDF [$sr^{-1}$]', color='k',
+                 pstep=45.0, tstep=30.0):
     min_val = np.min(pixels)
     max_val = np.max(pixels)
     normalized = (pixels - min_val) / (max_val - min_val)
@@ -81,7 +86,7 @@ def tone_mapping(pixels, size, cmap='BuPu', cbar=False, coord=False, cbar_label=
         cbar.ax.tick_params(colors=color)
 
     if coord:
-        draw_polar_grid(ax, size, color=color)
+        draw_polar_grid(ax, size, color=color, pstep=pstep, tstep=tstep)
 
     plt.subplots_adjust(left=0.002, right=0.998, top=0.998, bottom=0.002, wspace=0.1, hspace=0.0)
     return fig, ax
