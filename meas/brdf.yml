@@ -6,39 +6,40 @@ type: !bsdf
   transmitted_medium: al
   fresnel: true
   emitter:
-    num_rays: 1000000
+    num_rays: 360000000
     max_bounces: 8
     zenith: 0deg .. =80deg / 5deg
-    azimuth: 0deg .. =360deg / 15deg
-    spectrum: 400 nm .. = 700 nm / 150 nm # 379.71 nm .. =799.55 nm / 0.774612546 nm
+    azimuth: 0deg .. =0deg / 10deg
+    spectrum: 400 nm .. =700 nm / 300 nm # 379.71 nm .. =799.55 nm / 0.774612546 nm
   receivers:
     # first receiver
-    - domain: upper_hemisphere
-      precision:
-        theta: 5.0 deg
-        phi: 0.5 deg # only for equal-angle scheme
-      scheme: beckers
+    #    - domain: upper_hemisphere
+    #      precision:
+    #        theta: 5.0 deg
+    #        phi: 0.5 deg # only for equal-angle scheme
+    #      scheme: beckers
     - domain: upper_hemisphere
       precision:
         theta: 2.0 deg
         phi: 0.5 deg # only for equal-angle scheme
       scheme: beckers
-    - domain: upper_hemisphere
-      precision:
-        theta: 1.0 deg
-        phi: 0.5 deg # only for equal-angle scheme
-      scheme: beckers
-    - domain: upper_hemisphere
-      precision:
-        theta: 0.5 deg
-        phi: 0.5 deg # only for equal-angle scheme
-      scheme: beckers
+#    - domain: upper_hemisphere
+#      precision:
+#        theta: 1.0 deg
+#        phi: 0.5 deg # only for equal-angle scheme
+#      scheme: beckers
+#    - domain: upper_hemisphere
+#      precision:
+#        theta: 0.5 deg
+#        phi: 0.5 deg # only for equal-angle scheme
+#      scheme: beckers
 surfaces:
+  #  - usr://surfaces/olaf/aluminium4bar100.vgms
+  #  - usr://surfaces/olaf/aluminiummirror.vgms
+  #  - usr://surfaces/al064.txt
+
   - usr://surfaces/olaf/aluminium65bar100.vgms
   #  - usr://surfaces/olaf/aluminium1bar100.vgms
-  - usr://surfaces/olaf/aluminium4bar100.vgms
-  - usr://surfaces/olaf/aluminiummirror.vgms
-  - usr://surfaces/al064.txt
 #  - usr://surfaces/al032.txt
 #  - usr://surfaces/al016.txt
 #  - usr://surfaces/generated/128x128.txt

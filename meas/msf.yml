@@ -1,16 +1,16 @@
 ---
 type: !msf # !microfacet-masking-shadowing-function
-  azimuth: 0 rad .. =360 deg / 60 deg
+  azimuth: 0 rad .. =360 deg / 180 deg
   zenith: 0 rad .. =90 deg / 2 deg
   resolution: 2048
   strict: true
 surfaces:
-  - usr://surfaces/olaf/aluminium1bar100.vgms
+  #  - usr://surfaces/olaf/aluminium1bar100.vgms
   #  - usr://surfaces/aluminium1bar200.vgms
   #  - usr://surfaces/aluminium1bar200fine.vgms
   #  - usr://surfaces/aluminium2bar100.vgms
   #  - usr://surfaces/aluminium3bar100.vgms
   #  - usr://surfaces/aluminium4bar100.vgms
-  #  - usr://surfaces/olaf/aluminium65bar100.vgms
+  - usr://surfaces/olaf/aluminium65bar100.vgms
   # - usr://surfaces/olaf/aluminiummirror.vgms
   # - usr://surfaces/megamesh_varied_densityonehalf.txt

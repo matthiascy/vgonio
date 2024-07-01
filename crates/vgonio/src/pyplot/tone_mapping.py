@@ -148,7 +148,9 @@ if __name__ == "__main__":
             fig, ax = tone_mapping(values, size, args.cmap, args.cbar, args.coord, color=args.fc)
 
             if args.save:
-                # save the plot to pdf
-                fig.savefig(args.save, format='pdf', bbox_inches='tight')
+                if args.save.endswith('.pdf'):
+                    fig.savefig(args.save, format='pdf', bbox_inches='tight')
+                else:
+                    fig.savefig(args.save, format='png', bbox_inches='tight', dpi=100)
             else:
                 plt.show()

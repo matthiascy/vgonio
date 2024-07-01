@@ -56,6 +56,14 @@ impl VgonioBrdfParameterisation {
         )
     }
 
+    /// Returns the outgoing directions in spherical coordinates.
+    pub fn outgoing_spherical(&self) -> DyArr<Sph2> {
+        DyArr::from_iterator(
+            [-1],
+            self.outgoing.patches.iter().map(|patch| patch.center()),
+        )
+    }
+
     /// Returns the number of outgoing directions.
     pub fn n_wo(&self) -> usize { self.outgoing.patches.len() }
 

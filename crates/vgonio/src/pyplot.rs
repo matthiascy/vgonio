@@ -5,6 +5,7 @@ use crate::measure::{
 };
 use base::{
     math::Sph2,
+    range::RangeByStepSizeInclusive,
     units::{Degrees, Nanometres, Radians, Rads},
 };
 use bxdf::brdf::measured::{ClausenBrdf, VgonioBrdf};
@@ -160,6 +161,9 @@ pub fn plot_brdf_slice(
     phi_o: Radians,
     spectrum: Vec<Nanometres>,
     legend: bool,
+    cmap: String,
+    scale: f32,
+    log: bool,
 ) -> PyResult<()> {
     let opposite_phi_o = (phi_o + Radians::PI).wrap_to_tau();
     Python::with_gil(|py| {
@@ -216,6 +220,9 @@ pub fn plot_brdf_slice(
             brdfs,
             wavelengths,
             legend,
+            cmap,
+            scale,
+            log,
         );
         fun.call1(py, args)?;
         Ok(())
@@ -365,6 +372,7 @@ pub fn plot_gaf(
     wm: Sph2,
     phi_v: Radians,
     labels: Vec<String>,
+    save: Option<String>,
 ) -> PyResult<()> {
     Python::with_gil(|py| {
         let fun: Py<PyAny> =
@@ -390,9 +398,9 @@ pub fn plot_gaf(
                     let (spls, opp_spls) = gaf.slice_at(wm.phi, wm.theta, phi_v);
                     (
                         label,
-                        numpy::PyArray1::from_vec_bound(py, theta),
-                        numpy::PyArray1::from_slice_bound(py, spls),
-                        numpy::PyArray1::from_slice_bound(py, opp_spls.unwrap()),
+                        PyArray1::from_vec_bound(py, theta),
+                        PyArray1::from_slice_bound(py, spls),
+                        PyArray1::from_slice_bound(py, opp_spls.unwrap()),
                     )
                 })
                 .collect::<Vec<_>>(),
@@ -404,6 +412,7 @@ pub fn plot_gaf(
             phi_v.as_f32(),
             (phi_v + Radians::PI).wrap_to_tau().as_f32(),
             slices,
+            save,
         );
         fun.call1(py, args)?;
         Ok(())
@@ -422,6 +431,7 @@ pub fn plot_brdf_map(
     fc: String,
     pstep: Degrees,
     tstep: Degrees,
+    save: Option<String>,
 ) -> PyResult<()> {
     let theta_i_str = format!("{:4.2}", theta_i.as_f32()).replace(".", "_");
     let phi_i_str = format!("{:4.2}", phi_i.as_f32()).replace(".", "_");
@@ -493,6 +503,7 @@ pub fn plot_brdf_map(
             fc,
             pstep.as_f32(),
             tstep.as_f32(),
+            save,
         );
         fun.call1(py, args).unwrap();
         Ok(())
@@ -524,6 +535,66 @@ pub fn plot_surfaces(surfaces: &[&MicroSurface], downsample: u32, cmap: String) 
                 .collect::<Vec<_>>(),
         );
         fun.call1(py, (surfaces, cmap, downsample))?;
+        Ok(())
+    })
+}
+
+pub fn plot_brdf_3d(
+    brdf: &VgonioBrdf,
+    wi: Sph2,
+    wavelength: Nanometres,
+    cmap: String,
+    scale: f32,
+) -> PyResult<()> {
+    let wavelength_idx = brdf.spectrum.iter().position(|&x| x == wavelength).unwrap();
+    Python::with_gil(|py| {
+        let fun: Py<PyAny> =
+            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
+                .getattr("plot_brdf_3d")?
+                .into();
+        let theta = brdf
+            .params
+            .outgoing
+            .rings
+            .iter()
+            .map(|x| x.zenith_center().as_f32())
+            .collect::<Vec<_>>();
+        let phi = RangeByStepSizeInclusive::new(0.0, 360.0, 5.0f32)
+            .values()
+            .map(|x| x.to_radians())
+            .collect::<Vec<_>>();
+        let n_theta = theta.len();
+        let n_phi = phi.len();
+        let n_spectrum = brdf.spectrum.len();
+        let vals = {
+            let sampler = DataCarriedOnHemisphereSampler::new(brdf).unwrap();
+            let mut data = PyArray2::zeros_bound(py, [n_theta, n_phi], false);
+            unsafe {
+                let mut spectrum_samples = vec![0.0; n_spectrum].into_boxed_slice();
+                let slice = data.as_slice_mut().unwrap();
+                for (i, t) in theta.iter().enumerate() {
+                    for (j, p) in phi.iter().enumerate() {
+                        sampler.sample_point_at(
+                            wi,
+                            Sph2::new(Rads::new(*t), Rads::new(*p)),
+                            &mut spectrum_samples,
+                        );
+                        slice[i * n_phi + j] = spectrum_samples[wavelength_idx];
+                    }
+                }
+            }
+            data
+        };
+        let args = (
+            wi.theta.as_f32(),
+            wi.phi.as_f32(),
+            PyArray1::from_vec_bound(py, theta),
+            PyArray1::from_vec_bound(py, phi),
+            vals,
+            cmap,
+            scale,
+        );
+        fun.call1(py, args)?;
         Ok(())
     })
 }

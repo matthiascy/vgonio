@@ -5,8 +5,8 @@ use crate::{
         mfd::{MeasuredMsfData, MeasuredNdfData},
     },
     pyplot::{
-        plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane, plot_brdf_vgonio_clausen,
-        plot_gaf, plot_ndf, plot_surfaces,
+        plot_brdf_3d, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
+        plot_brdf_vgonio_clausen, plot_gaf, plot_ndf, plot_surfaces,
     },
 };
 use base::{
@@ -43,12 +43,9 @@ pub enum PlotKind {
     #[clap(alias = "cmp-vv")]
     ComparisonVgonio,
     /// Plot slices of the input BRDF.
-    #[clap(alias = "slice")]
-    Slice,
-
-    #[clap(alias = "slice-in-plane")]
-    SliceInPlane,
-
+    BrdfSlice,
+    /// Plot slices of the input BRDF at the same plane.
+    BrdfSliceInPlane,
     /// Plot the NDF from saved *.vgmo file
     #[clap(alias = "ndf")]
     Ndf,
@@ -58,6 +55,9 @@ pub enum PlotKind {
     /// Plot the BRDF from saved *.exr file
     #[clap(alias = "brdf-map")]
     BrdfMap,
+    /// Plot the BRDF from saved *.vgmo file in 3D
+    #[clap(alias = "brdf3d")]
+    Brdf3D,
     /// Plot the micro-surfaces from saved *.vgmo file
     #[clap(alias = "surf")]
     Surface,
@@ -96,7 +96,8 @@ pub struct PlotOptions {
         help = "The polar angle to plot the BRDF at.",
         default_value = "0.0",
         required_if_eq("kind", "slice"),
-        required_if_eq("kind", "brdf-map")
+        required_if_eq("kind", "brdf-map"),
+        required_if_eq("kind", "brdf3d")
     )]
     pub theta_i: f32,
 
@@ -107,7 +108,8 @@ pub struct PlotOptions {
         required_if_eq("kind", "slice"),
         required_if_eq("kind", "slice-in-plane"),
         required_if_eq("kind", "ndf"),
-        required_if_eq("kind", "brdf-map")
+        required_if_eq("kind", "brdf-map"),
+        required_if_eq("kind", "brdf3d")
     )]
     pub phi_i: f32,
 
@@ -154,7 +156,8 @@ pub struct PlotOptions {
         long = "lambda",
         help = "The wavelength to plot the BRDF at.",
         default_value = "550.0",
-        required_if_eq("kind", "brdf-map")
+        required_if_eq("kind", "brdf-map"),
+        required_if_eq("kind", "brdf3d")
     )]
     pub lambda: f32,
 
@@ -171,6 +174,9 @@ pub struct PlotOptions {
 
     #[clap(long, help = "The colormap to use.")]
     pub cmap: Option<String>,
+
+    #[clap(long, help = "The scale of the BRDF value.")]
+    pub scale: Option<f32>,
 
     #[clap(long, default_value = "false", help = "Whether to show the colorbar.")]
     pub cbar: bool,
@@ -202,6 +208,12 @@ pub struct PlotOptions {
 
     #[clap(long, help = "The y-axis limits.")]
     pub ylim: Option<f32>,
+
+    #[clap(long, help = "Use log scale for the plot.", default_value = "false")]
+    pub log: bool,
+
+    #[clap(long, help = "The file to save the plot.")]
+    pub save: Option<String>,
 }
 
 pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
@@ -250,7 +262,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
             PlotKind::ComparisonVgonio => {
                 todo!("Implement comparison between VgonioBrdf and VgonioBrdf.")
             }
-            slc @ (PlotKind::Slice | PlotKind::SliceInPlane) => {
+            slc @ (PlotKind::BrdfSlice | PlotKind::BrdfSliceInPlane) => {
                 let brdf_hdls = opts
                     .inputs
                     .iter()
@@ -260,7 +272,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 let theta_i = Rads::from_degrees(opts.theta_i);
                 let wi = Sph2::new(theta_i, phi_i);
                 let phi_o = Rads::from_degrees(opts.phi_o);
-                if slc == PlotKind::Slice {
+                if slc == PlotKind::BrdfSlice {
                     let labels = if opts.labels.is_empty() {
                         vec!["".to_string(); brdf_hdls.len()]
                     } else {
@@ -279,7 +291,17 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         })
                         .collect::<Vec<_>>();
                     let spectrum = brdfs[0].0.spectrum.clone().into_vec();
-                    plot_brdf_slice(&brdfs, wi, phi_o, spectrum, opts.legend).unwrap();
+                    plot_brdf_slice(
+                        &brdfs,
+                        wi,
+                        phi_o,
+                        spectrum,
+                        opts.legend,
+                        opts.cmap.unwrap_or("Set3".to_string()),
+                        opts.scale.unwrap_or(1.0),
+                        opts.log,
+                    )
+                    .unwrap();
                 } else {
                     let brdfs = brdf_hdls
                         .into_iter()
@@ -343,7 +365,14 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     Radians::from_degrees(opts.theta_m),
                     Radians::from_degrees(opts.phi_m),
                 );
-                plot_gaf(&gafs, wm, Radians::from_degrees(opts.phi_v), opts.labels).unwrap();
+                plot_gaf(
+                    &gafs,
+                    wm,
+                    Radians::from_degrees(opts.phi_v),
+                    opts.labels,
+                    opts.save,
+                )
+                .unwrap();
                 Ok(())
             }
             PlotKind::BrdfMap => {
@@ -371,9 +400,49 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     opts.fc.unwrap_or("w".to_string()),
                     Degs::new(opts.pstep),
                     Degs::new(opts.tstep),
+                    opts.save,
                 )
                 .unwrap();
 
+                Ok(())
+            }
+            PlotKind::Brdf3D => {
+                let hdls = opts
+                    .inputs
+                    .iter()
+                    .map(|input| cache.load_micro_surface_measurement(&config, input))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let brdfs = hdls
+                    .into_iter()
+                    .filter_map(|hdl| {
+                        cache
+                            .get_measurement(hdl)
+                            .unwrap()
+                            .measured
+                            .downcast_ref::<MeasuredBsdfData>()
+                            .and_then(|meas| meas.brdf_at(opts.level).map(|brdf| brdf))
+                    })
+                    .collect::<Vec<_>>();
+                let lambda = Nanometres::new(opts.lambda);
+                for brdf in &brdfs {
+                    if !brdf.spectrum.iter().find(|&l| *l == lambda).is_some() {
+                        return Err(VgonioError::new(
+                            "The wavelength is not in the spectrum of the BRDF.",
+                            None,
+                        ));
+                    }
+                    plot_brdf_3d(
+                        &brdf,
+                        Sph2::new(
+                            Radians::from_degrees(opts.theta_i),
+                            Radians::from_degrees(opts.phi_i),
+                        ),
+                        lambda,
+                        opts.cmap.clone().unwrap_or("viridis".to_string()),
+                        opts.scale.unwrap_or(1.0),
+                    )
+                    .unwrap();
+                }
                 Ok(())
             }
             PlotKind::Surface => {
