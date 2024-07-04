@@ -87,7 +87,7 @@ pub struct PlotOptions {
         long = "po",
         help = "The azimuthal angle to plot the BRDF at.",
         default_value = "0.0",
-        required_if_eq("kind", "slice")
+        required_if_eq("kind", "brdf-slice")
     )]
     pub phi_o: f32,
 
@@ -95,7 +95,7 @@ pub struct PlotOptions {
         long = "ti",
         help = "The polar angle to plot the BRDF at.",
         default_value = "0.0",
-        required_if_eq("kind", "slice"),
+        required_if_eq("kind", "brdf-slice"),
         required_if_eq("kind", "brdf-map"),
         required_if_eq("kind", "brdf3d")
     )]
@@ -105,7 +105,7 @@ pub struct PlotOptions {
         long = "pi",
         help = "The azimuthal angle to plot the BRDF at. (in degrees)",
         default_value = "0.0",
-        required_if_eq("kind", "slice"),
+        required_if_eq("kind", "brdf-slice"),
         required_if_eq("kind", "slice-in-plane"),
         required_if_eq("kind", "ndf"),
         required_if_eq("kind", "brdf-map"),
