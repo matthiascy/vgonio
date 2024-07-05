@@ -1,5 +1,9 @@
 //! Embree ray tracing.
 
+#[cfg(feature = "visu-dbg")]
+use crate::measure::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
+#[cfg(not(feature = "visu-dbg"))]
+use crate::measure::params::BsdfMeasurementParams;
 use crate::{
     app::cli::ansi,
     measure::bsdf::{
@@ -8,11 +12,6 @@ use crate::{
         SingleSimResult,
     },
 };
-
-#[cfg(feature = "visu-dbg")]
-use crate::measure::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
-#[cfg(not(feature = "visu-dbg"))]
-use crate::measure::params::BsdfMeasurementParams;
 #[cfg(not(feature = "visu-dbg"))]
 use base::optics::ior::Ior;
 use base::{

@@ -115,7 +115,8 @@ impl Tool for SamplingInspector {
             );
         }
         if ui.button("Unit Disk").clicked() {
-            self.samples = measure::uniform_sampling_on_unit_disk(self.sample_count as usize)
+            self.samples = vec![Vec3::ZERO; self.sample_count as usize].into_boxed_slice();
+            measure::uniform_sampling_on_unit_disk(&mut self.samples);
         }
         let response = ui.add(
             egui::Image::new(egui::load::SizedTexture {

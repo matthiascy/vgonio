@@ -8,7 +8,7 @@ use base::{
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::ops::Deref;
+use std::{env::temp_dir, fs::File, ops::Deref, rc::Rc};
 use surf::MicroSurfaceMesh;
 
 /// Parameters for the emitter.
@@ -84,9 +84,9 @@ impl EmitterParams {
     ///
     /// The samples are generated in the local coordinate system of the emitter.
     pub fn generate_unit_samples(&self) -> EmitterSamples {
-        EmitterSamples(crate::measure::uniform_sampling_on_unit_disk(
-            self.num_rays as usize,
-        ))
+        let mut samples = vec![Vec3::ZERO; self.num_rays as usize].into_boxed_slice();
+        crate::measure::uniform_sampling_on_unit_disk(&mut samples);
+        EmitterSamples(samples)
     }
 
     /// Returns the number of measurement positions.
@@ -103,7 +103,7 @@ impl EmitterParams {
     /// Transforms the samples from the sampling space to the desired position
     /// in the world coordinate system.
     pub(crate) fn transform_samples(
-        samples: &EmitterSamples,
+        samples: &[Vec3],
         dest: Sph2,
         orbit_radius: f32,
         disc_radius: f32,

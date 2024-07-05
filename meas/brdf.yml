@@ -6,9 +6,9 @@ type: !bsdf
   transmitted_medium: al
   fresnel: true
   emitter:
-    num_rays: 360000000
+    num_rays: 1000000
     max_bounces: 8
-    zenith: 0deg .. =80deg / 5deg
+    zenith: 0deg .. =0deg / 5deg
     azimuth: 0deg .. =0deg / 10deg
     spectrum: 400 nm .. =700 nm / 300 nm # 379.71 nm .. =799.55 nm / 0.774612546 nm
   receivers:
