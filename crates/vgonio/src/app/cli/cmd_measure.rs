@@ -126,6 +126,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         let measurement_start_time = std::time::SystemTime::now();
         let measured = match desc.params {
             MeasurementParams::Bsdf(params) => {
+                let num_rays_per_sector = opts.sector_ray_count.unwrap_or(params.emitter.num_rays);
                 println!(
                     "  {}>{} Launch BSDF measurement at {}
     • parameters:
@@ -136,7 +137,8 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         - max bounces: {}
         - spectrum: {}
         - polar angle: {}
-        - azimuthal angle: {}",
+        - azimuthal angle: {}
+        - num rays per sector: {}",
                     ansi::BRIGHT_YELLOW,
                     ansi::RESET,
                     chrono::DateTime::<chrono::Utc>::from(measurement_start_time),
@@ -147,6 +149,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     params.emitter.spectrum,
                     params.emitter.zenith.pretty_print(),
                     params.emitter.azimuth.pretty_print(),
+                    num_rays_per_sector,
                 );
                 for receiver in &params.receivers {
                     println!(
@@ -157,7 +160,9 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                         receiver.domain, receiver.scheme, receiver.precision
                     );
                 }
-                cache.read(|cache| measure::bsdf::measure_bsdf_rt(params, &surfaces, cache))
+                cache.read(|cache| {
+                    measure::bsdf::measure_bsdf_rt(params, &surfaces, num_rays_per_sector, cache)
+                })
             }
             MeasurementParams::Adf(measurement) => {
                 match &measurement.mode {
@@ -334,6 +339,12 @@ pub struct MeasureOptions {
     help = "Data compression for the measurement output."
     )]
     pub compression: CompressionScheme,
+
+    #[arg(
+        long = "sec-nrays",
+        help = "The maximum number of rays per disk sector for the BSDF measurement."
+    )]
+    pub sector_ray_count: Option<u32>,
 
     #[arg(
         short,

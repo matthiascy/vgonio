@@ -326,7 +326,7 @@ impl SphericalTransform {
 /// NOTE: samples are generated on the xy-plane, with the z component set to 1.0
 /// in the returned vector. This could simplify the transformation of the
 /// samples when rotating the disk.
-pub fn uniform_sampling_on_unit_disk(samples: &mut [Vec3]) {
+pub fn uniform_sampling_on_unit_disk(samples: &mut [Vec3], tstart: Radians, tstop: Radians) {
     const SEED: u64 = 0;
 
     let range: Uniform<f32> = Uniform::new(0.0, 1.0);
@@ -339,7 +339,7 @@ pub fn uniform_sampling_on_unit_disk(samples: &mut [Vec3]) {
 
             chunks.iter_mut().for_each(|v| {
                 let r = range.sample(&mut rng).sqrt();
-                let a = range.sample(&mut rng) * std::f32::consts::TAU;
+                let a = range.sample(&mut rng) * (tstop - tstart).as_f32() + tstart.as_f32();
                 *v = Vec3::new(r * a.cos(), r * a.sin(), 1.0);
             });
         });

@@ -39,7 +39,6 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fmt::{Debug, Display, Formatter},
-    mem::MaybeUninit,
     path::Path,
     str::FromStr,
 };
@@ -580,7 +579,10 @@ mod tests {
         emitter::EmitterParams, receiver::ReceiverParams, rtc::RtcMethod::Grid,
     };
     use base::{
-        medium::Medium, partition::SphericalDomain, range::RangeByStepSizeInclusive, units::nm,
+        medium::Medium,
+        partition::{PartitionScheme, SphericalDomain},
+        range::RangeByStepSizeInclusive,
+        units::nm,
     };
 
     #[test]
@@ -603,6 +605,7 @@ mod tests {
                 incident_medium: Medium::Vacuum,
                 transmitted_medium: Medium::Aluminium,
                 params: Box::new(VgonioBrdfParameterisation {
+                    n_zenith_i: 1,
                     incoming: DyArr::zeros([1]),
                     outgoing: partition.clone(),
                 }),
@@ -619,11 +622,11 @@ mod tests {
                     azimuth: RangeByStepSizeInclusive::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
                     spectrum: spectrum_range,
                 },
-                receivers: ReceiverParams {
+                receivers: vec![ReceiverParams {
                     domain: SphericalDomain::Upper,
                     precision: precision,
                     scheme: PartitionScheme::Beckers,
-                },
+                }],
                 kind: BsdfKind::Brdf,
                 sim_kind: SimulationKind::GeomOptics(Grid),
                 incident_medium: Medium::Vacuum,
@@ -631,6 +634,7 @@ mod tests {
                 transmitted_medium: Medium::Vacuum,
             },
             raw: RawMeasuredBsdfData {
+                n_zenith_in: 1,
                 spectrum,
                 incoming: DyArr::zeros([1]),
                 outgoing: partition,
@@ -805,6 +809,11 @@ pub struct SingleBsdfMeasurementStats {
     pub energy_per_bounce: Box<[f32]>,
 }
 
+static_assertions::assert_eq_size!(
+    SingleBsdfMeasurementStats,
+    Option<SingleBsdfMeasurementStats>
+);
+
 impl PartialEq for SingleBsdfMeasurementStats {
     fn eq(&self, other: &Self) -> bool {
         self.n_bounce == other.n_bounce
@@ -851,6 +860,49 @@ impl SingleBsdfMeasurementStats {
             n_ray_per_bounce: vec![0; n_spectrum * max_bounce].into_boxed_slice(),
             energy_per_bounce: vec![0.0; n_spectrum * max_bounce].into_boxed_slice(),
         }
+    }
+
+    /// Merges the statistics of another `SingleBsdfMeasurementStats` into this
+    /// one.
+    pub fn merge(&mut self, mut other: SingleBsdfMeasurementStats) {
+        debug_assert!(self.n_spectrum == other.n_spectrum, "Mismatched n_spectrum");
+
+        log::debug!("Merging stats:\n{:#?}\n+\n{:#?}", self, &other);
+
+        self.n_received += other.n_received;
+        self.n_missed += other.n_missed;
+
+        self.n_ray_stats
+            .iter_mut()
+            .zip(other.n_ray_stats.iter())
+            .for_each(|(a, b)| *a += *b);
+
+        self.e_captured
+            .iter_mut()
+            .zip(other.e_captured.iter())
+            .for_each(|(a, b)| *a += *b);
+
+        // Replace the histograms of current stats with the other one.
+        if self.n_bounce < other.n_bounce {
+            log::debug!("Swapping stats");
+            std::mem::swap(&mut self.n_bounce, &mut other.n_bounce);
+            std::mem::swap(&mut self.n_ray_per_bounce, &mut other.n_ray_per_bounce);
+            std::mem::swap(&mut self.energy_per_bounce, &mut other.energy_per_bounce);
+        }
+
+        log::debug!("After swap:\n{:#?}\n+\n{:#?}", self, &other);
+
+        // Add the histograms of the other stats to this one.
+        for i in 0..other.n_spectrum {
+            for j in 0..other.n_bounce as usize {
+                self.n_ray_per_bounce[i * self.n_bounce as usize + j] +=
+                    other.n_ray_per_bounce[i * other.n_bounce as usize + j];
+                self.energy_per_bounce[i * self.n_bounce as usize + j] +=
+                    other.energy_per_bounce[i * other.n_bounce as usize + j];
+            }
+        }
+
+        log::debug!("After merge:\n{:#?}", self);
     }
 
     /// Returns the number of absorbed rays statistics per wavelength.
@@ -1361,11 +1413,12 @@ impl<'a> ExactSizeIterator for SingleSimResultRayChunk<'a> {
 pub fn measure_bsdf_rt(
     params: BsdfMeasurementParams,
     handles: &[Handle<MicroSurface>],
+    max_sector_rays: u32,
     cache: &RawCache,
 ) -> Box<[Measurement]> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
-    let emitter = Emitter::new(&params.emitter);
+    let emitter = Emitter::new(&params.emitter, max_sector_rays);
     let n_wi = emitter.measpts.len();
     let n_spectrum = params.emitter.spectrum.step_count();
     let spectrum = DyArr::from_iterator([-1], params.emitter.spectrum.values());
@@ -1387,8 +1440,16 @@ pub fn measure_bsdf_rt(
         emitter.params.num_rays,
     );
 
+    let incoming = DyArr::<Sph2>::from_slice([n_wi], &emitter.measpts);
     let mut measurements = Vec::with_capacity(surfaces.len() * params.receivers.len());
+
     for (surf, mesh) in surfaces.iter().zip(meshes) {
+        #[cfg(feature = "visu-dbg")]
+        let mut trajectories: Vec<Vec<RayTrajectory>> =
+            vec![Vec::with_capacity(emitter.params.num_rays as usize); n_wi];
+        #[cfg(feature = "visu-dbg")]
+        let mut hit_points: Vec<Vec<Vec3>> = vec![Vec::new(); n_wi];
+
         if surf.is_none() || mesh.is_none() {
             log::debug!("Skipping surface {:?} and its mesh {:?}", surf, mesh);
             continue;
@@ -1402,48 +1463,8 @@ pub fn measure_bsdf_rt(
             surf.path.as_ref().unwrap().display()
         );
 
-        let sim_results = match &params.sim_kind {
-            SimulationKind::GeomOptics(method) => {
-                println!(
-                    "    {} Measuring {} with geometric optics...",
-                    ansi::YELLOW_GT,
-                    params.kind
-                );
-                match method {
-                    #[cfg(feature = "embree")]
-                    RtcMethod::Embree => embr::simulate_bsdf_measurement(
-                        #[cfg(not(feature = "visu-dbg"))]
-                        &params,
-                        &emitter,
-                        mesh,
-                        #[cfg(not(feature = "visu-dbg"))]
-                        &iors_i,
-                        #[cfg(not(feature = "visu-dbg"))]
-                        &iors_t,
-                    ),
-                    #[cfg(feature = "optix")]
-                    RtcMethod::Optix => rtc_simulation_optix(&params, mesh, &emitter, cache),
-                    RtcMethod::Grid => rtc_simulation_grid(&params, surf, mesh, &emitter, cache),
-                }
-            }
-            SimulationKind::WaveOptics => {
-                println!(
-                    "    {} Measuring {} with wave optics...",
-                    ansi::YELLOW_GT,
-                    params.kind
-                );
-                todo!("Wave optics simulation is not yet implemented")
-            }
-        };
-
         let orbit_radius = crate::measure::estimate_orbit_radius(mesh);
         log::trace!("Estimated orbit radius: {}", orbit_radius);
-
-        #[cfg(feature = "visu-dbg")]
-        let mut trajectories: Box<[MaybeUninit<Box<[RayTrajectory]>>]> =
-            Box::new_uninit_slice(n_wi);
-        #[cfg(feature = "visu-dbg")]
-        let mut hit_points: Box<[MaybeUninit<Vec<Vec3>>]> = Box::new_uninit_slice(n_wi);
 
         // Receiver with its records & stats
         let mut receivers = params
@@ -1455,93 +1476,143 @@ pub fn measure_bsdf_rt(
                     Option::<BounceAndEnergy>::None,
                     [n_wi, r.n_wo(), n_spectrum],
                 );
-                let stats: Box<[MaybeUninit<SingleBsdfMeasurementStats>]> =
-                    Box::new_uninit_slice(n_wi);
+                let stats: Box<[Option<SingleBsdfMeasurementStats>]> =
+                    vec![None; n_wi].into_boxed_slice();
                 (r, records, stats, *rparams)
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();
 
-        for (i, sim) in sim_results.into_iter().enumerate() {
-            #[cfg(feature = "visu-dbg")]
-            let trjs = trajectories[i].as_mut_ptr();
-            #[cfg(feature = "visu-dbg")]
-            let hpts = hit_points[i].as_mut_ptr();
+        match &params.sim_kind {
+            SimulationKind::GeomOptics(method) => {
+                #[cfg(feature = "embree")]
+                let (_, scene, geometry) = embr::create_resources(mesh);
+                for sector in emitter.circular_sectors() {
+                    for (i, wi) in sector.measpts.iter().enumerate() {
+                        #[cfg(feature = "bench")]
+                        let t = std::time::Instant::now();
+                        let single_result = match method {
+                            #[cfg(feature = "embree")]
+                            RtcMethod::Embree => embr::simulate_bsdf_measurement_single_point(
+                                *wi,
+                                &sector,
+                                mesh,
+                                geometry.clone(),
+                                &scene,
+                                #[cfg(not(feature = "visu-dbg"))]
+                                params.fresnel,
+                                #[cfg(not(feature = "visu-dbg"))]
+                                &iors_i,
+                                #[cfg(not(feature = "visu-dbg"))]
+                                &iors_t,
+                            ),
+                            _ => unimplemented!("Temporarily deactivated"),
+                        };
+                        #[cfg(feature = "bench")]
+                        {
+                            let elapsed = t.elapsed();
+                            log::debug!(
+                                "bsdf measurement simulation (one snapshot) took {} secs.",
+                                elapsed.as_secs_f64()
+                            );
+                        }
 
-            for (j, (receiver, records, stats, _)) in receivers.iter_mut().enumerate() {
-                let n_wo = receiver.n_wo();
-                let recs =
-                    &mut records.as_mut_slice()[i * n_wo * n_spectrum..(i + 1) * n_wo * n_spectrum];
+                        for (j, (receiver, records, stats, _)) in receivers.iter_mut().enumerate() {
+                            let n_wo = receiver.n_wo();
+                            let recs = &mut records.as_mut_slice()
+                                [i * n_wo * n_spectrum..(i + 1) * n_wo * n_spectrum];
 
-                #[cfg(feature = "bench")]
-                let t = std::time::Instant::now();
+                            #[cfg(feature = "bench")]
+                            let t = std::time::Instant::now();
 
-                println!(
-                    "        {} Collecting BSDF snapshot {}{}/{}{} to receiver #{}...",
-                    ansi::YELLOW_GT,
-                    ansi::BRIGHT_CYAN,
-                    i + 1,
-                    n_wi,
-                    ansi::RESET,
-                    j
-                );
+                            println!(
+                                "        {} Collecting BSDF snapshot {}{}/{}{} to receiver #{}...",
+                                ansi::YELLOW_GT,
+                                ansi::BRIGHT_CYAN,
+                                i + 1,
+                                n_wi,
+                                ansi::RESET,
+                                j
+                            );
 
-                // Collect the tracing data into raw bsdf snapshots.
-                receiver.collect(
-                    &sim,
-                    stats[i].as_mut_ptr(),
-                    recs,
-                    #[cfg(feature = "visu-dbg")]
-                    orbit_radius,
-                    #[cfg(feature = "visu-dbg")]
-                    params.fresnel,
-                    #[cfg(feature = "visu-dbg")]
-                    trjs,
-                    #[cfg(feature = "visu-dbg")]
-                    hpts,
-                );
+                            // Collect the tracing data into raw bsdf snapshots.
+                            receiver.collect(
+                                &single_result,
+                                &mut stats[i],
+                                recs,
+                                #[cfg(feature = "visu-dbg")]
+                                orbit_radius,
+                                #[cfg(feature = "visu-dbg")]
+                                params.fresnel,
+                                #[cfg(feature = "visu-dbg")]
+                                &mut trajectories[i],
+                                #[cfg(feature = "visu-dbg")]
+                                &mut hit_points[i],
+                            );
 
-                #[cfg(feature = "bench")]
-                {
-                    let elapsed = t.elapsed();
-                    log::debug!(
-                        "bsdf measurement data collection (one snapshot) took {} secs.",
-                        elapsed.as_secs_f64()
-                    );
+                            #[cfg(feature = "bench")]
+                            {
+                                let elapsed = t.elapsed();
+                                log::debug!(
+                                    "bsdf measurement data collection (one snapshot) took {} secs.",
+                                    elapsed.as_secs_f64()
+                                );
+                            }
+                        }
+                    }
+                }
+
+                #[cfg(feature = "visu-dbg")]
+                let trajectories = trajectories
+                    .into_iter()
+                    .map(|t| t.into_boxed_slice())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+                #[cfg(feature = "visu-dbg")]
+                let hit_points = hit_points.into_boxed_slice();
+                for (receiver, records, stats, rparams) in receivers {
+                    let stats = unsafe {
+                        std::mem::transmute::<_, Box<[SingleBsdfMeasurementStats]>>(stats)
+                    };
+                    let raw = RawMeasuredBsdfData {
+                        n_zenith_in: emitter.params.zenith.step_count_wrapped(),
+                        spectrum: spectrum.clone(),
+                        incoming: incoming.clone(),
+                        outgoing: receiver.patches,
+                        records,
+                        stats: DyArr::from_slice([n_wi], &stats),
+                        #[cfg(feature = "visu-dbg")]
+                        trajectories: trajectories.clone(),
+                        #[cfg(feature = "visu-dbg")]
+                        hit_points: hit_points.clone(),
+                    };
+                    let bsdfs =
+                        raw.compute_bsdfs(params.incident_medium, params.transmitted_medium);
+                    let params = BsdfMeasurementParams {
+                        kind: params.kind,
+                        sim_kind: params.sim_kind.clone(),
+                        incident_medium: params.incident_medium,
+                        transmitted_medium: params.transmitted_medium,
+                        emitter: params.emitter.clone(),
+                        receivers: vec![rparams],
+                        fresnel: params.fresnel,
+                    };
+                    measurements.push(Measurement {
+                        name: surf.file_stem().unwrap().to_owned(),
+                        source: MeasurementSource::Measured(Handle::with_id(surf.uuid)),
+                        timestamp: Local::now(),
+                        measured: Box::new(MeasuredBsdfData { params, raw, bsdfs }),
+                    });
                 }
             }
-        }
-
-        let incoming = DyArr::<Sph2>::from_slice([n_wi], &emitter.measpts);
-        for (receiver, records, stats, rparams) in receivers {
-            let raw = RawMeasuredBsdfData {
-                n_zenith_in: emitter.params.zenith.step_count_wrapped(),
-                spectrum: spectrum.clone(),
-                incoming: incoming.clone(),
-                outgoing: receiver.patches,
-                records,
-                stats: DyArr::from_boxed_slice([n_wi], unsafe { stats.assume_init() }),
-                #[cfg(feature = "visu-dbg")]
-                trajectories: unsafe { trajectories.assume_init() },
-                #[cfg(feature = "visu-dbg")]
-                hit_points: unsafe { hit_points.assume_init() },
-            };
-            let bsdfs = raw.compute_bsdfs(params.incident_medium, params.transmitted_medium);
-            let params = BsdfMeasurementParams {
-                kind: params.kind,
-                sim_kind: params.sim_kind.clone(),
-                incident_medium: params.incident_medium,
-                transmitted_medium: params.transmitted_medium,
-                emitter: params.emitter.clone(),
-                receivers: vec![rparams],
-                fresnel: params.fresnel,
-            };
-            measurements.push(Measurement {
-                name: surf.file_stem().unwrap().to_owned(),
-                source: MeasurementSource::Measured(Handle::with_id(surf.uuid)),
-                timestamp: Local::now(),
-                measured: Box::new(MeasuredBsdfData { params, raw, bsdfs }),
-            });
+            SimulationKind::WaveOptics => {
+                println!(
+                    "    {} Measuring {} with wave optics...",
+                    ansi::YELLOW_GT,
+                    params.kind
+                );
+                todo!("Wave optics simulation is not yet implemented")
+            }
         }
     }
 

@@ -642,7 +642,12 @@ impl VgonioGuiApp {
 
                                 #[cfg(not(feature = "visu-dbg"))]
                                 self.cache.read(|cache| {
-                                    measure::bsdf::measure_bsdf_rt(params, &surfaces, cache)
+                                    measure::bsdf::measure_bsdf_rt(
+                                        params,
+                                        &surfaces,
+                                        1024 * 1024 * 16, // TODO: make this configurable
+                                        cache,
+                                    )
                                 })
                             }
                             MeasurementParams::Sdf(params) => self.cache.read(|cache| {

@@ -4,17 +4,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use base::{
-    math::{Mat4, Vec3},
-    units::deg,
-};
-use gfxkit::{
-    camera::{Camera, Projection, ProjectionKind},
-    context::GpuContext,
-    texture::Texture,
-};
-use wgpu::util::DeviceExt;
-
 use crate::{
     app::gui::{
         event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
@@ -22,6 +11,16 @@ use crate::{
     },
     measure,
 };
+use base::{
+    math::{Mat4, Vec3},
+    units::{deg, Rads},
+};
+use gfxkit::{
+    camera::{Camera, Projection, ProjectionKind},
+    context::GpuContext,
+    texture::Texture,
+};
+use wgpu::util::DeviceExt;
 
 use super::Tool;
 
@@ -116,7 +115,7 @@ impl Tool for SamplingInspector {
         }
         if ui.button("Unit Disk").clicked() {
             self.samples = vec![Vec3::ZERO; self.sample_count as usize].into_boxed_slice();
-            measure::uniform_sampling_on_unit_disk(&mut self.samples);
+            measure::uniform_sampling_on_unit_disk(&mut self.samples, Rads::ZERO, Rads::TAU);
         }
         let response = ui.add(
             egui::Image::new(egui::load::SizedTexture {

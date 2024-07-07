@@ -51,6 +51,7 @@ pollster.workspace = true
 pyo3.workspace = true
 rfd.workspace = true
 rand_chacha.workspace = true
+static_assertions.workspace = true
 toml.workspace = true
 type-map.workspace = true
 winit.workspace = true

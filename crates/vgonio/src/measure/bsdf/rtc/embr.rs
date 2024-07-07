@@ -7,7 +7,7 @@ use crate::measure::params::BsdfMeasurementParams;
 use crate::{
     app::cli::ansi,
     measure::bsdf::{
-        emitter::Emitter,
+        emitter::{Emitter, EmitterCircularSector},
         rtc::{compute_num_of_streams, HitInfo, MAX_RAY_STREAM_SIZE},
         SingleSimResult,
     },
@@ -313,6 +313,21 @@ fn intersect_filter_stream<'a>(
     }
 }
 
+pub fn create_resources(mesh: &MicroSurfaceMesh) -> (Device, Scene, Arc<Geometry>) {
+    let device = Device::with_config(Config::default()).unwrap();
+    let mut scene = device.create_scene().unwrap();
+    scene.set_flags(SceneFlags::ROBUST);
+
+    // Upload the surface's mesh to the Embree scene.
+    let mut geometry = mesh.as_embree_geometry(&device);
+    geometry.set_intersect_filter_function(intersect_filter_stream);
+    geometry.commit();
+
+    scene.attach_geometry(&geometry);
+    scene.commit();
+    (device, scene, Arc::new(geometry))
+}
+
 /// Measures the BSDF of a micro-surface mesh.
 ///
 /// Full BSDF means that the BSDF is measured for all the emitter positions
@@ -326,25 +341,14 @@ fn intersect_filter_stream<'a>(
 ///        the emitter positions.
 pub fn simulate_bsdf_measurement<'a, 'b: 'a>(
     #[cfg(not(feature = "visu-dbg"))] params: &'a BsdfMeasurementParams,
-    emitter: &'a Emitter,
+    sector: EmitterCircularSector<'a>,
     mesh: &'a MicroSurfaceMesh,
     #[cfg(not(feature = "visu-dbg"))] iors_i: &'b [Ior],
     #[cfg(not(feature = "visu-dbg"))] iors_t: &'b [Ior],
 ) -> Box<dyn Iterator<Item = SingleSimResult> + 'a> {
     #[cfg(feature = "bench")]
     let t = std::time::Instant::now();
-
-    let device = Device::with_config(Config::default()).unwrap();
-    let mut scene = device.create_scene().unwrap();
-    scene.set_flags(SceneFlags::ROBUST);
-
-    // Upload the surface's mesh to the Embree scene.
-    let mut geometry = mesh.as_embree_geometry(&device);
-    geometry.set_intersect_filter_function(intersect_filter_stream);
-    geometry.commit();
-
-    scene.attach_geometry(&geometry);
-    scene.commit();
+    let (_, scene, geometry) = create_resources(mesh);
 
     #[cfg(feature = "bench")]
     {
@@ -352,15 +356,15 @@ pub fn simulate_bsdf_measurement<'a, 'b: 'a>(
         log::debug!("embree scene creation took {} secs.", elapsed.as_secs_f64());
     }
 
-    Box::new(emitter.measpts.iter().map(move |w_i| {
+    Box::new(sector.measpts.iter().map(move |w_i| {
         #[cfg(feature = "bench")]
         let t = std::time::Instant::now();
 
         let result = simulate_bsdf_measurement_single_point(
             *w_i,
-            emitter,
+            &sector,
             mesh,
-            Arc::new(geometry.clone()),
+            geometry.clone(),
             &scene,
             #[cfg(not(feature = "visu-dbg"))]
             params.fresnel,
@@ -383,9 +387,9 @@ pub fn simulate_bsdf_measurement<'a, 'b: 'a>(
 }
 
 /// Simulates the BSDF measurement for a single incident direction (point).
-fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
+pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
     w_i: Sph2,
-    emitter: &Emitter,
+    sector: &EmitterCircularSector,
     mesh: &MicroSurfaceMesh,
     geometry: Arc<Geometry<'a>>,
     scene: &Scene,
@@ -394,19 +398,19 @@ fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
     #[cfg(not(feature = "visu-dbg"))] iors_t: &'b [Ior],
 ) -> SingleSimResult {
     println!(
-        "      {}>{} Emit rays from {}",
+        "      {}>{} Emit rays from {}, sector: #{}",
         ansi::BRIGHT_YELLOW,
         ansi::RESET,
-        w_i
+        w_i,
+        sector.sector_idx
     );
+    let max_bounces = sector.params.max_bounces;
     #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
     let t = std::time::Instant::now();
-    let emitted_rays = emitter.emit_rays(w_i, mesh);
+    let emitted_rays = sector.emit_rays(w_i, mesh);
     let num_emitted_rays = emitted_rays.len();
     #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
     let elapsed = t.elapsed();
-    let max_bounces = emitter.params.max_bounces;
-
     #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
     log::debug!(
         "emitted {} rays with dir: {} from: {} in {} secs.",

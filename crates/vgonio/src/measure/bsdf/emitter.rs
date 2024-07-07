@@ -1,10 +1,13 @@
 //! Light source of the measurement system.
 
-use crate::measure::{bsdf::rtc::Ray, SphericalTransform};
+use crate::{
+    app::cli::ansi,
+    measure::{bsdf::rtc::Ray, SphericalTransform},
+};
 use base::{
     math::{Sph2, Vec3},
     range::RangeByStepSizeInclusive,
-    units::{deg, nm, rad, Nanometres, Radians},
+    units::{deg, nm, rad, Nanometres, Radians, Rads},
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -83,9 +86,20 @@ impl EmitterParams {
     /// Generated samples inside emitter's region.
     ///
     /// The samples are generated in the local coordinate system of the emitter.
-    pub fn generate_unit_samples(&self) -> EmitterSamples {
-        let mut samples = vec![Vec3::ZERO; self.num_rays as usize].into_boxed_slice();
-        crate::measure::uniform_sampling_on_unit_disk(&mut samples);
+    pub fn generate_unit_samples(
+        &self,
+        tstart: Rads,
+        tstop: Rads,
+        num_rays: usize,
+    ) -> EmitterSamples {
+        log::debug!(
+            "[Emitter] generating {} samples in the range [{}, {}]",
+            num_rays,
+            tstart.prettified(),
+            tstop.prettified()
+        );
+        let mut samples = vec![Vec3::ZERO; num_rays].into_boxed_slice();
+        crate::measure::uniform_sampling_on_unit_disk(&mut samples, tstart, tstop);
         EmitterSamples(samples)
     }
 
@@ -109,10 +123,12 @@ impl EmitterParams {
         disc_radius: f32,
     ) -> Vec<Vec3> {
         let transform = SphericalTransform::transform_disc(dest, disc_radius, orbit_radius);
-        samples
+        let mut transformed = samples
             .par_iter()
             .map(move |s| transform * Vec3::new(s.x * dest.theta.cos(), s.y, s.z))
-            .collect()
+            .collect::<Vec<_>>();
+        transformed.shrink_to_fit();
+        transformed
     }
 
     /// Emits rays from the samples
@@ -134,6 +150,11 @@ impl EmitterParams {
 /// Emitter's samples in the sampling space.
 #[derive(Debug, Clone)]
 pub struct EmitterSamples(Box<[Vec3]>);
+
+impl EmitterSamples {
+    /// Returns an empty set of samples.
+    pub fn empty() -> Self { EmitterSamples(Box::new([])) }
+}
 
 impl Deref for EmitterSamples {
     type Target = [Vec3];
@@ -181,29 +202,37 @@ impl IntoIterator for MeasurementPoints {
     fn into_iter(self) -> Self::IntoIter { Vec::from(self.0).into_iter() }
 }
 
-/// Emitter constructed from the parameters.
-#[derive(Debug, Clone)]
+/// Emitter with samples for partial measurements.
 pub struct Emitter {
     /// Parameters of the emitter.
     pub params: EmitterParams,
     /// Emitter's possible positions in spherical coordinates.
     pub measpts: MeasurementPoints,
-    /// Generated samples inside emitter's region.
-    pub samples: EmitterSamples,
+    /// The number of circular sectors on the unit sample disk.
+    /// This is determined by the total number of rays.
+    pub num_sectors: u32,
+    /// The number of rays per sector.
+    pub num_rays_per_sector: u32,
 }
 
-impl Emitter {
-    /// Constructs an emitter from the parameters.
-    pub fn new(params: &EmitterParams) -> Self {
-        let measpts = params.generate_measurement_points();
-        let samples = params.generate_unit_samples();
-        Emitter {
-            params: *params,
-            measpts,
-            samples,
-        }
-    }
+pub struct EmitterCircularSector<'a> {
+    /// Parameters of the emitter.
+    pub params: &'a EmitterParams,
+    /// Measurement points inherent to the emitter.
+    pub measpts: &'a MeasurementPoints,
+    /// Generated samples inside one sector of the emitter's region.
+    pub samples: EmitterSamples,
+    /// The index of the sector.
+    pub sector_idx: u32,
+}
 
+pub struct EmitterCircularSectors<'a> {
+    emitter: &'a Emitter,
+    sector_angle: Rads,
+    sector_idx: u32,
+}
+
+impl<'a> EmitterCircularSector<'a> {
     /// Transforms the samples from the sampling space to the emitter's local
     /// coordinate system.
     pub fn samples_at(&self, pos: Sph2, mesh: &MicroSurfaceMesh) -> Vec<Vec3> {
@@ -229,5 +258,67 @@ impl Emitter {
             .into_iter()
             .map(|origin| Ray::new(origin, dir))
             .collect()
+    }
+}
+
+impl Emitter {
+    pub fn new(params: &EmitterParams, max_sector_rays: u32) -> Self {
+        let num_sectors = (params.num_rays as f32 / max_sector_rays as f32).ceil() as u32;
+        let num_rays_per_sector = (params.num_rays as f32 / num_sectors as f32).ceil() as u32;
+        let measpts = params.generate_measurement_points();
+        println!(
+            "      {}>{} Dividing the emitter into {} sectors, {} rays per sector",
+            ansi::BRIGHT_YELLOW,
+            ansi::RESET,
+            num_sectors,
+            num_rays_per_sector
+        );
+        Self {
+            params: *params,
+            measpts,
+            num_sectors,
+            num_rays_per_sector,
+        }
+    }
+
+    pub fn circular_sectors(&self) -> EmitterCircularSectors {
+        EmitterCircularSectors {
+            emitter: self,
+            sector_angle: Rads::TAU / self.num_sectors as f32,
+            sector_idx: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for EmitterCircularSectors<'a> {
+    type Item = EmitterCircularSector<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.sector_idx < self.emitter.num_sectors {
+            let start = self.sector_idx as f32 * self.sector_angle;
+            let stop = (self.sector_idx + 1) as f32 * self.sector_angle;
+            let sector_idx = self.sector_idx;
+            self.sector_idx += 1;
+
+            log::debug!(
+                "[Emitter] sector {} with angle [{}, {}]",
+                sector_idx,
+                start.prettified(),
+                stop.prettified()
+            );
+
+            Some(EmitterCircularSector {
+                params: &self.emitter.params,
+                measpts: &self.emitter.measpts,
+                samples: self.emitter.params.generate_unit_samples(
+                    start,
+                    stop,
+                    self.emitter.num_rays_per_sector as usize,
+                ),
+                sector_idx,
+            })
+        } else {
+            None
+        }
     }
 }

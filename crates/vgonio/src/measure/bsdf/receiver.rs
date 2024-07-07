@@ -174,12 +174,12 @@ impl Receiver {
     pub fn collect(
         &self,
         result: &SingleSimResult,
-        out_stats: *mut SingleBsdfMeasurementStats,
+        out_stats: &mut Option<SingleBsdfMeasurementStats>,
         records: &mut [Option<BounceAndEnergy>],
         #[cfg(feature = "visu-dbg")] orbit_radius: f32,
         #[cfg(feature = "visu-dbg")] fresnel: bool,
-        #[cfg(feature = "visu-dbg")] out_trajs: *mut Box<[RayTrajectory]>,
-        #[cfg(feature = "visu-dbg")] out_hpnts: *mut Vec<Vec3>,
+        #[cfg(feature = "visu-dbg")] out_trajs: &mut Vec<RayTrajectory>,
+        #[cfg(feature = "visu-dbg")] out_hpnts: &mut Vec<Vec3>,
     ) {
         debug_assert!(
             records.len() == self.patches.n_patches() * self.spectrum.len(),
@@ -398,12 +398,18 @@ impl Receiver {
                 data_time - dirs_proc_time
             );
 
+            match out_stats {
+                None => {
+                    *out_stats = Some(stats);
+                }
+                Some(existing) => {
+                    existing.merge(stats);
+                }
+            }
+
             unsafe {
-                out_stats.write(stats);
-                #[cfg(feature = "visu-dbg")]
-                out_trajs.write(result.trajectories);
-                #[cfg(feature = "visu-dbg")]
-                out_hpnts.write(hit_points);
+                out_trajs.extend_from_slice(&result.trajectories);
+                out_hpnts.extend_from_slice(&hit_points);
             }
         }
 
@@ -507,6 +513,9 @@ impl Receiver {
                                     }
                                     patch.as_mut().unwrap()
                                 };
+                                // Reallocate the memory in case the number of bounces is greater
+                                mut_patch.reallocate(n_bounce as usize);
+
                                 mut_patch.energy_per_bounce[0] += e;
                                 mut_patch.n_ray_per_bounce[0] += 1;
                                 mut_patch.energy_per_bounce[bounce_idx + 1] += e;
@@ -545,8 +554,13 @@ impl Receiver {
             #[cfg(all(debug_assertions))]
             log::debug!("{:?}", stats);
 
-            unsafe {
-                out_stats.write(stats);
+            match out_stats {
+                None => {
+                    *out_stats = Some(stats);
+                }
+                Some(existing) => {
+                    existing.merge(stats);
+                }
             }
         }
     }
@@ -586,6 +600,23 @@ impl BounceAndEnergy {
             n_ray_per_bounce: vec![0; bounces + 1].into_boxed_slice(),
             energy_per_bounce: vec![0.0; bounces + 1].into_boxed_slice(),
         }
+    }
+
+    /// Reallocates the memory in case the number of bounces is greater
+    /// than the current number of bounces. The function creates a new
+    /// array of the number of rays and energy per bounce and then
+    /// copies the data from the old arrays to the new arrays.
+    pub fn reallocate(&mut self, bounces: usize) {
+        if bounces as u32 <= self.n_bounce {
+            return;
+        }
+        let mut n_ray_per_bounce = vec![0; bounces + 1];
+        let mut energy_per_bounce = vec![0.0; bounces + 1];
+        n_ray_per_bounce[..=self.n_bounce as usize].copy_from_slice(&self.n_ray_per_bounce);
+        energy_per_bounce[..=self.n_bounce as usize].copy_from_slice(&self.energy_per_bounce);
+        self.n_ray_per_bounce = n_ray_per_bounce.into_boxed_slice();
+        self.energy_per_bounce = energy_per_bounce.into_boxed_slice();
+        self.n_bounce = bounces as u32;
     }
 
     /// Returns the total number of rays.

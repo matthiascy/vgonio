@@ -8,7 +8,7 @@ use crate::{
     app::cli::ansi,
     measure::{
         bsdf::{
-            emitter::Emitter,
+            emitter::{Emitter, EmitterCircularSector},
             rtc,
             rtc::{Hit, HitInfo, Ray, MAX_RAY_STREAM_SIZE},
             SingleSimResult,
@@ -44,7 +44,7 @@ pub fn measure_bsdf(
     params: &BsdfMeasurementParams,
     surf: &MicroSurface,
     mesh: &MicroSurfaceMesh,
-    emitter: &Emitter,
+    sector: EmitterCircularSector,
 ) -> Vec<SingleSimResult> {
     // Unify the units of the micro-surface and emitter radius by converting
     // to micrometres.
@@ -64,7 +64,7 @@ pub fn measure_bsdf(
         );
     }
 
-    emitter
+    sector
         .measpts
         .iter()
         .map(|w_i| {
@@ -75,7 +75,7 @@ pub fn measure_bsdf(
                 w_i.phi.in_degrees().value()
             );
             let t = Instant::now();
-            let emitted_rays = emitter.emit_rays(*w_i, mesh);
+            let emitted_rays = sector.emit_rays(*w_i, mesh);
             let num_emitted_rays = emitted_rays.len();
             let elapsed = t.elapsed();
 
