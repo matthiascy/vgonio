@@ -315,7 +315,7 @@ def add_polar_brdf_plot_phi_o_text(ax, ymax, phi_o_deg, phi_o_deg_opp):
 
 
 def plot_brdf_slice(phi_o_deg, phi_o_deg_opp, brdf_slices: list[tuple[np.ndarray, np.ndarray, np.ndarray, str]],
-                    wavelengths: np.ndarray, legend=False, cmap='tab10', scale=1.0, use_log=False):
+                    legend=False, cmap='tab10', scale=1.0, use_log=False):
     sns.set_theme(style="whitegrid", color_codes=True)
 
     fig_polar, ax_polar = new_polar_brdf_plot()
@@ -323,7 +323,7 @@ def plot_brdf_slice(phi_o_deg, phi_o_deg_opp, brdf_slices: list[tuple[np.ndarray
     cm = plt.get_cmap(cmap)
 
     ymax = 0
-    for i, (slice_phi_o, slice_phi_o_opp, theta, label) in enumerate(brdf_slices):
+    for i, (slice_phi_o, slice_phi_o_opp, theta, wavelengths, label) in enumerate(brdf_slices):
         xs = np.append(np.flip(-np.radians(theta)), np.radians(theta))
         if use_log:
             for l in range(1):
@@ -349,14 +349,14 @@ def plot_brdf_slice(phi_o_deg, phi_o_deg_opp, brdf_slices: list[tuple[np.ndarray
     plt.show()
 
 
-def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices, wavelengths):
+def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices):
     # new polar plot
     fig_polar, ax_polar = new_polar_brdf_plot()
     ax_polar.set_rlabel_position(0)
-    n_spectrum = len(wavelengths)
 
     ymax = 0
-    for slices_phi, slices_phi_opp, theta_i, theta_o in slices:
+    for slices_phi, slices_phi_opp, theta_i, theta_o, wavelengths in slices:
+        n_spectrum = len(wavelengths)
         xs = np.append(np.flip(-np.radians(np.array(theta_o))), np.radians(np.array(theta_o)))
         for i, (slice_phi, slice_phi_opp, ti) in enumerate(zip(slices_phi, slices_phi_opp, theta_i)):
             if i % 3 == 0:
@@ -603,7 +603,7 @@ def plot_brdf_map(images: list[str, Tuple[int, int], np.ndarray], cmap='BuPu', c
             diff_pixels = np.abs(pixels1 - pixels2)
             mse = np.mean(np.square(diff_pixels))
             fig, ax = tone_mapping(diff_pixels, size1, cmap=cmap, cbar=cbar, coord=coord, cbar_label='Difference',
-                                   color=fc, pstep=pstep, tstep=tstep)
+                                   color=fc, pstep=pstep, tstep=tstep, ac='o')
             ax.text(-size1[0] / 2 + 50, size1[1] / 2 - 10, f'MSE: {mse:.4f}', color=fc, fontsize=14, ha='center',
                     va='center', alpha=0.8)
             if save is not None:
@@ -615,7 +615,7 @@ def plot_brdf_map(images: list[str, Tuple[int, int], np.ndarray], cmap='BuPu', c
     else:
         for i, (name, size, pixels) in enumerate(images):
             fig, ax = tone_mapping(pixels, size, cmap=cmap, cbar=cbar, coord=coord,
-                                   cbar_label=r'BRDF [$\mathrm{sr^{-1}}$]', color=fc, pstep=pstep, tstep=tstep)
+                                   cbar_label=r'BRDF [$\mathrm{sr^{-1}}$]', color=fc, pstep=pstep, tstep=tstep, ac='o')
             if save is not None:
                 if save.endswith('.pdf'):
                     fig.savefig(f'{name}.pdf', format='pdf', bbox_inches='tight')

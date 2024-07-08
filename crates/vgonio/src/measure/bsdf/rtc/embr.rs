@@ -402,7 +402,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
         ansi::BRIGHT_YELLOW,
         ansi::RESET,
         w_i,
-        sector.sector_idx
+        sector.idx
     );
     let max_bounces = sector.params.max_bounces;
     #[cfg(all(debug_assertions, feature = "verbose-dbg"))]

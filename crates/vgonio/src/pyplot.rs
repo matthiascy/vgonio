@@ -159,7 +159,6 @@ pub fn plot_brdf_slice(
     brdf: &[(&VgonioBrdf, String)],
     wi: Sph2,
     phi_o: Radians,
-    spectrum: Vec<Nanometres>,
     legend: bool,
     cmap: String,
     scale: f32,
@@ -183,10 +182,12 @@ pub fn plot_brdf_slice(
                         .iter()
                         .map(|x| x.zenith_center().to_degrees().as_f32())
                         .collect::<Vec<_>>();
+                    let n_spectrum = brdf.spectrum.len();
+                    let spectrum =
+                        PyArray1::from_iter_bound(py, brdf.spectrum.iter().map(|x| x.as_f32()));
                     let slice_phi = {
                         let data = sampler.sample_slice_at(wi, phi_o).unwrap();
-                        let mut slice =
-                            PyArray2::zeros_bound(py, [theta.len(), spectrum.len()], false);
+                        let mut slice = PyArray2::zeros_bound(py, [theta.len(), n_spectrum], false);
                         unsafe {
                             slice.as_slice_mut().unwrap().copy_from_slice(&data);
                         }
@@ -197,8 +198,7 @@ pub fn plot_brdf_slice(
                             .sample_slice_at(wi, opposite_phi_o)
                             .unwrap()
                             .into_vec();
-                        let mut slice =
-                            PyArray2::zeros_bound(py, [theta.len(), spectrum.len()], false);
+                        let mut slice = PyArray2::zeros_bound(py, [theta.len(), n_spectrum], false);
                         unsafe {
                             slice.as_slice_mut().unwrap().copy_from_slice(&data);
                         }
@@ -208,17 +208,16 @@ pub fn plot_brdf_slice(
                         slice_phi,
                         slice_opposite_phi,
                         PyArray1::from_vec_bound(py, theta),
+                        spectrum,
                         label,
                     )
                 })
                 .collect::<Vec<_>>(),
         );
-        let wavelengths = PyArray1::from_iter_bound(py, spectrum.iter().map(|x| x.as_f32()));
         let args = (
             phi_o.to_degrees().as_f32(),
             opposite_phi_o.to_degrees().as_f32(),
             brdfs,
-            wavelengths,
             legend,
             cmap,
             scale,
@@ -230,11 +229,7 @@ pub fn plot_brdf_slice(
 }
 
 /// Plot the BRDF slices on the plane with the given incoming azimuthal angle.
-pub fn plot_brdf_slice_in_plane(
-    brdf: &[&VgonioBrdf],
-    phi: Radians,
-    spectrum: Vec<Nanometres>,
-) -> PyResult<()> {
+pub fn plot_brdf_slice_in_plane(brdf: &[&VgonioBrdf], phi: Radians) -> PyResult<()> {
     let phi_opp = (phi + Radians::PI).wrap_to_tau();
     log::debug!(
         "phi: {}, phi_opp: {}",
@@ -266,6 +261,10 @@ pub fn plot_brdf_slice_in_plane(
                         .iter()
                         .map(|x| x.zenith_center().to_degrees().as_f32())
                         .collect::<Vec<_>>();
+                    let wavelength = PyArray1::from_vec_bound(
+                        py,
+                        brdf.spectrum.iter().map(|x| x.as_f32()).collect::<Vec<_>>(),
+                    );
                     let (slices_phi, slices_phi_opp): (Vec<Vec<_>>, Vec<Vec<_>>) = theta_i
                         .iter()
                         .map(|&theta_i| {
@@ -279,16 +278,14 @@ pub fn plot_brdf_slice_in_plane(
                     for theta in theta_i.iter_mut() {
                         *theta = theta.to_degrees();
                     }
-                    (slices_phi, slices_phi_opp, theta_i, theta_o)
+                    (slices_phi, slices_phi_opp, theta_i, theta_o, wavelength)
                 })
                 .collect::<Vec<_>>(),
         );
-        let wavelengths = PyList::new_bound(py, spectrum.iter().map(|x| x.as_f32()));
         let args = (
             phi.to_degrees().as_f32(),
             phi_opp.to_degrees().as_f32(),
             brdfs,
-            wavelengths,
         );
         fun.call1(py, args)?;
         Ok(())

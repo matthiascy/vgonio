@@ -344,7 +344,7 @@ pub struct MeasureOptions {
         long = "sec-nrays",
         help = "The maximum number of rays per disk sector for the BSDF measurement."
     )]
-    pub sector_ray_count: Option<u32>,
+    pub sector_ray_count: Option<u64>,
 
     #[arg(
         short,

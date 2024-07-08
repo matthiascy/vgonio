@@ -127,8 +127,8 @@ impl VisibilityEstimation {
 /// function estimation.
 impl VisibilityEstimator {
     /// Texture format used for the color attachment.
-    pub const COLOR_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-    // wgpu::TextureFormat::Rgb10a2Unorm;
+    pub const COLOR_ATTACHMENT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgb10a2Unorm;
+    // wgpu::TextureFormat::Rgba8Unorm
 
     /// Bytes per pixel of the color attachment.
     pub const COLOR_ATTACHMENT_FORMAT_BPP: u32 = tex_fmt_bpp(Self::COLOR_ATTACHMENT_FORMAT);

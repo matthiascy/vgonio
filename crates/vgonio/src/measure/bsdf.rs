@@ -24,7 +24,7 @@ use crate::{
 use base::{
     error::VgonioError,
     impl_measured_data_trait,
-    math::{rcp_f32, Sph2, Vec3},
+    math::{rcp_f32, rcp_f64, Sph2, Vec3},
     medium::Medium,
     partition::SphericalPartition,
     units::{Degs, Nanometres, Radians, Rads},
@@ -166,8 +166,13 @@ impl RawMeasuredBsdfData {
         let n_wi = self.n_wi();
         let n_wo = self.n_wo();
         let n_spectrum = self.n_spectrum();
-        log::info!("Computing BSDF... with {} patches", n_wo);
         let max_bounces = self.max_bounces();
+        log::debug!(
+            "Computing BSDF... with {} patches, {} bounces, and {} snapshots",
+            n_wo,
+            max_bounces,
+            self.snapshots().len()
+        );
         let mut bsdfs = HashMap::new();
         let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
         let mut samples_l1_plus = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
@@ -183,8 +188,8 @@ impl RawMeasuredBsdfData {
                     [wi_idx * n_wo * n_spectrum..(wi_idx + 1) * n_wo * n_spectrum];
                 let snapshot_l1_plus = &mut samples_l1_plus.as_mut_slice()
                     [wi_idx * n_wo * n_spectrum..(wi_idx + 1) * n_wo * n_spectrum];
-                let cos_i = snapshot.wi.theta.cos();
-                let rcp_e_i = rcp_f32(snapshot.stats.n_received as f32 * cos_i);
+                let cos_i = snapshot.wi.theta.cos() as f64;
+                let rcp_e_i = rcp_f64(snapshot.stats.n_received as f64 * cos_i);
                 for (wo_idx, patch_data_per_wavelength) in
                     snapshot.records.chunks(n_spectrum).enumerate()
                 {
@@ -195,15 +200,21 @@ impl RawMeasuredBsdfData {
                             continue;
                         }
                         let patch = &self.outgoing.patches[wo_idx];
-                        let cos_o = patch.center().theta.cos();
-                        let solid_angle = patch.solid_angle().as_f32();
-                        let e_o = patch_energy.as_ref().unwrap().energy_per_bounce[b];
+                        let cos_o = patch.center().theta.cos() as f64;
+                        let solid_angle = patch.solid_angle().as_f64();
+                        // let e_o = patch_energy.as_ref().unwrap().energy_per_bounce[b];
+                        let e_o = *patch_energy
+                            .as_ref()
+                            .unwrap()
+                            .energy_per_bounce
+                            .get(b)
+                            .unwrap_or(&0.0);
                         if cos_o != 0.0 {
-                            let l_o = e_o * rcp_f32(cos_o) * rcp_f32(solid_angle);
+                            let l_o = e_o * rcp_f64(cos_o) * rcp_f64(solid_angle);
                             let val = l_o * rcp_e_i;
-                            snapshot_samples[wo_idx * n_spectrum + k] = val;
+                            snapshot_samples[wo_idx * n_spectrum + k] = val as f32;
                             if b > 1 {
-                                snapshot_l1_plus[wo_idx * n_spectrum + k] += val;
+                                snapshot_l1_plus[wo_idx * n_spectrum + k] += val as f32;
                             }
                             any_energy = true;
 
@@ -212,7 +223,7 @@ impl RawMeasuredBsdfData {
                                 "    - energy of patch {wo_idx}: {:>12.4}, λ[{k}] --  e_i: \
                                  {:>12.4}, L_o[{k}]: {:>12.4} -- brdf: {:>14.8}",
                                 e_o,
-                                rcp_f32(rcp_e_i),
+                                rcp_f64(rcp_e_i),
                                 l_o,
                                 snapshot_samples[wo_idx * n_spectrum + k],
                             );
@@ -777,10 +788,10 @@ pub struct SingleBsdfMeasurementStats {
     /// bounce limit).
     pub n_bounce: u32,
     /// Number of emitted rays that hit the surface; invariant over wavelength.
-    pub n_received: u32,
+    pub n_received: u64,
     /// Number of emitted rays that missed the surface; invariant over
     /// wavelength.
-    pub n_missed: u32,
+    pub n_missed: u64,
     /// Number of wavelengths, which is the number of samples in the spectrum.
     pub n_spectrum: usize,
     /// Statistics of the number of emitted rays that either
@@ -793,20 +804,20 @@ pub struct SingleBsdfMeasurementStats {
     /// wavelength). The index of the statistics is defined by the constants
     /// `ABSORBED_IDX`, `REFLECTED_IDX`, and `CAPTURED_IDX`, `ESCAPED_IDX`.
     /// The total number of elements in the array is `4 * n_wavelength`.
-    pub n_ray_stats: Box<[u32]>,
+    pub n_ray_stats: Box<[u64]>,
     /// Energy captured by the collector; variant over wavelength.
-    pub e_captured: Box<[f32]>,
+    pub e_captured: Box<[f64]>,
     /// Histogram of reflected rays by number of bounces, variant over
     /// wavelength. The data is stored as a flat array in row-major order with
     /// the dimensions (wavelegnth, bounce). The total number of elements in
     /// the array is `n_wavelength * n_bounces`.
-    pub n_ray_per_bounce: Box<[u32]>,
+    pub n_ray_per_bounce: Box<[u64]>,
     /// Histogram of energy of reflected rays by number of bounces. The energy
     /// is the sum of the energy of the rays that were reflected at the
     /// corresponding bounce. The data is stored as a flat array in row-major
     /// order with the dimensions (wavelegnth, bounce). The total number of
     /// elements in the array is `n_wavelength * n_bounces`.
-    pub energy_per_bounce: Box<[f32]>,
+    pub energy_per_bounce: Box<[f64]>,
 }
 
 static_assertions::assert_eq_size!(
@@ -867,6 +878,7 @@ impl SingleBsdfMeasurementStats {
     pub fn merge(&mut self, mut other: SingleBsdfMeasurementStats) {
         debug_assert!(self.n_spectrum == other.n_spectrum, "Mismatched n_spectrum");
 
+        #[cfg(feature = "verbose-dbg")]
         log::debug!("Merging stats:\n{:#?}\n+\n{:#?}", self, &other);
 
         self.n_received += other.n_received;
@@ -884,12 +896,14 @@ impl SingleBsdfMeasurementStats {
 
         // Replace the histograms of current stats with the other one.
         if self.n_bounce < other.n_bounce {
+            #[cfg(feature = "verbose-dbg")]
             log::debug!("Swapping stats");
             std::mem::swap(&mut self.n_bounce, &mut other.n_bounce);
             std::mem::swap(&mut self.n_ray_per_bounce, &mut other.n_ray_per_bounce);
             std::mem::swap(&mut self.energy_per_bounce, &mut other.energy_per_bounce);
         }
 
+        #[cfg(feature = "verbose-dbg")]
         log::debug!("After swap:\n{:#?}\n+\n{:#?}", self, &other);
 
         // Add the histograms of the other stats to this one.
@@ -902,60 +916,61 @@ impl SingleBsdfMeasurementStats {
             }
         }
 
+        #[cfg(feature = "verbose-dbg")]
         log::debug!("After merge:\n{:#?}", self);
     }
 
     /// Returns the number of absorbed rays statistics per wavelength.
-    pub fn n_absorbed(&self) -> &[u32] {
+    pub fn n_absorbed(&self) -> &[u64] {
         let offset = Self::ABSORBED_IDX * self.n_spectrum;
         &self.n_ray_stats[offset..offset + self.n_spectrum]
     }
 
     /// Returns the number of absorbed rays statistics per wavelength.
-    pub fn n_absorbed_mut(&mut self) -> &mut [u32] {
+    pub fn n_absorbed_mut(&mut self) -> &mut [u64] {
         let offset = Self::ABSORBED_IDX * self.n_spectrum;
         &mut self.n_ray_stats[offset..offset + self.n_spectrum]
     }
 
     /// Returns the number of reflected rays statistics per wavelength.
-    pub fn n_reflected(&self) -> &[u32] {
+    pub fn n_reflected(&self) -> &[u64] {
         let offset = Self::REFLECTED_IDX * self.n_spectrum;
         &self.n_ray_stats[offset..offset + self.n_spectrum]
     }
 
     /// Returns the number of reflected rays statistics per wavelength.
-    pub fn n_reflected_mut(&mut self) -> &mut [u32] {
+    pub fn n_reflected_mut(&mut self) -> &mut [u64] {
         let offset = Self::REFLECTED_IDX * self.n_spectrum;
         &mut self.n_ray_stats[offset..offset + self.n_spectrum]
     }
 
     /// Returns the number of captured rays statistics per wavelength.
-    pub fn n_captured(&self) -> &[u32] {
+    pub fn n_captured(&self) -> &[u64] {
         let offset = Self::CAPTURED_IDX * self.n_spectrum;
         &self.n_ray_stats[offset..offset + self.n_spectrum]
     }
 
     /// Returns the number of captured rays statistics per wavelength.
-    pub fn n_captured_mut(&mut self) -> &mut [u32] {
+    pub fn n_captured_mut(&mut self) -> &mut [u64] {
         let offset = Self::CAPTURED_IDX * self.n_spectrum;
         &mut self.n_ray_stats[offset..offset + self.n_spectrum]
     }
 
     /// Returns the number of escaped rays statistics per wavelength.
-    pub fn n_escaped(&self) -> &[u32] {
+    pub fn n_escaped(&self) -> &[u64] {
         let offset = Self::ESCAPED_IDX * self.n_spectrum;
         &self.n_ray_stats[offset..offset + self.n_spectrum]
     }
 
     /// Returns the number of escaped rays statistics per wavelength.
-    pub fn n_escaped_mut(&mut self) -> &mut [u32] {
+    pub fn n_escaped_mut(&mut self) -> &mut [u64] {
         let offset = Self::ESCAPED_IDX * self.n_spectrum;
         &mut self.n_ray_stats[offset..offset + self.n_spectrum]
     }
 
     /// Returns the energy per wavelength which is the sum of the energy of the
     /// per bounce for the given wavelength.
-    pub fn energy_per_wavelength(&self) -> Box<[f32]> {
+    pub fn energy_per_wavelength(&self) -> Box<[f64]> {
         let mut energy = vec![0.0; self.n_spectrum].into_boxed_slice();
         for i in 0..self.n_spectrum {
             for j in 0..self.n_bounce as usize {
@@ -1413,7 +1428,7 @@ impl<'a> ExactSizeIterator for SingleSimResultRayChunk<'a> {
 pub fn measure_bsdf_rt(
     params: BsdfMeasurementParams,
     handles: &[Handle<MicroSurface>],
-    max_sector_rays: u32,
+    max_sector_rays: u64,
     cache: &RawCache,
 ) -> Box<[Measurement]> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);

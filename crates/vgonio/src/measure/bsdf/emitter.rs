@@ -24,7 +24,7 @@ use surf::MicroSurfaceMesh;
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EmitterParams {
     /// Number of emitted rays.
-    pub num_rays: u32,
+    pub num_rays: u64,
 
     /// Max allowed bounces for each ray.
     pub max_bounces: u32,
@@ -223,7 +223,7 @@ pub struct EmitterCircularSector<'a> {
     /// Generated samples inside one sector of the emitter's region.
     pub samples: EmitterSamples,
     /// The index of the sector.
-    pub sector_idx: u32,
+    pub idx: u32,
 }
 
 pub struct EmitterCircularSectors<'a> {
@@ -262,9 +262,9 @@ impl<'a> EmitterCircularSector<'a> {
 }
 
 impl Emitter {
-    pub fn new(params: &EmitterParams, max_sector_rays: u32) -> Self {
-        let num_sectors = (params.num_rays as f32 / max_sector_rays as f32).ceil() as u32;
-        let num_rays_per_sector = (params.num_rays as f32 / num_sectors as f32).ceil() as u32;
+    pub fn new(params: &EmitterParams, max_sector_rays: u64) -> Self {
+        let num_sectors = (params.num_rays as f64 / max_sector_rays as f64).ceil() as u32;
+        let num_rays_per_sector = (params.num_rays as f64 / num_sectors as f64).ceil() as u32;
         let measpts = params.generate_measurement_points();
         println!(
             "      {}>{} Dividing the emitter into {} sectors, {} rays per sector",
@@ -315,7 +315,7 @@ impl<'a> Iterator for EmitterCircularSectors<'a> {
                     stop,
                     self.emitter.num_rays_per_sector as usize,
                 ),
-                sector_idx,
+                idx: sector_idx,
             })
         } else {
             None

@@ -403,20 +403,26 @@ pub mod vgmo {
 
     impl EmitterParams {
         /// The size of the buffer required to read or write the parameters.
-        pub const fn required_size(version: Version) -> Option<usize> {
+        pub const fn required_size(version: Version, nrays64: bool) -> Option<usize> {
             match version {
                 Version {
                     major: 0,
                     minor: 1,
                     patch: 0,
-                } => Some(56),
+                } => {
+                    if nrays64 {
+                        Some(60)
+                    } else {
+                        Some(56)
+                    }
+                }
                 _ => None,
             }
         }
 
         /// Reads an emitter from the given buffer.
-        pub fn read_from_buf(version: Version, buf: &[u8]) -> Self {
-            let required_size = Self::required_size(version).unwrap();
+        pub fn read_from_buf(version: Version, buf: &[u8], nrays64: bool) -> Self {
+            let required_size = Self::required_size(version, nrays64).unwrap();
             debug_assert!(
                 buf.len() >= required_size,
                 "Emitter {} needs at least {} bytes of space",
@@ -429,12 +435,30 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => {
-                    let num_rays = u32::from_le_bytes(buf[0..4].try_into().unwrap());
-                    let max_bounces = u32::from_le_bytes(buf[4..8].try_into().unwrap());
-                    let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[8..24]);
-                    let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[24..40]);
-                    let spectrum =
-                        RangeByStepSizeInclusive::<Nanometres>::read_from_buf(&buf[40..56]);
+                    log::debug!("Reading emitter from buffer, nrays64: {}", nrays64);
+                    let (mut offset, num_rays) = if nrays64 {
+                        (8, u64::from_le_bytes(buf[0..8].try_into().unwrap()))
+                    } else {
+                        (4, u32::from_le_bytes(buf[0..4].try_into().unwrap()) as u64)
+                    };
+
+                    log::debug!("Reading emitter with {} rays", num_rays);
+
+                    let max_bounces =
+                        u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
+                    offset += 4;
+
+                    let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(
+                        &buf[offset..offset + 16],
+                    );
+                    offset += 16;
+                    let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(
+                        &buf[offset..offset + 16],
+                    );
+                    offset += 16;
+                    let spectrum = RangeByStepSizeInclusive::<Nanometres>::read_from_buf(
+                        &buf[offset..offset + 16],
+                    );
                     Self {
                         num_rays,
                         max_bounces,
@@ -452,7 +476,8 @@ pub mod vgmo {
         /// Writes the emitter to the given buffer and returns the number of
         /// bytes written.
         pub fn write_to_buf(&self, version: Version, buf: &mut [u8]) -> usize {
-            let required_size = Self::required_size(version).unwrap();
+            let nrays64 = self.num_rays > u32::MAX as u64;
+            let required_size = Self::required_size(version, nrays64).unwrap();
             debug_assert!(
                 buf.len() >= required_size,
                 "Emitter {} needs at least {} bytes of space",
@@ -465,11 +490,20 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => {
-                    buf[0..4].copy_from_slice(&self.num_rays.to_le_bytes());
-                    buf[4..8].copy_from_slice(&self.max_bounces.to_le_bytes());
-                    self.azimuth.write_to_buf(&mut buf[8..24]);
-                    self.zenith.write_to_buf(&mut buf[24..40]);
-                    self.spectrum.write_to_buf(&mut buf[40..56]);
+                    let mut offset = if nrays64 {
+                        buf[0..8].copy_from_slice(&self.num_rays.to_le_bytes());
+                        8
+                    } else {
+                        buf[0..4].copy_from_slice(&(self.num_rays as u32).to_le_bytes());
+                        4
+                    };
+                    buf[offset..offset + 4].copy_from_slice(&self.max_bounces.to_le_bytes());
+                    offset += 4;
+                    self.azimuth.write_to_buf(&mut buf[offset..offset + 16]);
+                    offset += 16;
+                    self.zenith.write_to_buf(&mut buf[offset..offset + 16]);
+                    offset += 16;
+                    self.spectrum.write_to_buf(&mut buf[offset..offset + 16]);
                     required_size
                 }
                 _ => {
@@ -682,15 +716,22 @@ pub mod vgmo {
                     minor: 1,
                     patch: 0,
                 } => {
-                    let mut buf = vec![0u8; 11 + EmitterParams::required_size(version).unwrap()]
-                        .into_boxed_slice();
+                    let mut buf = [0u8; 11];
                     reader.read_exact(&mut buf)?;
                     let kind = BsdfKind::from(buf[0]);
                     let incident_medium = Medium::read_from_buf(&buf[1..4]);
                     let transmitted_medium = Medium::read_from_buf(&buf[4..7]);
                     let sim_kind = SimulationKind::try_from(buf[7]).unwrap();
-                    let fresnel = buf[8] != 0; // 9/10 are padding bytes
-                    let emitter = EmitterParams::read_from_buf(version, &buf[11..]);
+                    let fresnel = buf[8] != 0; // [9] padding bytes
+                    let nrays64 = buf[10] == 0xff;
+
+                    let emitter = {
+                        let mut buf =
+                            vec![0u8; EmitterParams::required_size(version, nrays64).unwrap()]
+                                .into_boxed_slice();
+                        reader.read_exact(&mut buf)?;
+                        EmitterParams::read_from_buf(version, &mut buf, nrays64)
+                    };
                     // TODO: read multiple receivers
                     let receiver = ReceiverParams::read(version, reader);
                     Ok(Self {
@@ -721,13 +762,14 @@ pub mod vgmo {
         ) -> Result<(), std::io::Error> {
             // TODO: write multiple receivers
             let receiver = &self.receivers[0];
+            let nrays64 = self.emitter.num_rays > u32::MAX as u64;
             let buf_size = match version {
                 Version {
                     major: 0,
                     minor: 1,
                     patch: 0,
                 } => {
-                    11 + EmitterParams::required_size(version).unwrap()
+                    11 + EmitterParams::required_size(version, nrays64).unwrap()
                         + ReceiverParams::required_size(version, receiver.num_rings()).unwrap()
                 }
                 _ => {
@@ -741,7 +783,12 @@ pub mod vgmo {
             self.transmitted_medium.write_to_buf(&mut buf[4..7]);
             buf[7] = self.sim_kind.as_u8();
             buf[8] = self.fresnel as u8;
-            // buf[9/10] are padding bytes
+            buf[9] = 0; // padding, reserved for num receivers
+            buf[10] = 0; // Type of number for rays,
+            if self.emitter.num_rays > u32::MAX as u64 {
+                log::debug!("Emitter num rays exceeds u32 max, using u64");
+                buf[10] = 0xff;
+            }
 
             let n_written = self.emitter.write_to_buf(version, &mut buf[11..]);
             log::debug!("Written {} bytes for emitter", n_written);
@@ -763,7 +810,7 @@ pub mod vgmo {
             $(
                 impl LittleEndianRead for $t {
                     fn read_le_bytes(src: &[u8]) -> Self {
-                        Self::from_le_bytes(src.try_into().expect("Invalid byte slice, expected 4 bytes"))
+                        Self::from_le_bytes(src.try_into().expect("Invalid byte slice!"))
                     }
                 }
 
@@ -776,7 +823,7 @@ pub mod vgmo {
         };
     }
 
-    impl_endian_read_write!(u32, f32);
+    impl_endian_read_write!(u32, f32, u64, f64);
 
     /// Writes the given slice to the buffer in little-endian format.
     #[track_caller]
@@ -790,6 +837,34 @@ pub mod vgmo {
         );
         for i in 0..src.len() {
             src[i].write_le_bytes(&mut dst[i * size..(i + 1) * size]);
+        }
+    }
+
+    pub fn write_u64_slice_as_u32_to_buf(src: &[u64], dst: &mut [u8]) {
+        let size: usize = mem::size_of::<u32>();
+        debug_assert!(
+            dst.len() >= src.len() * size,
+            "Write array to buffer: desired size {}, got {}",
+            src.len() * size,
+            dst.len()
+        );
+        for i in 0..src.len() {
+            let val = src[i] as u32;
+            dst[i * size..(i + 1) * size].copy_from_slice(&val.to_le_bytes());
+        }
+    }
+
+    pub fn write_f64_slice_as_f32_to_buf(src: &[f64], dst: &mut [u8]) {
+        let size: usize = mem::size_of::<f32>();
+        debug_assert!(
+            dst.len() >= src.len() * size,
+            "Write array to buffer: desired size {}, got {}",
+            src.len() * size,
+            dst.len()
+        );
+        for i in 0..src.len() {
+            let val = src[i] as f32;
+            dst[i * size..(i + 1) * size].copy_from_slice(&val.to_le_bytes());
         }
     }
 
@@ -815,14 +890,68 @@ pub mod vgmo {
         }
     }
 
+    pub fn read_u32_slice_as_u64_from_buf(src: &[u8], dst: &mut [u64], len: usize) {
+        let size: usize = mem::size_of::<u32>();
+        assert_eq!(
+            src.len(),
+            len * size,
+            "Buffer size mismatch, expected {} bytes, got {}",
+            len * size,
+            src.len()
+        );
+        for i in 0..len {
+            let val = u32::from_le_bytes(src[i * size..(i + 1) * size].try_into().unwrap());
+            dst[i] = val as u64;
+        }
+    }
+
+    pub fn read_f32_slice_as_f64_from_buf(src: &[u8], dst: &mut [f64], len: usize) {
+        let size: usize = mem::size_of::<f32>();
+        assert_eq!(
+            src.len(),
+            len * size,
+            "Buffer size mismatch, expected {} bytes, got {}",
+            len * size,
+            src.len()
+        );
+        for i in 0..len {
+            let val = f32::from_le_bytes(src[i * size..(i + 1) * size].try_into().unwrap());
+            dst[i] = val as f64;
+        }
+    }
+
     impl SingleBsdfMeasurementStats {
         /// The size of the buffer required to read/write the BSDF measurement
         /// stats point.
-        pub fn size_in_bytes(n_spectrum: usize, n_bounce: usize) -> usize {
-            3 * mem::size_of::<u32>()
-                + Self::N_STATS * n_spectrum * mem::size_of::<u32>()
-                + n_spectrum * mem::size_of::<f32>()
-                + n_spectrum * n_bounce * 2 * mem::size_of::<f32>()
+        pub fn size_in_bytes(n_spectrum: usize, n_bounce: usize, nrays64: bool) -> usize {
+            if nrays64 {
+                size_of::<u32>()
+                    + 2 * size_of::<u64>()
+                    + n_spectrum * Self::N_STATS * size_of::<u64>()
+                    + n_spectrum * size_of::<f64>()
+                    + n_spectrum * n_bounce * 2 * size_of::<f64>()
+            } else {
+                3 * mem::size_of::<u32>()
+                    + Self::N_STATS * n_spectrum * mem::size_of::<u32>()
+                    + n_spectrum * mem::size_of::<f32>()
+                    + n_spectrum * n_bounce * 2 * mem::size_of::<f32>()
+            }
+        }
+
+        pub fn size_in_bytes_without_totals(
+            n_spectrum: usize,
+            n_bounce: usize,
+            nrays64: bool,
+        ) -> usize {
+            if nrays64 {
+                n_spectrum * Self::N_STATS * size_of::<u64>()
+                    + n_spectrum * size_of::<f64>()
+                    + n_spectrum * n_bounce * 2 * size_of::<f64>()
+            } else {
+                Self::N_STATS * n_spectrum * mem::size_of::<u32>()
+                    + n_spectrum * mem::size_of::<f32>()
+                    + n_spectrum * n_bounce * 2 * mem::size_of::<f32>()
+            }
         }
 
         /// Writes the BSDF measurement statistics at a single point to the
@@ -831,101 +960,193 @@ pub mod vgmo {
             &self,
             writer: &mut BufWriter<W>,
             n_spectrum: usize,
+            nrays64: bool,
         ) -> Result<(), std::io::Error> {
-            let size = Self::size_in_bytes(n_spectrum, self.n_bounce as usize);
+            let size = Self::size_in_bytes(n_spectrum, self.n_bounce as usize, nrays64);
             let mut buf = vec![0u8; size].into_boxed_slice();
             let mut offset_in_bytes = 0;
             buf[offset_in_bytes..offset_in_bytes + 4].copy_from_slice(&self.n_bounce.to_le_bytes());
             offset_in_bytes += 4;
-            buf[offset_in_bytes..offset_in_bytes + 4]
-                .copy_from_slice(&self.n_received.to_le_bytes());
-            offset_in_bytes += 4;
-            buf[offset_in_bytes..offset_in_bytes + 4].copy_from_slice(&self.n_missed.to_le_bytes());
-            offset_in_bytes += 4;
 
-            // Write n_absorbed, n_reflected, n_captured and n_escaped per wavelength
-            write_slice_to_buf::<u32>(
-                &self.n_ray_stats,
-                &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_spectrum * Self::N_STATS],
-            );
-            offset_in_bytes += 4 * n_spectrum * Self::N_STATS;
+            if nrays64 {
+                buf[offset_in_bytes..offset_in_bytes + 8]
+                    .copy_from_slice(&self.n_received.to_le_bytes());
+                offset_in_bytes += 8;
 
-            // Write the energy captured per wavelength
-            write_slice_to_buf(
-                &self.e_captured,
-                &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_spectrum],
-            );
-            offset_in_bytes += 4 * n_spectrum;
+                buf[offset_in_bytes..offset_in_bytes + 8]
+                    .copy_from_slice(&self.n_missed.to_le_bytes());
+                offset_in_bytes += 8;
 
-            // Write the number of rays per bounce for each wavelength
-            self.n_ray_per_bounce.iter().for_each(|val| {
-                buf[offset_in_bytes..offset_in_bytes + 4].copy_from_slice(&val.to_le_bytes());
+                // Write n_absorbed, n_reflected, n_captured and n_escaped per wavelength
+                write_slice_to_buf::<u64>(
+                    &self.n_ray_stats,
+                    &mut buf[offset_in_bytes..offset_in_bytes + 8 * n_spectrum * Self::N_STATS],
+                );
+                offset_in_bytes += 8 * n_spectrum * Self::N_STATS;
+
+                write_slice_to_buf(
+                    &self.e_captured,
+                    &mut buf[offset_in_bytes..offset_in_bytes + 8 * n_spectrum],
+                );
+                offset_in_bytes += 8 * n_spectrum;
+
+                write_slice_to_buf(
+                    &self.n_ray_per_bounce,
+                    &mut buf[offset_in_bytes
+                        ..offset_in_bytes + 8 * n_spectrum * self.n_bounce as usize],
+                );
+                offset_in_bytes += 8 * n_spectrum * self.n_bounce as usize;
+
+                write_slice_to_buf(
+                    &self.energy_per_bounce,
+                    &mut buf[offset_in_bytes
+                        ..offset_in_bytes + 8 * n_spectrum * self.n_bounce as usize],
+                );
+            } else {
+                let n_received = self.n_received as u32;
+                buf[offset_in_bytes..offset_in_bytes + 4]
+                    .copy_from_slice(&n_received.to_le_bytes());
                 offset_in_bytes += 4;
-            });
 
-            // Write the energy per bounce for each wavelength
-            self.energy_per_bounce.iter().for_each(|val| {
-                buf[offset_in_bytes..offset_in_bytes + 4].copy_from_slice(&val.to_le_bytes());
+                let n_missed = self.n_missed as u32;
+                buf[offset_in_bytes..offset_in_bytes + 4].copy_from_slice(&n_missed.to_le_bytes());
                 offset_in_bytes += 4;
-            });
+
+                write_u64_slice_as_u32_to_buf(
+                    &self.n_ray_stats,
+                    &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_spectrum * Self::N_STATS],
+                );
+                offset_in_bytes += 4 * n_spectrum * Self::N_STATS;
+
+                write_f64_slice_as_f32_to_buf(
+                    &self.e_captured,
+                    &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_spectrum],
+                );
+
+                write_u64_slice_as_u32_to_buf(
+                    &self.n_ray_per_bounce,
+                    &mut buf[offset_in_bytes
+                        ..offset_in_bytes + 4 * n_spectrum * self.n_bounce as usize],
+                );
+                offset_in_bytes += 4 * n_spectrum * self.n_bounce as usize;
+
+                write_f64_slice_as_f32_to_buf(
+                    &self.energy_per_bounce,
+                    &mut buf[offset_in_bytes
+                        ..offset_in_bytes + 4 * n_spectrum * self.n_bounce as usize],
+                );
+            }
+
             writer.write_all(&buf)
         }
 
         /// Reads the BSDF measurement statistics at a single point from the
         /// buffer.
-        pub fn read<R: Read>(reader: &mut R, n_spectrum: usize) -> Result<Self, std::io::Error> {
+        pub fn read<R: Read>(
+            reader: &mut R,
+            n_spectrum: usize,
+            nrays64: bool,
+        ) -> Result<Self, std::io::Error> {
             let mut buf = [0u8; 4];
             reader.read_exact(&mut buf)?;
             let n_bounce = u32::from_le_bytes(buf);
-            reader.read_exact(&mut buf)?;
-            let n_received = u32::from_le_bytes(buf);
-            reader.read_exact(&mut buf)?;
-            let n_missed = u32::from_le_bytes(buf);
 
-            let mut buf = vec![0u8; Self::size_in_bytes(n_spectrum, n_bounce as usize) - 3 * 4]
+            let (n_received, n_missed) = if nrays64 {
+                let mut buf = [0u8; 8];
+                reader.read_exact(&mut buf)?;
+                let n_received = u64::from_le_bytes(buf);
+                reader.read_exact(&mut buf)?;
+                let n_missed = u64::from_le_bytes(buf);
+                (n_received, n_missed)
+            } else {
+                let mut buf = [0u8; 4];
+                reader.read_exact(&mut buf)?;
+                let n_received = u32::from_le_bytes(buf);
+                reader.read_exact(&mut buf)?;
+                let n_missed = u32::from_le_bytes(buf);
+                (n_received as u64, n_missed as u64)
+            };
+
+            let mut buf =
+                vec![
+                    0u8;
+                    Self::size_in_bytes_without_totals(n_spectrum, n_bounce as usize, nrays64)
+                ]
                 .into_boxed_slice();
             reader.read_exact(&mut buf)?;
 
             let mut offset = 0;
-            let mut n_ray_stats = vec![0u32; n_spectrum * Self::N_STATS].into_boxed_slice();
-            let n_ray_stats_size = 4 * n_ray_stats.len();
-            read_slice_from_buf::<u32>(
-                &buf[offset..n_ray_stats_size],
-                &mut n_ray_stats,
-                n_spectrum * Self::N_STATS,
-            );
-            offset += n_ray_stats_size;
-
-            let mut e_captured = vec![0f32; n_spectrum].into_boxed_slice();
-            let e_captured_size = 4 * e_captured.len();
-            read_slice_from_buf::<f32>(
-                &buf[offset..offset + e_captured_size],
-                &mut e_captured,
-                n_spectrum,
-            );
-            offset += e_captured_size;
-
+            let mut n_ray_stats = vec![0u64; n_spectrum * Self::N_STATS].into_boxed_slice();
+            let mut e_captured = vec![0f64; n_spectrum].into_boxed_slice();
             let mut n_ray_per_bounce =
-                vec![0u32; n_spectrum * n_bounce as usize].into_boxed_slice();
-            read_slice_from_buf::<u32>(
-                &buf[offset..offset + n_spectrum * n_bounce as usize * 4],
-                &mut n_ray_per_bounce,
-                n_spectrum * n_bounce as usize,
-            );
-            offset += n_spectrum * n_bounce as usize * 4;
-
+                vec![0u64; n_spectrum * n_bounce as usize].into_boxed_slice();
             let mut energy_per_bounce =
-                vec![0f32; n_spectrum * n_bounce as usize].into_boxed_slice();
-            read_slice_from_buf::<f32>(
-                &buf[offset..offset + n_spectrum * n_bounce as usize * 4],
-                &mut energy_per_bounce,
-                n_spectrum * n_bounce as usize,
-            );
+                vec![0f64; n_spectrum * n_bounce as usize].into_boxed_slice();
+
+            if nrays64 {
+                let n_ray_stats_size = 8 * n_ray_stats.len();
+                read_slice_from_buf::<u64>(
+                    &buf[offset..n_ray_stats_size],
+                    &mut n_ray_stats,
+                    n_spectrum * Self::N_STATS,
+                );
+                offset += n_ray_stats_size;
+
+                let e_captured_size = 8 * e_captured.len();
+                read_slice_from_buf::<f64>(
+                    &buf[offset..offset + e_captured_size],
+                    &mut e_captured,
+                    n_spectrum,
+                );
+                offset += e_captured_size;
+
+                read_slice_from_buf::<u64>(
+                    &buf[offset..offset + n_spectrum * n_bounce as usize * 8],
+                    &mut n_ray_per_bounce,
+                    n_spectrum * n_bounce as usize,
+                );
+                offset += n_spectrum * n_bounce as usize * 8;
+
+                read_slice_from_buf::<f64>(
+                    &buf[offset..offset + n_spectrum * n_bounce as usize * 8],
+                    &mut energy_per_bounce,
+                    n_spectrum * n_bounce as usize,
+                );
+            } else {
+                let n_ray_stats_size = 4 * n_ray_stats.len();
+                read_u32_slice_as_u64_from_buf(
+                    &buf[offset..n_ray_stats_size],
+                    &mut n_ray_stats,
+                    n_spectrum * Self::N_STATS,
+                );
+                offset += n_ray_stats_size;
+
+                let e_captured_size = 4 * e_captured.len();
+                read_f32_slice_as_f64_from_buf(
+                    &buf[offset..offset + e_captured_size],
+                    &mut e_captured,
+                    n_spectrum,
+                );
+                offset += e_captured_size;
+
+                read_u32_slice_as_u64_from_buf(
+                    &buf[offset..offset + n_spectrum * n_bounce as usize * 4],
+                    &mut n_ray_per_bounce,
+                    n_spectrum * n_bounce as usize,
+                );
+                offset += n_spectrum * n_bounce as usize * 4;
+
+                read_f32_slice_as_f64_from_buf(
+                    &buf[offset..offset + n_spectrum * n_bounce as usize * 4],
+                    &mut energy_per_bounce,
+                    n_spectrum * n_bounce as usize,
+                );
+            }
 
             Ok(Self {
                 n_bounce,
-                n_received,
-                n_missed,
+                n_received: n_received as u64,
+                n_missed: n_missed as u64,
                 n_spectrum,
                 n_ray_stats,
                 e_captured,
@@ -937,12 +1158,19 @@ pub mod vgmo {
 
     impl BounceAndEnergy {
         /// Calculates the size of a single data point in bytes.
-        pub fn size_in_bytes(n_bounces: usize) -> usize {
-            mem::size_of::<u32>() + (n_bounces + 1) * 2 * mem::size_of::<f32>()
+        pub fn size_in_bytes(n_bounces: usize, nrays64: bool) -> usize {
+            if nrays64 {
+                size_of::<u32>() + (n_bounces + 1) * 2 * size_of::<f64>()
+            } else {
+                size_of::<u32>() + (n_bounces + 1) * 2 * size_of::<f32>()
+            }
         }
 
         /// Reads the data for one single patch.
-        pub fn read<R: Read>(reader: &mut R) -> Result<Option<Self>, std::io::Error> {
+        pub fn read<R: Read>(
+            reader: &mut R,
+            nrays64: bool,
+        ) -> Result<Option<Self>, std::io::Error> {
             let n_bounce = {
                 let mut buf = [0u8; 4];
                 reader.read_exact(&mut buf)?;
@@ -953,17 +1181,35 @@ pub mod vgmo {
                 return Ok(None);
             }
 
-            let mut buf = vec![0u8; (n_bounce as usize + 1) * 4].into_boxed_slice();
-            reader.read_exact(&mut buf)?;
-            let mut n_ray_per_bounce = vec![0u32; n_bounce as usize + 1].into_boxed_slice();
-            for (i, val_buf) in buf.chunks(4).enumerate() {
-                n_ray_per_bounce[i] = u32::from_le_bytes(val_buf.try_into().unwrap());
+            let mut energy_per_bounce = vec![0f64; n_bounce as usize + 1].into_boxed_slice();
+            let mut n_ray_per_bounce = vec![0u64; n_bounce as usize + 1].into_boxed_slice();
+
+            if nrays64 {
+                let mut buf = vec![0u8; (n_bounce as usize + 1) * 8].into_boxed_slice();
+
+                reader.read_exact(&mut buf)?;
+                for (i, val_buf) in buf.chunks(8).enumerate() {
+                    n_ray_per_bounce[i] = u64::from_le_bytes(val_buf.try_into().unwrap());
+                }
+
+                reader.read_exact(&mut buf)?;
+                for (i, val_buf) in buf.chunks(8).enumerate() {
+                    energy_per_bounce[i] = f64::from_le_bytes(val_buf.try_into().unwrap());
+                }
+            } else {
+                let mut buf = vec![0u8; (n_bounce as usize + 1) * 4].into_boxed_slice();
+
+                reader.read_exact(&mut buf)?;
+                for (i, val_buf) in buf.chunks(4).enumerate() {
+                    n_ray_per_bounce[i] = u32::from_le_bytes(val_buf.try_into().unwrap()) as u64;
+                }
+
+                reader.read_exact(&mut buf)?;
+                for (i, val_buf) in buf.chunks(4).enumerate() {
+                    energy_per_bounce[i] = f32::from_le_bytes(val_buf.try_into().unwrap()) as f64;
+                }
             }
-            reader.read_exact(&mut buf)?;
-            let mut energy_per_bounce = vec![0f32; n_bounce as usize + 1].into_boxed_slice();
-            for (i, val_buf) in buf.chunks(4).enumerate() {
-                energy_per_bounce[i] = f32::from_le_bytes(val_buf.try_into().unwrap());
-            }
+
             Ok(Some(Self {
                 n_bounce,
                 n_ray_per_bounce,
@@ -975,28 +1221,24 @@ pub mod vgmo {
         pub fn write<W: Write>(
             writer: &mut BufWriter<W>,
             be: &Option<BounceAndEnergy>,
+            nrays64: bool,
         ) -> Result<(), std::io::Error> {
             match be {
                 None => writer.write_all(&u32::MAX.to_le_bytes()),
                 Some(be) => {
-                    let mut buf =
-                        vec![0u8; Self::size_in_bytes(be.n_bounce as usize)].into_boxed_slice();
+                    let size = Self::size_in_bytes(be.n_bounce as usize, nrays64);
+                    let mut buf = vec![0u8; size].into_boxed_slice();
                     buf[0..4].copy_from_slice(&be.n_bounce.to_le_bytes());
                     let mut offset = 4;
-                    for n_ray_per_bounce in be.n_ray_per_bounce.iter() {
-                        buf[offset..offset + 4].copy_from_slice(&n_ray_per_bounce.to_le_bytes());
-                        offset += 4;
+                    if nrays64 {
+                        write_slice_to_buf::<u64>(&be.n_ray_per_bounce, &mut buf[offset..]);
+                        offset += 8 * (be.n_bounce as usize + 1);
+                        write_slice_to_buf::<f64>(&be.energy_per_bounce, &mut buf[offset..]);
+                    } else {
+                        write_u64_slice_as_u32_to_buf(&be.n_ray_per_bounce, &mut buf[offset..]);
+                        offset += 4 * (be.n_bounce as usize + 1);
+                        write_f64_slice_as_f32_to_buf(&be.energy_per_bounce, &mut buf[offset..]);
                     }
-                    for energy_per_bounce in be.energy_per_bounce.iter() {
-                        buf[offset..offset + 4].copy_from_slice(&energy_per_bounce.to_le_bytes());
-                        offset += 4;
-                    }
-                    debug_assert!(
-                        offset == buf.len(),
-                        "Wrong offset: {}, buf len: {}",
-                        offset,
-                        buf.len()
-                    );
                     writer.write_all(&buf)
                 }
             }
@@ -1073,16 +1315,17 @@ pub mod vgmo {
         pub(crate) fn write_raw_measured_data<W: Write>(
             writer: &mut W,
             raw: &RawMeasuredBsdfData,
+            nrays64: bool,
         ) -> Result<(), std::io::Error> {
             let mut writer = BufWriter::new(writer);
             // Collected data of the receiver per incident direction per
             // outgoing(patch) direction and per wavelength: `ωi, ωo, λ`.
             for record in raw.records.iter() {
-                BounceAndEnergy::write(&mut writer, record)?;
+                BounceAndEnergy::write(&mut writer, record, nrays64)?;
             }
             // Writes the statistics of the measurement per incident direction
             for stats in raw.stats.iter() {
-                stats.write(&mut writer, raw.spectrum.len())?;
+                stats.write(&mut writer, raw.spectrum.len(), nrays64)?;
             }
             writer.flush()
         }
@@ -1096,16 +1339,19 @@ pub mod vgmo {
             spectrum: &[Nanometres],
             incoming: &[Sph2],
             partition: SphericalPartition,
+            nrays64: bool,
         ) -> Result<RawMeasuredBsdfData, std::io::Error> {
             debug_assert_eq!(n_spectrum, spectrum.len(), "Spectrum size mismatch");
             let mut records = vec![None; n_wi * n_wo * n_spectrum];
             for record in records.iter_mut() {
-                *record = BounceAndEnergy::read(reader)?;
+                *record = BounceAndEnergy::read(reader, nrays64)?;
             }
 
             let mut stats = Box::new_uninit_slice(n_wi);
             for stat in stats.iter_mut() {
-                stat.write(SingleBsdfMeasurementStats::read(reader, n_spectrum)?);
+                stat.write(SingleBsdfMeasurementStats::read(
+                    reader, n_spectrum, nrays64,
+                )?);
             }
 
             Ok(unsafe {
@@ -1164,6 +1410,7 @@ pub mod vgmo {
                         &spectrum,
                         &incoming,
                         partition.clone(),
+                        params.emitter.num_rays > u32::MAX as u64,
                     )?;
                     let mut bsdfs =
                         Self::read_measured_bsdf_data(&mut decoder, n_wi, n_wo, n_spectrum)?;
@@ -1218,22 +1465,23 @@ pub mod vgmo {
             if encoding == FileEncoding::Ascii {
                 return Err(WriteFileErrorKind::UnsupportedEncoding);
             }
+            let nrays64 = self.params.emitter.num_rays > u32::MAX as u64;
             match compression {
                 CompressionScheme::None => {
-                    Self::write_raw_measured_data(writer, &self.raw)?;
+                    Self::write_raw_measured_data(writer, &self.raw, nrays64)?;
                     Self::write_measured_bsdf_data(writer, self.bsdfs.iter())?;
                 }
                 CompressionScheme::Zlib => {
                     let mut zlib_encoder =
                         flate2::write::ZlibEncoder::new(vec![], flate2::Compression::default());
-                    Self::write_raw_measured_data(&mut zlib_encoder, &self.raw)?;
+                    Self::write_raw_measured_data(&mut zlib_encoder, &self.raw, nrays64)?;
                     Self::write_measured_bsdf_data(&mut zlib_encoder, self.bsdfs.iter())?;
                     writer.write_all(&zlib_encoder.flush_finish()?)?
                 }
                 CompressionScheme::Gzip => {
                     let mut gzip_encoder =
                         flate2::write::GzEncoder::new(vec![], flate2::Compression::default());
-                    Self::write_raw_measured_data(&mut gzip_encoder, &self.raw)?;
+                    Self::write_raw_measured_data(&mut gzip_encoder, &self.raw, nrays64)?;
                     Self::write_measured_bsdf_data(&mut gzip_encoder, self.bsdfs.iter())?;
                     writer.write_all(&gzip_encoder.finish()?)?
                 }
@@ -1286,11 +1534,11 @@ mod tests {
                 azimuth: RangeByStepSizeInclusive::new(rad!(0.0), rad!(0.0), rad!(0.0)),
                 spectrum: RangeByStepSizeInclusive::new(nm!(400.0), nm!(700.0), nm!(100.0)),
             },
-            receivers: ReceiverParams {
+            receivers: vec![ReceiverParams {
                 domain: SphericalDomain::Upper,
                 precision: Sph2::new(rad!(0.1), rad!(0.1)),
                 scheme: PartitionScheme::Beckers,
-            },
+            }],
             fresnel: false,
         };
 
@@ -1336,12 +1584,12 @@ mod tests {
             .into_boxed_slice(),
         };
         assert!(data.is_valid(), "Invalid data");
-        let size = SingleBsdfMeasurementStats::size_in_bytes(4, 3);
+        let size = SingleBsdfMeasurementStats::size_in_bytes(4, 3, false);
         let mut writer = BufWriter::with_capacity(size, vec![]);
-        data.write(&mut writer, 4).unwrap();
+        data.write(&mut writer, 4, false).unwrap();
         let buf = writer.into_inner().unwrap();
         let mut reader = BufReader::new(Cursor::new(buf));
-        let data2 = SingleBsdfMeasurementStats::read(&mut reader, 4).unwrap();
+        let data2 = SingleBsdfMeasurementStats::read(&mut reader, 4, false).unwrap();
         assert_eq!(data, data2);
     }
 
@@ -1382,6 +1630,7 @@ mod tests {
             SphericalPartition::new_beckers(SphericalDomain::Upper, Rads::from_degrees(45.0));
         let n_wo = partition.n_patches(); // 8
         let raw = RawMeasuredBsdfData {
+            n_zenith_in: 4,
             spectrum: DyArr::from_iterator(
                 [n_spectrum as isize],
                 vec![nm!(400.0), nm!(500.0), nm!(600.0), nm!(700.0)],

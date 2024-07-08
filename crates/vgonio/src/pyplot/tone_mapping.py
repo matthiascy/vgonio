@@ -25,7 +25,7 @@ def load_exr_channel(exr_file, channel, size):
     return values
 
 
-def draw_polar_grid(ax, size, pstep=45.0, tstep=30.0, color='k'):
+def draw_polar_grid(ax, size, pstep=45.0, tstep=30.0, color='k', ac='m'):
     num_lines = int(360 / pstep)
     num_circles = int(90 / tstep) + 1
     print(f"Drawing polar grid with {num_lines} radial lines and {num_circles} circles")
@@ -39,7 +39,12 @@ def draw_polar_grid(ax, size, pstep=45.0, tstep=30.0, color='k'):
         if theta not in [0.0, 90.0]:
             ax.text(0, r, fr'{theta:.0f}$\degree$', color=color, fontsize=12, ha='center', va='center', alpha=0.8)
             if theta == 30.0:
-                ax.text(0, r * 1.5, r'$\theta_m$', color=color, fontsize=17, ha='center', va='center', alpha=0.8)
+                if tstep < 30.0:
+                    ax.text(-20.0, r * 1.5, fr'$\theta_{ac}$', color=color, fontsize=17, ha='center', va='center',
+                            alpha=0.8)
+                else:
+                    ax.text(0, r * 1.5, fr'$\theta_{ac}$', color=color, fontsize=17, ha='center', va='center',
+                            alpha=0.8)
 
     # Draw radial lines, the first one is the x-axis
     for phi in np.linspace(0, 2 * np.pi, num_lines, endpoint=False):
@@ -49,11 +54,11 @@ def draw_polar_grid(ax, size, pstep=45.0, tstep=30.0, color='k'):
         ax.text(x[1] * 0.95, y[1] * 0.95, f'{round(np.degrees(phi))}°', color=color, fontsize=12, ha='center',
                 va='center', alpha=0.8)
         if phi == 0.0:
-            ax.text(x[1] * 0.85, y[1], r'$\phi_m$', color=color, fontsize=17, ha='center', va='center', alpha=0.8)
+            ax.text(x[1] * 0.85, y[1], fr'$\phi_{ac}$', color=color, fontsize=17, ha='center', va='center', alpha=0.8)
 
 
 def tone_mapping(pixels, size, cmap='BuPu', cbar=False, coord=False, cbar_label='NDF [$sr^{-1}$]', color='k',
-                 pstep=45.0, tstep=30.0):
+                 pstep=45.0, tstep=30.0, ac='m'):
     min_val = np.min(pixels)
     max_val = np.max(pixels)
     normalized = (pixels - min_val) / (max_val - min_val)
@@ -86,7 +91,7 @@ def tone_mapping(pixels, size, cmap='BuPu', cbar=False, coord=False, cbar_label=
         cbar.ax.tick_params(colors=color)
 
     if coord:
-        draw_polar_grid(ax, size, color=color, pstep=pstep, tstep=tstep)
+        draw_polar_grid(ax, size, color=color, pstep=pstep, tstep=tstep, ac=ac)
 
     plt.subplots_adjust(left=0.002, right=0.998, top=0.998, bottom=0.002, wspace=0.1, hspace=0.0)
     return fig, ax

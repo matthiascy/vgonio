@@ -25,6 +25,9 @@ use surf::TriangulationPattern;
 // Mutiple BRDF
 // vgonio plot -i f0 f1 f2 -k slice --ti 0.0 --pi 0.0 --po 0.0 --labels f0 f1 f2
 
+// vgonio plot -i a b c d --ti 30.0 --po 120.0 --labels '$0.5^{\circ}$' '$1^{\circ}$' '$2^{\circ}$' '$5^{\circ}$' --kind brdf-slice --legend --cmap Paired --pi 120
+// vgonio plot -i a b c d --ti 30.0 --po 30.0 --labels '$10^5$' '$10^6$' '$10^7$' '$10^8$' --kind brdf-slice --legend --cmap tab10
+
 // Single BRDF
 // vgonio plot -i f0 -k slice --ti 0.0 --pi 0.0 --po 0.0
 
@@ -43,23 +46,25 @@ pub enum PlotKind {
     #[clap(alias = "cmp-vv")]
     ComparisonVgonio,
     /// Plot slices of the input BRDF.
+    #[clap(name = "brdf-slice")]
     BrdfSlice,
     /// Plot slices of the input BRDF at the same plane.
+    #[clap(name = "brdf-inplane")]
     BrdfSliceInPlane,
-    /// Plot the NDF from saved *.vgmo file
-    #[clap(alias = "ndf")]
-    Ndf,
-    /// Plot the GAF from saved *.vgmo file
-    #[clap(alias = "gaf")]
-    Gaf,
-    /// Plot the BRDF from saved *.exr file
-    #[clap(alias = "brdf-map")]
+    /// Plot the BRDF from saved *.exr file into a embedded map.
+    #[clap(name = "brdf-map")]
     BrdfMap,
     /// Plot the BRDF from saved *.vgmo file in 3D
-    #[clap(alias = "brdf3d")]
+    #[clap(name = "brdf-3d")]
     Brdf3D,
+    /// Plot the NDF from saved *.vgmo file
+    #[clap(name = "ndf")]
+    Ndf,
+    /// Plot the GAF from saved *.vgmo file
+    #[clap(name = "gaf")]
+    Gaf,
     /// Plot the micro-surfaces from saved *.vgmo file
-    #[clap(alias = "surf")]
+    #[clap(name = "surf")]
     Surface,
 }
 
@@ -68,6 +73,39 @@ pub enum PlotKind {
 pub struct PlotOptions {
     #[clap(short, long, num_args = 1.., value_delimiter = ' ', help = "Input files to plot.")]
     pub inputs: Vec<PathBuf>,
+
+    #[clap(short, long, help = "The kind of plot to generate.")]
+    pub kind: PlotKind,
+
+    #[clap(
+        long = "ti",
+        help = "The polar angle to plot the BRDF at.",
+        default_value = "0.0",
+        required_if_eq("kind", "brdf-slice"),
+        required_if_eq("kind", "brdf-map"),
+        required_if_eq("kind", "brdf-3d")
+    )]
+    pub theta_i: f32,
+
+    #[clap(
+        long = "pi",
+        help = "The azimuthal angle to plot the BRDF at. (in degrees)",
+        default_value = "0.0",
+        required_if_eq("kind", "brdf-inplane"),
+        required_if_eq("kind", "brdf-slice"),
+        required_if_eq("kind", "brdf-map"),
+        required_if_eq("kind", "brdf-3d"),
+        required_if_eq("kind", "ndf")
+    )]
+    pub phi_i: f32,
+
+    #[clap(
+        long = "po",
+        help = "The azimuthal angle to plot the BRDF at.",
+        default_value = "0.0",
+        required_if_eq("kind", "brdf-slice")
+    )]
+    pub phi_o: f32,
 
     #[clap(long, help = "Whether to show the legend.", default_value = "false")]
     pub legend: bool,
@@ -80,39 +118,6 @@ pub struct PlotOptions {
     )]
     pub labels: Vec<String>,
 
-    #[clap(short, long, help = "The kind of plot to generate.")]
-    pub kind: PlotKind,
-
-    #[clap(
-        long = "po",
-        help = "The azimuthal angle to plot the BRDF at.",
-        default_value = "0.0",
-        required_if_eq("kind", "brdf-slice")
-    )]
-    pub phi_o: f32,
-
-    #[clap(
-        long = "ti",
-        help = "The polar angle to plot the BRDF at.",
-        default_value = "0.0",
-        required_if_eq("kind", "brdf-slice"),
-        required_if_eq("kind", "brdf-map"),
-        required_if_eq("kind", "brdf3d")
-    )]
-    pub theta_i: f32,
-
-    #[clap(
-        long = "pi",
-        help = "The azimuthal angle to plot the BRDF at. (in degrees)",
-        default_value = "0.0",
-        required_if_eq("kind", "brdf-slice"),
-        required_if_eq("kind", "slice-in-plane"),
-        required_if_eq("kind", "ndf"),
-        required_if_eq("kind", "brdf-map"),
-        required_if_eq("kind", "brdf3d")
-    )]
-    pub phi_i: f32,
-
     #[clap(
         long = "pv",
         help = "The azimuthal angle of the view direction to plot the GAF at. (in degrees)",
@@ -122,6 +127,14 @@ pub struct PlotOptions {
     pub phi_v: f32,
 
     #[clap(
+        long = "tm",
+        help = "The polar angle of the view direction to plot the GAF at. (in degrees)",
+        default_value = "0.0",
+        required_if_eq("kind", "gaf")
+    )]
+    pub theta_m: f32,
+
+    #[clap(
         long = "pm",
         help = "The azimuthal angle of microfacet normal direction to plot the GAF at. (in \
                 degrees)",
@@ -129,14 +142,6 @@ pub struct PlotOptions {
         required_if_eq("kind", "gaf")
     )]
     pub phi_m: f32,
-
-    #[clap(
-        long = "tm",
-        help = "The polar angle of the view direction to plot the GAF at. (in degrees)",
-        default_value = "0.0",
-        required_if_eq("kind", "gaf")
-    )]
-    pub theta_m: f32,
 
     #[clap(
         long = "pstep",
@@ -157,7 +162,7 @@ pub struct PlotOptions {
         help = "The wavelength to plot the BRDF at.",
         default_value = "550.0",
         required_if_eq("kind", "brdf-map"),
-        required_if_eq("kind", "brdf3d")
+        required_if_eq("kind", "brdf-3d")
     )]
     pub lambda: f32,
 
@@ -290,12 +295,10 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                                 .and_then(|meas| meas.brdf_at(opts.level).map(|brdf| (brdf, label)))
                         })
                         .collect::<Vec<_>>();
-                    let spectrum = brdfs[0].0.spectrum.clone().into_vec();
                     plot_brdf_slice(
                         &brdfs,
                         wi,
                         phi_o,
-                        spectrum,
                         opts.legend,
                         opts.cmap.unwrap_or("Set3".to_string()),
                         opts.scale.unwrap_or(1.0),
@@ -314,8 +317,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                                 .and_then(|meas| meas.brdf_at(opts.level).map(|brdf| brdf))
                         })
                         .collect::<Vec<_>>();
-                    let spectrum = brdfs[0].spectrum.clone().into_vec();
-                    plot_brdf_slice_in_plane(&brdfs, phi_i, spectrum).unwrap();
+                    plot_brdf_slice_in_plane(&brdfs, phi_i).unwrap();
                 }
                 Ok(())
             }

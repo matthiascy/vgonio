@@ -19,7 +19,10 @@ use base::{
     units::{Nanometres, Radians},
 };
 use serde::{Deserialize, Serialize};
-use std::sync::{atomic, atomic::AtomicU32};
+use std::sync::{
+    atomic,
+    atomic::{AtomicU32, AtomicU64},
+};
 
 /// Description of a receiver collecting the data.
 ///
@@ -204,13 +207,13 @@ impl Receiver {
             );
             let (n_bounce, mut stats, dirs) = {
                 let n_bounce = AtomicU32::new(0);
-                let n_received = AtomicU32::new(0);
-                let n_missed = AtomicU32::new(0);
+                let n_received = AtomicU64::new(0);
+                let n_missed = AtomicU64::new(0);
                 let mut n_reflected = Vec::with_capacity(n_spectrum);
                 let mut n_escaped = Vec::with_capacity(n_spectrum);
                 for _ in 0..n_spectrum {
-                    n_reflected.push(AtomicU32::new(0));
-                    n_escaped.push(AtomicU32::new(0));
+                    n_reflected.push(AtomicU64::new(0));
+                    n_escaped.push(AtomicU64::new(0));
                 }
                 n_reflected.shrink_to_fit();
                 n_escaped.shrink_to_fit();
@@ -436,14 +439,15 @@ impl Receiver {
 
             let n_bounce = result.bounces.iter().max().copied().unwrap();
             assert!(n_bounce > 0, "no bounces");
+            log::debug!("collecting -- n_bounce: {}", n_bounce);
 
-            let n_received = AtomicU32::new(0);
-            let n_missed = AtomicU32::new(0);
+            let n_received = AtomicU64::new(0);
+            let n_missed = AtomicU64::new(0);
             let mut n_reflected = Vec::with_capacity(n_spectrum);
             let mut n_escaped = Vec::with_capacity(n_spectrum);
             for _ in 0..n_spectrum {
-                n_reflected.push(AtomicU32::new(0));
-                n_escaped.push(AtomicU32::new(0));
+                n_reflected.push(AtomicU64::new(0));
+                n_escaped.push(AtomicU64::new(0));
             }
             use rayon::iter::{ParallelBridge, ParallelIterator};
             // Create the statistics of the BSDF measurement for the current incident point.
@@ -516,15 +520,15 @@ impl Receiver {
                                 // Reallocate the memory in case the number of bounces is greater
                                 mut_patch.reallocate(n_bounce as usize);
 
-                                mut_patch.energy_per_bounce[0] += e;
+                                mut_patch.energy_per_bounce[0] += *e as f64;
                                 mut_patch.n_ray_per_bounce[0] += 1;
-                                mut_patch.energy_per_bounce[bounce_idx + 1] += e;
+                                mut_patch.energy_per_bounce[bounce_idx + 1] += *e as f64;
                                 mut_patch.n_ray_per_bounce[bounce_idx + 1] += 1;
                                 mut_stats.n_ray_per_bounce[k * n_bounce as usize + bounce_idx] += 1;
                                 mut_stats.n_captured_mut()[k] += 1;
                                 mut_stats.energy_per_bounce[k * n_bounce as usize + bounce_idx] +=
-                                    e;
-                                mut_stats.e_captured[k] += e;
+                                    *e as f64;
+                                mut_stats.e_captured[k] += *e as f64;
                             })
                     }
 
@@ -587,9 +591,9 @@ pub struct BounceAndEnergy {
     /// Maximum number of bounces of rays hitting the patch.
     pub n_bounce: u32,
     /// Number of rays hitting the patch for each bounce.
-    pub n_ray_per_bounce: Box<[u32]>,
+    pub n_ray_per_bounce: Box<[u64]>,
     /// Total energy of rays hitting the patch for each bounce.
-    pub energy_per_bounce: Box<[f32]>,
+    pub energy_per_bounce: Box<[f64]>,
 }
 
 impl BounceAndEnergy {
@@ -620,10 +624,10 @@ impl BounceAndEnergy {
     }
 
     /// Returns the total number of rays.
-    pub fn total_rays(&self) -> u32 { self.n_ray_per_bounce[0] }
+    pub fn total_rays(&self) -> u64 { self.n_ray_per_bounce[0] }
 
     /// Returns the total energy of rays.
-    pub fn total_energy(&self) -> f32 { self.energy_per_bounce[0] }
+    pub fn total_energy(&self) -> f64 { self.energy_per_bounce[0] }
 }
 
 impl PartialEq for BounceAndEnergy {
