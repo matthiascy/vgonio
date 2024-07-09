@@ -1,4 +1,4 @@
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 use crate::measure::bsdf::rtc::RayTrajectory;
 use crate::{
     app::{
@@ -693,7 +693,7 @@ impl DebugDrawingState {
     }
 
     /// Updates the ray trajectories for the debugging draw calls.
-    #[cfg(feature = "visu-dbg")]
+    #[cfg(feature = "vdbg")]
     pub fn update_ray_trajectories(
         &mut self,
         ctx: &GpuContext,

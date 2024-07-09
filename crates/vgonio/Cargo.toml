@@ -15,8 +15,8 @@ bench = ["surf/bench"]
 fitting = ["bxdf/fitting"]
 surf-obj = ["surf/surf-obj"]
 surf-gen = ["surf/surf-gen"]
-visu-dbg = []
-verbose-dbg = []
+vdbg = []
+vvdbg = []
 
 [dependencies]
 chrono.workspace = true

@@ -1,4 +1,4 @@
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 use crate::app::gui::{widgets::ToggleSwitch, DebuggingEvent, VgonioEvent};
 use crate::{
     app::gui::{
@@ -10,9 +10,9 @@ use crate::{
         params::{BsdfMeasurementParams, SimulationKind},
     },
 };
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 use base::math::Sph2;
-use base::{medium::Medium, partition::SphericalDomain};
+use base::{medium::Medium, partition::SphericalDomain, units::Rads};
 use std::hash::Hash;
 
 impl BsdfKind {
@@ -119,7 +119,7 @@ pub fn spherical_domain_ui(domain: &mut SphericalDomain, ui: &mut egui::Ui) {
 pub struct BsdfMeasurementTab {
     pub params: BsdfMeasurementParams,
     event_loop: EventLoopProxy,
-    #[cfg(feature = "visu-dbg")]
+    #[cfg(feature = "vdbg")]
     debug: BsdfMeasurementDebug,
 }
 
@@ -129,7 +129,7 @@ impl BsdfMeasurementTab {
         Self {
             params: BsdfMeasurementParams::default(),
             event_loop,
-            #[cfg(feature = "visu-dbg")]
+            #[cfg(feature = "vdbg")]
             debug: BsdfMeasurementDebug {
                 detector_dome_drawing: false,
                 emitter_samples_drawing: false,
@@ -145,7 +145,7 @@ impl BsdfMeasurementTab {
         }
     }
 
-    #[cfg(feature = "visu-dbg")]
+    #[cfg(feature = "vdbg")]
     pub fn measurement_point(&self) -> Sph2 {
         let zenith_count = self.params.emitter.zenith.step_count_wrapped();
         let azimuth_idx = self.debug.measurement_point_index / zenith_count as i32;
@@ -159,8 +159,8 @@ impl BsdfMeasurementTab {
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
-        #[cfg(feature = "visu-dbg")] debug_draw: bool,
-        #[cfg(feature = "visu-dbg")] orbit_radius: f32,
+        #[cfg(feature = "vdbg")] debug_draw: bool,
+        #[cfg(feature = "vdbg")] orbit_radius: f32,
     ) {
         egui::CollapsingHeader::new("Parameters")
             .default_open(true)
@@ -233,7 +233,8 @@ impl BsdfMeasurementTab {
                         }
                     });
                 self.params.emitter.ui(ui, |params, ui| {
-                    #[cfg(feature = "visu-dbg")]
+                    // TODO: Emitter sector
+                    #[cfg(feature = "vdbg")]
                     {
                         if debug_draw {
                             ui.label("Samples");
@@ -245,7 +246,11 @@ impl BsdfMeasurementTab {
                                 {
                                     self.event_loop.send_event(VgonioEvent::Debugging(
                                         DebuggingEvent::UpdateEmitterSamples(
-                                            params.generate_unit_samples(),
+                                            params.generate_unit_samples(
+                                                Rads::ZERO,
+                                                Rads::TAU,
+                                                params.num_rays as usize,
+                                            ),
                                         ),
                                     ));
                                 }
@@ -359,7 +364,7 @@ impl BsdfMeasurementTab {
                 // TODO: Add multiple receivers
                 for receiver in &mut self.params.receivers {
                     receiver.ui(ui, |params, ui| {
-                        #[cfg(feature = "visu-dbg")]
+                        #[cfg(feature = "vdbg")]
                         {
                             if debug_draw {
                                 ui.label("Dome:");
@@ -444,7 +449,7 @@ impl BsdfMeasurementTab {
     }
 }
 
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 pub struct BsdfMeasurementDebug {
     pub detector_dome_drawing: bool,
     pub emitter_samples_drawing: bool,

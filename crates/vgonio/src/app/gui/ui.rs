@@ -102,7 +102,7 @@ impl VgonioGui {
             // navigator: NavigationGizmo::new(GizmoOrientation::Global),
             measurement: MeasurementDialog::new(
                 event_loop.clone(),
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                #[cfg(any(feature = "vdbg", debug_assertions))]
                 cache.clone(),
             ),
             plotters: vec![],
@@ -133,7 +133,7 @@ impl VgonioGui {
                 EventResponse::Handled
             }
             VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Create { uuid, .. }) => {
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                #[cfg(any(feature = "vdbg", debug_assertions))]
                 self.measurement.update_surface_viewers(&[*uuid]);
                 EventResponse::Ignored(event)
             }

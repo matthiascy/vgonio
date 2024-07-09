@@ -461,6 +461,7 @@ pub mod vgmo {
                     );
                     Self {
                         num_rays,
+                        num_sectors: 1,
                         max_bounces,
                         zenith,
                         azimuth,
@@ -1362,9 +1363,9 @@ pub mod vgmo {
                     outgoing: partition,
                     records: DyArr::from_vec([n_wi, n_wo, n_spectrum], records),
                     stats: DyArr::from_boxed_slice_1d(stats.assume_init()),
-                    #[cfg(feature = "visu-dbg")]
+                    #[cfg(feature = "vdbg")]
                     trajectories: Box::new([]),
-                    #[cfg(feature = "visu-dbg")]
+                    #[cfg(feature = "vdbg")]
                     hit_points: Box::new([]),
                 }
             })
@@ -1677,9 +1678,9 @@ mod tests {
                 [4],
             ),
 
-            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+            #[cfg(any(feature = "vdbg", debug_assertions))]
             trajectories: Box::new([]),
-            #[cfg(any(feature = "visu-dbg", debug_assertions))]
+            #[cfg(any(feature = "vdbg", debug_assertions))]
             hit_points: Box::new([]),
         };
 
@@ -1839,9 +1840,9 @@ mod tests {
                     [4],
                 ),
 
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                #[cfg(any(feature = "vdbg", debug_assertions))]
                 trajectories: Box::new([]),
-                #[cfg(any(feature = "visu-dbg", debug_assertions))]
+                #[cfg(any(feature = "vdbg", debug_assertions))]
                 hit_points: Box::new([]),
             },
             bsdfs,

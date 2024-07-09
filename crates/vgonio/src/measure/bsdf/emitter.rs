@@ -26,6 +26,10 @@ pub struct EmitterParams {
     /// Number of emitted rays.
     pub num_rays: u64,
 
+    /// Number of circular sectors on the unit sample disk.
+    /// Not saved in the vgonio file.
+    pub num_sectors: u32,
+
     /// Max allowed bounces for each ray.
     pub max_bounces: u32,
 
@@ -45,6 +49,7 @@ impl Default for EmitterParams {
     fn default() -> Self {
         EmitterParams {
             num_rays: 2 ^ 20,
+            num_sectors: 1,
             max_bounces: 8,
             zenith: RangeByStepSizeInclusive::new(
                 rad!(0.0),
@@ -208,13 +213,11 @@ pub struct Emitter {
     pub params: EmitterParams,
     /// Emitter's possible positions in spherical coordinates.
     pub measpts: MeasurementPoints,
-    /// The number of circular sectors on the unit sample disk.
-    /// This is determined by the total number of rays.
-    pub num_sectors: u32,
     /// The number of rays per sector.
     pub num_rays_per_sector: u32,
 }
 
+/// A single circular sector of the emitter.
 pub struct EmitterCircularSector<'a> {
     /// Parameters of the emitter.
     pub params: &'a EmitterParams,
@@ -226,10 +229,16 @@ pub struct EmitterCircularSector<'a> {
     pub idx: u32,
 }
 
+/// Circular sectors of the emitter.
 pub struct EmitterCircularSectors<'a> {
+    /// The emitter where the sectors are generated.
     emitter: &'a Emitter,
+    /// The angle of the sector.
     sector_angle: Rads,
-    sector_idx: u32,
+    /// The index of the current sector.
+    /// The length of the iterator is equal to the number of sectors.
+    /// See [`EmitterParams::num_sectors`].
+    idx: u32,
 }
 
 impl<'a> EmitterCircularSector<'a> {
@@ -262,30 +271,31 @@ impl<'a> EmitterCircularSector<'a> {
 }
 
 impl Emitter {
-    pub fn new(params: &EmitterParams, max_sector_rays: u64) -> Self {
-        let num_sectors = (params.num_rays as f64 / max_sector_rays as f64).ceil() as u32;
-        let num_rays_per_sector = (params.num_rays as f64 / num_sectors as f64).ceil() as u32;
+    /// Creates a new emitter with the given parameters.
+    pub fn new(params: &EmitterParams) -> Self {
+        let num_rays_per_sector =
+            (params.num_rays as f64 / params.num_sectors as f64).ceil() as u32;
         let measpts = params.generate_measurement_points();
         println!(
             "      {}>{} Dividing the emitter into {} sectors, {} rays per sector",
             ansi::BRIGHT_YELLOW,
             ansi::RESET,
-            num_sectors,
+            params.num_sectors,
             num_rays_per_sector
         );
         Self {
             params: *params,
             measpts,
-            num_sectors,
             num_rays_per_sector,
         }
     }
 
+    /// Returns an iterator over the circular sectors of the emitter.
     pub fn circular_sectors(&self) -> EmitterCircularSectors {
         EmitterCircularSectors {
             emitter: self,
-            sector_angle: Rads::TAU / self.num_sectors as f32,
-            sector_idx: 0,
+            sector_angle: Rads::TAU / self.params.num_sectors as f32,
+            idx: 0,
         }
     }
 }
@@ -294,11 +304,11 @@ impl<'a> Iterator for EmitterCircularSectors<'a> {
     type Item = EmitterCircularSector<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.sector_idx < self.emitter.num_sectors {
-            let start = self.sector_idx as f32 * self.sector_angle;
-            let stop = (self.sector_idx + 1) as f32 * self.sector_angle;
-            let sector_idx = self.sector_idx;
-            self.sector_idx += 1;
+        if self.idx < self.emitter.params.num_sectors {
+            let start = self.idx as f32 * self.sector_angle;
+            let stop = (self.idx + 1) as f32 * self.sector_angle;
+            let sector_idx = self.idx;
+            self.idx += 1;
 
             log::debug!(
                 "[Emitter] sector {} with angle [{}, {}]",

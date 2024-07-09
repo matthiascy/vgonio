@@ -1,8 +1,8 @@
 //! Embree ray tracing.
 
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 use crate::measure::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
-#[cfg(not(feature = "visu-dbg"))]
+#[cfg(not(feature = "vdbg"))]
 use crate::measure::params::BsdfMeasurementParams;
 use crate::{
     app::cli::ansi,
@@ -12,7 +12,7 @@ use crate::{
         SingleSimResult,
     },
 };
-#[cfg(not(feature = "visu-dbg"))]
+#[cfg(not(feature = "vdbg"))]
 use base::optics::ior::Ior;
 use base::{
     math::{Sph2, Vec3, Vec3A},
@@ -45,22 +45,22 @@ struct SoARayStreams<'g> {
     pub msurf: Arc<Geometry<'g>>,
     /// The last hit for each ray.
     pub last_hit: Box<[HitInfo]>,
-    #[cfg(feature = "visu-dbg")]
+    #[cfg(feature = "vdbg")]
     /// The trajectory of each ray. Each ray's trajectory is started with
     /// the initial ray and then followed by the rays after each
     /// bounce. The cosine of the incident angle at each bounce is
     /// also recorded.
     pub trajectory: Box<[RayTrajectory]>,
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     /// The refractive indices of the incident medium.
     pub iors_i: &'g [Ior],
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     /// The refractive indices of the transmitted medium.
     pub iors_t: &'g [Ior],
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     /// Bounce count for each ray.
     pub bounce: Box<[u32]>,
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     /// Energy of each ray per wavelength. The first dimension is the index
     /// of the ray, and the second dimension is the wavelength index
     /// [id, wl].
@@ -78,9 +78,9 @@ impl<'g> SoARayStreams<'g> {
     pub fn new(
         msurf: Arc<Geometry<'g>>,
         n_ray: usize,
-        #[cfg(feature = "visu-dbg")] max_bounces: u32,
-        #[cfg(not(feature = "visu-dbg"))] iors_i: &'g [Ior],
-        #[cfg(not(feature = "visu-dbg"))] iors_t: &'g [Ior],
+        #[cfg(feature = "vdbg")] max_bounces: u32,
+        #[cfg(not(feature = "vdbg"))] iors_i: &'g [Ior],
+        #[cfg(not(feature = "vdbg"))] iors_t: &'g [Ior],
     ) -> Self {
         let n_stream = compute_num_of_streams(n_ray);
         let last_stream_size = n_ray % Self::RAY_STREAM_SIZE;
@@ -93,16 +93,16 @@ impl<'g> SoARayStreams<'g> {
             total_stream_size,
             msurf,
             last_hit,
-            #[cfg(feature = "visu-dbg")]
+            #[cfg(feature = "vdbg")]
             trajectory: vec![RayTrajectory(Vec::with_capacity(max_bounces as usize / 2)); n_ray]
                 .into_boxed_slice(),
-            #[cfg(not(feature = "visu-dbg"))]
+            #[cfg(not(feature = "vdbg"))]
             iors_i,
-            #[cfg(not(feature = "visu-dbg"))]
+            #[cfg(not(feature = "vdbg"))]
             iors_t,
-            #[cfg(not(feature = "visu-dbg"))]
+            #[cfg(not(feature = "vdbg"))]
             bounce: vec![0; n_ray].into_boxed_slice(),
-            #[cfg(not(feature = "visu-dbg"))]
+            #[cfg(not(feature = "vdbg"))]
             energy: vec![1.0; n_ray * iors_t.len()].into_boxed_slice(),
         }
     }
@@ -128,15 +128,15 @@ struct SoARayStreamMut<'a> {
     size: usize,
     msurf: Arc<Geometry<'a>>,
     last_hit: &'a mut [HitInfo],
-    #[cfg(feature = "visu-dbg")]
+    #[cfg(feature = "vdbg")]
     trajectory: &'a mut [RayTrajectory],
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     iors_i: &'a [Ior],
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     iors_t: &'a [Ior],
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     bounce: &'a mut [u32],
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     energy: &'a mut [f32],
 }
 
@@ -157,7 +157,7 @@ impl<'a> Iterator for SoARayStreamsIterMut<'a> {
                 ..self.stream_idx * SoARayStreams::RAY_STREAM_SIZE + stream_size;
 
             let stream = {
-                #[cfg(not(feature = "visu-dbg"))]
+                #[cfg(not(feature = "vdbg"))]
                 {
                     let n_spectrum = data.iors_t.len();
                     let energy_range = self.stream_idx * SoARayStreams::RAY_STREAM_SIZE * n_spectrum
@@ -174,7 +174,7 @@ impl<'a> Iterator for SoARayStreamsIterMut<'a> {
                         energy: &mut data.energy[energy_range],
                     }
                 }
-                #[cfg(feature = "visu-dbg")]
+                #[cfg(feature = "vdbg")]
                 {
                     SoARayStreamMut {
                         idx: self.stream_idx,
@@ -217,25 +217,25 @@ fn intersect_filter_stream<'a>(
         if hits.is_valid(i) {
             let prim_id = hits.prim_id(i);
             let ray_id = rays.id(i) as usize;
-            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+            #[cfg(all(debug_assertions, feature = "vvdbg"))]
             log::trace!("ray {} -- hit: {}", ray_id, prim_id);
 
             let hit_info = &mut ctx.ext.last_hit[ray_id];
             if prim_id != INVALID_ID && prim_id == hit_info.last_prim_id {
-                #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+                #[cfg(all(debug_assertions, feature = "vvdbg"))]
                 log::trace!("nudging ray origin");
                 // if the ray hit the same primitive as the previous bounce,
                 // nudging the ray origin slightly along the normal direction of
                 // the last hit point and re-tracing the ray.
                 valid[i] = ValidMask::Valid as i32;
 
-                #[cfg(not(feature = "visu-dbg"))]
+                #[cfg(not(feature = "vdbg"))]
                 {
                     hit_info.last_pos += hit_info.last_normal * 1e-4;
                     hit_info.factor = -1.0;
                 }
 
-                #[cfg(feature = "visu-dbg")]
+                #[cfg(feature = "vdbg")]
                 {
                     let traj_node = ctx.ext.trajectory[ray_id].last_mut().unwrap();
                     traj_node.org += hit_info.last_normal * 1e-4;
@@ -275,7 +275,7 @@ fn intersect_filter_stream<'a>(
                 let ray_dir: Vec3A = rays.unit_dir(i).into();
 
                 if ray_dir.dot(normal) > 0.0 {
-                    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+                    #[cfg(all(debug_assertions, feature = "vvdbg"))]
                     log::trace!("ray {} hit backface", ray_id);
                     valid[i] = ValidMask::Invalid as i32;
                     continue;
@@ -283,7 +283,7 @@ fn intersect_filter_stream<'a>(
 
                 let new_dir = fresnel::reflect(ray_dir, normal);
                 let cos_i = ray_dir.dot(normal);
-                #[cfg(feature = "visu-dbg")]
+                #[cfg(feature = "vdbg")]
                 {
                     let last_id = ctx.ext.trajectory[ray_id].len() - 1;
                     ctx.ext.trajectory[ray_id][last_id].cos = Some(cos_i);
@@ -293,7 +293,7 @@ fn intersect_filter_stream<'a>(
                         cos: None,
                     });
                 }
-                #[cfg(not(feature = "visu-dbg"))]
+                #[cfg(not(feature = "vdbg"))]
                 {
                     hit_info.last_pos = point;
                     hit_info.next_dir = new_dir;
@@ -306,7 +306,7 @@ fn intersect_filter_stream<'a>(
             }
         } else {
             // if the ray didn't hit anything, mark it as invalid
-            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+            #[cfg(all(debug_assertions, feature = "vvdbg"))]
             log::trace!("ray {} missed", rays.id(i));
             valid[i] = ValidMask::Invalid as i32;
         }
@@ -340,11 +340,11 @@ pub fn create_resources(mesh: &MicroSurfaceMesh) -> (Device, Scene, Arc<Geometry
 /// `w_i` - The incident direction. If `None`, the BSDF is measured for all
 ///        the emitter positions.
 pub fn simulate_bsdf_measurement<'a, 'b: 'a>(
-    #[cfg(not(feature = "visu-dbg"))] params: &'a BsdfMeasurementParams,
+    #[cfg(not(feature = "vdbg"))] params: &'a BsdfMeasurementParams,
     sector: EmitterCircularSector<'a>,
     mesh: &'a MicroSurfaceMesh,
-    #[cfg(not(feature = "visu-dbg"))] iors_i: &'b [Ior],
-    #[cfg(not(feature = "visu-dbg"))] iors_t: &'b [Ior],
+    #[cfg(not(feature = "vdbg"))] iors_i: &'b [Ior],
+    #[cfg(not(feature = "vdbg"))] iors_t: &'b [Ior],
 ) -> Box<dyn Iterator<Item = SingleSimResult> + 'a> {
     #[cfg(feature = "bench")]
     let t = std::time::Instant::now();
@@ -366,11 +366,11 @@ pub fn simulate_bsdf_measurement<'a, 'b: 'a>(
             mesh,
             geometry.clone(),
             &scene,
-            #[cfg(not(feature = "visu-dbg"))]
+            #[cfg(not(feature = "vdbg"))]
             params.fresnel,
-            #[cfg(not(feature = "visu-dbg"))]
+            #[cfg(not(feature = "vdbg"))]
             iors_i,
-            #[cfg(not(feature = "visu-dbg"))]
+            #[cfg(not(feature = "vdbg"))]
             iors_t,
         );
 
@@ -393,9 +393,9 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
     mesh: &MicroSurfaceMesh,
     geometry: Arc<Geometry<'a>>,
     scene: &Scene,
-    #[cfg(not(feature = "visu-dbg"))] fresnel: bool,
-    #[cfg(not(feature = "visu-dbg"))] iors_i: &'b [Ior],
-    #[cfg(not(feature = "visu-dbg"))] iors_t: &'b [Ior],
+    #[cfg(not(feature = "vdbg"))] fresnel: bool,
+    #[cfg(not(feature = "vdbg"))] iors_i: &'b [Ior],
+    #[cfg(not(feature = "vdbg"))] iors_t: &'b [Ior],
 ) -> SingleSimResult {
     println!(
         "      {}>{} Emit rays from {}, sector: #{}",
@@ -405,13 +405,13 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
         sector.idx
     );
     let max_bounces = sector.params.max_bounces;
-    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+    #[cfg(all(debug_assertions, feature = "vvdbg"))]
     let t = std::time::Instant::now();
     let emitted_rays = sector.emit_rays(w_i, mesh);
     let num_emitted_rays = emitted_rays.len();
-    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+    #[cfg(all(debug_assertions, feature = "vvdbg"))]
     let elapsed = t.elapsed();
-    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+    #[cfg(all(debug_assertions, feature = "vvdbg"))]
     log::debug!(
         "emitted {} rays with dir: {} from: {} in {} secs.",
         num_emitted_rays,
@@ -420,18 +420,18 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
         elapsed.as_secs_f64(),
     );
 
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     let n_spectrum = iors_t.len();
 
     // Allocate the stream data for all the rays.
     let mut stream_data = SoARayStreams::new(
         geometry.clone(),
         num_emitted_rays,
-        #[cfg(feature = "visu-dbg")]
+        #[cfg(feature = "vdbg")]
         max_bounces,
-        #[cfg(not(feature = "visu-dbg"))]
+        #[cfg(not(feature = "vdbg"))]
         iors_i,
-        #[cfg(not(feature = "visu-dbg"))]
+        #[cfg(not(feature = "vdbg"))]
         iors_t,
     );
     #[cfg(all(debug_assertions))]
@@ -447,7 +447,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
         .zip(stream_data.streams_mut())
         .par_bridge()
         .for_each(|(rays, data)| {
-            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+            #[cfg(all(debug_assertions, feature = "vvdbg"))]
             log::trace!("stream {} of {}", data.idx, stream_data.n_stream);
 
             // Populate embree ray stream with generated rays.
@@ -461,7 +461,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
                 ray.set_tfar(f32::INFINITY);
             }
 
-            #[cfg(feature = "visu-dbg")]
+            #[cfg(feature = "vdbg")]
             {
                 for (i, ray) in rays.iter().enumerate() {
                     data.trajectory[i].push(RayTrajectoryNode {
@@ -487,7 +487,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
                     ctx.ctx.flags = IntersectContextFlags::INCOHERENT;
                 }
 
-                #[cfg(all(debug_assertions, feature = "verbose-dbg", feature = "visu-dbg"))]
+                #[cfg(all(debug_assertions, feature = "vvdbg", feature = "vdbg"))]
                 {
                     log::trace!(
                         "------------ bounce {}, active rays {}\n {:?} | {}",
@@ -514,7 +514,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
                     }
 
                     // Update the ray with the hit information.
-                    #[cfg(not(feature = "visu-dbg"))]
+                    #[cfg(not(feature = "vdbg"))]
                     {
                         // Only update new ray origin and direction if the ray
                         // is reflected.
@@ -546,7 +546,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
                         }
                     }
 
-                    #[cfg(feature = "visu-dbg")]
+                    #[cfg(feature = "vdbg")]
                     {
                         let next_traj = ctx.ext.trajectory[i].last().unwrap();
                         ray_hit_n.ray.set_org(i, next_traj.org.into());
@@ -562,7 +562,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
                 bounces += 1;
             }
 
-            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+            #[cfg(all(debug_assertions, feature = "vvdbg"))]
             log::trace!(
                 "------------ result {}, active rays: {}, valid rays: {:?}\ntrajectory: {:?} | {}",
                 bounces,
@@ -574,7 +574,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
         });
 
     // Extract the trajectory of each ray.
-    #[cfg(feature = "visu-dbg")]
+    #[cfg(feature = "vdbg")]
     {
         SingleSimResult {
             wi: w_i,
@@ -582,7 +582,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
         }
     }
 
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     {
         use jabr::array::DyArr;
         // Unpack the stream data into a single result.

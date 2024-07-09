@@ -4,7 +4,7 @@
 use super::{params::BsdfMeasurementParams, DataCarriedOnHemisphereSampler};
 #[cfg(feature = "embree")]
 use crate::measure::bsdf::rtc::embr;
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 use crate::measure::bsdf::rtc::RayTrajectory;
 use crate::{
     app::{
@@ -67,10 +67,10 @@ pub struct RawMeasuredBsdfData {
     pub records: DyArr<Option<BounceAndEnergy>, 3>,
     /// The statistics of the measurement per incident direction.
     pub stats: DyArr<SingleBsdfMeasurementStats>,
-    #[cfg(feature = "visu-dbg")]
+    #[cfg(feature = "vdbg")]
     /// Extra ray trajectory data per incident direction.
     pub trajectories: Box<[Box<[RayTrajectory]>]>,
-    #[cfg(feature = "visu-dbg")]
+    #[cfg(feature = "vdbg")]
     /// Hit points on the receiver per incident direction.
     pub hit_points: Box<[Vec<Vec3>]>,
 }
@@ -93,10 +93,10 @@ pub struct RawBsdfSnapshot<'a> {
     /// The statistics of the snapshot.
     pub stats: &'a SingleBsdfMeasurementStats,
     /// Extra ray trajectory data.
-    #[cfg(feature = "visu-dbg")]
+    #[cfg(feature = "vdbg")]
     pub trajectories: &'a [RayTrajectory],
     /// Hit points on the receiver.
-    #[cfg(feature = "visu-dbg")]
+    #[cfg(feature = "vdbg")]
     pub hit_points: &'a [Vec3],
 }
 
@@ -113,9 +113,9 @@ impl<'a> Iterator for RawBsdfSnapshotIterator<'a> {
                 wi: self.data.incoming[self.idx],
                 records: &self.data.records.as_slice()[idx..idx + n_wo * n_spectrum],
                 stats: &self.data.stats[self.idx],
-                #[cfg(feature = "visu-dbg")]
+                #[cfg(feature = "vdbg")]
                 trajectories: &self.data.trajectories[self.idx],
-                #[cfg(feature = "visu-dbg")]
+                #[cfg(feature = "vdbg")]
                 hit_points: &self.data.hit_points[self.idx],
             };
             self.idx += 1;
@@ -177,7 +177,7 @@ impl RawMeasuredBsdfData {
         let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
         let mut samples_l1_plus = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
         for b in 0..max_bounces {
-            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+            #[cfg(all(debug_assertions, feature = "vvdbg"))]
             log::debug!("Computing BSDF at bounce #{}", b);
             let mut any_energy = false;
             for (wi_idx, snapshot) in self.snapshots().enumerate() {
@@ -193,7 +193,7 @@ impl RawMeasuredBsdfData {
                 for (wo_idx, patch_data_per_wavelength) in
                     snapshot.records.chunks(n_spectrum).enumerate()
                 {
-                    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+                    #[cfg(all(debug_assertions, feature = "vvdbg"))]
                     log::debug!("- snapshot #{wi_idx} and patch #{wo_idx}",);
                     for (k, patch_energy) in patch_data_per_wavelength.iter().enumerate() {
                         if patch_energy.is_none() {
@@ -202,13 +202,7 @@ impl RawMeasuredBsdfData {
                         let patch = &self.outgoing.patches[wo_idx];
                         let cos_o = patch.center().theta.cos() as f64;
                         let solid_angle = patch.solid_angle().as_f64();
-                        // let e_o = patch_energy.as_ref().unwrap().energy_per_bounce[b];
-                        let e_o = *patch_energy
-                            .as_ref()
-                            .unwrap()
-                            .energy_per_bounce
-                            .get(b)
-                            .unwrap_or(&0.0);
+                        let e_o = patch_energy.as_ref().unwrap().energy_per_bounce[b];
                         if cos_o != 0.0 {
                             let l_o = e_o * rcp_f64(cos_o) * rcp_f64(solid_angle);
                             let val = l_o * rcp_e_i;
@@ -218,7 +212,7 @@ impl RawMeasuredBsdfData {
                             }
                             any_energy = true;
 
-                            #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+                            #[cfg(all(debug_assertions, feature = "vvdbg"))]
                             log::debug!(
                                 "    - energy of patch {wo_idx}: {:>12.4}, λ[{k}] --  e_i: \
                                  {:>12.4}, L_o[{k}]: {:>12.4} -- brdf: {:>14.8}",
@@ -878,7 +872,7 @@ impl SingleBsdfMeasurementStats {
     pub fn merge(&mut self, mut other: SingleBsdfMeasurementStats) {
         debug_assert!(self.n_spectrum == other.n_spectrum, "Mismatched n_spectrum");
 
-        #[cfg(feature = "verbose-dbg")]
+        #[cfg(feature = "vvdbg")]
         log::debug!("Merging stats:\n{:#?}\n+\n{:#?}", self, &other);
 
         self.n_received += other.n_received;
@@ -896,14 +890,14 @@ impl SingleBsdfMeasurementStats {
 
         // Replace the histograms of current stats with the other one.
         if self.n_bounce < other.n_bounce {
-            #[cfg(feature = "verbose-dbg")]
+            #[cfg(feature = "vvdbg")]
             log::debug!("Swapping stats");
             std::mem::swap(&mut self.n_bounce, &mut other.n_bounce);
             std::mem::swap(&mut self.n_ray_per_bounce, &mut other.n_ray_per_bounce);
             std::mem::swap(&mut self.energy_per_bounce, &mut other.energy_per_bounce);
         }
 
-        #[cfg(feature = "verbose-dbg")]
+        #[cfg(feature = "vvdbg")]
         log::debug!("After swap:\n{:#?}\n+\n{:#?}", self, &other);
 
         // Add the histograms of the other stats to this one.
@@ -916,7 +910,7 @@ impl SingleBsdfMeasurementStats {
             }
         }
 
-        #[cfg(feature = "verbose-dbg")]
+        #[cfg(feature = "vvdbg")]
         log::debug!("After merge:\n{:#?}", self);
     }
 
@@ -1077,28 +1071,28 @@ pub struct SingleSimResult {
     /// Incident direction in the unit spherical coordinates.
     pub wi: Sph2,
     /// Trajectories of the rays.
-    #[cfg(feature = "visu-dbg")]
+    #[cfg(feature = "vdbg")]
     pub trajectories: Box<[RayTrajectory]>,
     /// Number of bounces of the rays.
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     pub bounces: Box<[u32]>,
     /// Final directions of the rays.
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     pub dirs: Box<[Vec3]>,
     /// Energy of the rays per wavelength.
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     pub energy: DyArr<f32, 2>,
 }
 
 /// Iterator over the rays in the simulation result.
-#[cfg(not(feature = "visu-dbg"))]
+#[cfg(not(feature = "vdbg"))]
 pub struct SingleSimResultRays<'a> {
     idx: usize,
     result: &'a SingleSimResult,
 }
 
 /// Single ray information in the simulation result.
-#[cfg(not(feature = "visu-dbg"))]
+#[cfg(not(feature = "vdbg"))]
 pub struct SingleSimResultRay<'a> {
     /// Bounce of the ray.
     pub bounce: &'a u32,
@@ -1108,7 +1102,7 @@ pub struct SingleSimResultRay<'a> {
     pub energy: &'a [f32],
 }
 
-#[cfg(not(feature = "visu-dbg"))]
+#[cfg(not(feature = "vdbg"))]
 impl SingleSimResult {
     /// Returns an iterator over the rays in the simulation result.
     pub fn iter_rays(&self) -> SingleSimResultRays {
@@ -1143,7 +1137,7 @@ impl SingleSimResult {
     }
 }
 
-#[cfg(not(feature = "visu-dbg"))]
+#[cfg(not(feature = "vdbg"))]
 impl<'a> Iterator for SingleSimResultRays<'a> {
     type Item = SingleSimResultRay<'a>;
 
@@ -1166,7 +1160,7 @@ impl<'a> Iterator for SingleSimResultRays<'a> {
     }
 }
 
-#[cfg(not(feature = "visu-dbg"))]
+#[cfg(not(feature = "vdbg"))]
 impl<'a> ExactSizeIterator for SingleSimResultRays<'a> {
     fn len(&self) -> usize { self.result.bounces.len() }
 }
@@ -1174,7 +1168,7 @@ impl<'a> ExactSizeIterator for SingleSimResultRays<'a> {
 /// Chunks of rays in the simulation result.
 ///
 /// This is useful for processing the rays in parallel.
-#[cfg(not(feature = "visu-dbg"))]
+#[cfg(not(feature = "vdbg"))]
 pub struct SingleSimResultRayChunks<'a> {
     chunk_idx: usize,
     chunk_size: usize,
@@ -1182,7 +1176,7 @@ pub struct SingleSimResultRayChunks<'a> {
     result: &'a SingleSimResult,
 }
 
-#[cfg(not(feature = "visu-dbg"))]
+#[cfg(not(feature = "vdbg"))]
 impl<'a> Iterator for SingleSimResultRayChunks<'a> {
     type Item = SingleSimResultRayChunk<'a>;
 
@@ -1212,7 +1206,7 @@ impl<'a> Iterator for SingleSimResultRayChunks<'a> {
 }
 
 /// A chunk of rays in the simulation result.
-#[cfg(not(feature = "visu-dbg"))]
+#[cfg(not(feature = "vdbg"))]
 pub struct SingleSimResultRayChunk<'a> {
     /// Number of rays in the chunk.
     pub size: usize,
@@ -1228,7 +1222,7 @@ pub struct SingleSimResultRayChunk<'a> {
     pub curr: usize,
 }
 
-#[cfg(not(feature = "visu-dbg"))]
+#[cfg(not(feature = "vdbg"))]
 impl<'a> Iterator for SingleSimResultRayChunk<'a> {
     type Item = SingleSimResultRay<'a>;
 
@@ -1250,7 +1244,7 @@ impl<'a> Iterator for SingleSimResultRayChunk<'a> {
     }
 }
 
-#[cfg(not(feature = "visu-dbg"))]
+#[cfg(not(feature = "vdbg"))]
 impl<'a> ExactSizeIterator for SingleSimResultRayChunk<'a> {
     fn len(&self) -> usize { self.size }
 }
@@ -1428,21 +1422,20 @@ impl<'a> ExactSizeIterator for SingleSimResultRayChunk<'a> {
 pub fn measure_bsdf_rt(
     params: BsdfMeasurementParams,
     handles: &[Handle<MicroSurface>],
-    max_sector_rays: u64,
     cache: &RawCache,
 ) -> Box<[Measurement]> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
-    let emitter = Emitter::new(&params.emitter, max_sector_rays);
+    let emitter = Emitter::new(&params.emitter);
     let n_wi = emitter.measpts.len();
     let n_spectrum = params.emitter.spectrum.step_count();
     let spectrum = DyArr::from_iterator([-1], params.emitter.spectrum.values());
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     let iors_i = cache
         .iors
         .ior_of_spectrum(params.incident_medium, spectrum.as_ref())
         .unwrap();
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     let iors_t = cache
         .iors
         .ior_of_spectrum(params.transmitted_medium, spectrum.as_ref())
@@ -1459,10 +1452,10 @@ pub fn measure_bsdf_rt(
     let mut measurements = Vec::with_capacity(surfaces.len() * params.receivers.len());
 
     for (surf, mesh) in surfaces.iter().zip(meshes) {
-        #[cfg(feature = "visu-dbg")]
+        #[cfg(feature = "vdbg")]
         let mut trajectories: Vec<Vec<RayTrajectory>> =
             vec![Vec::with_capacity(emitter.params.num_rays as usize); n_wi];
-        #[cfg(feature = "visu-dbg")]
+        #[cfg(feature = "vdbg")]
         let mut hit_points: Vec<Vec<Vec3>> = vec![Vec::new(); n_wi];
 
         if surf.is_none() || mesh.is_none() {
@@ -1514,11 +1507,11 @@ pub fn measure_bsdf_rt(
                                 mesh,
                                 geometry.clone(),
                                 &scene,
-                                #[cfg(not(feature = "visu-dbg"))]
+                                #[cfg(not(feature = "vdbg"))]
                                 params.fresnel,
-                                #[cfg(not(feature = "visu-dbg"))]
+                                #[cfg(not(feature = "vdbg"))]
                                 &iors_i,
-                                #[cfg(not(feature = "visu-dbg"))]
+                                #[cfg(not(feature = "vdbg"))]
                                 &iors_t,
                             ),
                             _ => unimplemented!("Temporarily deactivated"),
@@ -1555,13 +1548,13 @@ pub fn measure_bsdf_rt(
                                 &single_result,
                                 &mut stats[i],
                                 recs,
-                                #[cfg(feature = "visu-dbg")]
+                                #[cfg(feature = "vdbg")]
                                 orbit_radius,
-                                #[cfg(feature = "visu-dbg")]
+                                #[cfg(feature = "vdbg")]
                                 params.fresnel,
-                                #[cfg(feature = "visu-dbg")]
+                                #[cfg(feature = "vdbg")]
                                 &mut trajectories[i],
-                                #[cfg(feature = "visu-dbg")]
+                                #[cfg(feature = "vdbg")]
                                 &mut hit_points[i],
                             );
 
@@ -1577,13 +1570,13 @@ pub fn measure_bsdf_rt(
                     }
                 }
 
-                #[cfg(feature = "visu-dbg")]
+                #[cfg(feature = "vdbg")]
                 let trajectories = trajectories
                     .into_iter()
                     .map(|t| t.into_boxed_slice())
                     .collect::<Vec<_>>()
                     .into_boxed_slice();
-                #[cfg(feature = "visu-dbg")]
+                #[cfg(feature = "vdbg")]
                 let hit_points = hit_points.into_boxed_slice();
                 for (receiver, records, stats, rparams) in receivers {
                     let stats = unsafe {
@@ -1596,9 +1589,9 @@ pub fn measure_bsdf_rt(
                         outgoing: receiver.patches,
                         records,
                         stats: DyArr::from_slice([n_wi], &stats),
-                        #[cfg(feature = "visu-dbg")]
+                        #[cfg(feature = "vdbg")]
                         trajectories: trajectories.clone(),
-                        #[cfg(feature = "visu-dbg")]
+                        #[cfg(feature = "vdbg")]
                         hit_points: hit_points.clone(),
                     };
                     let bsdfs =

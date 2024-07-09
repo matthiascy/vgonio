@@ -65,7 +65,7 @@ pub struct BsdfMeasurementParams {
     /// Incident medium of the measurement.
     pub incident_medium: Medium,
 
-    /// Transmitted medium of the measurement (medium of the surface).
+    /// Transmitted medium of the measurement (surface medium).
     pub transmitted_medium: Medium,
 
     /// Description of the emitter.
@@ -90,6 +90,7 @@ impl Default for BsdfMeasurementParams {
             transmitted_medium: Medium::Air,
             emitter: EmitterParams {
                 num_rays: 1000,
+                num_sectors: 1,
                 max_bounces: 10,
                 zenith: RangeByStepSizeInclusive::new(
                     deg!(0.0).in_radians(),

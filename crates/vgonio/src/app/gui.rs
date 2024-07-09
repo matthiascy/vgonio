@@ -621,7 +621,7 @@ impl VgonioGuiApp {
                                     return;
                                 }
 
-                                #[cfg(feature = "visu-dbg")]
+                                #[cfg(feature = "vdbg")]
                                 {
                                     use crate::measure::bsdf::MeasuredBsdfData;
                                     let measured = self.cache.read(|cache| {
@@ -640,7 +640,7 @@ impl VgonioGuiApp {
                                     measured
                                 }
 
-                                #[cfg(not(feature = "visu-dbg"))]
+                                #[cfg(not(feature = "vdbg"))]
                                 self.cache.read(|cache| {
                                     measure::bsdf::measure_bsdf_rt(
                                         params,

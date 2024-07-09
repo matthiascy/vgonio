@@ -2,7 +2,7 @@
 
 // TODO: verification
 
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 use crate::measure::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
 use crate::{
     app::cli::ansi,
@@ -16,7 +16,7 @@ use crate::{
         params::BsdfMeasurementParams,
     },
 };
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 use base::optics::fresnel;
 use base::{
     math,
@@ -34,7 +34,7 @@ use surf::{MicroSurface, MicroSurfaceMesh};
 pub struct RayStreamData {
     /// The last hit of each ray in the stream.
     last_hit: Vec<HitInfo>,
-    #[cfg(feature = "visu-dbg")]
+    #[cfg(feature = "vdbg")]
     /// The trajectory of each ray in the stream. The trajectory is a list of
     trajectory: Vec<RayTrajectory>,
 }
@@ -51,7 +51,7 @@ pub fn measure_bsdf(
     let max_bounces = params.emitter.max_bounces;
     let grid = MultilevelGrid::new(surf, mesh, 64);
 
-    #[cfg(all(debug_assertions, feature = "verbose-dbg"))]
+    #[cfg(all(debug_assertions, feature = "vvdbg"))]
     {
         log::debug!("mesh extent: {:?}", mesh.bounds);
         log::debug!(
@@ -98,7 +98,7 @@ pub fn measure_bsdf(
             let mut stream_data = vec![
                 RayStreamData {
                     last_hit: vec![HitInfo::new(); stream_size],
-                    #[cfg(feature = "visu-dbg")]
+                    #[cfg(feature = "vdbg")]
                     trajectory: vec![
                         RayTrajectory(Vec::with_capacity(max_bounces as usize));
                         stream_size
@@ -150,7 +150,7 @@ pub fn measure_bsdf(
                             if hit.prim_id == data.last_hit[i].last_prim_id {
                                 // Hit the same primitive as the last hit.
                                 log::trace!("self-intersection: nudging the ray origin");
-                                #[cfg(feature = "visu-dbg")]
+                                #[cfg(feature = "vdbg")]
                                 {
                                     let traj_node = data.trajectory[i].last_mut().unwrap();
                                     traj_node.org += data.last_hit[i].last_normal * 1e-6;
@@ -159,7 +159,7 @@ pub fn measure_bsdf(
                             } else {
                                 // Hit a different primitive.
                                 // Record the cos of the last hit.
-                                #[cfg(feature = "visu-dbg")]
+                                #[cfg(feature = "vdbg")]
                                 {
                                     let last_node = data.trajectory[i].last_mut().unwrap();
                                     last_node.cos = Some(hit.normal.dot(ray.dir));
@@ -188,7 +188,7 @@ pub fn measure_bsdf(
                         bounces += 1;
                     }
 
-                    #[cfg(feature = "visu-dbg")]
+                    #[cfg(feature = "vdbg")]
                     log::trace!(
                         "------------ result {}, active rays {}\n {:?} | {:?}\n{:?}",
                         bounces,
@@ -199,7 +199,7 @@ pub fn measure_bsdf(
                     );
                 });
 
-            #[cfg(feature = "visu-dbg")]
+            #[cfg(feature = "vdbg")]
             // Extract the trajectory of each ray.
             let trajectories = stream_data
                 .into_iter()
@@ -209,13 +209,13 @@ pub fn measure_bsdf(
 
             SingleSimResult {
                 wi: *w_i,
-                #[cfg(feature = "visu-dbg")]
+                #[cfg(feature = "vdbg")]
                 trajectories,
-                #[cfg(not(feature = "visu-dbg"))]
+                #[cfg(not(feature = "vdbg"))]
                 bounces: Box::new([]),
-                #[cfg(not(feature = "visu-dbg"))]
+                #[cfg(not(feature = "vdbg"))]
                 dirs: Box::new([]),
-                #[cfg(not(feature = "visu-dbg"))]
+                #[cfg(not(feature = "vdbg"))]
                 energy: DyArr::zeros([1, 1]),
             }
         })

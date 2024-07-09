@@ -1,7 +1,7 @@
 //! Sensor of the virtual gonio-reflectometer.
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 use crate::measure::bsdf::rtc::RayTrajectory;
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 use base::math::{Vec3, Vec3A};
 
 use crate::{
@@ -106,7 +106,7 @@ pub struct Receiver {
 /// Outgoing ray of a trajectory [`RayTrajectory`].
 ///
 /// Used during the data collection process.
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 #[derive(Debug, Clone)]
 struct OutgoingRay {
     /// Index of the ray in the trajectory.
@@ -179,10 +179,10 @@ impl Receiver {
         result: &SingleSimResult,
         out_stats: &mut Option<SingleBsdfMeasurementStats>,
         records: &mut [Option<BounceAndEnergy>],
-        #[cfg(feature = "visu-dbg")] orbit_radius: f32,
-        #[cfg(feature = "visu-dbg")] fresnel: bool,
-        #[cfg(feature = "visu-dbg")] out_trajs: &mut Vec<RayTrajectory>,
-        #[cfg(feature = "visu-dbg")] out_hpnts: &mut Vec<Vec3>,
+        #[cfg(feature = "vdbg")] orbit_radius: f32,
+        #[cfg(feature = "vdbg")] fresnel: bool,
+        #[cfg(feature = "vdbg")] out_trajs: &mut Vec<RayTrajectory>,
+        #[cfg(feature = "vdbg")] out_hpnts: &mut Vec<Vec3>,
     ) {
         debug_assert!(
             records.len() == self.patches.n_patches() * self.spectrum.len(),
@@ -195,7 +195,7 @@ impl Receiver {
         #[cfg(feature = "bench")]
         let start = std::time::Instant::now();
 
-        #[cfg(feature = "visu-dbg")]
+        #[cfg(feature = "vdbg")]
         {
             use base::optics::fresnel;
             use rayon::prelude::*;
@@ -377,14 +377,15 @@ impl Receiver {
                                 }
                                 patch.as_mut().unwrap()
                             };
-                            mut_patch.energy_per_bounce[0] += *e;
+                            let energy = *e as f64;
+                            mut_patch.energy_per_bounce[0] += energy;
                             mut_patch.n_ray_per_bounce[0] += 1;
-                            mut_patch.energy_per_bounce[bounce_idx + 1] += e;
+                            mut_patch.energy_per_bounce[bounce_idx + 1] += energy;
                             mut_patch.n_ray_per_bounce[bounce_idx + 1] += 1;
                             stats.n_ray_per_bounce[j * n_bounce + bounce_idx] += 1;
                             stats.n_captured_mut()[j] += 1;
-                            stats.energy_per_bounce[j * n_bounce + bounce_idx] += e;
-                            stats.e_captured[j] += e;
+                            stats.energy_per_bounce[j * n_bounce + bounce_idx] += energy;
+                            stats.e_captured[j] += energy;
                         }
                     });
             }
@@ -416,7 +417,7 @@ impl Receiver {
             }
         }
 
-        #[cfg(not(feature = "visu-dbg"))]
+        #[cfg(not(feature = "vdbg"))]
         {
             use std::sync::RwLock;
 
@@ -508,7 +509,8 @@ impl Receiver {
                             .enumerate()
                             .zip(patch_samples.iter_mut())
                             .for_each(|((k, e), patch)| {
-                                if e <= &0.0 {
+                                let energy = *e as f64;
+                                if energy <= 0.0 {
                                     return;
                                 }
                                 let mut_patch = {
@@ -519,16 +521,15 @@ impl Receiver {
                                 };
                                 // Reallocate the memory in case the number of bounces is greater
                                 mut_patch.reallocate(n_bounce as usize);
-
-                                mut_patch.energy_per_bounce[0] += *e as f64;
+                                mut_patch.energy_per_bounce[0] += energy;
                                 mut_patch.n_ray_per_bounce[0] += 1;
-                                mut_patch.energy_per_bounce[bounce_idx + 1] += *e as f64;
+                                mut_patch.energy_per_bounce[bounce_idx + 1] += energy;
                                 mut_patch.n_ray_per_bounce[bounce_idx + 1] += 1;
                                 mut_stats.n_ray_per_bounce[k * n_bounce as usize + bounce_idx] += 1;
                                 mut_stats.n_captured_mut()[k] += 1;
                                 mut_stats.energy_per_bounce[k * n_bounce as usize + bounce_idx] +=
-                                    *e as f64;
-                                mut_stats.e_captured[k] += *e as f64;
+                                    energy;
+                                mut_stats.e_captured[k] += energy;
                             })
                     }
 
@@ -570,7 +571,7 @@ impl Receiver {
     }
 }
 
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 /// Energy after a ray is reflected by the micro-surface.
 ///
 /// Used during the data collection process.

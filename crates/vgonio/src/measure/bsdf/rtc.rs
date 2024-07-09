@@ -8,7 +8,7 @@ use std::{
     ops::{Add, Mul},
 };
 
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 use std::{
     fmt::Formatter,
     ops::{Deref, DerefMut},
@@ -165,13 +165,13 @@ struct HitInfo {
     pub last_prim_id: u32,
     /// Normal of the last-hit primitive.
     pub last_normal: Vec3A,
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     /// Hit point of the last hit; also the origin of the next ray.
     pub last_pos: Vec3A,
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     /// Ray direction of the next ray.
     pub next_dir: Vec3A,
-    #[cfg(not(feature = "visu-dbg"))]
+    #[cfg(not(feature = "vdbg"))]
     /// Energy coefficient of the last hit used for calculating the energy
     /// attenuation; in case of a valid hit, this is the cosine of the incident
     /// angle; in case of self-intersection, this is a negative value.
@@ -185,18 +185,18 @@ impl HitInfo {
             last_geom_id: INVALID_ID,
             last_prim_id: INVALID_ID,
             last_normal: Vec3A::ZERO,
-            #[cfg(not(feature = "visu-dbg"))]
+            #[cfg(not(feature = "vdbg"))]
             last_pos: Vec3A::ZERO,
-            #[cfg(not(feature = "visu-dbg"))]
+            #[cfg(not(feature = "vdbg"))]
             next_dir: Vec3A::ZERO,
-            #[cfg(not(feature = "visu-dbg"))]
+            #[cfg(not(feature = "vdbg"))]
             factor: 0.0,
         }
     }
 }
 
 /// Records the status of a traced ray.
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 #[derive(Clone, Copy, PartialEq)]
 pub struct RayTrajectoryNode {
     /// The origin of the ray.
@@ -208,7 +208,7 @@ pub struct RayTrajectoryNode {
     pub cos: Option<f32>,
 }
 
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 impl Debug for RayTrajectoryNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -222,23 +222,23 @@ impl Debug for RayTrajectoryNode {
 /// Records the trajectory of a ray from the moment it is spawned.
 ///
 /// The trajectory always starts with the ray that is spawned.
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct RayTrajectory(pub(crate) Vec<RayTrajectoryNode>);
 
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 impl Deref for RayTrajectory {
     type Target = Vec<RayTrajectoryNode>;
 
     fn deref(&self) -> &Self::Target { &self.0 }
 }
 
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 impl DerefMut for RayTrajectory {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
-#[cfg(feature = "visu-dbg")]
+#[cfg(feature = "vdbg")]
 impl RayTrajectory {
     /// Returns `true` if the ray did not hit anything.
     pub fn is_missed(&self) -> bool { self.0.len() <= 1 }

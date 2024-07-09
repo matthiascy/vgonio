@@ -7,6 +7,7 @@ type: !bsdf
   fresnel: true
   emitter:
     num_rays: 1520000000
+    num_sectors: 1
     max_bounces: 8
     zenith: 30deg .. =30deg / 10deg
     azimuth: 30deg .. =30deg / 10deg
