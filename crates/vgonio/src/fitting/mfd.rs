@@ -5,7 +5,13 @@ use crate::{
         params::NdfMeasurementMode,
     },
 };
-use base::{math::sph_to_cart, range::RangeByStepSizeInclusive, units::Radians, Isotropy};
+use base::{
+    math::sph_to_cart,
+    partition::{SphericalDomain, SphericalPartition},
+    range::RangeByStepSizeInclusive,
+    units::Radians,
+    Isotropy,
+};
 use bxdf::distro::{
     BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind, TrowbridgeReitzDistribution,
 };
@@ -67,97 +73,93 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
         let mut result: Vec<(
             Box<dyn MicrofacetDistribution<Params = [f64; 2]>>,
             MinimizationReport<f64>,
-        )> =
-            {
-                match self.measured {
-                    MfdFittingData::Ndf(measured) => {
-                        initialise_microfacet_mdf_models(0.001, 2.0, 32, self.target)
-                            .into_par_iter()
-                            .filter_map(|model| {
-                                log::debug!(
-                                    "Fitting with αx = {} αy = {}",
-                                    model.params()[0],
-                                    model.params()[1]
-                                );
-                                let (model, report) = match isotropy {
-                                    Isotropy::Isotropic => {
-                                        let problem =
-                                            NdfFittingProblemProxy::<{ Isotropy::Isotropic }> {
-                                                scale: self.scale,
-                                                measured,
-                                                model,
-                                            };
-                                        let (result, report) = solver.minimize(problem);
-                                        (result.model, report)
-                                    }
-                                    Isotropy::Anisotropic => {
-                                        let problem =
-                                            NdfFittingProblemProxy::<{ Isotropy::Anisotropic }> {
-                                                scale: self.scale,
-                                                measured,
-                                                model,
-                                            };
-                                        let (result, report) = solver.minimize(problem);
-                                        (result.model, report)
-                                    }
-                                };
-                                log::debug!(
-                                    "Fitted αx = {} αy = {}, report: {:?}",
-                                    model.params()[0],
-                                    model.params()[1],
-                                    report
-                                );
-                                match report.termination {
-                                    TerminationReason::Converged { .. } => Some((model, report)),
-                                    _ => None,
+        )> = {
+            match self.measured {
+                MfdFittingData::Ndf(measured) => {
+                    initialise_microfacet_mdf_models(0.001, 2.0, 32, self.target)
+                        .into_par_iter()
+                        .filter_map(|model| {
+                            log::debug!(
+                                "Fitting with αx = {} αy = {}",
+                                model.params()[0],
+                                model.params()[1]
+                            );
+                            let (model, report) = match isotropy {
+                                Isotropy::Isotropic => {
+                                    let problem =
+                                        NdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
+                                            self.scale, measured, model,
+                                        );
+                                    let (result, report) = solver.minimize(problem);
+                                    (result.model, report)
                                 }
-                            })
-                            .collect()
-                    }
-                    MfdFittingData::Msf(measured) => {
-                        initialise_microfacet_mdf_models(0.001, 2.0, 32, self.target)
-                            .into_iter()
-                            .filter_map(|model| {
-                                log::debug!(
-                                    "Fitting with αx = {} αy = {}",
-                                    model.params()[0],
-                                    model.params()[1]
-                                );
-                                let (model, report) = match isotropy {
-                                    Isotropy::Isotropic => {
-                                        let problem =
-                                            MsfFittingProblemProxy::<{ Isotropy::Isotropic }> {
-                                                measured,
-                                                model,
-                                            };
-                                        let (result, report) = solver.minimize(problem);
-                                        (result.model, report)
-                                    }
-                                    Isotropy::Anisotropic => {
-                                        let problem =
-                                            MsfFittingProblemProxy::<{ Isotropy::Anisotropic }> {
-                                                measured,
-                                                model,
-                                            };
-                                        let (result, report) = solver.minimize(problem);
-                                        (result.model, report)
-                                    }
-                                };
-                                log::debug!(
-                                    "Fitted αx = {} αy = {}, report: {:?}",
-                                    model.params()[0],
-                                    model.params()[1],
-                                    report
-                                );
-                                match report.termination {
-                                    TerminationReason::Converged { .. } => Some((model, report)),
-                                    _ => None,
+                                Isotropy::Anisotropic => {
+                                    let problem =
+                                        NdfFittingProblemProxy::<{ Isotropy::Anisotropic }>::new(
+                                            self.scale, measured, model,
+                                        );
+                                    let (result, report) = solver.minimize(problem);
+                                    (result.model, report)
                                 }
-                            })
-                            .collect()
-                    }
+                            };
+                            log::debug!(
+                                "Fitted αx = {} αy = {}, report: {:?}",
+                                model.params()[0],
+                                model.params()[1],
+                                report
+                            );
+                            match report.termination {
+                                TerminationReason::Converged { .. } => Some((model, report)),
+                                _ => None,
+                            }
+                        })
+                        .collect()
                 }
-            };
+                MfdFittingData::Msf(measured) => initialise_microfacet_mdf_models(
+                    0.001,
+                    2.0,
+                    32,
+                    self.target,
+                )
+                .into_iter()
+                .filter_map(|model| {
+                    log::debug!(
+                        "Fitting with αx = {} αy = {}",
+                        model.params()[0],
+                        model.params()[1]
+                    );
+                    let (model, report) = match isotropy {
+                        Isotropy::Isotropic => {
+                            let problem = MsfFittingProblemProxy::<{ Isotropy::Isotropic }> {
+                                measured,
+                                model,
+                            };
+                            let (result, report) = solver.minimize(problem);
+                            (result.model, report)
+                        }
+                        Isotropy::Anisotropic => {
+                            let problem = MsfFittingProblemProxy::<{ Isotropy::Anisotropic }> {
+                                measured,
+                                model,
+                            };
+                            let (result, report) = solver.minimize(problem);
+                            (result.model, report)
+                        }
+                    };
+                    log::debug!(
+                        "Fitted αx = {} αy = {}, report: {:?}",
+                        model.params()[0],
+                        model.params()[1],
+                        report
+                    );
+                    match report.termination {
+                        TerminationReason::Converged { .. } => Some((model, report)),
+                        _ => None,
+                    }
+                })
+                .collect(),
+            }
+        };
         result.shrink_to_fit();
         FittingReport::new(result)
     }
@@ -168,6 +170,31 @@ struct NdfFittingProblemProxy<'a, const I: Isotropy> {
     scale: f32,
     measured: &'a MeasuredNdfData,
     model: Box<dyn MicrofacetDistribution<Params = [f64; 2]>>,
+    /// The spherical partition used for the fitting only if the measurement
+    /// mode is by partition.
+    partition: Option<SphericalPartition>,
+}
+
+impl<'a, const I: Isotropy> NdfFittingProblemProxy<'a, I> {
+    pub fn new(
+        scale: f32,
+        measured: &'a MeasuredNdfData,
+        model: Box<dyn MicrofacetDistribution<Params = [f64; 2]>>,
+    ) -> Self {
+        let partition = match measured.params.mode {
+            NdfMeasurementMode::ByPoints { .. } => None,
+            NdfMeasurementMode::ByPartition { precision } => Some(SphericalPartition::new_beckers(
+                SphericalDomain::Upper,
+                precision,
+            )),
+        };
+        Self {
+            scale,
+            measured,
+            model,
+            partition,
+        }
+    }
 }
 
 /// Proxy for the MSF fitting problem.
@@ -241,6 +268,41 @@ fn extract_azimuth_zenith_angles_cos(
         .unzip()
 }
 
+fn eval_ndf_residuals<'a>(
+    measured: &'a MeasuredNdfData,
+    model: &'a dyn MicrofacetDistribution<Params = [f64; 2]>,
+    partition: Option<&'a SphericalPartition>,
+    scale: f32,
+) -> OMatrix<f64, Dyn, U1> {
+    match measured.params.mode {
+        NdfMeasurementMode::ByPoints { azimuth, zenith } => {
+            let theta_step_count = zenith.step_count_wrapped();
+            let residuals = measured.samples.iter().enumerate().map(|(idx, meas)| {
+                let theta_idx = idx % theta_step_count;
+                let theta = zenith.step(theta_idx);
+                let phi_idx = idx / theta_step_count;
+                let phi = azimuth.step(phi_idx);
+                model.eval_ndf(theta.cos() as f64, phi.cos() as f64) - *meas as f64 * scale as f64
+            });
+            OMatrix::<f64, Dyn, U1>::from_iterator(residuals.len(), residuals)
+        }
+        NdfMeasurementMode::ByPartition { .. } => {
+            let partition = partition.unwrap();
+            let residuals =
+                partition
+                    .patches
+                    .iter()
+                    .zip(measured.samples.iter())
+                    .map(move |(patch, meas)| {
+                        let sph2 = patch.center();
+                        model.eval_ndf(sph2.theta.cos() as f64, sph2.phi.cos() as f64)
+                            - *meas as f64 * scale as f64
+                    });
+            OMatrix::<f64, Dyn, U1>::from_iterator(residuals.len(), residuals)
+        }
+    }
+}
+
 // TODO: maybe split this into two different structs for measured ADF in
 // different modes?
 impl<'a> LeastSquaresProblem<f64, Dyn, U2>
@@ -253,27 +315,12 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
     impl_least_squares_problem_common_methods!(@aniso => self, Vector<f64, U2, Self::ParameterStorage>);
 
     fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
-        match self.measured.params.mode {
-            NdfMeasurementMode::ByPoints { azimuth, zenith } => {
-                let theta_step_count = zenith.step_count_wrapped();
-                let residuals = self.measured.samples.iter().enumerate().map(|(idx, meas)| {
-                    let theta_idx = idx % theta_step_count;
-                    let theta = zenith.step(theta_idx);
-                    let phi_idx = idx / theta_step_count;
-                    let phi = azimuth.step(phi_idx);
-                    self.model.eval_ndf(theta.cos() as f64, phi.cos() as f64)
-                        - *meas as f64 * self.scale as f64
-                });
-                Some(OMatrix::<f64, Dyn, U1>::from_iterator(
-                    residuals.len(),
-                    residuals,
-                ))
-            }
-            NdfMeasurementMode::ByPartition { .. } => {
-                // TODO: Implement this.
-                None
-            }
-        }
+        Some(eval_ndf_residuals(
+            self.measured,
+            self.model.as_ref(),
+            self.partition.as_ref(),
+            self.scale,
+        ))
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
@@ -285,8 +332,22 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
                     &self.model.pd_ndf(&cos_thetas, &cos_phis),
                 ))
             }
-            // TODO: Implement this.
-            NdfMeasurementMode::ByPartition { .. } => None,
+            NdfMeasurementMode::ByPartition { .. } => {
+                let partition = self.partition.as_ref().unwrap();
+                let (cos_thetas, cos_phis): (Vec<_>, Vec<_>) = partition
+                    .patches
+                    .iter()
+                    .map(|patch| {
+                        (
+                            patch.center().theta.cos() as f64,
+                            patch.center().phi.cos() as f64,
+                        )
+                    })
+                    .unzip();
+                Some(OMatrix::<f64, Dyn, U2>::from_row_slice(
+                    &self.model.pd_ndf(&cos_thetas, &cos_phis),
+                ))
+            }
         }
     }
 }
@@ -299,27 +360,12 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for NdfFittingProblemProxy<'a, { Isot
     impl_least_squares_problem_common_methods!(@iso2 => self, Vector<f64, U1, Self::ParameterStorage>);
 
     fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> {
-        match self.measured.params.mode {
-            NdfMeasurementMode::ByPoints { azimuth, zenith } => {
-                let theta_step_count = zenith.step_count_wrapped();
-                let residuals = self.measured.samples.iter().enumerate().map(|(idx, meas)| {
-                    let theta_idx = idx % theta_step_count;
-                    let theta = zenith.step(theta_idx);
-                    let phi_idx = idx / theta_step_count;
-                    let phi = azimuth.step(phi_idx);
-                    self.model.eval_ndf(theta.cos() as f64, phi.cos() as f64)
-                        - *meas as f64 * self.scale as f64
-                });
-                Some(OMatrix::<f64, Dyn, U1>::from_iterator(
-                    residuals.len(),
-                    residuals,
-                ))
-            }
-            NdfMeasurementMode::ByPartition { .. } => {
-                // TODO: Implement this.
-                None
-            }
-        }
+        Some(eval_ndf_residuals(
+            self.measured,
+            self.model.as_ref(),
+            self.partition.as_ref(),
+            self.scale,
+        ))
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
@@ -331,8 +377,17 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for NdfFittingProblemProxy<'a, { Isot
                     &self.model.pd_ndf_iso(&cos_thetas),
                 ))
             }
-            // TODO: Implement this.
-            NdfMeasurementMode::ByPartition { .. } => None,
+            NdfMeasurementMode::ByPartition { .. } => {
+                let partition = self.partition.as_ref().unwrap();
+                let cos_thetas = partition
+                    .patches
+                    .iter()
+                    .map(|patch| patch.center().theta.cos() as f64)
+                    .collect::<Vec<_>>();
+                Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
+                    &self.model.pd_ndf_iso(&cos_thetas),
+                ))
+            }
         }
     }
 }

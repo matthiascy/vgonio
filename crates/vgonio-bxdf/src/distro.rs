@@ -116,12 +116,14 @@ pub trait MicrofacetDistribution: Debug + Send + Sync {
     /// vector contains the partial derivatives with respect to the roughness
     /// parameters: ∂f/∂αx and ∂f/∂αy for microfacet normals with the given
     /// the polar angles and azimuthal angles.
+    /// The derivatives are evaluated first with the αx and then αy for each
+    /// microfacet normal (pair of cos_theta and cos_phi).
     ///
     /// # Note
     ///
-    /// The partial derivatives are evaluated WITHOUT Fresnel factor. You may
-    /// need to multiply the partial derivatives by the Fresnel factor if you
-    /// want to use them in the fitting process.
+    /// The partial derivatives are evaluated WITHOUT the Fresnel factor. You
+    /// may need to multiply the partial derivatives by the Fresnel factor
+    /// if you want to use them in the fitting process.
     fn pd_ndf(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Box<[f64]>;
 
     #[cfg(feature = "fitting")]
