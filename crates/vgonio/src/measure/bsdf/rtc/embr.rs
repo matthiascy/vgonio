@@ -7,7 +7,7 @@ use crate::measure::params::BsdfMeasurementParams;
 use crate::{
     app::cli::ansi,
     measure::bsdf::{
-        emitter::{Emitter, EmitterCircularSector},
+        emitter::EmitterCircularSector,
         rtc::{compute_num_of_streams, HitInfo, MAX_RAY_STREAM_SIZE},
         SingleSimResult,
     },
@@ -313,6 +313,7 @@ fn intersect_filter_stream<'a>(
     }
 }
 
+/// Creates the Embree resources for the tracing.
 pub fn create_resources(mesh: &MicroSurfaceMesh) -> (Device, Scene, Arc<Geometry>) {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();

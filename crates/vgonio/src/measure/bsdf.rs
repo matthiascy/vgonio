@@ -24,7 +24,7 @@ use crate::{
 use base::{
     error::VgonioError,
     impl_measured_data_trait,
-    math::{rcp_f32, rcp_f64, Sph2, Vec3},
+    math::{rcp_f64, Sph2, Vec3},
     medium::Medium,
     partition::SphericalPartition,
     units::{Degs, Nanometres, Radians, Rads},
@@ -1419,6 +1419,7 @@ impl<'a> ExactSizeIterator for SingleSimResultRayChunk<'a> {
 //     measurements.into_boxed_slice()
 // }
 
+/// Measures the BSDF of a surface using geometric ray tracing methods.
 pub fn measure_bsdf_rt(
     params: BsdfMeasurementParams,
     handles: &[Handle<MicroSurface>],

@@ -127,25 +127,25 @@ pub fn run(config: Config) -> Result<(), VgonioError> {
 }
 // TODO: add MSAA
 
-/// Vgonio client application with GUI.
+/// Vgonio client app with GUI.
 pub struct VgonioGuiApp {
-    /// The time when the application started.
+    /// The time when the app started.
     start_time: Instant,
     /// Gui context
     gui_ctx: GuiContext,
     /// Gpu context
     gpu_ctx: Arc<GpuContext>,
-    /// The main window of the application.
+    /// The main window of the app.
     window: Arc<Window>,
     /// Surface for presenting rendered frames.
     canvas: WindowSurface,
-    /// The GUI application state.
+    /// The GUI app state.
     ui: VgonioGui,
-    /// The theme of the application.
+    /// The theme of the app.
     theme: ThemeState,
-    /// The configuration of the application. See [`Config`].
+    /// The configuration of the app. See [`Config`].
     config: Arc<Config>,
-    /// The cache of the application including preloaded datafiles. See
+    /// The cache of the app including preloaded datafiles. See
     /// [`Cache`].
     cache: Cache,
     /// Input states collected from the window.
@@ -157,7 +157,7 @@ pub struct VgonioGuiApp {
     bsdf_viewer: Arc<RwLock<BsdfViewer>>,
     /// Debug drawing state.
     dbg_drawing_state: DebugDrawingState,
-    /// Event loop proxy for sending events to the application.
+    /// Event loop proxy for sending events to the app.
     event_loop_proxy: EventLoopProxy,
 }
 
@@ -642,12 +642,7 @@ impl VgonioGuiApp {
 
                                 #[cfg(not(feature = "vdbg"))]
                                 self.cache.read(|cache| {
-                                    measure::bsdf::measure_bsdf_rt(
-                                        params,
-                                        &surfaces,
-                                        1024 * 1024 * 16, // TODO: make this configurable
-                                        cache,
-                                    )
+                                    measure::bsdf::measure_bsdf_rt(params, &surfaces, cache)
                                 })
                             }
                             MeasurementParams::Sdf(params) => self.cache.read(|cache| {
@@ -720,7 +715,7 @@ impl VgonioGuiApp {
         }
     }
 
-    /// Update the state of the application then render the current frame.
+    /// Update the state of the app then render the current frame.
     pub fn update_and_render(&mut self, elwt: &EventLoopWindowTarget<VgonioEvent>, dt: Duration) {
         let window = self.window.clone();
         match self.render_frame(&window, dt) {

@@ -95,6 +95,7 @@ pub struct DebugDrawingState {
     pub emitter_samples: Option<EmitterSamples>,
     /// Emitter samples buffer.
     pub emitter_samples_buffer: Option<wgpu::Buffer>,
+    #[cfg(feature = "vdbg")]
     /// Emitter samples uniform buffer.
     pub emitter_samples_uniform_buffer: Option<wgpu::Buffer>,
     /// Emitter measurement points buffer.
@@ -142,7 +143,6 @@ pub struct DebugDrawingState {
     surface_primitive_drawing: bool,
     event_loop: EventLoopProxy,
     cache: Cache,
-
     pub microsurface: Option<(Handle<MicroSurface>, Handle<MicroSurfaceMesh>)>,
     pub msurf_prim_rp: RenderPass,
     pub msurf_prim_index_buf: wgpu::Buffer,
@@ -350,6 +350,7 @@ impl DebugDrawingState {
             emitter_position: Sph2::zero(),
             emitter_samples: None,
             emitter_samples_buffer: None,
+            #[cfg(feature = "vdbg")]
             emitter_samples_uniform_buffer: None,
             emitter_points_buffer: None,
             emitter_rays: None,

@@ -19,10 +19,7 @@ use base::{
     units::{Nanometres, Radians},
 };
 use serde::{Deserialize, Serialize};
-use std::sync::{
-    atomic,
-    atomic::{AtomicU32, AtomicU64},
-};
+use std::sync::{atomic, atomic::AtomicU64};
 
 /// Description of a receiver collecting the data.
 ///

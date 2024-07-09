@@ -732,6 +732,7 @@ impl<'a> DataCarriedOnHemisphereSampler<'a, VgonioBrdf> {
 }
 
 impl<'a> DataCarriedOnHemisphereSampler<'a, MeasuredNdfData> {
+    /// Retrieve the NDF sample data at the given position;
     pub fn sample_point_at(&self, wm: Sph2) -> f32 {
         log::trace!("Sampling NDF at wm: {}", wm,);
 
@@ -921,6 +922,7 @@ impl<'a> DataCarriedOnHemisphereSampler<'a, MeasuredNdfData> {
         }
     }
 
+    /// Retrieve the NDF slice data at the given azimuthal angle in radians.
     pub fn sample_slice_at(&self, phi: Radians) -> Box<[f32]> {
         let partition = self.extra.as_ref().unwrap();
         let n_theta = partition.n_rings();

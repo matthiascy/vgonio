@@ -11,8 +11,8 @@ use crate::{
     },
 };
 #[cfg(feature = "vdbg")]
-use base::math::Sph2;
-use base::{medium::Medium, partition::SphericalDomain, units::Rads};
+use base::{math::Sph2, units::Rads};
+use base::{medium::Medium, partition::SphericalDomain};
 use std::hash::Hash;
 
 impl BsdfKind {

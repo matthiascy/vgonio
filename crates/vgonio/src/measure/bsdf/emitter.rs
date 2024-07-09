@@ -11,7 +11,7 @@ use base::{
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::{env::temp_dir, fs::File, ops::Deref, rc::Rc};
+use std::ops::Deref;
 use surf::MicroSurfaceMesh;
 
 /// Parameters for the emitter.
