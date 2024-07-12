@@ -141,60 +141,60 @@ def plot_brdf_comparison(
         a.legend()
 
     olaf_cur_lambda_text = TextBox(
-        plt.axes([0.15, 0.025, 0.06, 0.04]),
+        plt.axes((0.15, 0.025, 0.06, 0.04)),
         "λ",
         initial=f"{wavelengths_olaf[olaf_cur_lambda_idx]:.4f}",
     )
     button_prev_olaf_lambda = Button(
-        plt.axes([0.22, 0.025, 0.06, 0.04]),
+        plt.axes((0.22, 0.025, 0.06, 0.04)),
         "Prev λ",
         color="lightgoldenrodyellow",
         hovercolor="0.975",
     )
     button_next_olaf_lambda = Button(
-        plt.axes([0.29, 0.025, 0.06, 0.04]),
+        plt.axes((0.29, 0.025, 0.06, 0.04)),
         "Next λ",
         color="lightgoldenrodyellow",
         hovercolor="0.975",
     )
 
     compare_button = Button(
-        plt.axes([0.38, 0.025, 0.06, 0.04]),
+        plt.axes((0.38, 0.025, 0.06, 0.04)),
         "Comp.",
         color="lightgoldenrodyellow",
         hovercolor="0.975",
     )
     compare_norm_button = Button(
-        plt.axes([0.45, 0.025, 0.06, 0.04]),
+        plt.axes((0.45, 0.025, 0.06, 0.04)),
         "(Comp.)",
         color="lightgoldenrodyellow",
         hovercolor="0.975",
     )
     prev_wi_button = Button(
-        plt.axes([0.53, 0.025, 0.06, 0.04]),
+        plt.axes((0.53, 0.025, 0.06, 0.04)),
         "Prev ωi",
         color="lightgoldenrodyellow",
         hovercolor="0.975",
     )
     next_wi_button = Button(
-        plt.axes([0.60, 0.025, 0.06, 0.04]),
+        plt.axes((0.60, 0.025, 0.06, 0.04)),
         "Next ωi",
         color="lightgoldenrodyellow",
         hovercolor="0.975",
     )
     cur_wi_text = TextBox(
-        plt.axes([0.46, 0.90, 0.11, 0.04]),
+        plt.axes((0.46, 0.90, 0.11, 0.04)),
         "ωi: ",
         initial=f"{format_angle_pair(wi_wo_pairs_itrp[cur_wi_idx][0])}",
     )
 
     itrp_cur_lambda_text = TextBox(
-        plt.axes([0.75, 0.025, 0.06, 0.04]),
+        plt.axes((0.75, 0.025, 0.06, 0.04)),
         "λ",
         initial=f"{wavelengths_itrp[itrp_cur_lambda_idx]:.4f}",
     )
     button_next_itrp_lambda = Button(
-        plt.axes([0.82, 0.025, 0.06, 0.04]),
+        plt.axes((0.82, 0.025, 0.06, 0.04)),
         "Next λ",
         color="lightgoldenrodyellow",
         hovercolor="0.975",
@@ -350,7 +350,6 @@ def plot_brdf_slice(phi_o_deg, phi_o_deg_opp, brdf_slices: list[tuple[np.ndarray
 
 
 def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices):
-    # new polar plot
     fig_polar, ax_polar = new_polar_brdf_plot()
     ax_polar.set_rlabel_position(0)
 
@@ -437,11 +436,10 @@ def plot_brdf_3d(theta_i, phi_i, theta, phi, vals, cmap='viridis', scale=1.0):
     ax.view_init(elev=25, azim=phi_i_deg - 25)
     ax.dist = 20
 
-    val_max = np.max(vals)
-
-    incident_x = np.sin(theta_i) * np.cos(phi_i) * val_max * 0.6
-    incident_y = np.sin(theta_i) * np.sin(phi_i) * val_max * 0.6
-    incident_z = np.cos(theta_i) * val_max * 0.6
+    # val_max = np.max(vals)
+    # incident_x = np.sin(theta_i) * np.cos(phi_i) * val_max * 0.6
+    # incident_y = np.sin(theta_i) * np.sin(phi_i) * val_max * 0.6
+    # incident_z = np.cos(theta_i) * val_max * 0.6
     # Draw incident light using arrow
     # ax.quiver(0, 0, 0, incident_x, incident_y, incident_z, color='k', arrow_length_ratio=0.1, linewidth=2)
     # ax.text(incident_x, incident_y, incident_z * 1.2,

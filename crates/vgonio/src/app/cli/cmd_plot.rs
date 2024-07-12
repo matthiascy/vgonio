@@ -57,6 +57,8 @@ pub enum PlotKind {
     /// Plot the BRDF from saved *.vgmo file in 3D
     #[clap(name = "brdf-3d")]
     Brdf3D,
+    #[clap(name = "brdf-fitting")]
+    BrdfFitting,
     /// Plot the NDF from saved *.vgmo file
     #[clap(name = "ndf")]
     Ndf,
@@ -466,6 +468,9 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 .unwrap();
 
                 Ok(())
+            }
+            PlotKind::BrdfFitting => {
+                todo!("Implement BRDF fitting.")
             }
         }
     })

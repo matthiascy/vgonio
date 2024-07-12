@@ -140,18 +140,20 @@ fn render_film(
             let max_time = max_time.load(std::sync::atomic::Ordering::Relaxed);
             if n == 0 {
                 continue;
-            } else if n == num_tiles {
-                break;
-            } else {
-                print!(
-                    "\rProgress: {}/{} tiles done, {}ms average, {}ms peek, {}ms elapsed",
-                    n + 1,
-                    num_tiles,
-                    total_time / n as u64,
-                    max_time,
-                    start_time.elapsed().as_millis()
-                );
             }
+
+            if n == num_tiles {
+                break;
+            }
+
+            print!(
+                "\rProgress: {}/{} tiles done, {}ms average, {}ms peek, {}ms elapsed",
+                n + 1,
+                num_tiles,
+                total_time / n as u64,
+                max_time,
+                start_time.elapsed().as_millis()
+            );
             thread::sleep(std::time::Duration::from_millis(10));
         }
     });
