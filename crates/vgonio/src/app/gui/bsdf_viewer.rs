@@ -146,6 +146,7 @@ impl BsdfViewer {
                 vertex: wgpu::VertexState {
                     module: &shader,
                     entry_point: "vs_main",
+                    compilation_options: Default::default(),
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vec3>() as u64,
                         step_mode: wgpu::VertexStepMode::Vertex,
@@ -155,6 +156,7 @@ impl BsdfViewer {
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
                     entry_point: "fs_main",
+                    compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: Self::OUTPUT_TEXTURE_FORMAT,
                         blend: Some(wgpu::BlendState::REPLACE),

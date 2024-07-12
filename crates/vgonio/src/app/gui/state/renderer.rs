@@ -227,6 +227,7 @@ impl GuiRenderer {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: "vs_main",
+                compilation_options: Default::default(),
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<egui::epaint::Vertex>()
                         as wgpu::BufferAddress,
@@ -259,6 +260,7 @@ impl GuiRenderer {
                 } else {
                     "fs_main_gamma_framebuffer"
                 },
+                compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: output_color_format,
                     blend: Some(wgpu::BlendState {

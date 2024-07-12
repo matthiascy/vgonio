@@ -241,6 +241,7 @@ impl VisibilityEstimator {
                     vertex: wgpu::VertexState {
                         module: &shader_module,
                         entry_point: "vs_depth_pass",
+                        compilation_options: Default::default(),
                         buffers: &[wgpu::VertexBufferLayout {
                             array_stride: 12,
                             step_mode: wgpu::VertexStepMode::Vertex,
@@ -385,6 +386,7 @@ impl VisibilityEstimator {
                     vertex: wgpu::VertexState {
                         module: &shader_module,
                         entry_point: "vs_render_pass",
+                        compilation_options: Default::default(),
                         buffers: &[wgpu::VertexBufferLayout {
                             array_stride: 12,
                             step_mode: wgpu::VertexStepMode::Vertex,
@@ -413,6 +415,7 @@ impl VisibilityEstimator {
                     fragment: Some(wgpu::FragmentState {
                         module: &shader_module,
                         entry_point: "fs_render_pass",
+                        compilation_options: Default::default(),
                         targets: &[
                             Some(ColorTargetState {
                                 format: Self::COLOR_ATTACHMENT_FORMAT,

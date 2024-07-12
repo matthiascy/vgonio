@@ -36,7 +36,7 @@ impl<'a> Widget for ToggleSwitch<'a> {
 
         // Attach some meta-data to the response which can be used by screen readers:
         response.widget_info(|| {
-            egui::WidgetInfo::selected(egui::WidgetType::Checkbox, *self.value, "")
+            egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, *self.value, "")
         });
 
         // 4. Paint!

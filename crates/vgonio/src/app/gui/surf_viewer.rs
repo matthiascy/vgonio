@@ -511,6 +511,7 @@ impl MicroSurfaceState {
                 vertex: wgpu::VertexState {
                     module: &shader_module,
                     entry_point: "vs_main",
+                    compilation_options: Default::default(),
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: 3 * std::mem::size_of::<f32>() as u64,
                         step_mode: wgpu::VertexStepMode::Vertex,
@@ -545,6 +546,7 @@ impl MicroSurfaceState {
                 fragment: Some(wgpu::FragmentState {
                     module: &shader_module,
                     entry_point: "fs_main",
+                    compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: target_format,
                         blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -570,6 +572,7 @@ impl MicroSurfaceState {
             let vert_state = wgpu::VertexState {
                 module: &shader_module,
                 entry_point: "vs_normals_main",
+                compilation_options: Default::default(),
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: 3 * std::mem::size_of::<f32>() as u64,
                     step_mode: wgpu::VertexStepMode::Vertex,
@@ -579,6 +582,7 @@ impl MicroSurfaceState {
             let frag_state = wgpu::FragmentState {
                 module: &shader_module,
                 entry_point: "fs_normals_main",
+                compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: target_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -818,7 +822,7 @@ impl Dockable for SurfaceViewer {
         let top = ui.clip_rect().top();
         let right = ui.clip_rect().right();
         let toolbar_width = ui.clip_rect().width() * 0.1;
-        egui::Area::new(format!("surf_viewer_toolbar_{:?}", self.uuid))
+        egui::Area::new(format!("surf_viewer_toolbar_{:?}", self.uuid).into())
             .anchor(
                 egui::Align2::LEFT_TOP,
                 egui::Vec2::new(right - toolbar_width, top),

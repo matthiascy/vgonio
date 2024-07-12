@@ -243,6 +243,7 @@ impl SamplingInspector {
                 vertex: wgpu::VertexState {
                     module: &shader,
                     entry_point: "vs_main",
+                    compilation_options: Default::default(),
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as u64,
                         step_mode: wgpu::VertexStepMode::Vertex,
@@ -252,6 +253,7 @@ impl SamplingInspector {
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
                     entry_point: "fs_main",
+                    compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: output_format,
                         blend: Some(wgpu::BlendState::REPLACE),

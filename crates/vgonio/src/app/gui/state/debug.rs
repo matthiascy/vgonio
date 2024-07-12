@@ -259,11 +259,13 @@ impl DebugDrawingState {
             let vert_state = wgpu::VertexState {
                 module: &shader_module,
                 entry_point: "vs_main",
+                compilation_options: Default::default(),
                 buffers: &[vert_buffer_layout.clone()],
             };
             let frag_state = wgpu::FragmentState {
                 module: &shader_module,
                 entry_point: "fs_main",
+                compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: target_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -371,6 +373,7 @@ impl DebugDrawingState {
                         vertex: wgpu::VertexState {
                             module: &prim_shader_module,
                             entry_point: "vs_main",
+                            compilation_options: Default::default(),
                             buffers: &[VertexLayout::new(&[wgpu::VertexFormat::Float32x3], None)
                                 .buffer_layout(wgpu::VertexStepMode::Vertex)],
                         },
@@ -388,6 +391,7 @@ impl DebugDrawingState {
                         fragment: Some(wgpu::FragmentState {
                             module: &prim_shader_module,
                             entry_point: "fs_main",
+                            compilation_options: Default::default(),
                             targets: &[Some(wgpu::ColorTargetState {
                                 format: target_format,
                                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),

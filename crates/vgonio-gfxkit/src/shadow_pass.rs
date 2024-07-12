@@ -128,6 +128,7 @@ impl ShadowPass {
                 vertex: wgpu::VertexState {
                     module: &shader_module,
                     entry_point: "vs_main",
+                    compilation_options: Default::default(),
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: 12,
                         step_mode: wgpu::VertexStepMode::Vertex,

@@ -91,6 +91,7 @@ impl VisualGridState {
                 vertex: wgpu::VertexState {
                     module: &vert_shader,
                     entry_point: "main",
+                    compilation_options: Default::default(),
                     buffers: &[],
                 },
                 primitive: wgpu::PrimitiveState {
@@ -117,6 +118,7 @@ impl VisualGridState {
                 fragment: Some(wgpu::FragmentState {
                     module: &frag_shader,
                     entry_point: "main",
+                    compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: target_format,
                         blend: Some(wgpu::BlendState::ALPHA_BLENDING),

@@ -2,7 +2,7 @@ use crate::app::gui::{
     event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
     state::GuiContext,
 };
-use egui::{Sense, TextureFilter};
+use egui::{Sense, TextureFilter, TextureWrapMode};
 use gfxkit::{context::GpuContext, render_pass::remap_depth};
 
 const IMG_WIDTH: usize = 480;
@@ -73,6 +73,7 @@ impl DepthMapPane {
             egui::TextureOptions {
                 minification: TextureFilter::Nearest,
                 magnification: TextureFilter::Nearest,
+                wrap_mode: TextureWrapMode::MirroredRepeat,
             },
         ));
     }

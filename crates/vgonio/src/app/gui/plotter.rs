@@ -487,7 +487,7 @@ impl PlottingWidget for PlotInspector {
                 .sharp_grid_lines(true)
                 .x_grid_spacer(adf_msf_x_angle_spacer)
                 .y_grid_spacer(ndf_msf_y_uniform_spacer)
-                .x_axis_formatter(|x, _, _| format!("{:.2}°", x.to_degrees()));
+                .x_axis_formatter(|x, _| format!("{:.2}°", x.value.to_degrees()));
             let azimuth_range =
                 RangeByStepSizeInclusive::new(Radians::ZERO, Radians::TAU, deg!(1.0).to_radians());
             angle_knob(
@@ -563,7 +563,7 @@ impl PlottingWidget for PlotInspector {
                                 .sharp_grid_lines(true)
                                 .x_grid_spacer(adf_msf_x_angle_spacer)
                                 .y_grid_spacer(ndf_msf_y_uniform_spacer)
-                                .x_axis_formatter(|x, _, _| format!("{:.2}°", x.to_degrees()))
+                                .x_axis_formatter(|x, _| format!("{:.2}°", x.value.to_degrees()))
                                 .coordinates_formatter(
                                     Corner::LeftBottom,
                                     CoordinatesFormatter::new(move |p, _| {
@@ -718,7 +718,7 @@ impl PlottingWidget for PlotInspector {
                                 .center_x_axis(true)
                                 .sharp_grid_lines(true)
                                 .x_grid_spacer(adf_msf_x_angle_spacer)
-                                .x_axis_formatter(|x, _, _| format!("{:.2}°", x.to_degrees()))
+                                .x_axis_formatter(|x, _| format!("{:.2}°", x.value.to_degrees()))
                                 .coordinates_formatter(
                                     Corner::LeftBottom,
                                     CoordinatesFormatter::new(move |p, _| {
@@ -784,7 +784,7 @@ impl PlottingWidget for PlotInspector {
                                 .sharp_grid_lines(true)
                                 .x_grid_spacer(adf_msf_x_angle_spacer)
                                 .y_grid_spacer(ndf_msf_y_uniform_spacer)
-                                .x_axis_formatter(|x, _, _| format!("{:.2}°", x.to_degrees()))
+                                .x_axis_formatter(|x, _| format!("{:.2}°", x.value.to_degrees()))
                                 .coordinates_formatter(
                                     Corner::LeftBottom,
                                     CoordinatesFormatter::new(move |p, _| {
