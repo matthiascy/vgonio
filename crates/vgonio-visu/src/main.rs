@@ -14,29 +14,44 @@ use vgonio_visu::{
     material::{Dielectric, Lambertian, Metal},
     ray::Ray,
     sphere::Sphere,
+    RenderParams,
 };
+use winit::event_loop::EventLoop;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 #[command(next_line_help = true)]
 #[clap(disable_help_flag = true)]
 struct Args {
-    /// Prints help information.
     #[arg(long, action = clap::ArgAction::HelpLong)]
     help: Option<bool>,
-    /// Image width in pixels.
-    #[arg(short = 'w', default_value_t = 256)]
+    #[arg(short = 'w', help = "Image width in pixels.", default_value_t = 256)]
     width: u32,
-    /// Image height in pixels.
-    #[arg(short = 'h', default_value_t = 256)]
+    #[arg(short = 'h', help = "Image height in pixels.", default_value_t = 256)]
     height: u32,
-    /// Samples per pixel
-    #[arg(short = 's', default_value_t = 1)]
+
+    #[arg(
+        short = 's',
+        help = "Number of samples per pixel. The higher the value, the less noise in the image.",
+        default_value_t = 1
+    )]
     spp: u32,
+    #[arg(
+        long = "tsz",
+        help = "Tile size (width/height) in pixels.",
+        default_value_t = 32
+    )]
+    tile_size: u32,
     #[arg(short = 'b', default_value_t = 16)]
     max_bounces: u32,
     #[arg(long = "vfov", default_value_t = 90.0)]
     vfov_in_deg: f64,
+    #[arg(
+        long = "rt",
+        help = "Use real-time rendering mode. The image will be presented as it is rendered.",
+        default_value_t = false
+    )]
+    realtime: bool,
 }
 
 fn main() {
@@ -48,8 +63,6 @@ fn main() {
     }
 
     let camera = Camera::new(image_width, image_height, args.vfov_in_deg);
-
-    // World
     let mut world = HittableList::new();
 
     let material_ground = Arc::new(Lambertian {
@@ -85,79 +98,116 @@ fn main() {
 
     let spp = args.spp.clamp(1, u32::MAX);
 
-    let mut film = TiledImage::new(image_width, image_height, 32, 32);
+    let mut film = TiledImage::new(image_width, image_height, args.tile_size, args.tile_size);
+    let params = RenderParams {
+        camera: &camera,
+        world: &world,
+        spp,
+        max_bounces: args.max_bounces,
+    };
 
-    render_film(&camera, &world, spp, args.max_bounces, &mut film);
-
-    let mut image = image::RgbaImage::new(image_width, image_height);
-    // film.write_to_image(&mut image);
-    film.write_to_flat_buffer(image.as_mut());
-    let filename = format!(
-        "image-{}x{}-{}spp-{}bnc-{:.2}fov.png",
-        image_width, image_height, spp, args.max_bounces, args.vfov_in_deg
-    );
-    println!("Saving image to {}", filename);
-    image
-        .save_with_format(filename, image::ImageFormat::Png)
-        .unwrap();
+    if args.realtime {
+        let event_loop = EventLoop::new().unwrap();
+        let display = pollster::block_on(vgonio_visu::display::Display::new(
+            image_width,
+            image_height,
+            &event_loop,
+        ));
+        vgonio_visu::display::run(event_loop, display, render_film, &params, &mut film);
+    } else {
+        render_film(&params, &mut film, false);
+        let mut image = image::RgbaImage::new(image_width, image_height);
+        // film.write_to_image(&mut image);
+        film.write_to_flat_buffer(image.as_mut());
+        let filename = format!(
+            "image-{}x{}-{}spp-{}bnc-{:.2}fov.png",
+            image_width, image_height, spp, args.max_bounces, args.vfov_in_deg
+        );
+        println!("Saving image to {}", filename);
+        image
+            .save_with_format(filename, image::ImageFormat::Png)
+            .unwrap();
+    }
 }
 
-fn render_film(
-    camera: &Camera,
-    world: &HittableList,
-    spp: u32,
-    max_bounces: u32,
-    film: &mut TiledImage,
-) {
+fn render_film(params: &RenderParams, film: &mut TiledImage, silent: bool) {
     use rayon::iter::ParallelIterator;
-    let num_tiles = film.tiles_per_image;
-    let num_done = &AtomicU32::new(0);
-    let total_time = &AtomicU64::new(0);
-    let max_time = &AtomicU64::new(0);
-    let start_time = std::time::Instant::now();
-
-    thread::scope(|s| {
-        s.spawn(move || {
-            film.par_tiles_mut().for_each(|tile| {
-                let start = std::time::Instant::now();
-                let mut rays = vec![Ray::empty(); spp as usize];
-                tile.pixels.iter_mut().enumerate().for_each(|(i, pixel)| {
-                    let x = tile.x + (i % tile.w as usize) as u32;
-                    let y = tile.y + (i / tile.w as usize) as u32;
-                    *pixel = render_pixel(x, y, camera, world, max_bounces, &mut rays);
-                });
-                let time_taken = start.elapsed().as_millis() as u64;
-
-                num_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                total_time.fetch_add(time_taken, std::sync::atomic::Ordering::Relaxed);
-                max_time.fetch_max(time_taken, std::sync::atomic::Ordering::Relaxed);
+    fn render_film_inner(params: &RenderParams, film: &mut TiledImage) {
+        film.par_tiles_mut().for_each(|tile| {
+            tile.pixels.iter_mut().enumerate().for_each(|(i, pixel)| {
+                let x = tile.x + (i % tile.w as usize) as u32;
+                let y = tile.y + (i / tile.w as usize) as u32;
+                *pixel = render_pixel(
+                    x,
+                    y,
+                    params.camera,
+                    params.world,
+                    params.max_bounces,
+                    &mut vec![Ray::empty(); params.spp as usize],
+                );
             });
         });
+    }
 
-        loop {
-            let n = num_done.load(std::sync::atomic::Ordering::Relaxed);
-            let total_time = total_time.load(std::sync::atomic::Ordering::Relaxed);
-            let max_time = max_time.load(std::sync::atomic::Ordering::Relaxed);
-            if n == 0 {
-                continue;
+    if silent {
+        render_film_inner(params, film);
+    } else {
+        let num_tiles = film.tiles_per_image;
+        let num_done = &AtomicU32::new(0);
+        let total_time = &AtomicU64::new(0);
+        let max_time = &AtomicU64::new(0);
+        let start_time = std::time::Instant::now();
+
+        thread::scope(|s| {
+            s.spawn(move || {
+                film.par_tiles_mut().for_each(|tile| {
+                    let start = std::time::Instant::now();
+                    let mut rays = vec![Ray::empty(); params.spp as usize];
+                    tile.pixels.iter_mut().enumerate().for_each(|(i, pixel)| {
+                        let x = tile.x + (i % tile.w as usize) as u32;
+                        let y = tile.y + (i / tile.w as usize) as u32;
+                        *pixel = render_pixel(
+                            x,
+                            y,
+                            params.camera,
+                            params.world,
+                            params.max_bounces,
+                            &mut rays,
+                        );
+                    });
+                    let time_taken = start.elapsed().as_millis() as u64;
+
+                    num_done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    total_time.fetch_add(time_taken, std::sync::atomic::Ordering::Relaxed);
+                    max_time.fetch_max(time_taken, std::sync::atomic::Ordering::Relaxed);
+                });
+            });
+
+            loop {
+                let n = num_done.load(std::sync::atomic::Ordering::Relaxed);
+                let total_time = total_time.load(std::sync::atomic::Ordering::Relaxed);
+                let max_time = max_time.load(std::sync::atomic::Ordering::Relaxed);
+                if n == 0 {
+                    continue;
+                }
+
+                if n == num_tiles {
+                    break;
+                }
+
+                print!(
+                    "\rProgress: {}/{} tiles done, {}ms average, {}ms peek, {}ms elapsed",
+                    n + 1,
+                    num_tiles,
+                    total_time / n as u64,
+                    max_time,
+                    start_time.elapsed().as_millis()
+                );
+                thread::sleep(std::time::Duration::from_millis(10));
             }
-
-            if n == num_tiles {
-                break;
-            }
-
-            print!(
-                "\rProgress: {}/{} tiles done, {}ms average, {}ms peek, {}ms elapsed",
-                n + 1,
-                num_tiles,
-                total_time / n as u64,
-                max_time,
-                start_time.elapsed().as_millis()
-            );
-            thread::sleep(std::time::Duration::from_millis(10));
-        }
-    });
-    println!("\nDone!");
+        });
+        println!("\nDone!");
+    }
 }
 
 fn render_pixel(

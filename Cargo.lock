@@ -3872,9 +3872,13 @@ version = "0.3.0"
 dependencies = [
  "clap",
  "image",
+ "pollster",
  "rand",
  "rayon",
+ "vgonio-gfxkit",
  "vgonio-jabr",
+ "wgpu",
+ "winit",
 ]
 
 [[package]]
