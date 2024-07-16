@@ -24,7 +24,7 @@ bytemuck = { version = "1.12", features = ["derive"] }
 byteorder = "1.4"
 cfg-if = "1.0"
 chrono = "0.4"
-clap = { version = "~4", features = ["derive"] }
+clap = { version = "~4", features = ["derive", "wrap_help"] }
 csv = "1"
 dirs = "5.0"
 egui = { version = "~0.28", features = ["bytemuck"] }

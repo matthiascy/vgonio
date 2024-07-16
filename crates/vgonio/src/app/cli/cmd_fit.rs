@@ -284,9 +284,9 @@ pub struct FitOptions {
 
     #[clap(
         long,
-        help = "Whether to match the measured BRDF data to physically measured in-plane \
-                BRDF\ndata by O. Clausen. If true, the inputs should be in pairs of measured data \
-                and O. Clausen's data.",
+        help = "Whether to match the measured BRDF data to physically measured in-plane BRDF data \
+                by O. Clausen. If true, the inputs should be in pairs of measured data and O. \
+                Clausen's data.",
         default_value = "false"
     )]
     pub clausen: bool,
