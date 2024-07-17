@@ -98,7 +98,7 @@ def draw_direction_angle_auxiliary(ax, dir, theta, phi, theta_radius=1.0, phi_ra
 def draw_direction(ax, theta, phi, with_solid_angle=True, annotate=False, auxiliary=False, c='g', phi_aux_radius=1.0,
                    theta_aux_radius=1.0, text=r'$\mathbf{d}$', theta_aux_text=r'$\theta$', phi_aux_text=r'$\phi',
                    phi_aux_text_offset=(0.2, 0.3, 0.0), theta_aux_text_offset=(0.0, 0.3, 0.0),
-                   solid_angle_text=r'$\omega$', ):
+                   solid_angle_text=r'$\omega$', open_angle=False):
     """
     Draw a direction and it's reflected direction on the hemisphere.
 
@@ -110,7 +110,7 @@ def draw_direction(ax, theta, phi, with_solid_angle=True, annotate=False, auxili
     z = np.cos(theta)
     # Draw the direction
     ax.quiver(0, 0, 0, x, y, z, color=c, arrow_length_ratio=0.05, alpha=0.8, linewidth=2.0)
-    if annotate:
+    if annotate and not open_angle:
         ax.text(x / 2, y / 2, z / 2 + 0.15, text, fontsize=15, color=c, alpha=1.0)
     # Draw the solid angle, which is the area of the patch on the sphere
     if with_solid_angle:
@@ -118,11 +118,51 @@ def draw_direction(ax, theta, phi, with_solid_angle=True, annotate=False, auxili
 
     # Draw the line annotating the angle
     if auxiliary:
-        draw_direction_angle_auxiliary(ax, (x, y, z), theta, phi, theta_radius=theta_aux_radius,
-                                       phi_radius=phi_aux_radius,
-                                       azm_text=phi_aux_text, azm_text_offset=phi_aux_text_offset,
-                                       zen_text=theta_aux_text, zen_text_offset=theta_aux_text_offset,
-                                       annotate=annotate)
+        if not open_angle:
+            draw_direction_angle_auxiliary(ax, (x, y, z), theta, phi, theta_radius=theta_aux_radius,
+                                           phi_radius=phi_aux_radius,
+                                           azm_text=phi_aux_text, azm_text_offset=phi_aux_text_offset,
+                                           zen_text=theta_aux_text, zen_text_offset=theta_aux_text_offset,
+                                           annotate=annotate)
+        else:
+            theta_radius = 1.5
+            # Draw the arc from the z-axis to the direction
+            arc_theta = Arc((0, 0), width=theta_radius, height=theta_radius, angle=0,
+                            theta1=np.degrees(np.pi / 2 - theta - np.radians(7.5)),
+                            theta2=np.degrees(np.pi / 2 - theta + np.radians(7.5)), color='k', linestyle='dotted',
+                            linewidth=1.5,
+                            alpha=0.6)
+            ax.add_patch(arc_theta)
+            path_patch_2d_to_3d(arc_theta, m=np.matmul(rotate(phi, 'z'), rotate(np.pi / 2, 'x')), z=0)
+            # Draw the two ends of the arca
+            start_angle_theta = np.pi * 0.5 - theta + np.radians(4.5)
+            end_angle_theta = np.pi * 0.5 - theta + np.radians(7.5)
+            start_x_theta = theta_radius / 2 * np.cos(start_angle_theta)
+            start_y_theta = theta_radius / 2 * np.sin(start_angle_theta)
+            end_x_theta = theta_radius / 2 * np.cos(end_angle_theta)
+            end_y_theta = theta_radius / 2 * np.sin(end_angle_theta)
+            arrow_theta = FancyArrowPatch((start_x_theta, start_y_theta), (end_x_theta, end_y_theta),
+                                          mutation_scale=200,
+                                          color='k', arrowstyle='->', alpha=0.6, linewidth=1.5,
+                                          connectionstyle="arc3,rad=0.0",
+                                          fill=True)
+            ax.add_patch(arrow_theta)
+            path_patch_2d_to_3d(arrow_theta, m=np.matmul(rotate(phi, 'z'), rotate(np.pi / 2, 'x')), z=0)
+            # The other end of the arc
+            start_angle_theta = (np.pi * 0.5 - theta) - np.radians(4.5)
+            end_angle_theta = (np.pi * 0.5 - theta) - np.radians(7.5)
+            start_x_theta = theta_radius / 2 * np.cos(start_angle_theta)
+            start_y_theta = theta_radius / 2 * np.sin(start_angle_theta)
+            end_x_theta = theta_radius / 2 * np.cos(end_angle_theta)
+            end_y_theta = theta_radius / 2 * np.sin(end_angle_theta)
+            arrow_theta = FancyArrowPatch((start_x_theta, start_y_theta), (end_x_theta, end_y_theta),
+                                          mutation_scale=200,
+                                          color='k', arrowstyle='->', alpha=0.6, linewidth=1.5,
+                                          connectionstyle="arc3,rad=0.0",
+                                          fill=True)
+            ax.add_patch(arrow_theta)
+            path_patch_2d_to_3d(arrow_theta, m=np.matmul(rotate(phi, 'z'), rotate(np.pi / 2, 'x')), z=0)
+            ax.text(x - 0.1, y - 0.1, z - 0.2, r'$\theta$', fontsize=18, color='k', alpha=1.0)
 
 
 if __name__ == "__main__":
@@ -131,25 +171,35 @@ if __name__ == "__main__":
     parser.add_argument("--annotate", action="store_true", help="Enable annotations")
     parser.add_argument("--solid", action="store_true", help="Draw the solid angle")
     parser.add_argument("--aux", action="store_true", help="Draw auxiliary lines")
+    parser.add_argument("--i", action="store_true", help="Draw the incident direction")
+    parser.add_argument("--o", action="store_true", help="Draw the outgoing direction")
+    parser.add_argument("--cone", action="store_true", help="Draw the cone")
 
     args = parser.parse_args()
 
     sns.set_theme(style="whitegrid", color_codes=True)
 
-    fig, ax = hemi_coord_figure(elev=25, azim=-40, surf=False, hc='c', ha=0.15, annotate=args.annotate)
+    axes = 'xyz'
+    if args.cone:
+        axes = ''
+    open_angle = args.cone
+    annotate = args.annotate and not args.cone
+    fig, ax = hemi_coord_figure(elev=25, azim=-40, surf=False, hc='c', ha=0.15, annotate=annotate, axes=axes)
 
-    draw_direction(ax, np.pi / 4, np.pi / 4, with_solid_angle=args.solid, annotate=args.annotate,
-                   auxiliary=args.aux, phi_aux_radius=1.0, theta_aux_radius=0.8, text=r'$\mathbf{i}$',
-                   theta_aux_text=r'$\theta_i$', phi_aux_text=r'$\phi_i$',
-                   theta_aux_text_offset=(-0.4, -0.45, -np.cos(np.pi / 4) * 0.35),
-                   phi_aux_text_offset=(0.1, -0.4, -np.cos(np.pi / 4)),
-                   solid_angle_text=r'$\omega_i$', c='r')
-    draw_direction(ax, np.pi / 5, np.pi / 3 + np.pi, with_solid_angle=args.solid, annotate=args.annotate,
-                   auxiliary=args.aux, phi_aux_radius=0.7, theta_aux_radius=0.7, text=r'$\mathbf{o}$',
-                   theta_aux_text=r'$\theta_o$', phi_aux_text=r'$\phi_o$',
-                   theta_aux_text_offset=(0.2, 0.35, -np.cos(np.pi / 5) * 0.45),
-                   phi_aux_text_offset=(0.45, 0.85, -np.cos(np.pi / 5)),
-                   solid_angle_text=r'$\omega_o$', c='m')
+    if args.i:
+        draw_direction(ax, np.pi / 4, np.pi / 4, with_solid_angle=args.solid, annotate=annotate,
+                       auxiliary=args.aux, phi_aux_radius=1.0, theta_aux_radius=0.8, text=r'$\mathbf{i}$',
+                       theta_aux_text=r'$\theta_i$', phi_aux_text=r'$\phi_i$',
+                       theta_aux_text_offset=(-0.4, -0.45, -np.cos(np.pi / 4) * 0.35),
+                       phi_aux_text_offset=(0.1, -0.4, -np.cos(np.pi / 4)),
+                       solid_angle_text=r'$\omega_i$', c='r', open_angle=open_angle)
+    if args.o:
+        draw_direction(ax, np.pi / 5, np.pi / 3 + np.pi, with_solid_angle=args.solid, annotate=annotate,
+                       auxiliary=args.aux, phi_aux_radius=0.7, theta_aux_radius=0.7, text=r'$\mathbf{o}$',
+                       theta_aux_text=r'$\theta_o$', phi_aux_text=r'$\phi_o$',
+                       theta_aux_text_offset=(0.2, 0.35, -np.cos(np.pi / 5) * 0.45),
+                       phi_aux_text_offset=(0.45, 0.85, -np.cos(np.pi / 5)),
+                       solid_angle_text=r'$\omega_o$', c='m', open_angle=open_angle)
 
     plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0, wspace=0.0, hspace=0.0)
     if args.gen:

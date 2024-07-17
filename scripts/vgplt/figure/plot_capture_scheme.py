@@ -19,7 +19,7 @@ def plot_points(ax, r=1.0, c='m', s=15, extra=False):
 
 
 def plot_patches(ax):
-    from plot_beckers import becker_plot_hemisphere, compute_becker
+    from .plot_beckers import becker_plot_hemisphere, compute_becker
     ks, rs, ts = compute_becker(10, True)
     becker_plot_hemisphere(ks, ts, ax)
 
