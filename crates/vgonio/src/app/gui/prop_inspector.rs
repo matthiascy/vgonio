@@ -18,7 +18,7 @@ use crate::{
         },
     },
     measure::{
-        mfd::{MeasuredMsfData, MeasuredNdfData},
+        mfd::{MeasuredGafData, MeasuredNdfData},
         params::NdfMeasurementMode,
         MeasurementSource,
     },
@@ -239,9 +239,9 @@ impl PropertyInspector {
                                                 }
                                             }
                                         }
-                                        MeasurementKind::Msf => {
+                                        MeasurementKind::Gaf => {
                                             let msf =
-                                                measured.downcast_ref::<MeasuredMsfData>().unwrap();
+                                                measured.downcast_ref::<MeasuredGafData>().unwrap();
                                             ui.label("θ:");
                                             ui.label(format!(
                                                 "{} ~ {}, every {}",

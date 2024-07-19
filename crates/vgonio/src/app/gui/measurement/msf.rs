@@ -1,23 +1,23 @@
 use crate::{
     app::gui::{event::EventLoopProxy, misc::range_step_size_inclusive_angle_ui},
-    measure::params::MsfMeasurementParams,
+    measure::params::GafMeasurementParams,
 };
 
-pub struct MsfMeasurementTab {
-    pub params: MsfMeasurementParams,
+pub struct GafMeasurementTab {
+    pub params: GafMeasurementParams,
     _event_loop: EventLoopProxy,
 }
 
-impl MsfMeasurementTab {
+impl GafMeasurementTab {
     pub fn new(event_loop: EventLoopProxy) -> Self {
         Self {
-            params: MsfMeasurementParams::default(),
+            params: GafMeasurementParams::default(),
             _event_loop: event_loop,
         }
     }
 
     pub fn ui(&mut self, ui: &mut egui::Ui) {
-        egui::Grid::new("mmsf_sim_grid")
+        egui::Grid::new("gaf_sim_grid")
             .num_columns(2)
             .show(ui, |ui| {
                 ui.label("Zenith angle θ:");

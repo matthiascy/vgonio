@@ -18,10 +18,10 @@ pub enum MeasurementParams {
     Bsdf(BsdfMeasurementParams),
     /// Measure the micro-facet area distribution function of a micro-surface.
     #[serde(alias = "microfacet-area-distribution-function")]
-    Adf(NdfMeasurementParams),
+    Ndf(NdfMeasurementParams),
     /// Measure the micro-facet masking/shadowing function.
     #[serde(alias = "microfacet-masking-shadowing-function")]
-    Msf(MsfMeasurementParams),
+    Gaf(GafMeasurementParams),
     /// Measure the micro-facet slope distribution function.
     #[serde(alias = "microfacet-slope-distribution-function")]
     Sdf(SdfMeasurementParams),
@@ -32,8 +32,8 @@ impl MeasurementParams {
     pub fn validate(self) -> Result<Self, VgonioError> {
         match self {
             MeasurementParams::Bsdf(bsdf) => Ok(Self::Bsdf(bsdf.validate()?)),
-            MeasurementParams::Adf(mfd) => Ok(Self::Adf(mfd.validate()?)),
-            MeasurementParams::Msf(mfs) => Ok(Self::Msf(mfs.validate()?)),
+            MeasurementParams::Ndf(mfd) => Ok(Self::Ndf(mfd.validate()?)),
+            MeasurementParams::Gaf(mfs) => Ok(Self::Gaf(mfs.validate()?)),
             MeasurementParams::Sdf(sdf) => Ok(Self::Sdf(sdf.validate()?)),
         }
     }
@@ -42,11 +42,11 @@ impl MeasurementParams {
     pub fn is_bsdf(&self) -> bool { matches!(self, Self::Bsdf { .. }) }
 
     /// Whether the measurement is a micro-facet distribution measurement.
-    pub fn is_microfacet_distribution(&self) -> bool { matches!(self, Self::Adf { .. }) }
+    pub fn is_microfacet_distribution(&self) -> bool { matches!(self, Self::Ndf { .. }) }
 
     /// Whether the measurement is a micro-surface shadowing-masking function
     /// measurement.
-    pub fn is_micro_surface_shadow_masking(&self) -> bool { matches!(self, Self::Msf { .. }) }
+    pub fn is_micro_surface_shadow_masking(&self) -> bool { matches!(self, Self::Gaf { .. }) }
 
     /// Get the BSDF measurement parameters.
     pub fn bsdf(&self) -> Option<&BsdfMeasurementParams> {
@@ -59,7 +59,7 @@ impl MeasurementParams {
 
     /// Get the micro-facet distribution measurement parameters.
     pub fn microfacet_distribution(&self) -> Option<&NdfMeasurementParams> {
-        if let MeasurementParams::Adf(mfd) = self {
+        if let MeasurementParams::Ndf(mfd) = self {
             Some(mfd)
         } else {
             None
@@ -67,8 +67,8 @@ impl MeasurementParams {
     }
 
     /// Get the micro-surface shadowing-masking function measurement parameters.
-    pub fn micro_surface_shadow_masking(&self) -> Option<&MsfMeasurementParams> {
-        if let MeasurementParams::Msf(mfd) = self {
+    pub fn micro_surface_shadow_masking(&self) -> Option<&GafMeasurementParams> {
+        if let MeasurementParams::Gaf(mfd) = self {
             Some(mfd)
         } else {
             None
@@ -189,8 +189,8 @@ impl MeasurementDescription {
     pub fn name(&self) -> &'static str {
         match self.params {
             MeasurementParams::Bsdf { .. } => "BSDF measurement",
-            MeasurementParams::Adf { .. } => "microfacet-distribution measurement",
-            MeasurementParams::Msf { .. } => "micro-surface-shadow-masking measurement",
+            MeasurementParams::Ndf { .. } => "microfacet-distribution measurement",
+            MeasurementParams::Gaf { .. } => "micro-surface-shadow-masking measurement",
             MeasurementParams::Sdf { .. } => "microfacet-slope-distribution measurement",
         }
     }

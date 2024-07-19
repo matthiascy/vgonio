@@ -230,7 +230,7 @@ pub enum MeasurementKind {
     /// Microfacet area distribution function measurement.
     Ndf = 0x01,
     /// Microfacet Masking-shadowing function measurement.
-    Msf = 0x02,
+    Gaf = 0x02,
     /// Microfacet slope distribution function measurement.
     Sdf = 0x03,
 }
@@ -242,10 +242,10 @@ impl Display for MeasurementKind {
                 write!(f, "BSDF")
             }
             MeasurementKind::Ndf => {
-                write!(f, "ADF")
+                write!(f, "NDF")
             }
-            MeasurementKind::Msf => {
-                write!(f, "MSF")
+            MeasurementKind::Gaf => {
+                write!(f, "GAF")
             }
             MeasurementKind::Sdf => {
                 write!(f, "SDF")
@@ -259,7 +259,7 @@ impl From<u8> for MeasurementKind {
         match value {
             0x00 => Self::Bsdf,
             0x01 => Self::Ndf,
-            0x02 => Self::Msf,
+            0x02 => Self::Gaf,
             0x03 => Self::Sdf,
             _ => panic!("Invalid measurement kind! {}", value),
         }
@@ -272,8 +272,8 @@ impl MeasurementKind {
     pub fn ascii_str(&self) -> &'static str {
         match self {
             MeasurementKind::Bsdf => "bsdf",
-            MeasurementKind::Ndf => "adf",
-            MeasurementKind::Msf => "msf",
+            MeasurementKind::Ndf => "ndf",
+            MeasurementKind::Gaf => "gaf",
             MeasurementKind::Sdf => "sdf",
         }
     }

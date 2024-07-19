@@ -1,5 +1,5 @@
 use crate::measure::{
-    mfd::{MeasuredMsfData, MeasuredNdfData},
+    mfd::{MeasuredGafData, MeasuredNdfData},
     params::NdfMeasurementMode,
     DataCarriedOnHemisphereSampler,
 };
@@ -365,7 +365,7 @@ pub fn plot_ndf(
 }
 
 pub fn plot_gaf(
-    gaf: &[&MeasuredMsfData],
+    gaf: &[&MeasuredGafData],
     wm: Sph2,
     phi_v: Radians,
     labels: Vec<String>,

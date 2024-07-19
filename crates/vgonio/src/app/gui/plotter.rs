@@ -20,7 +20,7 @@ use crate::{
         },
     },
     measure::{
-        mfd::{MeasuredMsfData, MeasuredNdfData},
+        mfd::{MeasuredGafData, MeasuredNdfData},
         Measurement,
     },
 };
@@ -692,7 +692,7 @@ impl PlottingWidget for PlotInspector {
                         }
                     }
                 }
-                MeasurementKind::Msf => {
+                MeasurementKind::Gaf => {
                     if let Some(extra) = &mut self.variant {
                         let variant = extra
                             .as_any_mut()
@@ -702,7 +702,7 @@ impl PlottingWidget for PlotInspector {
                             let measurement = cache.get_measurement(self.data_handle).unwrap();
                             measurement
                                 .measured
-                                .downcast_ref::<MeasuredMsfData>()
+                                .downcast_ref::<MeasuredGafData>()
                                 .unwrap()
                                 .params
                                 .zenith
@@ -842,7 +842,7 @@ impl PlottingWidget for PlotInspector {
         match self.data_handle.variant_id() {
             0 => MeasurementKind::Bsdf,
             1 => MeasurementKind::Ndf,
-            2 => MeasurementKind::Msf,
+            2 => MeasurementKind::Gaf,
             3 => MeasurementKind::Sdf,
             _ => {
                 unreachable!("Invalid measurement data handle variant id")

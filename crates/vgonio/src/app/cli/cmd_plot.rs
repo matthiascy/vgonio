@@ -2,7 +2,7 @@ use crate::{
     app::{cache::Cache, Config},
     measure::{
         bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
-        mfd::{MeasuredMsfData, MeasuredNdfData},
+        mfd::{MeasuredGafData, MeasuredNdfData},
     },
     pyplot::{
         plot_brdf_3d, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
@@ -362,7 +362,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                             .get_measurement(hdl)
                             .unwrap()
                             .measured
-                            .downcast_ref::<MeasuredMsfData>()
+                            .downcast_ref::<MeasuredGafData>()
                     })
                     .collect::<Vec<_>>();
                 let wm = Sph2::new(

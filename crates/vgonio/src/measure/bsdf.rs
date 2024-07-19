@@ -1636,6 +1636,7 @@ fn rtc_simulation_grid<'a>(
     _emitter: &'a Emitter,
     _cache: &'a RawCache,
 ) -> Box<dyn Iterator<Item = SingleSimResult>> {
+    // Temporary deactivated
     // for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
     //     if surf.is_none() || mesh.is_none() {
     //         log::debug!("Skipping surface {:?} and its mesh {:?}", surf,
@@ -1656,7 +1657,6 @@ fn rtc_simulation_grid<'a>(
     //     //     t.elapsed().as_secs_f32()
     //     // );
     // }
-    todo!("Grid ray tracing is not yet implemented")
 }
 
 /// Brdf measurement of a microfacet surface using the OptiX ray tracing.

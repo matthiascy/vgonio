@@ -602,10 +602,10 @@ impl VgonioGuiApp {
                         output_opts,
                     } => {
                         let data = match params {
-                            MeasurementParams::Adf(params) => self.cache.read(|cache| {
+                            MeasurementParams::Ndf(params) => self.cache.read(|cache| {
                                 measure::mfd::measure_area_distribution(params, &surfaces, cache)
                             }),
-                            MeasurementParams::Msf(params) => self.cache.read(|cache| {
+                            MeasurementParams::Gaf(params) => self.cache.read(|cache| {
                                 measure::mfd::measure_masking_shadowing_function(
                                     params, &surfaces, cache,
                                 )

@@ -169,7 +169,7 @@ impl Measurement {
                     let ndf = self.measured.downcast_ref::<MeasuredNdfData>().unwrap();
                     ndf.write_as_exr(&filepath, &self.timestamp, *resolution)?
                 }
-                MeasurementKind::Msf => {
+                MeasurementKind::Gaf => {
                     todo!("Writing MSF to EXR is not supported yet.");
                 }
                 MeasurementKind::Sdf => {

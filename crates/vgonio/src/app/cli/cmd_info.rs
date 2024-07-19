@@ -4,7 +4,7 @@ use crate::{
         Config,
     },
     measure::params::{
-        BsdfMeasurementParams, MeasurementDescription, MeasurementParams, MsfMeasurementParams,
+        BsdfMeasurementParams, GafMeasurementParams, MeasurementDescription, MeasurementParams,
         NdfMeasurementMode, NdfMeasurementParams,
     },
 };
@@ -44,7 +44,7 @@ impl Display for NdfMeasurementParams {
     }
 }
 
-impl Display for MsfMeasurementParams {
+impl Display for GafMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -98,7 +98,7 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioEr
         );
         println!(
             "Microfacet shadowing and masking default parameters:\n\n{}",
-            MsfMeasurementParams::default()
+            GafMeasurementParams::default()
         );
         // TODO: print default parameters for brdf measurement (prettified
         // version)
@@ -108,14 +108,14 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioEr
         println!("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
         [
             MeasurementDescription {
-                params: MeasurementParams::Adf(NdfMeasurementParams::default()),
+                params: MeasurementParams::Ndf(NdfMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),
                 ],
             },
             MeasurementDescription {
-                params: MeasurementParams::Msf(MsfMeasurementParams::default()),
+                params: MeasurementParams::Gaf(GafMeasurementParams::default()),
                 surfaces: vec![
                     PathBuf::from("path/to/surface1"),
                     PathBuf::from("path/to/surface2"),

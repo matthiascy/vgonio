@@ -1,7 +1,7 @@
 use crate::{
     fitting::{FittingProblem, FittingReport},
     measure::{
-        mfd::{MeasuredMsfData, MeasuredNdfData},
+        mfd::{MeasuredGafData, MeasuredNdfData},
         params::NdfMeasurementMode,
     },
 };
@@ -27,7 +27,7 @@ pub enum MfdFittingData<'a> {
     /// The measured NDF data.
     Ndf(&'a MeasuredNdfData),
     /// The measured MSF data.
-    Msf(&'a MeasuredMsfData),
+    Msf(&'a MeasuredGafData),
 }
 
 /// Fitting procedure trying to find different models for the measured
@@ -199,7 +199,7 @@ impl<'a, const I: Isotropy> NdfFittingProblemProxy<'a, I> {
 
 /// Proxy for the MSF fitting problem.
 struct MsfFittingProblemProxy<'a, const I: Isotropy> {
-    measured: &'a MeasuredMsfData,
+    measured: &'a MeasuredGafData,
     model: Box<dyn MicrofacetDistribution<Params = [f64; 2]>>,
 }
 
@@ -439,7 +439,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for MsfFittingProblemProxy<'a, { Isot
 }
 
 fn calc_msf_residuals<'a>(
-    measured: &'a MeasuredMsfData,
+    measured: &'a MeasuredGafData,
     model: &'a dyn MicrofacetDistribution<Params = [f64; 2]>,
 ) -> impl IntoIterator<Item = f64> + 'a {
     let theta_step_count = measured.params.zenith.step_count_wrapped();
@@ -458,7 +458,7 @@ fn calc_msf_residuals<'a>(
 }
 
 fn calc_msf_jacobian(
-    measured: &MeasuredMsfData,
+    measured: &MeasuredGafData,
     model: &dyn MicrofacetDistribution<Params = [f64; 2]>,
 ) -> Box<[f64]> {
     let theta_step_count = measured.params.zenith.step_count_wrapped();

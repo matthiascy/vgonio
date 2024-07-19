@@ -12,7 +12,7 @@ use crate::{
         gui::{
             event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
             measurement::{
-                bsdf::BsdfMeasurementTab, msf::MsfMeasurementTab, ndf::NdfMeasurementTab,
+                bsdf::BsdfMeasurementTab, msf::GafMeasurementTab, ndf::NdfMeasurementTab,
                 sdf::SdfMeasurementTab,
             },
             misc,
@@ -87,7 +87,7 @@ pub fn measurement_kind_selectable_ui(kind: &mut MeasurementKind, ui: &mut egui:
         ui.label("Measurement kind: ");
         ui.selectable_value(kind, MeasurementKind::Bsdf, "BSDF");
         ui.selectable_value(kind, MeasurementKind::Ndf, "NDF");
-        ui.selectable_value(kind, MeasurementKind::Msf, "MSF");
+        ui.selectable_value(kind, MeasurementKind::Gaf, "MSF");
         ui.selectable_value(kind, MeasurementKind::Sdf, "SDF");
     });
 }
@@ -97,7 +97,7 @@ pub struct MeasurementDialog {
     selector: SurfaceSelector,
     tab_bsdf: BsdfMeasurementTab,
     tab_adf: NdfMeasurementTab,
-    tab_msf: MsfMeasurementTab,
+    tab_msf: GafMeasurementTab,
     tab_sdf: SdfMeasurementTab,
     /// Whether the dialog is open.
     is_open: bool,
@@ -129,7 +129,7 @@ impl MeasurementDialog {
             selector: SurfaceSelector::multiple(),
             tab_bsdf: BsdfMeasurementTab::new(event_loop.clone()),
             tab_adf: NdfMeasurementTab::new(event_loop.clone()),
-            tab_msf: MsfMeasurementTab::new(event_loop.clone()),
+            tab_msf: GafMeasurementTab::new(event_loop.clone()),
             tab_sdf: SdfMeasurementTab::new(),
             is_open: false,
             format: OutputFormat::Vgmo,
@@ -293,7 +293,7 @@ impl MeasurementDialog {
                         )
                     }
                     MeasurementKind::Ndf => self.tab_adf.ui(ui),
-                    MeasurementKind::Msf => self.tab_msf.ui(ui),
+                    MeasurementKind::Gaf => self.tab_msf.ui(ui),
                     MeasurementKind::Sdf => {
                         self.tab_sdf.ui(ui);
                     }
@@ -310,7 +310,7 @@ impl MeasurementDialog {
                     ui.horizontal_wrapped(|ui| {
                         ui.label("Output format: ");
                         ui.selectable_value(&mut self.format, OutputFormat::Vgmo, "vgmo");
-                        if self.kind != MeasurementKind::Msf {
+                        if self.kind != MeasurementKind::Gaf {
                             ui.selectable_value(&mut self.format, OutputFormat::Exr, "exr");
                         }
                         ui.selectable_value(&mut self.format, OutputFormat::VgmoExr, "vgmo+exr");
@@ -388,8 +388,8 @@ impl MeasurementDialog {
                             MeasurementKind::Bsdf => {
                                 MeasurementParams::Bsdf(self.tab_bsdf.params.clone())
                             }
-                            MeasurementKind::Ndf => MeasurementParams::Adf(self.tab_adf.params),
-                            MeasurementKind::Msf => MeasurementParams::Msf(self.tab_msf.params),
+                            MeasurementKind::Ndf => MeasurementParams::Ndf(self.tab_adf.params),
+                            MeasurementKind::Gaf => MeasurementParams::Gaf(self.tab_msf.params),
                             MeasurementKind::Sdf => MeasurementParams::Sdf(self.tab_sdf.params),
                             _ => {
                                 unreachable!("Invalid measurement kind")

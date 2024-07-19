@@ -10,7 +10,7 @@ use crate::{
             plotter::{angle_knob, Curve, VariantData},
         },
     },
-    measure::{mfd::MeasuredMsfData, Measurement},
+    measure::{mfd::MeasuredGafData, Measurement},
 };
 use base::{
     range::RangeByStepSizeInclusive,
@@ -73,12 +73,12 @@ impl VariantData for MaskingShadowingExtra {
         let measurement = cache.get_measurement(data).unwrap();
         assert_eq!(
             measurement.measured.kind(),
-            MeasurementKind::Msf,
+            MeasurementKind::Gaf,
             "Wrong measurement kind!"
         );
         let msf = measurement
             .measured
-            .downcast_ref::<MeasuredMsfData>()
+            .downcast_ref::<MeasuredGafData>()
             .unwrap();
         let (azimuth, zenith) = msf.measurement_range();
         self.azimuth_range = azimuth;

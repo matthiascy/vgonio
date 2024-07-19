@@ -7,7 +7,7 @@ use crate::fitting::{
 use crate::fitting::{FittingReport, MfdFittingData};
 use crate::measure::{
     bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
-    mfd::{MeasuredMsfData, MeasuredNdfData},
+    mfd::{MeasuredGafData, MeasuredNdfData},
 };
 use crate::{
     app::{
@@ -215,7 +215,7 @@ impl VgonioGui {
                             self.properties.clone(),
                             self.event_loop.clone(),
                         )),
-                        MeasurementKind::Msf => Box::new(PlotInspector::new_msf(
+                        MeasurementKind::Gaf => Box::new(PlotInspector::new_msf(
                             prop.measured.get(data).unwrap().name.clone(),
                             *data,
                             self.cache.clone(),
@@ -288,10 +288,10 @@ impl VgonioGui {
                                 measurement.measured.kind()
                             );
                             let data = match measurement.measured.kind() {
-                                MeasurementKind::Msf => MfdFittingData::Msf(
+                                MeasurementKind::Gaf => MfdFittingData::Msf(
                                     measurement
                                         .measured
-                                        .downcast_ref::<MeasuredMsfData>()
+                                        .downcast_ref::<MeasuredGafData>()
                                         .unwrap(),
                                 ),
                                 MeasurementKind::Ndf => MfdFittingData::Ndf(

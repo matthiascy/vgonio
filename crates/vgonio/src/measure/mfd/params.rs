@@ -196,7 +196,7 @@ impl NdfMeasurementParams {
 /// Parameters for microfacet geometric attenuation (masking/shadowing) function
 /// measurement.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct MsfMeasurementParams {
+pub struct GafMeasurementParams {
     /// Azimuthal angle sampling range.
     pub azimuth: RangeByStepSizeInclusive<Radians>,
     /// Polar angle sampling range.
@@ -208,7 +208,7 @@ pub struct MsfMeasurementParams {
     pub strict: bool,
 }
 
-impl Default for MsfMeasurementParams {
+impl Default for GafMeasurementParams {
     fn default() -> Self {
         Self {
             azimuth: DEFAULT_AZIMUTH_RANGE,
@@ -219,7 +219,7 @@ impl Default for MsfMeasurementParams {
     }
 }
 
-impl MsfMeasurementParams {
+impl GafMeasurementParams {
     /// Returns the number of samples with the current parameters.
     pub fn samples_count(&self) -> usize {
         (self.azimuth.step_count_wrapped() * self.zenith.step_count_wrapped()).pow(2)

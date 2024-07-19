@@ -6,7 +6,7 @@ use crate::{
     },
     measure::{
         bsdf::MeasuredBsdfData,
-        mfd::{MeasuredMsfData, MeasuredNdfData},
+        mfd::{MeasuredGafData, MeasuredNdfData},
         Measurement,
     },
 };
@@ -33,7 +33,7 @@ pub mod vgmo {
         },
         mfd::MeasuredSdfData,
         params::{
-            BsdfMeasurementParams, MsfMeasurementParams, NdfMeasurementMode, NdfMeasurementParams,
+            BsdfMeasurementParams, GafMeasurementParams, NdfMeasurementMode, NdfMeasurementParams,
             SdfMeasurementParams, SimulationKind,
         },
     };
@@ -65,7 +65,7 @@ pub mod vgmo {
     pub enum VgmoHeaderExt {
         Bsdf { params: BsdfMeasurementParams },
         Ndf { params: NdfMeasurementParams },
-        Gaf { params: MsfMeasurementParams },
+        Gaf { params: GafMeasurementParams },
         Sdf,
     }
 
@@ -85,8 +85,8 @@ pub mod vgmo {
                     params: ndf.params.clone(),
                 }
             }
-            MeasurementKind::Msf => {
-                let msf = data.downcast_ref::<MeasuredMsfData>().unwrap();
+            MeasurementKind::Gaf => {
+                let msf = data.downcast_ref::<MeasuredGafData>().unwrap();
                 VgmoHeaderExt::Gaf {
                     params: msf.params.clone(),
                 }
@@ -147,7 +147,7 @@ pub mod vgmo {
                         }
                     }
                     Self::Gaf { params } => {
-                        writer.write_all(&[MeasurementKind::Msf as u8])?;
+                        writer.write_all(&[MeasurementKind::Gaf as u8])?;
                         write_adf_or_msf_params_to_vgmo(
                             &params.azimuth,
                             &params.zenith,
@@ -183,7 +183,7 @@ pub mod vgmo {
                     .map(|params| Ok(Self::Bsdf { params }))?,
                 MeasurementKind::Ndf => NdfMeasurementParams::read_from_vgmo(version, reader)
                     .map(|params| Ok(Self::Ndf { params }))?,
-                MeasurementKind::Msf => MsfMeasurementParams::read_from_vgmo(version, reader)
+                MeasurementKind::Gaf => GafMeasurementParams::read_from_vgmo(version, reader)
                     .map(|params| Ok(Self::Gaf { params }))?,
                 MeasurementKind::Sdf => Ok(Self::Sdf),
                 _ => {
@@ -242,7 +242,7 @@ pub mod vgmo {
                     header.meta.compression,
                 )
                 .map_err(ReadFileErrorKind::Parse)?;
-                Ok(Box::new(MeasuredMsfData {
+                Ok(Box::new(MeasuredGafData {
                     params: *params,
                     samples,
                 }))
@@ -291,7 +291,7 @@ pub mod vgmo {
         let start = std::time::Instant::now();
 
         match measured.kind() {
-            mfd @ (MeasurementKind::Ndf | MeasurementKind::Msf) => {
+            mfd @ (MeasurementKind::Ndf | MeasurementKind::Gaf) => {
                 let (samples, cols) = match mfd {
                     MeasurementKind::Ndf => {
                         let ndf = measured.downcast_ref::<MeasuredNdfData>().unwrap();
@@ -303,8 +303,8 @@ pub mod vgmo {
                         };
                         (&ndf.samples, cols)
                     }
-                    MeasurementKind::Msf => {
-                        let msf = measured.downcast_ref::<MeasuredMsfData>().unwrap();
+                    MeasurementKind::Gaf => {
+                        let msf = measured.downcast_ref::<MeasuredGafData>().unwrap();
                         (&msf.samples, msf.params.zenith.step_count_wrapped())
                     }
                     _ => {
@@ -668,7 +668,7 @@ pub mod vgmo {
         }
     }
 
-    impl MsfMeasurementParams {
+    impl GafMeasurementParams {
         // TODO: resolve resolution and strict
         /// Reads the MSF measurement parameters from the given reader.
         pub fn read_from_vgmo<R: Read + Seek>(
@@ -688,7 +688,7 @@ pub mod vgmo {
                     let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
                     debug_assert_eq!(
                         sample_count as usize,
-                        MsfMeasurementParams::expected_samples_count(&azimuth, &zenith)
+                        GafMeasurementParams::expected_samples_count(&azimuth, &zenith)
                     );
                     Ok(Self {
                         azimuth,

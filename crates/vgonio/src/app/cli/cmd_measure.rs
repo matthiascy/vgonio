@@ -161,7 +161,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                 }
                 cache.read(|cache| measure::bsdf::measure_bsdf_rt(params, &surfaces, cache))
             }
-            MeasurementParams::Adf(measurement) => {
+            MeasurementParams::Ndf(measurement) => {
                 match &measurement.mode {
                     NdfMeasurementMode::ByPoints { azimuth, zenith } => {
                         println!(
@@ -193,7 +193,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     measure::mfd::measure_area_distribution(measurement, &surfaces, cache)
                 })
             }
-            MeasurementParams::Msf(measurement) => {
+            MeasurementParams::Gaf(measurement) => {
                 println!(
                     "  {}>{} Measuring microfacet masking-shadowing function:
     • parameters:
