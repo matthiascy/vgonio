@@ -14,7 +14,7 @@ members = [
 [workspace.package]
 authors = ["Yang Chen <y.chen-14@tudelft.nl>"]
 edition = "2021"
-version = "0.3.0"
+version = "0.3.1"
 
 [workspace.dependencies]
 ahash = "0.8"
