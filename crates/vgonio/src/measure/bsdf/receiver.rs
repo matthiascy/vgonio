@@ -191,6 +191,7 @@ impl Receiver {
         {
             use base::optics::fresnel;
             use rayon::prelude::*;
+            use std::sync::atomic::AtomicU32;
 
             log::debug!(
                 "SingleSimResult at {}, {} rays",
