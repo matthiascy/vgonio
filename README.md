@@ -14,10 +14,6 @@ thorough analysis of the material's behaviour under various lighting conditions.
 * **BRDF Estimation**: By combining the NDF and GAF, VGonio can calculate the Bidirectional Reflectance Distribution
   Function (BRDF) of a material.
 
-## Download
-
-You can download the latest version of VGonio from the [releases page](https://github.com/matthiascy/vgonio/releases).
-
 ## Documentation
 
 To support latex, when generating the documentation, extra HTML header content will be added. With `cargo doc` or
@@ -26,6 +22,10 @@ applied globally (applies to each dependent crate), it will mess up dependencies
 `--no-deps` to the `cargo doc`, or use `cargo rustdoc` to generate documentation only for the root crate(this crate).
 For more information, see cargo issue [#331](https://github.com/rust-lang/cargo/issues/331)
 and rust pull request [#95691](https://github.com/rust-lang/rust/pull/95691).
+
+## Installation
+
+You can download the latest version of VGonio from the [releases page](https://github.com/matthiascy/vgonio/releases).
 
 ## Building from Source
 
@@ -60,15 +60,14 @@ vgonio measure [OPTIONS]
 fit ~/Documents/virtual-gonio/output/test-data-d2/bsdf_aluminium3bar100_2024-02-28T21-58-41.vgmo --normalize --astart 0.175 --astop 0.225 --astep 0.001 -e nlls --model beckmann
 ```
 
-## Environment Variables
+## Contributing
 
-* `ORIGINAL_MAX`
-* `DENSE`
+Found a bug or have a feature suggestion? Your feedback is highly appreciated!
 
-## Contributions
-
-Contributions are welcome!
-For feature requests and bug reports, please submit an issue.
-For code contributions, please submit a pull request.
+Share your thoughts and report any issues on the [issue tracker](https://github.com/matthiascy/vgonio/issues).
 
 ## License
+
+VGonio is distributed under the terms of the Apache License (Version 2.0).
+
+See [LICENSE](LICENSE) for details.
