@@ -57,7 +57,7 @@ As VGonio relies on some unstable features, you need to use the nightly version 
 cloning the repository, you can switch to the nightly version specified in the `rust-toolchain.toml` file by running:
 
 ```shell
-rustup override set $(cat rust-toolchain.toml)
+rustup component add --toolchain nightly-2024-06-28
 ```
 
 ### Installing Dependencies
