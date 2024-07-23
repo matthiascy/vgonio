@@ -7,6 +7,6 @@
 /.pyenv
 reflectance_*.csv
 debug_*/
-**.png
+/**.png
 **/__pycache__
 **.so**
