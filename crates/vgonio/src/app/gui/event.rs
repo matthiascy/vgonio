@@ -22,6 +22,7 @@ use base::{
     units::Degrees,
     MeasurementKind,
 };
+use std::path::PathBuf;
 use surf::{MicroSurface, MicroSurfaceMesh};
 use uuid::Uuid;
 
@@ -54,7 +55,7 @@ impl EventLoopProxy {
 pub enum VgonioEvent {
     Quit,
     RequestRedraw,
-    OpenFiles(Vec<rfd::FileHandle>),
+    OpenFiles(Vec<PathBuf>),
     ToggleSurfaceVisibility,
     CheckVisibleFacets {
         m_azimuth: Degrees,

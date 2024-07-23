@@ -56,11 +56,7 @@ impl FileDragDrop {
         if !self.files.is_empty() {
             let files = std::mem::take(&mut self.files)
                 .into_iter()
-                .filter_map(|f| {
-                    f.path
-                        .filter(|p| p.is_file() && p.exists())
-                        .map(rfd::FileHandle::from)
-                })
+                .filter_map(|f| f.path)
                 .collect::<Vec<_>>();
 
             self.event_loop.send_event(VgonioEvent::OpenFiles(files));

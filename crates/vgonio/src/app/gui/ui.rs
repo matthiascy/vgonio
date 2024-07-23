@@ -1,3 +1,4 @@
+use super::{docking::DockSpace, event::EventResponse};
 #[cfg(feature = "fitting")]
 use crate::fitting::{
     FittedModel, FittingProblem, FittingProblemKind, MicrofacetBrdfFittingProblem,
@@ -37,14 +38,13 @@ use base::{
     MeasurementKind,
 };
 use bxdf::brdf::BxdfFamily;
+use egui_file_dialog::{DialogMode, FileDialog, FileDialogConfig};
 use gfxkit::context::GpuContext;
 use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
 use surf::MicroSurface;
-
-use super::{docking::DockSpace, event::EventResponse};
 
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
@@ -61,6 +61,9 @@ pub struct VgonioGui {
     // pub simulation_workspace: SimulationWorkspace, // TODO: make private, simplify access
     /// The drag and drop state.
     drag_drop: FileDragDrop,
+
+    file_dialog: FileDialog,
+    export: Option<Handle<Measurement>>,
 
     // Gizmo inside the viewport for navigating the scene.
     // navigator: NavigationGizmo,
@@ -93,6 +96,17 @@ impl VgonioGui {
     ) -> Self {
         log::info!("Initializing UI ...");
         let properties = Arc::new(RwLock::new(PropertyData::new()));
+        let file_dialog = FileDialog::new()
+            .default_pos((120.0, 120.0))
+            .default_size((800.0, 370.0))
+            .initial_directory(
+                config
+                    .user_data_dir()
+                    .unwrap_or_else(|| config.sys_data_dir())
+                    .into(),
+            )
+            .title("Open files");
+
         Self {
             config,
             event_loop: event_loop.clone(),
@@ -115,6 +129,8 @@ impl VgonioGui {
             properties,
             gpu_ctx: gpu,
             notif: NotifySystem::new(),
+            file_dialog,
+            export: None,
         }
     }
 
@@ -122,7 +138,7 @@ impl VgonioGui {
     ///
     /// Returns [`EventResponse::Ignored`] if the event was not handled,
     /// otherwise returns [`EventResponse::Handled`].
-    pub fn on_user_event(&mut self, event: VgonioEvent) -> EventResponse {
+    pub fn on_user_event(&mut self, event: VgonioEvent, ctx: &egui::Context) -> EventResponse {
         match &event {
             VgonioEvent::OpenFiles(paths) => {
                 self.on_open_files(paths);
@@ -158,32 +174,8 @@ impl VgonioGui {
                 }
             },
             VgonioEvent::ExportMeasurement(meas) => {
-                use rfd::AsyncFileDialog;
-                let dir = std::env::current_dir().unwrap();
-                let task = AsyncFileDialog::new().set_directory(dir).save_file();
-                let event_loop = self.event_loop.clone();
-                let hdl = std::thread::spawn(move || pollster::block_on(task)).join();
-                if let Ok(Some(hdl)) = hdl {
-                    self.cache.read(|cache| {
-                        let measured = cache.get_measurement(*meas).unwrap();
-                        crate::io::write_single_measured_data_to_file(
-                            measured,
-                            FileEncoding::Binary,
-                            CompressionScheme::Zlib,
-                            Some(512),
-                            hdl.inner(),
-                        )
-                        .map_err(|err| {
-                            log::error!("Failed to write measured data to file: {}", err);
-                        })
-                        .unwrap_or_default();
-                        event_loop.send_event(VgonioEvent::Notify {
-                            kind: NotifyKind::Info,
-                            text: format!("Export measurement to {:?}", hdl.path()),
-                            time: 3.0,
-                        });
-                    });
-                }
+                self.file_dialog.save_file();
+                self.export = Some(*meas);
                 EventResponse::Handled
             }
             VgonioEvent::Graphing {
@@ -331,6 +323,34 @@ impl VgonioGui {
     // }
 
     pub fn show(&mut self, ctx: &egui::Context, theme_kind: ThemeKind) {
+        self.file_dialog.update(ctx);
+
+        if let Some(files) = self.file_dialog.take_selected_multiple() {
+            self.event_loop.send_event(VgonioEvent::OpenFiles(files));
+        }
+
+        if self.file_dialog.mode() == DialogMode::SaveFile {
+            if let Some(filepath) = self.file_dialog.update(ctx).selected() {
+                if let Some(meas) = self.export.take() {
+                    log::debug!("Exporting measurement to {:?}", filepath);
+                    self.cache.read(|cache| {
+                        let measured = cache.get_measurement(meas).unwrap();
+                        crate::io::write_single_measured_data_to_file(
+                            measured,
+                            FileEncoding::Binary,
+                            CompressionScheme::Zlib,
+                            Some(512),
+                            filepath,
+                        )
+                        .map_err(|err| {
+                            log::error!("Failed to write measured data to file: {}", err);
+                        })
+                        .unwrap_or_default();
+                    });
+                }
+            }
+        }
+
         egui::TopBottomPanel::top("vgonio_top_panel")
             .exact_height(28.0)
             .show(ctx, |ui| {
@@ -350,7 +370,7 @@ impl VgonioGui {
         }
     }
 
-    pub fn on_open_files(&mut self, files: &[rfd::FileHandle]) {
+    pub fn on_open_files(&mut self, files: &[PathBuf]) {
         log::info!("Process UI opening files: {:?}", files);
         let (surfaces, measurements) = self.open_files(files);
         self.cache.read(|cache| {
@@ -392,23 +412,11 @@ impl VgonioGui {
                     });
                 }
             });
+
             if ui.button("Open...").clicked() {
-                use rfd::AsyncFileDialog;
-                let dir = self
-                    .config
-                    .user_data_dir()
-                    .unwrap_or_else(|| self.config.sys_data_dir());
-                let task = AsyncFileDialog::new().set_directory(dir).pick_files();
-                let event_loop = self.event_loop.clone();
-                std::thread::spawn(move || {
-                    pollster::block_on(async {
-                        let file_handles = task.await;
-                        if let Some(hds) = file_handles {
-                            event_loop.send_event(VgonioEvent::OpenFiles(hds));
-                        }
-                    })
-                });
+                self.file_dialog.select_multiple();
             }
+
             ui.menu_button("Recent...", |ui| {
                 for i in 0..10 {
                     if ui.button(format!("item {i}")).clicked() {
@@ -516,14 +524,13 @@ impl VgonioGui {
 
     fn open_files(
         &mut self,
-        files: &[rfd::FileHandle],
+        files: &[PathBuf],
     ) -> (Vec<Handle<MicroSurface>>, Vec<Handle<Measurement>>) {
         let mut surfaces = vec![];
         let mut measurements = vec![];
         // TODO: handle other file types
-        for file in files {
-            let path: PathBuf = file.into();
-            let ext = match path.extension() {
+        for filepath in files {
+            let ext = match filepath.extension() {
                 None => None,
                 Some(s) => s.to_str().map(|s| s.to_lowercase()),
             };
@@ -532,9 +539,9 @@ impl VgonioGui {
                 match ext.as_str() {
                     "vgmo" => {
                         // Micro-surface measurement data
-                        log::debug!("Opening micro-surface measurement output: {:?}", path);
+                        log::debug!("Opening micro-surface measurement output: {:?}", filepath);
                         self.cache.write(|cache| {
-                            match cache.load_micro_surface_measurement(&self.config, &path) {
+                            match cache.load_micro_surface_measurement(&self.config, &filepath) {
                                 Ok(hdl) => {
                                     measurements.push(hdl);
                                 }
@@ -549,9 +556,9 @@ impl VgonioGui {
                     }
                     "vgms" | "txt" | "os3d" => {
                         // Micro-surface profile
-                        log::debug!("Opening micro-surface profile: {:?}", path);
+                        log::debug!("Opening micro-surface profile: {:?}", filepath);
                         self.cache.write(|cache| {
-                            match cache.load_micro_surface(&self.config, &path) {
+                            match cache.load_micro_surface(&self.config, &filepath) {
                                 Ok((surf, _)) => {
                                     let _ = cache
                                         .create_micro_surface_renderable_mesh(&self.gpu_ctx, surf)
@@ -573,7 +580,7 @@ impl VgonioGui {
                     _ => {}
                 }
             } else {
-                log::warn!("File {:?} has no extension, ignoring", path);
+                log::warn!("File {:?} has no extension, ignoring", filepath);
             }
         }
         (surfaces, measurements)

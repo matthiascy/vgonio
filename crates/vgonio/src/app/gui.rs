@@ -457,7 +457,7 @@ impl VgonioGuiApp {
         use VgonioEvent::*;
 
         // Handle events from the UI.
-        match self.ui.on_user_event(event) {
+        match self.ui.on_user_event(event, self.gui_ctx.ctx()) {
             EventResponse::Handled => (),
             EventResponse::Ignored(event) => {
                 match event {
