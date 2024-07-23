@@ -1,64 +1,177 @@
 # VGonio
 
-VGonio is an advanced tool designed to measure the geometric properties of materials described by microfacet-based BRDF
+VGonio is a tool designed to measure the geometric properties of materials described by microfacet-based BRDF
 models. By analyzing a material's microstructure, VGonio can estimate the Normal Distribution Function (NDF), the
 Geometric Attenuation Function (GAF), and the Bidirectional Reflectance Distribution Function (BRDF). This tool is
 specifically created to tackle the complexities associated with multiple scattering phenomena in BRDF models, offering a
-thorough analysis of the material's behaviour under various lighting conditions.
+thorough analysis of the material's behaviour.
 
-## Features
+## Status
 
-* **NDF Estimation**: VGonio can estimate the Normal Distribution Function (NDF) of a material by analyzing its
-  microstructure.
-* **GAF Estimation**: The Geometric Attenuation Function (GAF) is another essential parameter that VGonio can estimate.
-* **BRDF Estimation**: By combining the NDF and GAF, VGonio can calculate the Bidirectional Reflectance Distribution
-  Function (BRDF) of a material.
+VGonio is currently in active development. There are still many potential features and improvements that can be made,
+and the API is subject to change. *Expect breaking changes!*
+
+Current features that are being worked on:
+
+* Data fitting
+* Multiple scattering data analysis
+* Wave optics simulation
+
+## File Organization
+
+* `crates/` - Contains the source code for the VGonio library.
+* `scripts/` - Contains scripts for generating figures from collected data.
+* `meas/` - Contains the descriptions of the measurements.
 
 ## Documentation
 
-To support latex, when generating the documentation, extra HTML header content will be added. With `cargo doc` or
-`cargo rustdoc`, the `rustdocflags` defined in `./cargo/config.toml` will be used. With `cargo doc`, `rustdocflags` is
-applied globally (applies to each dependent crate), it will mess up dependencies. Possible workarounds are to either add
+The documentation can be built using `cargo doc -p vgonio --open --no-deps`. The documentation is generated using
+`rustdoc` and can be viewed in the browser. Extra HTML header content will be added to support latex math rendering by
+setting the `rustdocflags` in
+`./cargo/config.toml`.
+
+Do **NOT** use `cargo doc --open` as it will generate documentation for all crates in the workspace, which will mess up
+documentation dependencies.
+
+Possible workarounds are to either add
 `--no-deps` to the `cargo doc`, or use `cargo rustdoc` to generate documentation only for the root crate(this crate).
 For more information, see cargo issue [#331](https://github.com/rust-lang/cargo/issues/331)
 and rust pull request [#95691](https://github.com/rust-lang/rust/pull/95691).
 
-## Installation
-
-You can download the latest version of VGonio from the [releases page](https://github.com/matthiascy/vgonio/releases).
-
 ## Building from Source
 
-### Requirements
+You can download the latest source code of VGonio from
+the [releases page](https://github.com/matthiascy/vgonio/releases)
+or clone the repository using Git:
+
+```shell
+git clone https://github.com/matthiascy/vgonio.git
+```
+
+### Installing Rust
+
+VGonio is written in Rust, so you need to have Rust installed on your system to build it. You can install Rust by
+following the instructions on the [official website](https://www.rust-lang.org/tools/install).
+
+As VGonio relies on some unstable features, you need to use the nightly version of Rust. After installing Rust and
+cloning the repository, you can switch to the nightly version specified in the `rust-toolchain.toml` file by running:
+
+```shell
+rustup override set $(cat rust-toolchain.toml)
+```
+
+### Installing Dependencies
+
+Currently, VGonio depends on the following libraries:
 
 * [shaderc](https://github.com/google/shaderc)
-* [Embree3](https://www.embree.org/)
-* `zlib`/`zlib-ng`
+* [Embree v3.13.5](https://www.embree.org/):
+  You can simply download the precompiled binaries from the [Embree website](https://www.embree.org/downloads.html)
+  and extract them to the root directory of VGonio.
+* [zlib](https://zlib.net/) or [zlib-ng](https://github.com/zlib-ng/zlib-ng)
 
 The default cargo build uses [sccache](https://github.com/mozilla/sccache) and [mold](https://github.com/rui314/mold) to
 speed up the build process. If you don't have them installed, you can disable them by commenting out the `rustc_wrapper`
-and `rustflags` in `./cargo/config.toml`.
+and `rustflags` in `./cargo/config.toml` under the `[build]` section.
 
 ```toml
-rustc_wrapper = ["sccache"] # use sccache as compiler
+[build]
+rustc_wrapper = ["sccache"] # use sccache as compiler wrapper
 rustflags = ["-Clink-arg=-fuse-ld=mold"] # use mold as linker
 ```
 
+### Compiling
+
+Running the following command in the root directory of the repository will compile the VGonio tool:
+
+```shell
+cargo build --release
+```
+
+Once the build process is complete, you can find the compiled binaries in the `target/release` directory.
+
+### Configurations
+
+The VGonio tool uses a configuration file to specify the data directories and other settings.
+
+VGonio can run with different configuration files:
+
+1. You specify the configuration file while launching the application. It will read the file if it exists.
+2. If there is a file named as `vgonio.toml` exists in the working directory where the application launched, it will try
+   to read this config file.
+3. If 1. and 2. failed, it will read the config file `vgonio.toml` in folder `SYS_CONFIG_DIR/vgonio` if exists.
+
+In the root directory of the repository, you can find the configuration file `vgonio.toml` that you can modify to
+specify the data directories and other settings.
+
+```toml
+triangulation = "top-left-to-bottom-right"
+output_dir = "~/Documents/virtual-gonio/output"
+data_dir = "~/Documents/virtual-gonio/datafiles"
+```
+
+You should modify the `output_dir` and `data_dir` fields to point to the directories where you want to store the output
+data and the data files, respectively. The required `ior` files are already included in the repository, you should copy
+them to the `data_dir` directory you specified in the configuration file.
+
 ## Usage
+
+VGonio provides a command-line interface (CLI) and a graphical user interface (GUI) for the measurement and analysis of
+BRDF data.
+
+### Graphical User Interface
+
+Simply run the compiled binary without any subcommands starts directly the GUI:
+
+```shell
+./target/release/vgonio
+```
+
+![VGonio GUI](./misc/imgs/vgonio-gui.png)
+
+The Menu is located in the top left corner of the window.
+To start a new measurement, the surface must be loaded first. To do this,
+click in the `Open` menu and select the surface file (by default, VGonio will open the directory specified by the
+`data_dir` field in the configuration file).
+
+![Open Surface](./misc/imgs/vgonio-open.png)
+
+Then, you can start the measurement by clicking on the `Measure` button. All possible measurement settings will show up
+in a pop-up window.
+
+![Measurement Settings](./misc/imgs/vgonio-measure.png)
+
+Start the measurement by clicking on the `Simulate` button. If `Write to file` is checked, the measurement data will be
+saved to files in the output directory specified in the configuration file.
+
+## Command-Line Interface
 
 ### Measurement
 
-```shell
-vgonio measure [OPTIONS]
-```
-
-#### NDF Estimation
-
-### `vgonio fit`
+The `measure` subcommand is used to measure different properties of the material depending on the measurement
+description.
+The measurement description is a YAML file that specifies the measurement settings.
+For each kind of measurement, we provide a template file in the `meas/` directory named with corresponding measurement
+kind.
 
 ```shell
-fit ~/Documents/virtual-gonio/output/test-data-d2/bsdf_aluminium3bar100_2024-02-28T21-58-41.vgmo --normalize --astart 0.175 --astop 0.225 --astep 0.001 -e nlls --model beckmann
+vgonio measure -i <measurement_description>...
 ```
+
+For example, to measure the BRDF of a surface, you can run the following command:
+
+```shell
+vgonio measure -i meas/brdf.yaml
+```
+
+Note that to specify multiple measurement descriptions, you can use the `-i` flag multiple times. The surface file path
+specified in the measurement description should be an absolute path or a path relative to the data directory specified
+in the configuration file (`data_dir`). The specified data directory can be referenced using `usr://` in the measurement
+description.
+
+### Plotting
+
+The `plot` subcommand is used to plot the measured data.
 
 ## Contributing
 
