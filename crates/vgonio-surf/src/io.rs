@@ -387,7 +387,7 @@ fn read_line_ascii_usurf(line: &str) -> Vec<f32> {
 
 /// Read micro-surface height field from OmniSurf3D data file.
 /// The file format is described in the following link:
-/// https://digitalmetrology.com/omnisurf3d-file-format/
+/// <https://digitalmetrology.com/omnisurf3d-file-format/>
 pub fn read_omni_surf_3d<R: BufRead>(
     reader: &mut R,
     filepath: &Path,

@@ -8,7 +8,7 @@ description = "Microscopic level light transport simulation."
 publish = false
 
 [features]
-default = []
+default = ["embree"]
 embree = ["dep:embree", "surf/embree"]
 optix = []
 bench = ["surf/bench"]

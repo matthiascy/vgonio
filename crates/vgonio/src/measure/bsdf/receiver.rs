@@ -166,11 +166,6 @@ impl Receiver {
     /// * `params` - The parameters of the BSDF measurement.
     /// * `sim_res` - The simulation results.
     /// * `cache` - The cache where all the data are stored.
-    ///
-    /// # Returns
-    ///
-    /// The collected data for each simulation result which is a vector of
-    /// [`BsdfSnapshotRaw`].
     pub fn collect(
         &self,
         result: &SingleSimResult,

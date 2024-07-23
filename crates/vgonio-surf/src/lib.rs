@@ -817,14 +817,14 @@ fn regular_grid_triangulation_test() {
 
 /// Triangle representation of the surface mesh.
 ///
-/// Created from [`MicroSurface`](`crate::msurf::MicroSurface`) using
-/// [`MicroSurface::as_micro_surface_mesh`](`crate::msurf::MicroSurface::as_micro_surface_mesh`),
+/// Created from [`MicroSurface`](`crate::MicroSurface`) using
+/// [`MicroSurface::as_micro_surface_mesh`](`crate::MicroSurface::as_micro_surface_mesh`),
 /// and has the same length unit ([`Micrometres`](`crate::units::Micrometres`))
-/// as the [`MicroSurface`](`crate::msurf::MicroSurface`).
+/// as the [`MicroSurface`](`crate::MicroSurface`).
 ///
 /// By default, the generated mesh is located on XZ plane in right-handed Y up
 /// coordinate system.
-/// See [`MicroSurface::as_micro_surface_mesh`](`crate::msurf::MicroSurface::as_micro_surface_mesh`)
+/// See [`MicroSurface::as_micro_surface_mesh`](`crate::MicroSurface::as_micro_surface_mesh`)
 #[derive(Debug)]
 pub struct MicroSurfaceMesh {
     /// Unique identifier, different from the [`MicroSurface`] uuid.
@@ -865,7 +865,7 @@ pub struct MicroSurfaceMesh {
     pub facet_total_area: f32,
 
     /// Length unit of inherited from the
-    /// [`MicroSurface`](`crate::msurf::MicroSurface`).
+    /// [`MicroSurface`](`crate::MicroSurface`).
     pub unit: LengthUnit,
 }
 

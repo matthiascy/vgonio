@@ -1657,6 +1657,7 @@ fn rtc_simulation_grid<'a>(
     //     //     t.elapsed().as_secs_f32()
     //     // );
     // }
+    todo!()
 }
 
 /// Brdf measurement of a microfacet surface using the OptiX ray tracing.

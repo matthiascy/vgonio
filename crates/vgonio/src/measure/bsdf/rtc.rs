@@ -2,7 +2,6 @@
 
 use approx::RelativeEq;
 use base::math::{Aabb, Vec3, Vec3A};
-use embree::INVALID_ID;
 use std::{
     fmt::Debug,
     ops::{Add, Mul},
@@ -177,6 +176,9 @@ struct HitInfo {
     /// angle; in case of self-intersection, this is a negative value.
     pub factor: f32,
 }
+
+/// Invalid ID value for geometry and primitive IDs.
+pub const INVALID_ID: u32 = u32::MAX;
 
 impl HitInfo {
     /// Creates a new `HitInfo` with invalid values.
