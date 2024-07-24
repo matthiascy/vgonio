@@ -57,17 +57,11 @@ impl Display {
         let surface = WindowSurface::new(&ctx, &window, &wgpu_config, surface);
 
         // Create resources for the pipeline
-        let vs_module = ctx
+        let shader_module = ctx
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("vertex_shader"),
+                label: Some("display_shader"),
                 source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&WGSL_DISPLAY)),
-            });
-        let fs_module = ctx
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("fragment_shader"),
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(WGSL_DISPLAY)),
             });
         let idx_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("index_buffer"),
@@ -145,13 +139,13 @@ impl Display {
                 label: Some("display_pipeline"),
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
-                    module: &vs_module,
+                    module: &shader_module,
                     entry_point: "vertex_main",
                     compilation_options: Default::default(),
                     buffers: &[],
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &fs_module,
+                    module: &shader_module,
                     entry_point: "fragment_main",
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
