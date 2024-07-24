@@ -424,8 +424,11 @@ impl RawCache {
                     log::debug!("-- loading: {}", filepath.display());
                     let msurf = MicroSurface::read_from_file(&filepath, None)?;
                     let msurf_hdl = Handle::with_id(msurf.uuid);
-                    let mesh = msurf
-                        .as_micro_surface_mesh(HeightOffset::Grounded, config.user.triangulation);
+                    let mesh = msurf.as_micro_surface_mesh(
+                        HeightOffset::Grounded,
+                        config.user.triangulation,
+                        0,
+                    );
                     let mesh_hdl = Handle::with_id(mesh.uuid);
                     self.msurfs.insert(msurf_hdl, msurf);
                     self.meshes.insert(mesh_hdl, mesh);
@@ -553,7 +556,7 @@ impl RawCache {
                         log::debug!("-- loading: {}", filepath.display());
                         let msurf = MicroSurface::read_from_file(&filepath, None).unwrap();
                         let msurf_hdl = Handle::with_id(msurf.uuid);
-                        let mesh = msurf.as_micro_surface_mesh(HeightOffset::Grounded, pattern);
+                        let mesh = msurf.as_micro_surface_mesh(HeightOffset::Grounded, pattern, 0);
                         let mesh_hdl = Handle::new();
                         self.msurfs.insert(msurf_hdl, msurf);
                         self.meshes.insert(mesh_hdl, mesh);

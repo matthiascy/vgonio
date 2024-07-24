@@ -511,6 +511,7 @@ impl MicroSurface {
         &self,
         offset: HeightOffset,
         pattern: TriangulationPattern,
+        subdivision_level: u32,
     ) -> MicroSurfaceMesh {
         let height_offset = match offset {
             HeightOffset::Arbitrary(val) => val,
@@ -578,13 +579,10 @@ impl MicroSurface {
             height_offset,
             facet_total_area,
         };
-        let lod = std::env::var("LOD")
-            .map(|s| s.parse().unwrap_or(0))
-            .unwrap_or(0);
         log::debug!("Microfacet Area: {}", facet_total_area);
-        if lod > 0 {
-            log::debug!("Subdividing the mesh with LOD: {}", lod);
-            mesh.curved_smooth(lod);
+        if subdivision_level > 0 {
+            log::debug!("Subdividing the mesh with level: {}", subdivision_level);
+            mesh.curved_smooth(subdivision_level);
             log::debug!("Microfacet Area(subdivided): {}", mesh.facet_total_area);
         }
         mesh

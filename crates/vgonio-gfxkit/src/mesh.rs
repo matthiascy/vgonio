@@ -34,8 +34,9 @@ impl RenderableMesh {
         id: Uuid,
         offset: HeightOffset,
         pattern: TriangulationPattern,
+        subdivision_level: u32,
     ) -> Self {
-        let mesh = surf.as_micro_surface_mesh(offset, pattern);
+        let mesh = surf.as_micro_surface_mesh(offset, pattern, subdivision_level);
         Self::from_micro_surface_mesh_with_id(ctx, &mesh, id)
     }
 
@@ -45,8 +46,16 @@ impl RenderableMesh {
         surf: &MicroSurface,
         offset: HeightOffset,
         pattern: TriangulationPattern,
+        subdivision_level: u32,
     ) -> Self {
-        Self::from_micro_surface_with_id(ctx, surf, Uuid::new_v4(), offset, pattern)
+        Self::from_micro_surface_with_id(
+            ctx,
+            surf,
+            Uuid::new_v4(),
+            offset,
+            pattern,
+            subdivision_level,
+        )
     }
 
     pub fn from_micro_surface_mesh_with_id(
