@@ -46,6 +46,7 @@ impl Default for VisualGridUniforms {
 pub struct VisualGridState {
     bind_group: wgpu::BindGroup,
     uniform_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
     pub(crate) visible: bool,
 }
 
@@ -61,18 +62,21 @@ impl VisualGridState {
         ctx: &GpuContext,
         target_format: wgpu::TextureFormat,
     ) -> VisualGridPipeline {
-        let vert_shader = ctx
-            .device
-            .create_shader_module(wgpu::include_spirv!(concat!(
-                env!("OUT_DIR"),
-                "/visual_grid.vert.spv"
-            )));
-        let frag_shader = ctx
-            .device
-            .create_shader_module(wgpu::include_spirv!(concat!(
-                env!("OUT_DIR"),
-                "/visual_grid.frag.spv"
-            )));
+        let shader_module = ctx.device.create_shader_module(wgpu::include_wgsl!(
+            "./assets/shaders/wgsl/visual_grid.wgsl"
+        ));
+        // let vert_shader = ctx
+        //     .device
+        //     .create_shader_module(wgpu::include_spirv!(concat!(
+        //         env!("OUT_DIR"),
+        //         "/visual_grid.vert.spv"
+        //     )));
+        // let frag_shader = ctx
+        //     .device
+        //     .create_shader_module(wgpu::include_spirv!(concat!(
+        //         env!("OUT_DIR"),
+        //         "/visual_grid.frag.spv"
+        //     )));
         let bind_group_layout = ctx
             .device
             .create_bind_group_layout(&DEFAULT_BIND_GROUP_LAYOUT_DESC);
@@ -89,8 +93,8 @@ impl VisualGridState {
                 label: Some("visual_grid_render_pipeline"),
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
-                    module: &vert_shader,
-                    entry_point: "main",
+                    module: &shader_module,
+                    entry_point: "vs_main",
                     compilation_options: Default::default(),
                     buffers: &[],
                 },
@@ -116,8 +120,8 @@ impl VisualGridState {
                     alpha_to_coverage_enabled: false,
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &frag_shader,
-                    entry_point: "main",
+                    module: &shader_module,
+                    entry_point: "fs_main",
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: target_format,
@@ -152,9 +156,17 @@ impl VisualGridState {
                 resource: uniform_buffer.as_entire_binding(),
             }],
         });
+        let index_buffer = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("visual_grid_index_buffer"),
+                contents: bytemuck::cast_slice(&[0u16, 1, 2, 2, 3, 0]),
+                usage: wgpu::BufferUsages::INDEX,
+            });
         Self {
             bind_group,
             uniform_buffer,
+            index_buffer,
             visible: true,
         }
     }
@@ -195,6 +207,7 @@ impl VisualGridState {
         }
         pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &self.bind_group, &[]);
+        pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         pass.draw(0..6, 0..1);
     }
 

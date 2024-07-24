@@ -3,7 +3,6 @@ name = "vgonio"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-build = "build.rs"
 description = "Microscopic level light transport simulation."
 publish = false
 
@@ -61,6 +60,3 @@ base = { package = "vgonio-base", path = "../vgonio-base", features = ["cli", "w
 bxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf", features = ["cli", "exr"] }
 jabr = { package = "vgonio-jabr", path = "../vgonio-jabr" }
 gfxkit = { package = "vgonio-gfxkit", path = "../vgonio-gfxkit" }
-
-[build-dependencies]
-shaderc = "0.8"
