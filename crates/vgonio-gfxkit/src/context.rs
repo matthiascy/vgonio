@@ -214,6 +214,7 @@ impl Default for WgpuConfig {
                 } else {
                     wgpu::Limits::default()
                 },
+                memory_hints: Default::default(),
             },
             backends: wgpu::Backends::PRIMARY,
             present_mode: wgpu::PresentMode::AutoVsync,
@@ -291,6 +292,7 @@ impl GpuContext {
                     label: config.device_descriptor.label,
                     required_features: config.device_descriptor.required_features,
                     required_limits: adapter_limits,
+                    memory_hints: Default::default(),
                 },
                 None,
             )
@@ -353,6 +355,7 @@ impl GpuContext {
                     label: config.device_descriptor.label,
                     required_features: config.device_descriptor.required_features,
                     required_limits: adapter_limits,
+                    memory_hints: Default::default(),
                 },
                 None,
             )

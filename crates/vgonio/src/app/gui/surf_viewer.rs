@@ -554,6 +554,7 @@ impl MicroSurfaceState {
                     })],
                 }),
                 multiview: None,
+                cache: None,
             });
         let normals_pipeline = {
             let pipeline_layout =
@@ -610,6 +611,7 @@ impl MicroSurfaceState {
                     multisample: Default::default(),
                     fragment: Some(frag_state.clone()),
                     multiview: None,
+                    cache: None,
                 })
         };
 

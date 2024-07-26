@@ -41,9 +41,9 @@ exr = { git = "https://github.com/matthiascy/exr.git", branch = "main" }
 flate2 = { version = "~1.0", features = ["zlib-ng-compat"], default-features = false }
 futures-intrusive = "0.5"
 glam = { version = "~0.28", features = ["serde", "bytemuck"] }
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
-levenberg-marquardt = "0.13"
-nalgebra = "0.32"
+image = { version = "0.25", default-features = false, features = ["png"] }
+levenberg-marquardt = "0.14"
+nalgebra = "0.33"
 libm = "0.2"
 log = "0.4"
 num-traits = "0.2"
@@ -65,7 +65,7 @@ toml = "0.8"
 type-map = "0.5"
 uuid = { version = "1.2", features = ["serde", "v4"] }
 winit = "~0.29"
-wgpu = { version = "0.20", features = ["spirv"] }
+wgpu = { version = "22", features = ["spirv"] }
 
 
 [profile.dev]

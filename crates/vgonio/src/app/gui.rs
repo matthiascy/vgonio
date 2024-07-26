@@ -178,6 +178,7 @@ impl VgonioGuiApp {
                     max_push_constant_size: 256,
                     ..Default::default()
                 },
+                memory_hints: Default::default(),
             },
             ..Default::default()
         };

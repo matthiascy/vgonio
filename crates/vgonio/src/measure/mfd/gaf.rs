@@ -275,6 +275,7 @@ impl VisibilityEstimator {
                     },
                     fragment: None,
                     multiview: None,
+                    cache: None,
                 });
 
             RenderPass {
@@ -444,6 +445,7 @@ impl VisibilityEstimator {
                         ],
                     }),
                     multiview: None,
+                    cache: None,
                 });
             RenderPass {
                 pipeline,
@@ -1499,6 +1501,7 @@ pub fn measure_masking_shadowing_function(
             } else {
                 wgpu::Limits::default()
             },
+            memory_hints: Default::default(),
         },
         target_format: Some(VisibilityEstimator::COLOR_ATTACHMENT_FORMAT),
         backends: wgpu::Backends::VULKAN,

@@ -130,6 +130,7 @@ impl VisualGridState {
                     })],
                 }),
                 multiview: None,
+                cache: None,
             });
         VisualGridPipeline {
             pipeline,

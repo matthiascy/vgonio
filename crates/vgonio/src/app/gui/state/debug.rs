@@ -295,6 +295,7 @@ impl DebugDrawingState {
                         multisample: Default::default(),
                         fragment: Some(frag_state.clone()),
                         multiview: None,
+                        cache: None,
                     });
             let points_pipeline =
                 ctx.device
@@ -311,6 +312,7 @@ impl DebugDrawingState {
                         multisample: Default::default(),
                         fragment: Some(frag_state.clone()),
                         multiview: None,
+                        cache: None,
                     });
             let lines_pipeline =
                 ctx.device
@@ -327,6 +329,7 @@ impl DebugDrawingState {
                         multisample: Default::default(),
                         fragment: Some(frag_state.clone()),
                         multiview: None,
+                        cache: None,
                     });
             (
                 triangles_pipeline,
@@ -399,6 +402,7 @@ impl DebugDrawingState {
                             })],
                         }),
                         multiview: None,
+                        cache: None,
                     }),
                 bind_groups: vec![ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("debug-prim-bind-group"),

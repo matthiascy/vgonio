@@ -162,6 +162,7 @@ impl ShadowPass {
                 },
                 fragment: None,
                 multiview: None,
+                cache: None,
             });
         let pass = RenderPass {
             pipeline,
