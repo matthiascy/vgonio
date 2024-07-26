@@ -10,12 +10,12 @@ mod gen;
 #[cfg(feature = "surf-gen")]
 pub use gen::*;
 pub mod io;
-pub mod smooth;
+pub mod subdivision;
 
 #[cfg(feature = "embree")]
 use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
 
-use crate::smooth::cpnt;
+use crate::subdivision::{cpnt, Subdivision};
 use base::{
     error::VgonioError,
     io::{
@@ -511,7 +511,7 @@ impl MicroSurface {
         &self,
         offset: HeightOffset,
         pattern: TriangulationPattern,
-        subdivision_level: u32,
+        subdivision: Subdivision,
     ) -> MicroSurfaceMesh {
         let height_offset = match offset {
             HeightOffset::Arbitrary(val) => val,
@@ -580,11 +580,21 @@ impl MicroSurface {
             facet_total_area,
         };
         log::debug!("Microfacet Area: {}", facet_total_area);
-        if subdivision_level > 0 {
-            log::debug!("Subdividing the mesh with level: {}", subdivision_level);
-            mesh.curved_smooth(subdivision_level);
-            log::debug!("Microfacet Area(subdivided): {}", mesh.facet_total_area);
+
+        match subdivision {
+            Subdivision::Curved(lvl) => {
+                log::debug!("Subdividing the mesh with level: {}", lvl);
+                mesh.curved_smooth(lvl);
+                log::debug!("Microfacet Area(subdivided): {}", mesh.facet_total_area);
+            }
+            Subdivision::Wiggly(lvl) => {
+                log::debug!("Subdividing the mesh with level: {}", lvl);
+                mesh.wiggly_smooth(lvl);
+                log::debug!("Microfacet Area(subdivided): {}", mesh.facet_total_area);
+            }
+            _ => {}
         }
+
         mesh
     }
 
@@ -921,8 +931,8 @@ impl MicroSurfaceMesh {
     }
 
     /// Smooth the mesh by subdividing the triangles into curved surfaces.
-    pub fn curved_smooth(&mut self, lod: u32) {
-        if lod == 0 {
+    pub fn curved_smooth(&mut self, level: u32) {
+        if level == 0 {
             return;
         }
         fn nvert(lod: u32) -> u32 {
@@ -932,9 +942,9 @@ impl MicroSurfaceMesh {
                 nvert(lod - 1) + lod + 2
             }
         }
-        let n_pts_per_facet = nvert(lod) as usize;
-        let n_tris_per_facet = ((lod + 1) * (lod + 1)) as usize;
-        let n_ctrl_pts_per_edge = lod + 2;
+        let n_pts_per_facet = nvert(level) as usize;
+        let n_tris_per_facet = ((level + 1) * (level + 1)) as usize;
+        let n_ctrl_pts_per_edge = level + 2;
 
         let new_num_verts = self.num_facets * n_pts_per_facet;
         let mut new_verts = vec![Vec3::ZERO; new_num_verts].into_boxed_slice();
@@ -1075,7 +1085,7 @@ impl MicroSurfaceMesh {
                                 let vert_base = (chunk_idx * FACET_CHUNK_SIZE * n_pts_per_facet
                                     + i * n_pts_per_facet)
                                     as u32;
-                                triangulate(lod, vert_base, new_facets);
+                                triangulate(level, vert_base, new_facets);
                                 // Compute the per-facet normals and areas
                                 for ((new_facet, new_normal), new_area) in new_facets
                                     .chunks_mut(3)
@@ -1126,6 +1136,9 @@ impl MicroSurfaceMesh {
         self.num_verts = new_num_verts;
         self.vert_normals = new_vert_normals;
     }
+
+    /// Smooth the mesh by subdividing the triangles into wiggly surfaces.
+    pub fn wiggly_smooth(&mut self, level: u32) {}
 }
 
 /// Origin of the micro-geometry height field.

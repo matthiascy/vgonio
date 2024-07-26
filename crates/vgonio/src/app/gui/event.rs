@@ -1,3 +1,4 @@
+use super::outliner::OutlinerItem;
 #[cfg(feature = "fitting")]
 use crate::fitting::FittingProblemKind;
 use crate::{
@@ -23,10 +24,8 @@ use base::{
     MeasurementKind,
 };
 use std::path::PathBuf;
-use surf::{MicroSurface, MicroSurfaceMesh};
+use surf::{subdivision::Subdivision, MicroSurface, MicroSurfaceMesh};
 use uuid::Uuid;
-
-use super::outliner::OutlinerItem;
 
 /// Event loop proxy with Vgonio events.
 #[derive(Clone, Debug)]
@@ -92,10 +91,9 @@ pub enum VgonioEvent {
         data: Handle<Measurement>,
         scale: f32,
     },
-    // TODO
-    SmoothSurface {
+    SubdivideSurface {
         surf: Handle<MicroSurface>,
-        lod: u32,
+        subdivision: Subdivision,
     },
 }
 

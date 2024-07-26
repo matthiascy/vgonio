@@ -9,13 +9,14 @@ use std::{
 
 use uuid::Uuid;
 
-use base::{error::VgonioError, medium::Medium, optics::ior::RefractiveIndexRegistry, Asset};
-use gfxkit::{context::GpuContext, mesh::RenderableMesh};
-use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
-
 use crate::{
     app::{cli::ansi, Config},
     measure::Measurement,
+};
+use base::{error::VgonioError, medium::Medium, optics::ior::RefractiveIndexRegistry, Asset};
+use gfxkit::{context::GpuContext, mesh::RenderableMesh};
+use surf::{
+    subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern,
 };
 
 /// Handle referencing loaded assets.
@@ -199,10 +200,10 @@ pub struct RawCache {
     msurfs: HashMap<Handle<MicroSurface>, MicroSurface>,
 
     /// Micro-surface triangle mesh cache, indexed by micro-surface mesh uuid.
-    meshes: HashMap<Handle<MicroSurfaceMesh>, MicroSurfaceMesh>,
+    pub(crate) meshes: HashMap<Handle<MicroSurfaceMesh>, MicroSurfaceMesh>,
 
     /// Cache for `RenderableMesh`s, indexed by renderable mesh uuid.
-    renderables: HashMap<Handle<RenderableMesh>, RenderableMesh>,
+    pub(crate) renderables: HashMap<Handle<RenderableMesh>, RenderableMesh>,
 
     /// Cache for measured data.
     measurements: HashMap<Handle<Measurement>, Measurement>,
@@ -403,6 +404,7 @@ impl RawCache {
         &mut self,
         config: &Config,
         path: &Path,
+        subdivision: Subdivision,
     ) -> Result<(Handle<MicroSurface>, Handle<MicroSurfaceMesh>), VgonioError> {
         match config.resolve_path(path) {
             None => Err(VgonioError::new(
@@ -427,7 +429,7 @@ impl RawCache {
                     let mesh = msurf.as_micro_surface_mesh(
                         HeightOffset::Grounded,
                         config.user.triangulation,
-                        0,
+                        subdivision,
                     );
                     let mesh_hdl = Handle::with_id(mesh.uuid);
                     self.msurfs.insert(msurf_hdl, msurf);
@@ -524,6 +526,7 @@ impl RawCache {
         config: &Config,
         paths: &[PathBuf],
         pattern: TriangulationPattern,
+        subdivision: Subdivision,
     ) -> Result<Vec<Handle<MicroSurface>>, VgonioError> {
         log::info!("Loading micro surfaces from {:?}", paths);
         let canonical_paths = paths
@@ -556,7 +559,11 @@ impl RawCache {
                         log::debug!("-- loading: {}", filepath.display());
                         let msurf = MicroSurface::read_from_file(&filepath, None).unwrap();
                         let msurf_hdl = Handle::with_id(msurf.uuid);
-                        let mesh = msurf.as_micro_surface_mesh(HeightOffset::Grounded, pattern, 0);
+                        let mesh = msurf.as_micro_surface_mesh(
+                            HeightOffset::Grounded,
+                            pattern,
+                            subdivision,
+                        );
                         let mesh_hdl = Handle::new();
                         self.msurfs.insert(msurf_hdl, msurf);
                         self.meshes.insert(mesh_hdl, mesh);

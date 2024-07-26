@@ -11,7 +11,10 @@ use crate::{
 };
 use egui::WidgetText;
 use std::sync::{Arc, RwLock};
-use surf::MicroSurface;
+use surf::{
+    subdivision::{Subdivision, SubdivisionKind},
+    MicroSurface,
+};
 
 /// Outliner is a widget that displays the scene graph of the current scene.
 ///
@@ -99,12 +102,13 @@ impl CollapsableHeader<Handle<MicroSurface>> {
         })
         .body(|ui| {
             let mut prop = prop.write().unwrap();
-            let scale = &mut prop.surfaces.get_mut(&self.item).unwrap().scale;
-            // Scale
+            let surf_props = prop.surfaces.get_mut(&self.item).unwrap();
+            let scale = &mut surf_props.scale;
+            let subdivision_level = &mut surf_props.subdivision_level;
+            let subdivision_kind = &mut surf_props.subdivision_kind;
             egui::Grid::new("surface_collapsable_header_grid")
                 .num_columns(3)
-                .spacing([40.0, 4.0])
-                .striped(true)
+                .spacing([20.0, 4.0])
                 .show(ui, |ui| {
                     ui.add(egui::Label::new("Scale:")).on_hover_text(
                         "Scales the surface visually. Doest not affect the actual surface.",
@@ -112,13 +116,35 @@ impl CollapsableHeader<Handle<MicroSurface>> {
                     ui.add(egui::Slider::new(scale, 0.005..=1.5).trailing_fill(true));
                     ui.end_row();
 
-                    let mut lod = 2;
-                    ui.add(egui::DragValue::new(&mut lod).speed(1))
-                        .on_hover_text("LOD");
-                    if ui.button("Smooth").clicked() {
-                        event_loop.send_event(VgonioEvent::SmoothSurface {
+                    ui.add(egui::Label::new("Subdivision:"))
+                        .on_hover_text("Subdivides the surface.");
+                    ui.end_row();
+
+                    ui.horizontal(|ui| {
+                        if ui.button("<").clicked() {
+                            *subdivision_level = subdivision_level.saturating_sub(1);
+                        }
+                        if ui.button(">").clicked() {
+                            *subdivision_level = subdivision_level.saturating_add(1);
+                        }
+                        ui.add(egui::DragValue::new(subdivision_level).speed(1))
+                            .on_hover_text("Subdivision level for the surface.");
+                    });
+                    ui.horizontal(|ui| {
+                        ui.selectable_value(subdivision_kind, SubdivisionKind::Curved, "Curved");
+                        ui.selectable_value(subdivision_kind, SubdivisionKind::Wiggly, "Wiggly");
+                    });
+                    ui.end_row();
+
+                    if ui.button("Subdivide").clicked() {
+                        let subdivision = if *subdivision_kind == SubdivisionKind::Curved {
+                            Subdivision::Curved(*subdivision_level)
+                        } else {
+                            Subdivision::Wiggly(*subdivision_level)
+                        };
+                        event_loop.send_event(VgonioEvent::SubdivideSurface {
                             surf: self.item,
-                            lod: lod as u32,
+                            subdivision,
                         });
                     }
                     ui.end_row();

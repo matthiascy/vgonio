@@ -3,7 +3,9 @@ use base::{
     math::{Aabb, Vec3},
     Asset,
 };
-use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern};
+use surf::{
+    subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern,
+};
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
 
@@ -34,9 +36,9 @@ impl RenderableMesh {
         id: Uuid,
         offset: HeightOffset,
         pattern: TriangulationPattern,
-        subdivision_level: u32,
+        subdivision: Subdivision,
     ) -> Self {
-        let mesh = surf.as_micro_surface_mesh(offset, pattern, subdivision_level);
+        let mesh = surf.as_micro_surface_mesh(offset, pattern, subdivision);
         Self::from_micro_surface_mesh_with_id(ctx, &mesh, id)
     }
 
@@ -46,16 +48,9 @@ impl RenderableMesh {
         surf: &MicroSurface,
         offset: HeightOffset,
         pattern: TriangulationPattern,
-        subdivision_level: u32,
+        subdivision: Subdivision,
     ) -> Self {
-        Self::from_micro_surface_with_id(
-            ctx,
-            surf,
-            Uuid::new_v4(),
-            offset,
-            pattern,
-            subdivision_level,
-        )
+        Self::from_micro_surface_with_id(ctx, surf, Uuid::new_v4(), offset, pattern, subdivision)
     }
 
     pub fn from_micro_surface_mesh_with_id(

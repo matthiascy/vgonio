@@ -9,6 +9,7 @@ use base::{
     io::{CompressionScheme, FileEncoding},
 };
 use std::{path::PathBuf, time::Instant};
+use surf::subdivision::Subdivision;
 
 /// Measure different metrics of the micro-surface.
 pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
@@ -83,7 +84,12 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             .into_iter()
             .filter_map(|meas| {
                 cache
-                    .load_micro_surfaces(&config, &meas.surfaces, config.user.triangulation)
+                    .load_micro_surfaces(
+                        &config,
+                        &meas.surfaces,
+                        config.user.triangulation,
+                        Subdivision::None,
+                    )
                     .ok()
                     .map(|surfaces| (meas, surfaces))
             })

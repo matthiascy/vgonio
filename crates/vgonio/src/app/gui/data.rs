@@ -2,11 +2,10 @@ use base::MeasurementKind;
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
 
-use base::units::LengthUnit;
-use surf::MicroSurface;
-
 #[cfg(feature = "fitting")]
 use crate::fitting::FittedModels;
+use base::units::LengthUnit;
+use surf::{subdivision::SubdivisionKind, MicroSurface};
 
 use crate::{
     app::cache::{Handle, RawCache},
@@ -46,6 +45,10 @@ pub struct MicroSurfaceProp {
     pub rms_slope_x: f32,
     /// Root-mean-square of the slope along the y-axis.
     pub rms_slope_y: f32,
+    /// Level of subdivision.
+    pub subdivision_level: u32,
+    /// The kind of subdivision.
+    pub subdivision_kind: SubdivisionKind,
 }
 
 /// Measured data properties.
@@ -114,6 +117,8 @@ impl PropertyData {
                     rms_height: surf.rms_height(),
                     rms_slope_x: surf.rms_slope_x(),
                     rms_slope_y: surf.rms_slope_y(),
+                    subdivision_level: 0,
+                    subdivision_kind: SubdivisionKind::Curved,
                 });
             }
         }

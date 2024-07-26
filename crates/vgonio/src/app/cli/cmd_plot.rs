@@ -16,7 +16,7 @@ use base::{
 };
 use bxdf::brdf::measured::ClausenBrdf;
 use std::path::PathBuf;
-use surf::TriangulationPattern;
+use surf::{subdivision::Subdivision, TriangulationPattern};
 
 #[rustfmt::skip]
 // Same BRDF but different incident angles
@@ -454,6 +454,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     &config,
                     &opts.inputs,
                     TriangulationPattern::BottomLeftToTopRight,
+                    Subdivision::None,
                 )?;
                 let surfaces = hdls
                     .into_iter()

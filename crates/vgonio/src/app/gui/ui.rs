@@ -39,12 +39,12 @@ use base::{
 };
 use bxdf::brdf::BxdfFamily;
 use egui_file_dialog::{DialogMode, FileDialog, FileDialogConfig};
-use gfxkit::context::GpuContext;
+use gfxkit::{context::GpuContext, mesh::RenderableMesh};
 use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use surf::MicroSurface;
+use surf::{subdivision::Subdivision, HeightOffset, MicroSurface};
 
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
@@ -313,7 +313,40 @@ impl VgonioGui {
                 }
                 EventResponse::Handled
             }
-            VgonioEvent::SmoothSurface { .. } => EventResponse::Handled,
+            VgonioEvent::SubdivideSurface { surf, subdivision } => {
+                // Don't touch the original surface, just subdivide into a new one mesh.
+                // Regenerate the mesh with more vertices.
+                self.cache.write(|cache| {
+                    let surface = cache.get_micro_surface(*surf).unwrap();
+                    let new_mesh = surface.as_micro_surface_mesh(
+                        HeightOffset::Grounded,
+                        self.config.user.triangulation,
+                        *subdivision,
+                    );
+                    let new_renderable_hdl = Handle::new();
+                    let new_renderable = RenderableMesh::from_micro_surface_mesh_with_id(
+                        &self.gpu_ctx,
+                        &new_mesh,
+                        new_renderable_hdl.id(),
+                    );
+                    let new_mesh_hdl = Handle::with_id(new_mesh.uuid);
+                    cache.meshes.insert(new_mesh_hdl, new_mesh);
+                    cache.renderables.insert(new_renderable_hdl, new_renderable);
+
+                    // Create a new renderable mesh from the subdivided mesh.
+                    let record = cache.records.get_mut(surf).unwrap();
+                    let old_mesh_hdl = record.mesh;
+                    let old_renderable_hdl = record.renderable;
+
+                    record.mesh = new_mesh_hdl;
+                    record.renderable = new_renderable_hdl;
+
+                    // Remove the old mesh and renderable.
+                    cache.meshes.remove(&old_mesh_hdl);
+                    cache.renderables.remove(&old_renderable_hdl);
+                });
+                EventResponse::Handled
+            }
             _ => EventResponse::Ignored(event),
         }
     }
@@ -558,7 +591,11 @@ impl VgonioGui {
                         // Micro-surface profile
                         log::debug!("Opening micro-surface profile: {:?}", filepath);
                         self.cache.write(|cache| {
-                            match cache.load_micro_surface(&self.config, &filepath) {
+                            match cache.load_micro_surface(
+                                &self.config,
+                                &filepath,
+                                Subdivision::None,
+                            ) {
                                 Ok((surf, _)) => {
                                     let _ = cache
                                         .create_micro_surface_renderable_mesh(&self.gpu_ctx, surf)
