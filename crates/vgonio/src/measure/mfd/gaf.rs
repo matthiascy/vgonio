@@ -1665,8 +1665,7 @@ pub fn measure_masking_shadowing_function(
                     .into_iter()
                     .map(|est| est.visibility())
             })
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
+            .collect::<Box<_>>();
 
         results.push(Measurement {
             name: surface.unwrap().file_stem().unwrap().to_owned(),

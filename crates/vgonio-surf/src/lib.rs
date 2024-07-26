@@ -947,8 +947,7 @@ impl MicroSurfaceMesh {
             let uv_vals = RangeByStepCountInclusive::new(0.0f32, 1.0, n_ctrl_pts_per_edge as usize)
                 .values()
                 .map(|x| x.min(1.0))
-                .collect::<Vec<_>>()
-                .into_boxed_slice();
+                .collect::<Box<_>>();
             let mut uvs = Box::new_uninit_slice(n_pts_per_facet);
             let mut i = 0;
             for u in uv_vals.iter() {
@@ -1120,8 +1119,7 @@ impl MicroSurfaceMesh {
         self.facet_areas = new_facet_areas
             .iter()
             .map(|x| *x as f32)
-            .collect::<Vec<f32>>()
-            .into_boxed_slice();
+            .collect::<Box<[f32]>>();
         self.facets = new_facets;
         self.verts = new_verts;
         self.num_facets = new_num_facets;

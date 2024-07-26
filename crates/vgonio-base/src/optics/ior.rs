@@ -88,8 +88,7 @@ impl RefractiveIndexRegistry {
                 self.ior_of(medium, wavelength.in_nanometres())
                     .map(|ior| ior.ior)
             })
-            .collect::<Option<Vec<_>>>()
-            .map(|iors| iors.into_boxed_slice())
+            .collect::<Option<Box<[_]>>>()
     }
 
     #[cfg(feature = "io")]
@@ -126,8 +125,7 @@ impl RefractiveIndexRegistry {
                             }
                             Err(_) => None,
                         })
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice()
+                        .collect::<Box<_>>()
                 } else {
                     rdr.records()
                         .filter_map(|ior_record| match ior_record {
@@ -138,8 +136,7 @@ impl RefractiveIndexRegistry {
                             }
                             Err(_) => None,
                         })
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice()
+                        .collect::<Box<_>>()
                 }
             })
             .ok()

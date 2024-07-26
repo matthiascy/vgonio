@@ -129,12 +129,7 @@ impl Receiver {
         meas_params: &BsdfMeasurementParams,
         cache: &RawCache,
     ) -> Self {
-        let spectrum = meas_params
-            .emitter
-            .spectrum
-            .values()
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
+        let spectrum = meas_params.emitter.spectrum.values().collect::<Box<_>>();
         // Retrieve the incident medium's refractive indices for each wavelength.
         let iors_i = cache
             .iors
@@ -320,8 +315,7 @@ impl Receiver {
                             })
                             .collect::<Vec<_>>()
                     })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
+                    .collect::<Box<_>>();
                 let n_bounce = n_bounce.load(atomic::Ordering::Relaxed) as usize;
                 let n_received = n_received.load(atomic::Ordering::Relaxed);
 

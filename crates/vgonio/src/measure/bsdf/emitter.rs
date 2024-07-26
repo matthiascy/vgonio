@@ -169,7 +169,7 @@ impl Deref for EmitterSamples {
 
 impl FromIterator<Vec3> for EmitterSamples {
     fn from_iter<T: IntoIterator<Item = Vec3>>(iter: T) -> Self {
-        EmitterSamples(iter.into_iter().collect::<Vec<_>>().into_boxed_slice())
+        EmitterSamples(iter.into_iter().collect::<Box<_>>())
     }
 }
 
@@ -185,7 +185,7 @@ impl Deref for MeasurementPoints {
 
 impl FromIterator<Sph2> for MeasurementPoints {
     fn from_iter<T: IntoIterator<Item = Sph2>>(iter: T) -> Self {
-        MeasurementPoints(iter.into_iter().collect::<Vec<_>>().into_boxed_slice())
+        MeasurementPoints(iter.into_iter().collect::<Box<_>>())
     }
 }
 

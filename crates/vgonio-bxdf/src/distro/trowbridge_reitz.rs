@@ -156,8 +156,7 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
                 };
                 [d_alpha_x, d_alpha_y]
             })
-            .collect::<Vec<_>>()
-            .into_boxed_slice()
+            .collect::<Box<_>>()
     }
 
     #[cfg(feature = "fitting")]

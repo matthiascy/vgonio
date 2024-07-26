@@ -472,8 +472,7 @@ fn calc_msf_jacobian(
                 measured.params.azimuth.step(phi_wm_idx),
             )
         })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
+        .collect::<Box<_>>();
     let ws = (0..measured.samples.len())
         .map(|idx| {
             let theta_w_idx = idx % theta_step_count;
@@ -483,7 +482,6 @@ fn calc_msf_jacobian(
                 measured.params.azimuth.step(phi_w_idx),
             )
         })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
+        .collect::<Box<_>>();
     model.pd_msf1(&wms, &ws)
 }

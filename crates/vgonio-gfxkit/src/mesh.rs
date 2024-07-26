@@ -96,8 +96,7 @@ impl RenderableMesh {
                     .fold(Vec3::ZERO, |acc, v| acc + mesh.verts[*v as usize] / 3.0);
                 [center, center + *n * 0.35]
             })
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
+            .collect::<Box<_>>();
 
         let facet_normal_buffer = Some(ctx.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -112,8 +111,7 @@ impl RenderableMesh {
             .iter()
             .zip(mesh.verts.iter())
             .flat_map(|(n, v)| [*v, *v + *n * 0.35])
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
+            .collect::<Box<_>>();
 
         let vertex_normal_buffer = Some(ctx.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {

@@ -454,8 +454,7 @@ impl<'a, const I: Isotropy>
                     modelled.into_iter()
                 })
             })
-            .collect::<Vec<_>>()
-            .into_boxed_slice()
+            .collect::<Box<_>>()
     }
 }
 

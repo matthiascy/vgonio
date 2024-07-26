@@ -204,8 +204,7 @@ pub fn measure_bsdf(
             let trajectories = stream_data
                 .into_iter()
                 .flat_map(|data| data.trajectory)
-                .collect::<Vec<_>>()
-                .into_boxed_slice();
+                .collect::<Box<_>>();
 
             SingleSimResult {
                 wi: *w_i,

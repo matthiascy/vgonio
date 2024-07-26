@@ -272,8 +272,7 @@ impl AnalyticalFit for VgonioBrdf {
                     Scattering::eval_reflectance_spectrum(model, &wi, &wo, &iors_i, &iors_t)
                         .iter()
                         .map(|&x| x as f32)
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice();
+                        .collect::<Box<_>>();
                 let offset = i * n_wo * n_spectrum + j * n_spectrum;
                 samples.as_mut_slice()[offset..offset + n_spectrum]
                     .copy_from_slice(&spectral_samples);

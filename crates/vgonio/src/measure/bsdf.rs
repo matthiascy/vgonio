@@ -1489,8 +1489,7 @@ pub fn measure_bsdf_rt(
                     vec![None; n_wi].into_boxed_slice();
                 (r, records, stats, *rparams)
             })
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
+            .collect::<Box<_>>();
 
         match &params.sim_kind {
             SimulationKind::GeomOptics(method) => {
@@ -1575,8 +1574,7 @@ pub fn measure_bsdf_rt(
                 let trajectories = trajectories
                     .into_iter()
                     .map(|t| t.into_boxed_slice())
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
+                    .collect::<Box<_>>();
                 #[cfg(feature = "vdbg")]
                 let hit_points = hit_points.into_boxed_slice();
                 for (receiver, records, stats, rparams) in receivers {

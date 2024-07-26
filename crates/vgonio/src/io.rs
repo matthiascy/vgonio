@@ -261,8 +261,7 @@ pub mod vgmo {
                 let slopes = samples
                     .chunks(2)
                     .map(|s| math::Vec2::new(s[0], s[1]))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
+                    .collect::<Box<_>>();
                 Ok(Box::new(MeasuredSdfData {
                     params: SdfMeasurementParams {
                         max_slope: std::f32::consts::PI,

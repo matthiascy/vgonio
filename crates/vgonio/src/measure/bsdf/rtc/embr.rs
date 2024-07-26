@@ -591,8 +591,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
             .last_hit
             .iter()
             .map(|h| Vec3::from(h.next_dir))
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
+            .collect::<Box<_>>();
         // TODO: number of emitted rays should be checked.
         SingleSimResult {
             wi: w_i,

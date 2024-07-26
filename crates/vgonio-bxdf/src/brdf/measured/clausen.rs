@@ -215,8 +215,7 @@ impl ClausenBrdf {
                 .unwrap()
                 .iter()
                 .map(|v| v.as_f64().unwrap() as f32)
-                .collect::<Vec<f32>>()
-                .into_boxed_slice();
+                .collect::<Box<[f32]>>();
             assert_eq!(spectrum_samples.len(), n_spectrum);
             unordered_samples.push((wi, wo, spectrum_samples));
             i += 1;
