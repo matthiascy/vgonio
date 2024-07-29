@@ -1,5 +1,6 @@
 //! Surface smoothing algorithms.
-pub mod cpnt;
+pub mod curved;
+pub mod wiggle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Subdivision {
@@ -10,6 +11,16 @@ pub enum Subdivision {
     Wiggly(u32),
     /// No subdivision.
     None,
+}
+
+impl Subdivision {
+    /// Get the subdivision level.
+    pub fn level(&self) -> u32 {
+        match self {
+            Subdivision::Curved(level) | Subdivision::Wiggly(level) => *level,
+            Subdivision::None => 0,
+        }
+    }
 }
 
 /// The kind of subdivision.

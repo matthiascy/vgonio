@@ -15,7 +15,7 @@ pub mod subdivision;
 #[cfg(feature = "embree")]
 use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
 
-use crate::subdivision::{cpnt, Subdivision};
+use crate::subdivision::{curved, wiggle, Subdivision};
 use base::{
     error::VgonioError,
     io::{
@@ -935,86 +935,25 @@ impl MicroSurfaceMesh {
         if level == 0 {
             return;
         }
-        fn nvert(lod: u32) -> u32 {
-            if lod == 0 {
-                3
-            } else {
-                nvert(lod - 1) + lod + 2
-            }
-        }
-        let n_pts_per_facet = nvert(level) as usize;
-        let n_tris_per_facet = ((level + 1) * (level + 1)) as usize;
-        let n_ctrl_pts_per_edge = level + 2;
 
-        let new_num_verts = self.num_facets * n_pts_per_facet;
+        let subdivision = TriangleSubdivision::new(level);
+        let new_num_verts = self.num_facets * subdivision.n_pnts as usize;
         let mut new_verts = vec![Vec3::ZERO; new_num_verts].into_boxed_slice();
         let mut new_vert_normals = vec![Vec3::ZERO; new_num_verts].into_boxed_slice();
-        let new_num_facets = self.num_facets * n_tris_per_facet;
+        let new_num_facets = self.num_facets * subdivision.n_tris as usize;
         let mut new_facets = vec![0u32; new_num_facets * 3].into_boxed_slice();
         let mut new_facet_normals = vec![Vec3::ZERO; new_num_facets].into_boxed_slice();
         let mut new_facet_areas = vec![0.0f64; new_num_facets].into_boxed_slice();
-        let uvs = {
-            let uv_vals = RangeByStepCountInclusive::new(0.0f32, 1.0, n_ctrl_pts_per_edge as usize)
-                .values()
-                .map(|x| x.min(1.0))
-                .collect::<Box<_>>();
-            let mut uvs = Box::new_uninit_slice(n_pts_per_facet);
-            let mut i = 0;
-            for u in uv_vals.iter() {
-                for v in uv_vals.iter() {
-                    if u + v <= 1.0 || (u + v - 1.0).abs() <= 1e-6 {
-                        uvs[i].write(Vec2::new(*u, *v));
-                        i += 1;
-                    }
-                }
-            }
-            assert_eq!(
-                i, n_pts_per_facet,
-                "Number of UVs does not match the number of points"
-            );
-            unsafe { uvs.assume_init() }
-        };
 
-        fn triangulate(lod: u32, base: u32, tris: &mut [u32]) {
-            let num_ctrl_pts = lod + 2;
-            let mut offset = 0;
-            let mut tris_idx = 0;
-            for l in 0..num_ctrl_pts {
-                let nl = num_ctrl_pts - l;
-                for i in 0..nl - 1 {
-                    if i < nl - 2 {
-                        tris[tris_idx..tris_idx + 6].copy_from_slice(&[
-                            // 1st
-                            base + offset + i,
-                            base + offset + i + 1,
-                            base + offset + i + nl,
-                            // 2nd
-                            base + offset + i + 1,
-                            base + offset + i + nl,
-                            base + offset + i + nl + 1,
-                        ]);
-                        tris_idx += 6;
-                    } else {
-                        tris[tris_idx..tris_idx + 3].copy_from_slice(&[
-                            // 1st
-                            base + offset + i,
-                            base + offset + i + 1,
-                            base + offset + i + nl,
-                        ]);
-                        tris_idx += 3;
-                    };
-                }
-                offset += nl;
-            }
-        }
         const FACET_CHUNK_SIZE: usize = 128;
+        // Iterate over the facets in chunks to subdivide in parallel
         self.facets
             .par_chunks(3 * FACET_CHUNK_SIZE)
-            .zip(new_verts.par_chunks_mut(FACET_CHUNK_SIZE * n_pts_per_facet))
-            .zip(new_vert_normals.par_chunks_mut(FACET_CHUNK_SIZE * n_pts_per_facet))
-            .zip(new_facets.par_chunks_mut(FACET_CHUNK_SIZE * 3 * n_tris_per_facet))
-            .zip(new_facet_normals.par_chunks_mut(FACET_CHUNK_SIZE * n_tris_per_facet))
-            .zip(new_facet_areas.par_chunks_mut(FACET_CHUNK_SIZE * n_tris_per_facet))
+            .zip(new_verts.par_chunks_mut(FACET_CHUNK_SIZE * subdivision.n_pnts as usize))
+            .zip(new_vert_normals.par_chunks_mut(FACET_CHUNK_SIZE * subdivision.n_pnts as usize))
+            .zip(new_facets.par_chunks_mut(FACET_CHUNK_SIZE * 3 * subdivision.n_tris as usize))
+            .zip(new_facet_normals.par_chunks_mut(FACET_CHUNK_SIZE * subdivision.n_tris as usize))
+            .zip(new_facet_areas.par_chunks_mut(FACET_CHUNK_SIZE * subdivision.n_tris as usize))
             .zip(self.facet_normals.par_chunks(FACET_CHUNK_SIZE))
             .enumerate()
             .for_each(
@@ -1034,14 +973,15 @@ impl MicroSurfaceMesh {
                         facet_normals_chunk,
                     ),
                 )| {
-                    let mut new_verts_f64 = vec![DVec3::ZERO; n_pts_per_facet].into_boxed_slice();
+                    let mut new_verts_f64 =
+                        vec![DVec3::ZERO; subdivision.n_pnts as usize].into_boxed_slice();
                     facets_chunk
                         .chunks(3)
-                        .zip(new_verts_chunk.chunks_mut(n_pts_per_facet))
-                        .zip(new_vert_normals_chunk.chunks_mut(n_pts_per_facet))
-                        .zip(new_facets_chunk.chunks_mut(3 * n_tris_per_facet))
-                        .zip(new_facets_normal_chunk.chunks_mut(n_tris_per_facet))
-                        .zip(new_facets_area_chunk.chunks_mut(n_tris_per_facet))
+                        .zip(new_verts_chunk.chunks_mut(subdivision.n_pnts as usize))
+                        .zip(new_vert_normals_chunk.chunks_mut(subdivision.n_pnts as usize))
+                        .zip(new_facets_chunk.chunks_mut(3 * subdivision.n_tris as usize))
+                        .zip(new_facets_normal_chunk.chunks_mut(subdivision.n_tris as usize))
+                        .zip(new_facets_area_chunk.chunks_mut(subdivision.n_tris as usize))
                         .zip(facet_normals_chunk.iter())
                         .enumerate()
                         .for_each(
@@ -1074,18 +1014,19 @@ impl MicroSurfaceMesh {
                                     self.vert_normals[facet[2] as usize],
                                 ];
                                 // Get interpolated points and normals
-                                cpnt::subdivide_triangle(
+                                curved::subdivide_triangle(
                                     &tri_verts,
                                     &tri_norms,
-                                    &uvs,
+                                    &subdivision.uvs,
                                     &mut new_verts_f64,
                                     new_vert_normals,
                                 );
                                 // Triangulate the new points
-                                let vert_base = (chunk_idx * FACET_CHUNK_SIZE * n_pts_per_facet
-                                    + i * n_pts_per_facet)
-                                    as u32;
-                                triangulate(level, vert_base, new_facets);
+                                let vert_base =
+                                    (chunk_idx * FACET_CHUNK_SIZE * subdivision.n_pnts as usize
+                                        + i * subdivision.n_pnts as usize)
+                                        as u32;
+                                TriangleSubdivision::triangulate(level, vert_base, new_facets);
                                 // Compute the per-facet normals and areas
                                 for ((new_facet, new_normal), new_area) in new_facets
                                     .chunks_mut(3)
@@ -1138,7 +1079,258 @@ impl MicroSurfaceMesh {
     }
 
     /// Smooth the mesh by subdividing the triangles into wiggly surfaces.
-    pub fn wiggly_smooth(&mut self, level: u32) {}
+    pub fn wiggly_smooth(&mut self, level: u32) {
+        log::debug!("Wiggly smoothing the mesh with level: {}", level);
+        if level == 0 {
+            return;
+        }
+
+        let subdivision = TriangleSubdivision::new(level);
+        let new_num_verts = self.num_facets * subdivision.n_pnts as usize;
+        let mut new_verts = vec![Vec3::ZERO; new_num_verts].into_boxed_slice();
+        let mut new_vert_normals = vec![Vec3::ZERO; new_num_verts].into_boxed_slice();
+        let new_num_facets = self.num_facets * subdivision.n_tris as usize;
+        let mut new_facets = vec![0u32; new_num_facets * 3].into_boxed_slice();
+        let mut new_facet_normals = vec![Vec3::ZERO; new_num_facets].into_boxed_slice();
+        let mut new_facet_areas = vec![0.0f64; new_num_facets].into_boxed_slice();
+
+        const FACET_CHUNK_SIZE: usize = 128;
+        // Iterate over the facets in chunks to subdivide in parallel
+        self.facets
+            .par_chunks(3 * FACET_CHUNK_SIZE)
+            .zip(new_verts.par_chunks_mut(FACET_CHUNK_SIZE * subdivision.n_pnts as usize))
+            .zip(new_vert_normals.par_chunks_mut(FACET_CHUNK_SIZE * subdivision.n_pnts as usize))
+            .zip(new_facets.par_chunks_mut(FACET_CHUNK_SIZE * 3 * subdivision.n_tris as usize))
+            .zip(new_facet_normals.par_chunks_mut(FACET_CHUNK_SIZE * subdivision.n_tris as usize))
+            .zip(new_facet_areas.par_chunks_mut(FACET_CHUNK_SIZE * subdivision.n_tris as usize))
+            .zip(self.facet_normals.par_chunks(FACET_CHUNK_SIZE))
+            .enumerate()
+            .for_each(
+                |(
+                    chunk_idx,
+                    (
+                        (
+                            (
+                                (
+                                    ((facets_chunk, new_verts_chunk), new_vert_normals_chunk),
+                                    new_facets_chunk,
+                                ),
+                                new_facets_normal_chunk,
+                            ),
+                            new_facets_area_chunk,
+                        ),
+                        facet_normals_chunk,
+                    ),
+                )| {
+                    let mut new_verts_f64 =
+                        vec![DVec3::ZERO; subdivision.n_pnts as usize].into_boxed_slice();
+                    facets_chunk
+                        .chunks(3)
+                        .zip(new_verts_chunk.chunks_mut(subdivision.n_pnts as usize))
+                        .zip(new_vert_normals_chunk.chunks_mut(subdivision.n_pnts as usize))
+                        .zip(new_facets_chunk.chunks_mut(3 * subdivision.n_tris as usize))
+                        .zip(new_facets_normal_chunk.chunks_mut(subdivision.n_tris as usize))
+                        .zip(new_facets_area_chunk.chunks_mut(subdivision.n_tris as usize))
+                        .zip(facet_normals_chunk.iter())
+                        .enumerate()
+                        .for_each(
+                            |(
+                                i,
+                                (
+                                    (
+                                        (
+                                            (((facet, new_verts), new_vert_normals), new_facets),
+                                            new_facet_normals,
+                                        ),
+                                        new_area,
+                                    ),
+                                    facet_normal,
+                                ),
+                            )| {
+                                let original_facet_normal = DVec3::new(
+                                    facet_normal.x as f64,
+                                    facet_normal.y as f64,
+                                    facet_normal.z as f64,
+                                );
+                                let tri_verts = [
+                                    self.verts[facet[0] as usize],
+                                    self.verts[facet[1] as usize],
+                                    self.verts[facet[2] as usize],
+                                ];
+                                let tri_norms = [
+                                    self.vert_normals[facet[0] as usize],
+                                    self.vert_normals[facet[1] as usize],
+                                    self.vert_normals[facet[2] as usize],
+                                ];
+                                // Get interpolated points and normals
+                                wiggle::subdivide_triangle(
+                                    &tri_verts,
+                                    &subdivision.uvs,
+                                    &mut new_verts_f64,
+                                );
+                                // Triangulate the new points
+                                let vert_base =
+                                    (chunk_idx * FACET_CHUNK_SIZE * subdivision.n_pnts as usize
+                                        + i * subdivision.n_pnts as usize)
+                                        as u32;
+                                TriangleSubdivision::triangulate(level, vert_base, new_facets);
+                                // Compute the per-facet normals and areas
+                                for ((new_facet, new_normal), new_area) in new_facets
+                                    .chunks_mut(3)
+                                    .zip(new_facet_normals.iter_mut())
+                                    .zip(new_area.iter_mut())
+                                {
+                                    let p0 =
+                                        new_verts_f64[new_facet[0] as usize - vert_base as usize];
+                                    let p1 =
+                                        new_verts_f64[new_facet[1] as usize - vert_base as usize];
+                                    let p2 =
+                                        new_verts_f64[new_facet[2] as usize - vert_base as usize];
+                                    let cross = (p1 - p0).cross(p2 - p0);
+                                    *new_area = 0.5 * cross.length();
+                                    let mut normal = cross.normalize();
+                                    if normal.dot(original_facet_normal) < 0.0 {
+                                        normal = -normal;
+                                        *new_normal =
+                                            (normal.x as f32, normal.y as f32, normal.z as f32)
+                                                .into();
+                                        new_facet.swap(1, 2);
+                                    } else {
+                                        *new_normal =
+                                            (normal.x as f32, normal.y as f32, normal.z as f32)
+                                                .into();
+                                    }
+                                }
+                                new_verts_f64.iter().zip(new_verts.iter_mut()).for_each(
+                                    |(vertf64, vert)| {
+                                        vert.x = vertf64.x as f32;
+                                        vert.y = vertf64.y as f32;
+                                        vert.z = vertf64.z as f32;
+                                    },
+                                );
+                            },
+                        );
+                },
+            );
+        self.facet_total_area = new_facet_areas.iter().sum::<f64>() as f32;
+        self.facet_normals = new_facet_normals;
+        self.facet_areas = new_facet_areas
+            .iter()
+            .map(|x| *x as f32)
+            .collect::<Box<[f32]>>();
+        self.facets = new_facets;
+        self.verts = new_verts;
+        self.num_facets = new_num_facets;
+        self.num_verts = new_num_verts;
+        self.vert_normals = new_vert_normals;
+    }
+}
+
+/// Helper struct for triangle subdivision.
+struct TriangleSubdivision {
+    /// Level of subdivision.
+    level: u32,
+    /// Number of vertices in total after subdivision.
+    n_pnts: u32,
+    /// Number of triangles in total after subdivision.
+    n_tris: u32,
+    /// Number of control points per edge.
+    /// The original triangle has 2 control points per edge.
+    n_ctrl_pnts_per_edge: u32,
+    /// UV coordinates for the points on the subdivided triangle.
+    uvs: Box<[Vec2]>,
+}
+
+impl TriangleSubdivision {
+    pub fn new(level: u32) -> Self {
+        let n_ctrl_pnts_per_edge = level + 2;
+        let n_pnts = Self::calc_n_pnts(level);
+        let n_tris = (level + 1) * (level + 1);
+        let uvs = Self::calc_pnts_uvs(n_ctrl_pnts_per_edge, n_pnts);
+        Self {
+            level,
+            n_pnts,
+            n_tris,
+            n_ctrl_pnts_per_edge,
+            uvs,
+        }
+    }
+
+    /// Returns the number of vertices in the triangulation of a facet at the
+    /// specified level.
+    ///
+    /// Level 0 has the original 3 vertices.
+    const fn calc_n_pnts(level: u32) -> u32 {
+        if level == 0 {
+            3
+        } else {
+            Self::calc_n_pnts(level - 1) + level + 2
+        }
+    }
+
+    /// Computes the UV coordinates for the points on the subdivided triangle.
+    fn calc_pnts_uvs(n_ctrl_pnts_per_edge: u32, n_pnts_per_facet: u32) -> Box<[Vec2]> {
+        let uv_vals = RangeByStepCountInclusive::new(0.0f32, 1.0, n_ctrl_pnts_per_edge as usize)
+            .values()
+            .map(|x| x.min(1.0))
+            .collect::<Box<_>>();
+        let mut uvs = Box::new_uninit_slice(n_pnts_per_facet as usize);
+        let mut i = 0;
+        for u in uv_vals.iter() {
+            for v in uv_vals.iter() {
+                if u + v <= 1.0 || (u + v - 1.0).abs() <= 1e-6 {
+                    uvs[i].write(Vec2::new(*u, *v));
+                    i += 1;
+                }
+            }
+        }
+        assert_eq!(
+            i, n_pnts_per_facet as usize,
+            "Number of UVs does not match the number of points"
+        );
+        unsafe { uvs.assume_init() }
+    }
+
+    /// Triangulate a single facet into a set of triangles according to the
+    /// specified level.
+    ///
+    /// # Arguments
+    ///
+    /// * `level` - Level of subdivision, 0 means no subdivision.
+    /// * `base` - Base index of the first vertex of the facet.
+    /// * `tris` - Array of vertex indices forming triangles.
+    fn triangulate(level: u32, base: u32, tris: &mut [u32]) {
+        let num_ctrl_pts = level + 2;
+        let mut offset = 0;
+        let mut tris_idx = 0;
+        for l in 0..num_ctrl_pts {
+            let nl = num_ctrl_pts - l;
+            for i in 0..nl - 1 {
+                if i < nl - 2 {
+                    tris[tris_idx..tris_idx + 6].copy_from_slice(&[
+                        // 1st
+                        base + offset + i,
+                        base + offset + i + 1,
+                        base + offset + i + nl,
+                        // 2nd
+                        base + offset + i + 1,
+                        base + offset + i + nl,
+                        base + offset + i + nl + 1,
+                    ]);
+                    tris_idx += 6;
+                } else {
+                    tris[tris_idx..tris_idx + 3].copy_from_slice(&[
+                        // 1st
+                        base + offset + i,
+                        base + offset + i + 1,
+                        base + offset + i + nl,
+                    ]);
+                    tris_idx += 3;
+                };
+            }
+            offset += nl;
+        }
+    }
 }
 
 /// Origin of the micro-geometry height field.
