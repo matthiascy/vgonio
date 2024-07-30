@@ -9,13 +9,17 @@ use base::math::Axis;
 mod gen;
 #[cfg(feature = "surf-gen")]
 pub use gen::*;
+pub mod dcel;
 pub mod io;
 pub mod subdivision;
 
 #[cfg(feature = "embree")]
 use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
 
-use crate::subdivision::{curved, wiggle, Subdivision};
+use crate::{
+    dcel::HalfEdgeMesh,
+    subdivision::{curved, wiggle, Subdivision},
+};
 use base::{
     error::VgonioError,
     io::{
@@ -31,6 +35,8 @@ use glam::{DVec3, Vec2};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
+    collections::HashMap,
     fs::File,
     io::{BufReader, BufWriter, Read, Seek, Write},
     path::{Path, PathBuf},
@@ -1080,6 +1086,11 @@ impl MicroSurfaceMesh {
 
     /// Smooth the mesh by subdividing the triangles into wiggly surfaces.
     pub fn wiggly_smooth(&mut self, level: u32) {
+        let dcel = self.build_half_edges();
+        println!("Half edges built: {:?}", dcel.darts);
+        println!("Half edges built: {:?}", dcel.faces);
+        println!("Half edges built: {:?}", dcel.verts);
+
         log::debug!("Wiggly smoothing the mesh with level: {}", level);
         if level == 0 {
             return;
@@ -1224,6 +1235,9 @@ impl MicroSurfaceMesh {
         self.num_verts = new_num_verts;
         self.vert_normals = new_vert_normals;
     }
+
+    /// Convert the mesh into a half-edge mesh.
+    pub fn build_half_edges(&self) -> HalfEdgeMesh { HalfEdgeMesh::new(&self.verts, &self.facets) }
 }
 
 /// Helper struct for triangle subdivision.

@@ -314,10 +314,11 @@ impl VgonioGui {
                 EventResponse::Handled
             }
             VgonioEvent::SubdivideSurface { surf, subdivision } => {
-                if subdivision.level() == 0 {
-                    log::debug!("No subdivision requested, skipping");
-                    return EventResponse::Handled;
-                }
+                // Temporary: disable subdivision
+                // if subdivision.level() == 0 {
+                //     log::debug!("No subdivision requested, skipping");
+                //     return EventResponse::Handled;
+                // }
 
                 // Don't touch the original surface, just subdivide into a new one mesh.
                 // Regenerate the mesh with more vertices.
