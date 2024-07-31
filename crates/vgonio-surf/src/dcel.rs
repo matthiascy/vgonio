@@ -78,11 +78,12 @@ impl Dart {
         }
     }
 
-    /// A valid half-edge means that the origin vertex, the incident face and
-    /// the next half-edge are all valid.
-    pub fn is_valid(&self) -> bool {
-        self.vert != u32::MAX && self.face != u32::MAX && self.next != u32::MAX
-    }
+    /// A valid half-edge means that the origin vertex, and
+    /// the next half-edge is valid.
+    pub fn is_valid(&self) -> bool { self.vert != u32::MAX && self.next != u32::MAX }
+
+    /// Check if the half-edge is on the boundary.
+    pub fn is_boundary(&self) -> bool { self.face == u32::MAX }
 
     /// Check if the half-edge has a twin.
     pub fn has_twin(&self) -> bool { self.twin != u32::MAX }
@@ -103,13 +104,16 @@ pub struct HalfEdgeMesh<'a> {
 impl<'a> HalfEdgeMesh<'a> {
     /// Create a new half-edge mesh from the given positions and triangles.
     pub fn new<'b>(positions: Cow<'a, [Vec3]>, tris: &'b [u32]) -> Self {
+        if positions.is_empty() || tris.is_empty() {
+            log::error!("Constructing a half-edge mesh with empty positions or triangles!");
+        }
         assert_eq!(tris.len() % 3, 0, "The input triangles must be valid.");
         let num_verts = positions.len();
         let num_faces = tris.len() / 3;
 
         let mut verts = vec![Vert::invalid(); num_verts].into_boxed_slice();
         let mut faces = vec![Face::invalid(); num_faces].into_boxed_slice();
-        let mut darts = vec![Dart::invalid(); num_faces * 3].into_boxed_slice();
+        let mut darts = vec![Dart::invalid(); num_faces * 3];
         // The key is the vertex indices of the two ends of the half-edge.
         // The value is the two half-edges that are twins.
         let mut twins: HashMap<(u32, u32), (u32, u32)> = HashMap::new();
@@ -146,19 +150,61 @@ impl<'a> HalfEdgeMesh<'a> {
             }
         }
 
+        // Number of darts incident on a face.
+        let n_darts = darts.len();
+        let mut boundary_darts = Vec::with_capacity(num_verts);
+        // The boundary darts are stored in a hashmap where the key is the dart index,
+        // and the value is the start and end vertices indices of the boundary.
+        let mut boundary_darts_ends: HashMap<u32, (u32, u32)> = HashMap::new();
         for (a, b) in twins.values() {
-            if *a == u32::MAX || *b == u32::MAX {
+            // The twin of the half-edge is on the boundary.
+            if *b == u32::MAX {
+                // The half-edge located on the face.
+                let dart = darts[*a as usize];
+                let next_dart_vert = darts[dart.next as usize].vert;
+                let boundary_dart_idx = (n_darts + boundary_darts.len()) as u32;
+                darts[*a as usize].twin = boundary_dart_idx;
+
+                // Construct the dart on the boundary.
+                let mut boundary_dart = Dart::invalid();
+                boundary_dart.twin = *a;
+                boundary_dart.vert = next_dart_vert;
+                boundary_dart.face = u32::MAX;
+                boundary_dart.next = u32::MAX;
+                boundary_dart.prev = u32::MAX;
+                boundary_darts.push(boundary_dart);
+                boundary_darts_ends.insert(boundary_dart_idx, (boundary_dart.vert, dart.vert));
                 continue;
             }
             darts[*a as usize].twin = *b;
             darts[*b as usize].twin = *a;
         }
 
+        darts.append(&mut boundary_darts);
+        darts.shrink_to_fit();
+
+        // Iterate over the boundary darts and set the next and previous darts.
+        for (dart_idx, (start, end)) in boundary_darts_ends.iter() {
+            let mut dart = &mut darts[*dart_idx as usize];
+            dart.next = boundary_darts_ends
+                .iter()
+                .find(|(_, (s, _))| s == end)
+                .unwrap()
+                .0
+                .clone();
+            dart.prev = boundary_darts_ends
+                .iter()
+                .find(|(_, (_, e))| e == start)
+                .unwrap()
+                .0
+                .clone();
+        }
+
         Self {
             positions,
             verts,
             faces,
-            darts,
+            darts: darts.into_boxed_slice(),
         }
     }
 
@@ -178,6 +224,25 @@ impl<'a> HalfEdgeMesh<'a> {
         darts.into_boxed_slice()
     }
 
+    /// Get the faces on which the vertex is incident.
+    pub fn faces_of_vert(&self, vert_idx: usize) -> Box<[u32]> {
+        let vert = &self.verts[vert_idx];
+        let mut faces = Vec::new();
+        let mut dart_idx = vert.dart;
+        loop {
+            let dart = &self.darts[dart_idx as usize];
+            if !dart.is_boundary() {
+                faces.push(dart.face);
+            }
+            let prev = &self.darts[dart.prev as usize];
+            dart_idx = prev.twin;
+            if dart_idx == vert.dart {
+                break;
+            }
+        }
+        faces.into_boxed_slice()
+    }
+
     /// Subdivide the mesh by looping over the faces and subdividing each face
     /// into smaller faces according to the given uv coordinates of the
     /// triangle.
@@ -195,7 +260,7 @@ impl<'a> HalfEdgeMesh<'a> {
     ///   the positions of the vertices of the face, and the output positions of
     ///   the new vertices.
     pub fn subdivide_by_uvs<I>(
-        &mut self,
+        &self,
         sub: &TriangleUVSubdivision,
         interp: I,
     ) -> HalfEdgeMesh<'static>
@@ -205,7 +270,7 @@ impl<'a> HalfEdgeMesh<'a> {
         log::debug!("Subdividing the mesh by uvs.: {:?}", sub);
         let new_num_faces = sub.n_tris as usize * self.faces.len();
         let mut new_positions = self.positions.to_vec();
-        let mut new_triangles = Vec::with_capacity(new_num_faces * 3);
+        let mut new_triangles = vec![u32::MAX; new_num_faces * 3];
 
         // The new triangles that will be added to the mesh.
         let mut interp_pnts_per_face = vec![DVec3::ZERO; sub.uvs.len()].into_boxed_slice();
@@ -377,5 +442,17 @@ impl<'a> HalfEdgeMesh<'a> {
         new_positions.shrink_to_fit();
         new_triangles.shrink_to_fit();
         HalfEdgeMesh::new(Cow::Owned(new_positions), &new_triangles)
+    }
+
+    /// Get the number of vertices.
+    pub fn n_verts(&self) -> usize { self.verts.len() }
+
+    /// Get the number of faces.
+    pub fn n_faces(&self) -> usize { self.faces.len() }
+
+    pub fn debug_print(&self) {
+        log::debug!("Vertices: {:?}", self.verts);
+        log::debug!("Faces: {:?}", self.faces);
+        log::debug!("Darts: {:?}", self.darts);
     }
 }
