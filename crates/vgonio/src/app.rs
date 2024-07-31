@@ -554,6 +554,7 @@ pub fn init(args: &CliArgs, launch_time: std::time::SystemTime) -> Result<Config
         .filter(Some("wgpu"), log_filter_from_level(log_level_wgpu))
         .filter(Some("naga"), log_filter_from_level(log_level_wgpu))
         .filter(Some("winit"), log_filter_from_level(log_level_winit))
+        .filter(Some("calloop"), log_filter_from_level(3))
         .filter_level(log_filter_from_level(log_level))
         .init();
 

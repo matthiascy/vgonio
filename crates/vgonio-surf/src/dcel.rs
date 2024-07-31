@@ -150,6 +150,8 @@ impl<'a> HalfEdgeMesh<'a> {
             }
         }
 
+        log::trace!("Twins: {:?}", twins);
+
         // Number of darts incident on a face.
         let n_darts = darts.len();
         let mut boundary_darts = Vec::with_capacity(num_verts);
@@ -179,6 +181,17 @@ impl<'a> HalfEdgeMesh<'a> {
             darts[*a as usize].twin = *b;
             darts[*b as usize].twin = *a;
         }
+
+        log::trace!(
+            "Boundary darts ({}): {:?}",
+            boundary_darts.len(),
+            boundary_darts
+        );
+        log::trace!(
+            "Boundary darts ends ({}): {:?}",
+            boundary_darts_ends.len(),
+            boundary_darts_ends
+        );
 
         darts.append(&mut boundary_darts);
         darts.shrink_to_fit();
@@ -289,7 +302,7 @@ impl<'a> HalfEdgeMesh<'a> {
             .zip(new_triangles.chunks_mut(sub.n_tris as usize * 3))
             .enumerate()
         {
-            log::debug!("Processing face: {}", old_face_idx);
+            log::trace!("Processing face: {}", old_face_idx);
             // 1. Get the vertices of the face.
             let mut old_tri_verts = [Vec3::ZERO; 3];
             let mut old_tri_indis = [u32::MAX; 3];
@@ -330,6 +343,7 @@ impl<'a> HalfEdgeMesh<'a> {
             log::trace!("Construct shared edges (local): {:?}", local_shared);
 
             let new_tri_vert_idx_offset = new_positions.len() as u32;
+            log::trace!("num verts start: {}", new_positions.len());
             let mut next_new_tri_vert_idx = new_tri_vert_idx_offset;
             for (new_pnt, loc) in interp_pnts_per_face.iter().zip(sub.locations.iter()) {
                 match loc {
@@ -344,7 +358,7 @@ impl<'a> HalfEdgeMesh<'a> {
                             let dart_idx = local_shared[edge_loc as usize];
                             // This edge is shared.
                             if dart_idx != u32::MAX {
-                                log::debug!(" - Shared edge: {}, dart: {}", edge_loc, dart_idx);
+                                log::trace!(" - Shared edge: {}, dart: {}", edge_loc, dart_idx);
 
                                 // Do not construct new vertices for the vertices that are shared.
                                 if shared.contains_key(&self.darts[dart_idx as usize].twin) {
@@ -371,7 +385,8 @@ impl<'a> HalfEdgeMesh<'a> {
                 }
             }
 
-            log::debug!("num verts after: {}", new_positions.len());
+            log::trace!("shared edges: {:?}", shared);
+            log::trace!("num verts after: {}", new_positions.len());
 
             let mut to_remove = Vec::with_capacity(3);
             // 4. Build vertex index replacement table.
@@ -389,13 +404,17 @@ impl<'a> HalfEdgeMesh<'a> {
                             return;
                         }
                         VertLoc::Inside => {}
-                        VertLoc::Edge(i) => {
+                        e @ VertLoc::Edge(i) => {
                             // Shared edge.
                             if local_shared[*i as usize] != u32::MAX {
                                 let dart = self.darts[local_shared[*i as usize] as usize];
                                 // Can we find the vertex index from the shared edges?
                                 if let Some((_, verts)) = shared.get_mut(&dart.twin) {
-                                    *rep = verts.pop_front().unwrap();
+                                    *rep = if e == &VertLoc::E02 {
+                                        verts.pop_back().unwrap()
+                                    } else {
+                                        verts.pop_front().unwrap()
+                                    };
                                     if verts.is_empty() {
                                         to_remove.push(dart.twin);
                                     }
@@ -414,16 +433,16 @@ impl<'a> HalfEdgeMesh<'a> {
                         *rep = idx as u32 + new_tri_vert_idx_offset - 1 - n_shared;
                     }
                 });
-            log::debug!("Replacement table: {:?}", replacement);
+            log::trace!("Replacement table: {:?}", replacement);
 
             // 5. Convert the newly created triangle indices into global vertex indices.
             new_tris_per_face.iter_mut().for_each(|vidx| {
                 *vidx = replacement[*vidx as usize];
             });
 
-            log::debug!("New triangles - local: {:?}", sub.indices);
-            log::debug!("New triangles - global: {:?}", new_tris_per_face);
-            log::debug!("Old triangle vertices: {:?}", old_tri_indis);
+            log::trace!("New triangles - local: {:?}", sub.indices);
+            log::trace!("New triangles - global: {:?}", new_tris_per_face);
+            log::trace!("Old triangle vertices: {:?}", old_tri_indis);
 
             // 6. Append the new triangles to the mesh.
             new_tris.copy_from_slice(&new_tris_per_face);
@@ -433,7 +452,7 @@ impl<'a> HalfEdgeMesh<'a> {
                 shared.remove(&dart_idx);
             }
 
-            log::debug!("Shared edges after cleanup: {:?}", shared);
+            log::trace!("Shared edges after cleanup: {:?}", shared);
 
             // Reset the new triangles.
             new_tris_per_face.copy_from_slice(&sub.indices);

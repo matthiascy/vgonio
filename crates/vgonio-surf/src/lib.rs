@@ -945,6 +945,7 @@ impl MicroSurfaceMesh {
         geom
     }
 
+    // TODO: merge cureved_smooth and wiggly_smooth into a single function
     /// Subdivide the mesh.
     pub fn subdivide(&mut self, opts: Subdivision) {
         if opts.level() == 0 {
@@ -1123,27 +1124,55 @@ impl MicroSurfaceMesh {
             let dcel = HalfEdgeMesh::new(Cow::Borrowed(&self.verts), &self.facets);
             dcel.subdivide_by_uvs(&subdivision, wiggle::subdivide_triangle)
         };
-        println!("subdivided: {:?}", subdivided.darts);
-        // let mut new_verts = subdivided.positions;
-        // let mut new_facets = vec![u32::MAX; dcel.n_faces() * 3].into_boxed_slice();
-        // let mut new_facets_normals = vec![Vec3::ZERO;
-        // dcel.n_faces()].into_boxed_slice(); let mut new_verts_normals =
-        // vec![Vec3::ZERO; dcel.n_verts()].into_boxed_slice();
+        let mut new_facets = vec![u32::MAX; subdivided.n_faces() * 3].into_boxed_slice();
+        let mut new_facets_normals = vec![Vec3::ZERO; subdivided.n_faces()].into_boxed_slice();
+        let mut new_facets_areas = vec![0.0f64; subdivided.n_faces()].into_boxed_slice();
 
-        println!("faces of vert 3: {:?}", subdivided.faces_of_vert(3));
-        println!("faces of vert 9: {:?}", subdivided.faces_of_vert(9));
+        new_facets
+            .chunks_mut(3)
+            .zip(new_facets_normals.iter_mut())
+            .zip(new_facets_areas.iter_mut())
+            .zip(subdivided.faces.iter().enumerate())
+            .for_each(|(((f, normal), area), (i, _))| {
+                let darts_of_face = subdivided.darts_of_face(i);
+                for ((dart_idx, dart), v) in darts_of_face.iter().zip(f.iter_mut()) {
+                    *v = subdivided.darts[*dart_idx as usize].vert;
+                }
+                let p0 = subdivided.positions[f[0] as usize].as_dvec3();
+                let p1 = subdivided.positions[f[1] as usize].as_dvec3();
+                let p2 = subdivided.positions[f[2] as usize].as_dvec3();
+                let cross = (p1 - p0).cross(p2 - p0);
+                *area = 0.5 * cross.length();
+                *normal = cross.normalize().as_vec3();
+            });
 
-        // self.facet_total_area = new_facet_areas.iter().sum::<f64>() as f32;
-        // self.facet_normals = new_facet_normals;
-        // self.facet_areas = new_facet_areas
-        //     .iter()
-        //     .map(|x| *x as f32)
-        //     .collect::<Box<[f32]>>();
-        // self.facets = new_facets;
-        // self.verts = new_verts;
-        // self.num_facets = new_num_facets;
-        // self.num_verts = new_num_verts;
-        // self.vert_normals = new_vert_normals;
+        let mut new_verts_normals = vec![Vec3::ZERO; subdivided.n_verts()].into_boxed_slice();
+        for (i, (_, normal)) in subdivided
+            .verts
+            .iter()
+            .zip(new_verts_normals.iter_mut())
+            .enumerate()
+        {
+            for face in subdivided.faces_of_vert(i) {
+                *normal += new_facets_normals[face as usize];
+            }
+            *normal = normal.normalize();
+        }
+
+        let new_verts = subdivided.positions;
+        let num_facets = new_facets.len() / 3;
+        let num_verts = new_verts.len();
+        self.facet_total_area = new_facets_areas.iter().sum::<f64>() as f32;
+        self.facet_normals = new_facets_normals;
+        self.facet_areas = new_facets_areas
+            .iter()
+            .map(|x| *x as f32)
+            .collect::<Box<[f32]>>();
+        self.facets = new_facets;
+        self.verts = new_verts.to_owned().into();
+        self.num_facets = num_facets;
+        self.num_verts = num_verts;
+        self.vert_normals = new_verts_normals;
     }
 }
 
@@ -1176,7 +1205,7 @@ struct TriangleUVSubdivision {
 }
 
 /// Location of the vertex in the subdivided triangle.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum VertLoc {
     /// Vertex of the original triangle.
     Vert(u32),
@@ -1195,9 +1224,9 @@ impl VertLoc {
     pub const V2: Self = Self::Vert(2);
     /// Vertex on the edge formed by the original vertices 0 and 1.
     pub const E01: Self = Self::Edge(0);
-    /// Vertex on the edge formed by the original vertices 2 and 0.
-    pub const E12: Self = Self::Edge(1);
     /// Vertex on the edge formed by the original vertices 1 and 2.
+    pub const E12: Self = Self::Edge(1);
+    /// Vertex on the edge formed by the original vertices 0 and 2.
     pub const E02: Self = Self::Edge(2);
 
     /// Returns true if the original vertex.
