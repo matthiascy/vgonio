@@ -1,3 +1,4 @@
+use crate::dcel::HalfEdgeMesh;
 use glam::{DVec3, Vec2, Vec3};
 use rand::distributions::{Distribution, Uniform};
 

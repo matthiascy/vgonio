@@ -32,6 +32,7 @@ use base::{
     Asset, Version,
 };
 use glam::{DVec3, Vec2};
+use log::log;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -581,9 +582,11 @@ impl MicroSurface {
             vert_normals: unsafe { vert_normals.assume_init() },
             facet_areas: areas,
             msurf: self.uuid,
+            num_rows: self.rows,
             unit: self.unit,
             height_offset,
             facet_total_area,
+            num_cols: self.cols,
         };
         log::debug!("Microfacet Area: {}", facet_total_area);
 
@@ -746,13 +749,13 @@ pub enum TriangulationPattern {
     /// | A  /  |
     /// |  /  B |
     /// 2  -->  3
-    #[default]
     BottomLeftToTopRight,
     /// Triangulate from top to bottom, right to left.
     /// 0  <--  1
     /// |  \  B |
     /// | A  \  |
     /// 2  -->  3
+    #[default]
     TopLeftToBottomRight,
 }
 
@@ -846,6 +849,12 @@ pub struct MicroSurfaceMesh {
 
     /// Uuid of the [`MicroSurface`] from which the mesh is generated.
     pub msurf: uuid::Uuid,
+
+    /// Number of rows in the mesh.
+    pub num_rows: usize,
+
+    /// Number of columns in the mesh.
+    pub num_cols: usize,
 
     /// Axis-aligned bounding box of the mesh.
     pub bounds: Aabb,
@@ -942,7 +951,7 @@ impl MicroSurfaceMesh {
             return;
         }
 
-        let subdivision = TriangleSubdivision::new(level);
+        let subdivision = TriangleUVSubdivision::new(level);
         let new_num_verts = self.num_facets * subdivision.n_pnts as usize;
         let mut new_verts = vec![Vec3::ZERO; new_num_verts].into_boxed_slice();
         let mut new_vert_normals = vec![Vec3::ZERO; new_num_verts].into_boxed_slice();
@@ -1032,7 +1041,7 @@ impl MicroSurfaceMesh {
                                     (chunk_idx * FACET_CHUNK_SIZE * subdivision.n_pnts as usize
                                         + i * subdivision.n_pnts as usize)
                                         as u32;
-                                TriangleSubdivision::triangulate(level, vert_base, new_facets);
+                                TriangleUVSubdivision::triangulate(level, vert_base, new_facets);
                                 // Compute the per-facet normals and areas
                                 for ((new_facet, new_normal), new_area) in new_facets
                                     .chunks_mut(3)
@@ -1086,17 +1095,19 @@ impl MicroSurfaceMesh {
 
     /// Smooth the mesh by subdividing the triangles into wiggly surfaces.
     pub fn wiggly_smooth(&mut self, level: u32) {
-        let dcel = self.build_half_edges();
-        println!("Half edges built: {:?}", dcel.darts);
-        println!("Half edges built: {:?}", dcel.faces);
-        println!("Half edges built: {:?}", dcel.verts);
-
         log::debug!("Wiggly smoothing the mesh with level: {}", level);
         if level == 0 {
             return;
         }
 
-        let subdivision = TriangleSubdivision::new(level);
+        let mut dcel = self.build_half_edges();
+        log::trace!("Half edges built: {:?}", dcel.darts);
+        log::trace!("Half edges built: {:?}", dcel.faces);
+        log::trace!("Half edges built: {:?}", dcel.verts);
+        let subdivision = TriangleUVSubdivision::new(level);
+
+        dcel.subdivide_by_uvs(&subdivision, wiggle::subdivide_triangle);
+
         let new_num_verts = self.num_facets * subdivision.n_pnts as usize;
         let mut new_verts = vec![Vec3::ZERO; new_num_verts].into_boxed_slice();
         let mut new_vert_normals = vec![Vec3::ZERO; new_num_verts].into_boxed_slice();
@@ -1184,7 +1195,7 @@ impl MicroSurfaceMesh {
                                     (chunk_idx * FACET_CHUNK_SIZE * subdivision.n_pnts as usize
                                         + i * subdivision.n_pnts as usize)
                                         as u32;
-                                TriangleSubdivision::triangulate(level, vert_base, new_facets);
+                                TriangleUVSubdivision::triangulate(level, vert_base, new_facets);
                                 // Compute the per-facet normals and areas
                                 for ((new_facet, new_normal), new_area) in new_facets
                                     .chunks_mut(3)
@@ -1237,11 +1248,14 @@ impl MicroSurfaceMesh {
     }
 
     /// Convert the mesh into a half-edge mesh.
-    pub fn build_half_edges(&self) -> HalfEdgeMesh { HalfEdgeMesh::new(&self.verts, &self.facets) }
+    pub fn build_half_edges(&self) -> HalfEdgeMesh {
+        HalfEdgeMesh::new(Cow::Borrowed(&self.verts), &self.facets)
+    }
 }
 
-/// Helper struct for triangle subdivision.
-struct TriangleSubdivision {
+/// Helper struct for micro-surface mesh subdivision.
+#[derive(Debug)]
+struct TriangleUVSubdivision {
     /// Level of subdivision.
     level: u32,
     /// Number of vertices in total after subdivision.
@@ -1250,23 +1264,85 @@ struct TriangleSubdivision {
     n_tris: u32,
     /// Number of control points per edge.
     /// The original triangle has 2 control points per edge.
-    n_ctrl_pnts_per_edge: u32,
+    n_ctrl_pnts: u32,
     /// UV coordinates for the points on the subdivided triangle.
     uvs: Box<[Vec2]>,
+    /// Indices of the resulting triangles in the local index space (in terms of
+    /// all the vertices inside the triangle).
+    /// The subdivision starts from the base triangle, and the indices are
+    /// generated in the order of the base triangle.
+    /// The indices are generated in the order first by u then by v (v increases
+    /// faster), which is the same order as the UV coordinates; thus, the base
+    /// edge where u = 0 is the 2nd edge in the original triangle (1st one
+    /// has v = 0).
+    indices: Box<[u32]>,
+    /// Records the edge where the new vertices are located.
+    /// 0, 1, 2 means the vertex is the original triangle vertex.
+    locations: Box<[VertLoc]>,
 }
 
-impl TriangleSubdivision {
+/// Location of the vertex in the subdivided triangle.
+#[derive(Debug, Copy, Clone)]
+pub enum VertLoc {
+    /// Vertex of the original triangle.
+    Vert(u32),
+    /// Vertex on the edge formed by the original vertices:
+    Edge(u32),
+    /// Vertex inside the triangle.
+    Inside,
+}
+
+impl VertLoc {
+    /// Vertex 0 of the original triangle.
+    pub const V0: Self = Self::Vert(0);
+    /// Vertex 1 of the original triangle.
+    pub const V1: Self = Self::Vert(1);
+    /// Vertex 2 of the original triangle.
+    pub const V2: Self = Self::Vert(2);
+    /// Vertex on the edge formed by the original vertices 0 and 1.
+    pub const E01: Self = Self::Edge(0);
+    /// Vertex on the edge formed by the original vertices 2 and 0.
+    pub const E12: Self = Self::Edge(1);
+    /// Vertex on the edge formed by the original vertices 1 and 2.
+    pub const E02: Self = Self::Edge(2);
+
+    /// Returns true if the original vertex.
+    pub fn is_vert(&self) -> bool { matches!(self, Self::Vert(_)) }
+
+    /// Returns true if the vertex is on the edge.
+    pub fn is_on_edge(&self) -> bool { matches!(self, Self::Edge(_)) }
+
+    /// Returns true if the vertex is inside the triangle.
+    pub fn edge_idx(&self) -> Option<u32> {
+        match self {
+            Self::Edge(idx) => Some(*idx),
+            _ => None,
+        }
+    }
+}
+
+impl TriangleUVSubdivision {
     pub fn new(level: u32) -> Self {
-        let n_ctrl_pnts_per_edge = level + 2;
+        let n_ctrl_pnts = level + 2;
         let n_pnts = Self::calc_n_pnts(level);
         let n_tris = (level + 1) * (level + 1);
-        let uvs = Self::calc_pnts_uvs(n_ctrl_pnts_per_edge, n_pnts);
+        let uvs = Self::calc_pnts_uvs(n_ctrl_pnts, n_pnts);
+        let indices = Self::calc_indices(n_ctrl_pnts, n_tris);
+        let locations = Self::calc_locations(n_ctrl_pnts, n_pnts);
+        log::debug!(
+            "Triangle UV subdivision: level: {}, n_pnts: {}, n_tris: {}",
+            level,
+            n_pnts,
+            n_tris
+        );
         Self {
             level,
             n_pnts,
             n_tris,
-            n_ctrl_pnts_per_edge,
+            n_ctrl_pnts,
             uvs,
+            indices,
+            locations,
         }
     }
 
@@ -1283,6 +1359,9 @@ impl TriangleSubdivision {
     }
 
     /// Computes the UV coordinates for the points on the subdivided triangle.
+    ///
+    /// The UV coordinates are generated in the order first by u then by v (v
+    /// increases faster).
     fn calc_pnts_uvs(n_ctrl_pnts_per_edge: u32, n_pnts_per_facet: u32) -> Box<[Vec2]> {
         let uv_vals = RangeByStepCountInclusive::new(0.0f32, 1.0, n_ctrl_pnts_per_edge as usize)
             .values()
@@ -1305,6 +1384,92 @@ impl TriangleSubdivision {
         unsafe { uvs.assume_init() }
     }
 
+    /// Computes the indices subdivide the triangle into smaller triangles.
+    ///
+    /// Construct the new triangles from the base where u = 0, level by level
+    /// until the last level.
+    ///
+    /// Index 0 matches the first vertex of the face,
+    /// Index num_ctrl_pts - 1 matches the last vertex of the face (along which
+    /// the u = 0). The index of the last vertex calculated is the last
+    /// vertex of the face.
+    ///
+    /// Example:
+    ///  num_ctrl_pnts = 3
+    ///  level = 2 = num_ctrl_pnts - 1
+    ///         5
+    ///       /  \     <- level 1, 1 triangle, n_pnts_base = 2
+    ///      4 -- 3
+    ///     / \ /  \   <- level 0, 3 triangles, n_pnts_base = 3
+    ///   2 -- 1 -- 0  <- base, u = 0
+    ///
+    ///  num_ctrl_pnts = 4
+    ///  level = 3 = num_ctrl_pnts - 1
+    ///         9
+    ///       /  \        <- level 2, 1 triangle, n_pnts_base = 2, pnts_idx = 7
+    ///      8 -- 7
+    ///    /  \ /  \      <- level 1, 3 triangles, n_pnts_base = 3, pnts_idx = 4
+    ///   6 -- 5 -- 4
+    ///  /  \ /  \ /  \   <- level 0, 6 triangles, n_pnts_base = 4, pnts_idx = 0
+    /// 3 -- 2 -- 1 -- 0  <- base, u = 0
+    pub fn calc_indices(n_ctrl_pnts: u32, n_tris: u32) -> Box<[u32]> {
+        let mut tris = vec![0; n_tris as usize * 3].into_boxed_slice();
+        let mut tri_idx = 0;
+        let mut pnts_idx = 0;
+        for l in 0..n_ctrl_pnts - 1 {
+            let n_pnts_base = n_ctrl_pnts - l;
+            for i in 0..n_pnts_base - 1 {
+                tris[tri_idx * 3] = i + pnts_idx;
+                tris[tri_idx * 3 + 1] = i + n_pnts_base + pnts_idx;
+                tris[tri_idx * 3 + 2] = i + 1 + pnts_idx;
+                tri_idx += 1;
+                if i < n_pnts_base - 2 {
+                    tris[tri_idx * 3] = i + n_pnts_base + pnts_idx;
+                    tris[tri_idx * 3 + 1] = i + 1 + n_pnts_base + pnts_idx;
+                    tris[tri_idx * 3 + 2] = i + 1 + pnts_idx;
+                    tri_idx += 1;
+                }
+            }
+            pnts_idx += n_pnts_base;
+        }
+        tris
+    }
+
+    /// Computes the locations of the vertices in the subdivided triangle.
+    pub fn calc_locations(n_ctrl_pnts: u32, n_pnts: u32) -> Box<[VertLoc]> {
+        let mut locs = vec![VertLoc::Inside; n_pnts as usize].into_boxed_slice();
+        let mut idx = 0;
+        for l in 0..n_ctrl_pnts {
+            let n_pnts_base = n_ctrl_pnts - l;
+            for i in 0..n_pnts_base {
+                if l == 0 {
+                    if i == 0 {
+                        locs[idx] = VertLoc::V0;
+                    } else if i == n_pnts_base - 1 {
+                        locs[idx] = VertLoc::V2;
+                    } else {
+                        locs[idx] = VertLoc::E02;
+                    }
+                } else if l == n_ctrl_pnts - 1 {
+                    locs[idx] = VertLoc::V1;
+                } else {
+                    if i == 0 {
+                        locs[idx] = VertLoc::E01;
+                    } else if i == n_pnts_base - 1 {
+                        locs[idx] = VertLoc::E12;
+                    } else {
+                        locs[idx] = VertLoc::Inside;
+                    }
+                }
+                idx += 1;
+            }
+        }
+
+        locs
+    }
+
+    // TODO: rewrite using pre-computed indices
+    // TODO: check triangle winding order
     /// Triangulate a single facet into a set of triangles according to the
     /// specified level.
     ///
@@ -1313,7 +1478,7 @@ impl TriangleSubdivision {
     /// * `level` - Level of subdivision, 0 means no subdivision.
     /// * `base` - Base index of the first vertex of the facet.
     /// * `tris` - Array of vertex indices forming triangles.
-    fn triangulate(level: u32, base: u32, tris: &mut [u32]) {
+    pub fn triangulate(level: u32, base: u32, tris: &mut [u32]) {
         let num_ctrl_pts = level + 2;
         let mut offset = 0;
         let mut tris_idx = 0;
