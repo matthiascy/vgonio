@@ -6,10 +6,12 @@
 use crate::{TriangleUVSubdivision, VertLoc};
 use glam::{DVec3, Vec2, Vec3};
 use log::log;
-use std::{
-    borrow::Cow,
-    collections::{HashMap, VecDeque},
-};
+use std::{borrow::Cow, collections::VecDeque};
+
+use rayon::iter::{IntoParallelRefMutIterator, ParallelBridge, ParallelIterator};
+use std::{collections::HashMap, ptr::addr_of_mut, sync::RwLock};
+
+type NoHashMap<K, V> = HashMap<K, V, nohash_hasher::BuildNoHashHasher<K>>;
 
 /// Vertex representation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -104,6 +106,8 @@ pub struct HalfEdgeMesh<'a> {
 impl<'a> HalfEdgeMesh<'a> {
     /// Create a new half-edge mesh from the given positions and triangles.
     pub fn new<'b>(positions: Cow<'a, [Vec3]>, tris: &'b [u32]) -> Self {
+        #[cfg(feature = "bench")]
+        let start = std::time::Instant::now();
         if positions.is_empty() || tris.is_empty() {
             log::error!("Constructing a half-edge mesh with empty positions or triangles!");
         }
@@ -114,26 +118,64 @@ impl<'a> HalfEdgeMesh<'a> {
         let mut verts = vec![Vert::invalid(); num_verts].into_boxed_slice();
         let mut faces = vec![Face::invalid(); num_faces].into_boxed_slice();
         let mut darts = vec![Dart::invalid(); num_faces * 3];
+
+        // Initialize the vertices with the position index to avoid modifying inside
+        // loop constructing darts.
+        for (i, vert) in verts.iter_mut().enumerate() {
+            vert.pos = i as u32;
+        }
+
+        // The pointer to the darts as one dart will not be accessed by multiple threads
+        // in the later loop.
+        struct DartsPtr(pub *mut Dart);
+        unsafe impl Send for DartsPtr {}
+        unsafe impl Sync for DartsPtr {}
+
+        let darts_ptr = DartsPtr(darts.as_mut_ptr());
+
         // The key is the vertex indices of the two ends of the half-edge.
         // The value is the two half-edges that are twins.
         let mut twins: HashMap<(u32, u32), (u32, u32)> = HashMap::new();
 
-        for (face_idx, (tri, face)) in tris.chunks(3).zip(faces.iter_mut()).enumerate() {
+        // Parallelize the construction of the darts.
+        tris.chunks(3 * 1024)
+            .zip(faces.chunks_mut(1024))
+            .enumerate()
+            .par_bridge()
+            .for_each(|(chunk_idx, (tris_chunk, faces_chunk))| {
+                tris_chunk
+                    .chunks(3)
+                    .zip(faces_chunk.iter_mut())
+                    .enumerate()
+                    .for_each(|(face_local_idx, (tri, face))| {
+                        let _ = &darts_ptr;
+                        let face_idx = chunk_idx * 1024 + face_local_idx;
+                        let base_dart_idx = face_idx * 3;
+                        face.dart = base_dart_idx as u32;
+                        unsafe {
+                            for i in 0..3 {
+                                let dart_idx = base_dart_idx + i;
+                                let vert_idx = *tri.get_unchecked(i);
+
+                                let dart = darts_ptr.0.add(dart_idx);
+                                (*dart).vert = vert_idx;
+                                (*dart).face = face_idx as u32;
+                                (*dart).next = (base_dart_idx + (i + 1) % 3) as u32;
+                                (*dart).prev = (base_dart_idx + (i + 2) % 3) as u32;
+                            }
+                        }
+                    })
+            });
+
+        // Process the vertices and the twins.
+        for (face_idx, tri) in tris.chunks(3).enumerate() {
             let base_dart_idx = face_idx * 3;
-            face.dart = base_dart_idx as u32;
 
             for i in 0..3 {
                 let dart_idx = base_dart_idx + i;
                 let vert_idx = tri[i] as usize;
 
-                let dart = &mut darts[dart_idx];
-                dart.vert = vert_idx as u32;
-                dart.face = face_idx as u32;
-                dart.next = (base_dart_idx + (i + 1) % 3) as u32;
-                dart.prev = (base_dart_idx + (i + 2) % 3) as u32;
-
-                let vert = &mut verts[vert_idx];
-                vert.pos = vert_idx as u32;
+                let vert = unsafe { verts.get_unchecked_mut(vert_idx) };
                 // Set the half-edge of the vertex if it's not set yet
                 if !vert.is_valid() {
                     vert.dart = dart_idx as u32;
@@ -212,6 +254,12 @@ impl<'a> HalfEdgeMesh<'a> {
                 .0
                 .clone();
         }
+
+        #[cfg(feature = "bench")]
+        log::debug!(
+            "Constructing the half-edge mesh took: {:?} ms",
+            start.elapsed().as_millis()
+        );
 
         Self {
             positions,
@@ -293,7 +341,11 @@ impl<'a> HalfEdgeMesh<'a> {
         // u32 - the dart index of the shared edge.
         // VertLoc - the location of the shared edge.
         // Box<u32> - the indices of the new vertices.
-        let mut shared: HashMap<u32, (VertLoc, VecDeque<u32>)> = HashMap::new();
+        let mut shared: NoHashMap<u32, (VertLoc, VecDeque<u32>)> = NoHashMap::default();
+        let mut shared_to_remove = [u32::MAX; 3];
+
+        // Vertex index replacement table from local to global.
+        let mut replacement = vec![u32::MAX; sub.n_pnts as usize].into_boxed_slice();
 
         // Loop over the faces and subdivide each face.
         for (old_face_idx, (face, new_tris)) in self
@@ -388,10 +440,10 @@ impl<'a> HalfEdgeMesh<'a> {
             log::trace!("shared edges: {:?}", shared);
             log::trace!("num verts after: {}", new_positions.len());
 
-            let mut to_remove = Vec::with_capacity(3);
             // 4. Build vertex index replacement table.
-            let mut replacement = vec![u32::MAX; sub.n_pnts as usize].into_boxed_slice();
+            // let mut replacement = vec![u32::MAX; sub.n_pnts as usize].into_boxed_slice();
             let mut n_shared = 0;
+            let mut shared_to_remove_idx = 0;
             replacement
                 .iter_mut()
                 .zip(sub.locations.iter())
@@ -416,7 +468,8 @@ impl<'a> HalfEdgeMesh<'a> {
                                         verts.pop_front().unwrap()
                                     };
                                     if verts.is_empty() {
-                                        to_remove.push(dart.twin);
+                                        shared_to_remove[shared_to_remove_idx] = dart.twin;
+                                        shared_to_remove_idx += 1;
                                     }
                                     n_shared += 1;
                                     return;
@@ -448,9 +501,16 @@ impl<'a> HalfEdgeMesh<'a> {
             new_tris.copy_from_slice(&new_tris_per_face);
 
             // Cleanup the shared edges.
-            for dart_idx in to_remove {
+            for dart_idx in shared_to_remove.iter_mut() {
+                if *dart_idx == u32::MAX {
+                    continue;
+                }
                 shared.remove(&dart_idx);
+                *dart_idx = u32::MAX;
             }
+
+            // Reset the replacement table.
+            replacement.fill(u32::MAX);
 
             log::trace!("Shared edges after cleanup: {:?}", shared);
 

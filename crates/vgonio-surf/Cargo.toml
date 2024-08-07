@@ -25,6 +25,7 @@ clap.workspace = true
 flate2.workspace = true
 glam.workspace = true
 log.workspace = true
+nohash-hasher.workspace = true
 pyo3 = { workspace = true, optional = true, features = ["extension-module"] }
 rand.workspace = true
 rayon.workspace = true

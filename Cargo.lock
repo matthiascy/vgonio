@@ -3432,6 +3432,7 @@ dependencies = [
  "flate2",
  "glam 0.28.0",
  "log",
+ "nohash-hasher",
  "pyo3",
  "rand",
  "rayon",

@@ -1120,9 +1120,14 @@ impl MicroSurfaceMesh {
             return;
         }
         let subdivision = TriangleUVSubdivision::new(level);
+        let t = std::time::Instant::now();
         let subdivided = {
             let dcel = HalfEdgeMesh::new(Cow::Borrowed(&self.verts), &self.facets);
-            dcel.subdivide_by_uvs(&subdivision, wiggle::subdivide_triangle)
+            let t_dcel = t.elapsed().as_millis();
+            log::debug!("Construct DCEL: {:?}", t_dcel);
+            let divided = dcel.subdivide_by_uvs(&subdivision, wiggle::subdivide_triangle);
+            log::debug!("Subdivide: {:?}", t.elapsed().as_millis() - t_dcel);
+            divided
         };
         let mut new_facets = vec![u32::MAX; subdivided.n_faces() * 3].into_boxed_slice();
         let mut new_facets_normals = vec![Vec3::ZERO; subdivided.n_faces()].into_boxed_slice();
