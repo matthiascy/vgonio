@@ -587,6 +587,7 @@ impl MicroSurface {
             height_offset,
             facet_total_area,
             num_cols: self.cols,
+            pattern,
         };
         log::debug!("Microfacet Area: {}", facet_total_area);
 
@@ -749,12 +750,16 @@ pub enum TriangulationPattern {
     /// | A  /  |
     /// |  /  B |
     /// 2  -->  3
+    ///
+    /// 102,123
     BottomLeftToTopRight,
     /// Triangulate from top to bottom, right to left.
     /// 0  <--  1
     /// |  \  B |
     /// | A  \  |
     /// 2  -->  3
+    ///
+    /// 023, 031
     #[default]
     TopLeftToBottomRight,
 }
@@ -890,6 +895,9 @@ pub struct MicroSurfaceMesh {
     /// Length unit of inherited from the
     /// [`MicroSurface`](`crate::MicroSurface`).
     pub unit: LengthUnit,
+
+    /// Triangulation pattern used to generate the mesh.
+    pub pattern: TriangulationPattern,
 }
 
 impl Asset for MicroSurfaceMesh {}
@@ -953,7 +961,7 @@ impl MicroSurfaceMesh {
         }
 
         let mut dcel = HalfEdgeMesh::new(Cow::Borrowed(&self.verts), &self.facets);
-        let subdivision = TriangleUVSubdivision::new(opts.level());
+        let subdivision = TriangleUVSubdivision::new(opts.level(), self.pattern);
 
         let subdivided = match opts {
             Subdivision::Wiggly(lvl) => {
@@ -971,7 +979,7 @@ impl MicroSurfaceMesh {
             return;
         }
 
-        let subdivision = TriangleUVSubdivision::new(level);
+        let subdivision = TriangleUVSubdivision::new(level, self.pattern);
         let new_num_verts = self.num_facets * subdivision.n_pnts as usize;
         let mut new_verts = vec![Vec3::ZERO; new_num_verts].into_boxed_slice();
         let mut new_vert_normals = vec![Vec3::ZERO; new_num_verts].into_boxed_slice();
@@ -1119,7 +1127,7 @@ impl MicroSurfaceMesh {
         if level == 0 {
             return;
         }
-        let subdivision = TriangleUVSubdivision::new(level);
+        let subdivision = TriangleUVSubdivision::new(level, self.pattern);
         let t = std::time::Instant::now();
         let subdivided = {
             let dcel = HalfEdgeMesh::new(Cow::Borrowed(&self.verts), &self.facets);
@@ -1193,6 +1201,8 @@ struct TriangleUVSubdivision {
     /// Number of control points per edge.
     /// The original triangle has 2 control points per edge.
     n_ctrl_pnts: u32,
+    /// Pattern of triangulation.
+    pattern: TriangulationPattern,
     /// UV coordinates for the points on the subdivided triangle.
     uvs: Box<[Vec2]>,
     /// Indices of the resulting triangles in the local index space (in terms of
@@ -1250,7 +1260,7 @@ impl VertLoc {
 }
 
 impl TriangleUVSubdivision {
-    pub fn new(level: u32) -> Self {
+    pub fn new(level: u32, pattern: TriangulationPattern) -> Self {
         let n_ctrl_pnts = level + 2;
         let n_pnts = Self::calc_n_pnts(level);
         let n_tris = (level + 1) * (level + 1);
@@ -1268,6 +1278,7 @@ impl TriangleUVSubdivision {
             n_pnts,
             n_tris,
             n_ctrl_pnts,
+            pattern,
             uvs,
             indices,
             locations,

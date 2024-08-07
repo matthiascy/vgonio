@@ -3,7 +3,7 @@
 //! a surface mesh.
 //! Any valid half-edge mesh must be manifold, oriented, and closed.
 
-use crate::{TriangleUVSubdivision, VertLoc};
+use crate::{TriangleUVSubdivision, TriangulationPattern, VertLoc};
 use glam::{DVec3, Vec2, Vec3};
 use log::log;
 use std::{borrow::Cow, collections::VecDeque};
@@ -106,6 +106,7 @@ pub struct HalfEdgeMesh<'a> {
 impl<'a> HalfEdgeMesh<'a> {
     /// Create a new half-edge mesh from the given positions and triangles.
     pub fn new<'b>(positions: Cow<'a, [Vec3]>, tris: &'b [u32]) -> Self {
+        log::trace!("Constructing a half-edge mesh with tris: {:?}", tris);
         #[cfg(feature = "bench")]
         let start = std::time::Instant::now();
         if positions.is_empty() || tris.is_empty() {
@@ -346,7 +347,7 @@ impl<'a> HalfEdgeMesh<'a> {
 
         // Vertex index replacement table from local to global.
         let mut replacement = vec![u32::MAX; sub.n_pnts as usize].into_boxed_slice();
-
+        let is_bottom_left_to_top_right = sub.pattern == TriangulationPattern::BottomLeftToTopRight;
         // Loop over the faces and subdivide each face.
         for (old_face_idx, (face, new_tris)) in self
             .faces
@@ -462,11 +463,14 @@ impl<'a> HalfEdgeMesh<'a> {
                                 let dart = self.darts[local_shared[*i as usize] as usize];
                                 // Can we find the vertex index from the shared edges?
                                 if let Some((_, verts)) = shared.get_mut(&dart.twin) {
-                                    *rep = if e == &VertLoc::E02 {
+                                    *rep = if e == &VertLoc::E02
+                                        || (e == &VertLoc::E12 && is_bottom_left_to_top_right)
+                                    {
                                         verts.pop_back().unwrap()
                                     } else {
                                         verts.pop_front().unwrap()
                                     };
+
                                     if verts.is_empty() {
                                         shared_to_remove[shared_to_remove_idx] = dart.twin;
                                         shared_to_remove_idx += 1;
