@@ -9,6 +9,8 @@
     - remove build script
     - remove `shaderc` build dependency
 - Enable subdivision of the surface on the fly with UI
+- Support subdivision description in the measurement description file
+    - `/path/to/the/surface.vgmo ~~ curved/wiggly l2`
 - Implement Doubly Connected Edge List (DCEL) data structure for mesh processing
 
 ## 0.3.1 - 2024-06-23
