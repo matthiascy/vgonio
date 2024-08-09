@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     app::{cli::ansi, Config},
-    measure::Measurement,
+    measure::{params::SurfacePath, Measurement},
 };
 use base::{error::VgonioError, medium::Medium, optics::ior::RefractiveIndexRegistry, Asset};
 use gfxkit::{context::GpuContext, mesh::RenderableMesh};
@@ -404,7 +404,7 @@ impl RawCache {
         &mut self,
         config: &Config,
         path: &Path,
-        subdivision: Subdivision,
+        subdiv: Option<Subdivision>,
     ) -> Result<(Handle<MicroSurface>, Handle<MicroSurfaceMesh>), VgonioError> {
         match config.resolve_path(path) {
             None => Err(VgonioError::new(
@@ -429,7 +429,7 @@ impl RawCache {
                     let mesh = msurf.as_micro_surface_mesh(
                         HeightOffset::Grounded,
                         config.user.triangulation,
-                        subdivision,
+                        subdiv,
                     );
                     let mesh_hdl = Handle::with_id(mesh.uuid);
                     self.msurfs.insert(msurf_hdl, msurf);
@@ -524,30 +524,35 @@ impl RawCache {
     pub fn load_micro_surfaces(
         &mut self,
         config: &Config,
-        paths: &[PathBuf],
+        paths: &[SurfacePath],
         pattern: TriangulationPattern,
-        subdivision: Subdivision,
     ) -> Result<Vec<Handle<MicroSurface>>, VgonioError> {
         log::info!("Loading micro surfaces from {:?}", paths);
-        let canonical_paths = paths
+        let canonical = paths
             .iter()
-            .filter_map(|s| config.resolve_path(s))
+            .filter_map(|s| {
+                config.resolve_path(&s.path).map(|path| SurfacePath {
+                    path,
+                    subdivision: s.subdivision,
+                })
+            })
             .collect::<Vec<_>>();
-        log::debug!("-- canonical paths: {:?}", canonical_paths);
+        log::debug!("-- canonical paths: {:?}", canonical);
         let mut loaded = vec![];
-        for path in canonical_paths {
-            if path.exists() {
+        for surf in canonical {
+            if surf.path.exists() {
                 let files_to_load = {
-                    if path.is_dir() {
-                        path.read_dir()
+                    if surf.path.is_dir() {
+                        surf.path
+                            .read_dir()
                             .unwrap()
-                            .map(|entry| entry.unwrap().path())
-                            .collect::<Vec<_>>()
+                            .map(|entry| (entry.unwrap().path(), surf.subdivision))
+                            .collect::<Box<_>>()
                     } else {
-                        vec![path]
+                        vec![(surf.path, surf.subdivision)].into_boxed_slice()
                     }
                 };
-                for filepath in files_to_load {
+                for (filepath, subdivision) in files_to_load {
                     if let Some((msurf_id, _)) = self
                         .records
                         .iter()
@@ -584,7 +589,7 @@ impl RawCache {
                     "    {}!{} file not found: {}",
                     ansi::BRIGHT_RED,
                     ansi::RESET,
-                    path.display()
+                    surf.path.display()
                 );
             }
         }

@@ -327,7 +327,7 @@ impl VgonioGui {
                     let new_mesh = surface.as_micro_surface_mesh(
                         HeightOffset::Grounded,
                         self.config.user.triangulation,
-                        *subdivision,
+                        Some(*subdivision),
                     );
                     let new_renderable_hdl = Handle::new();
                     let new_renderable = RenderableMesh::from_micro_surface_mesh_with_id(
@@ -598,11 +598,7 @@ impl VgonioGui {
                         // Micro-surface profile
                         log::debug!("Opening micro-surface profile: {:?}", filepath);
                         self.cache.write(|cache| {
-                            match cache.load_micro_surface(
-                                &self.config,
-                                &filepath,
-                                Subdivision::None,
-                            ) {
+                            match cache.load_micro_surface(&self.config, &filepath, None) {
                                 Ok((surf, _)) => {
                                     let _ = cache
                                         .create_micro_surface_renderable_mesh(&self.gpu_ctx, surf)

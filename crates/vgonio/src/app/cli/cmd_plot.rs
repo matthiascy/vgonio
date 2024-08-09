@@ -3,6 +3,7 @@ use crate::{
     measure::{
         bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
         mfd::{MeasuredGafData, MeasuredNdfData},
+        params::SurfacePath,
     },
     pyplot::{
         plot_brdf_3d, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
@@ -16,7 +17,10 @@ use base::{
 };
 use bxdf::brdf::measured::ClausenBrdf;
 use std::path::PathBuf;
-use surf::{subdivision::Subdivision, TriangulationPattern};
+use surf::{
+    subdivision::{Subdivision, SubdivisionKind},
+    TriangulationPattern,
+};
 
 #[rustfmt::skip]
 // Same BRDF but different incident angles
@@ -78,6 +82,21 @@ pub struct PlotOptions {
 
     #[clap(short, long, help = "The kind of plot to generate.")]
     pub kind: PlotKind,
+
+    #[clap(
+        long = "subdiv_kind",
+        help = "The kind of subdivision.",
+        required_if_eq("kind", "surf")
+    )]
+    pub subdiv_kind: Option<SubdivisionKind>,
+
+    #[clap(
+        long = "subdiv_level",
+        help = "The level of subdivision.",
+        required_if_eq("kind", "surf"),
+        default_value = "0"
+    )]
+    pub subdiv_level: Option<u32>,
 
     #[clap(
         long = "ti",
@@ -306,7 +325,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         opts.scale.unwrap_or(1.0),
                         opts.log,
                     )
-                    .unwrap();
+                        .unwrap();
                 } else {
                     let brdfs = brdf_hdls
                         .into_iter()
@@ -346,7 +365,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     opts.labels,
                     opts.ylim,
                 )
-                .unwrap();
+                    .unwrap();
                 Ok(())
             }
             PlotKind::Gaf => {
@@ -376,7 +395,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     opts.labels,
                     opts.save,
                 )
-                .unwrap();
+                    .unwrap();
                 Ok(())
             }
             PlotKind::BrdfMap => {
@@ -406,7 +425,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     Degs::new(opts.tstep),
                     opts.save,
                 )
-                .unwrap();
+                    .unwrap();
 
                 Ok(())
             }
@@ -445,16 +464,31 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         opts.cmap.clone().unwrap_or("viridis".to_string()),
                         opts.scale.unwrap_or(1.0),
                     )
-                    .unwrap();
+                        .unwrap();
                 }
                 Ok(())
             }
             PlotKind::Surface => {
+                let surfaces = opts
+                    .inputs
+                    .iter()
+                    .map(|path| SurfacePath {
+                        path: path.clone(),
+                        subdivision: match (opts.subdiv_kind, opts.subdiv_level) {
+                            (Some(SubdivisionKind::Curved), Some(level)) => {
+                                Some(Subdivision::Curved(level))
+                            }
+                            (Some(SubdivisionKind::Wiggly), Some(level)) => {
+                                Some(Subdivision::Wiggly(level))
+                            }
+                            _ => None,
+                        },
+                    })
+                    .collect::<Box<_>>();
                 let hdls = cache.load_micro_surfaces(
                     &config,
-                    &opts.inputs,
+                    &surfaces,
                     TriangulationPattern::BottomLeftToTopRight,
-                    Subdivision::None,
                 )?;
                 let surfaces = hdls
                     .into_iter()
@@ -466,7 +500,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     opts.downsample,
                     opts.cmap.unwrap_or("viridis".to_string()),
                 )
-                .unwrap();
+                    .unwrap();
 
                 Ok(())
             }

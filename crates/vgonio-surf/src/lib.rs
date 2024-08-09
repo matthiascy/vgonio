@@ -518,7 +518,7 @@ impl MicroSurface {
         &self,
         offset: HeightOffset,
         pattern: TriangulationPattern,
-        subdivision: Subdivision,
+        subdiv: Option<Subdivision>,
     ) -> MicroSurfaceMesh {
         let height_offset = match offset {
             HeightOffset::Arbitrary(val) => val,
@@ -591,13 +591,13 @@ impl MicroSurface {
         };
         log::debug!("Microfacet Area: {}", facet_total_area);
 
-        match subdivision {
-            Subdivision::Curved(lvl) => {
+        match subdiv {
+            Some(Subdivision::Curved(lvl)) => {
                 log::debug!("Subdividing the mesh with level: {}", lvl);
                 mesh.curved_smooth(lvl);
                 log::debug!("Microfacet Area(subdivided): {}", mesh.facet_total_area);
             }
-            Subdivision::Wiggly(lvl) => {
+            Some(Subdivision::Wiggly(lvl)) => {
                 log::debug!("Subdividing the mesh with level: {}", lvl);
                 mesh.wiggly_smooth(lvl);
                 log::debug!("Microfacet Area(subdivided): {}", mesh.facet_total_area);

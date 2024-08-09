@@ -9,6 +9,7 @@ use std::{
     io::BufReader,
     path::{Path, PathBuf},
 };
+use surf::subdivision::Subdivision;
 
 /// Describes the different kind of measurements with parameters.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -88,7 +89,91 @@ pub struct MeasurementDescription {
     /// Surfaces to be measured. surface's path can be prefixed with either
     /// `usr://` or `sys://` to indicate the user-defined data file path
     /// or system-defined data file path.
-    pub surfaces: Vec<PathBuf>, // TODO(yang): use Cow<'a, Vec<PathBuf>> to avoid copying the path
+    pub surfaces: Vec<SurfacePath>,
+}
+
+/// Customized surface path with subdivision only used for
+/// serialization/deserialization of the measurement description.
+///
+/// In the measurement description file, the [`SurfacePath`] is used to
+/// represent a surface path with an optional subdivision level like this:
+///
+/// - `/path/to/surface1` means no subdivision is applied
+/// - `/path/to/surface2 :: curly l3` means curved subdivision with level 3
+/// - `/path/to/surface3 :: wiggly l2` means wiggly subdivision with level 2
+///
+/// If the subdivision level is 0, it means no subdivision is applied.
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) struct SurfacePath {
+    /// Path to the surface file.
+    pub path: PathBuf,
+    /// Subdivision to apply to the surface if any.
+    pub subdivision: Option<Subdivision>,
+}
+
+impl SurfacePath {
+    /// Create a new surface path.
+    pub fn new(path: PathBuf, subdivision: Option<Subdivision>) -> Self {
+        Self { path, subdivision }
+    }
+}
+
+impl Serialize for SurfacePath {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match &self.subdivision {
+            Some(Subdivision::Curved(level)) => {
+                serializer.serialize_str(&format!("{} ~~ curved l{}", self.path.display(), level))
+            }
+            Some(Subdivision::Wiggly(level)) => {
+                serializer.serialize_str(&format!("{} ~~ wiggly l{}", self.path.display(), level))
+            }
+            None => serializer.serialize_str(&self.path.display().to_string()),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SurfacePath {
+    fn deserialize<D>(deserializer: D) -> Result<SurfacePath, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let parts: Vec<&str> = s.split("~~").map(|s| s.trim()).collect();
+        let path = PathBuf::from(parts[0]);
+        let subdivision = if parts.len() > 1 {
+            let parts: Vec<&str> = parts[1].split_whitespace().collect();
+            if parts.len() == 2 {
+                let kind = parts[0];
+                let level = parts[1]
+                    .trim()
+                    .trim_matches('l')
+                    .parse::<u32>()
+                    .map_err(serde::de::Error::custom)?;
+                if level != 0 {
+                    match kind {
+                        "curved" => Some(Subdivision::Curved(level)),
+                        "wiggly" => Some(Subdivision::Wiggly(level)),
+                        _ => {
+                            return Err(serde::de::Error::custom(format!(
+                                "Invalid subdivision kind: {}",
+                                kind
+                            )))
+                        }
+                    }
+                } else {
+                    None
+                }
+            } else {
+                return Err(serde::de::Error::custom("Invalid subdivision format"));
+            }
+        } else {
+            None
+        };
+        Ok(SurfacePath { path, subdivision })
+    }
 }
 
 impl MeasurementDescription {

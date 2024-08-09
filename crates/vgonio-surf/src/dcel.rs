@@ -504,20 +504,16 @@ impl<'a> HalfEdgeMesh<'a> {
             // 6. Append the new triangles to the mesh.
             new_tris.copy_from_slice(&new_tris_per_face);
 
-            // Cleanup the shared edges.
-            for dart_idx in shared_to_remove.iter_mut() {
-                if *dart_idx == u32::MAX {
-                    continue;
-                }
-                shared.remove(&dart_idx);
-                *dart_idx = u32::MAX;
-            }
-
+            // Clean-up the shared edges.
+            shared_to_remove
+                .iter()
+                .filter(|idx| **idx != u32::MAX)
+                .for_each(|idx| {
+                    shared.remove(idx);
+                });
+            shared_to_remove.fill(u32::MAX);
             // Reset the replacement table.
             replacement.fill(u32::MAX);
-
-            log::trace!("Shared edges after cleanup: {:?}", shared);
-
             // Reset the new triangles.
             new_tris_per_face.copy_from_slice(&sub.indices);
         }

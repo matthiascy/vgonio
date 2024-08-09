@@ -5,7 +5,7 @@ use crate::{
     },
     measure::params::{
         BsdfMeasurementParams, GafMeasurementParams, MeasurementDescription, MeasurementParams,
-        NdfMeasurementMode, NdfMeasurementParams,
+        NdfMeasurementMode, NdfMeasurementParams, SurfacePath,
     },
 };
 use base::error::VgonioError;
@@ -13,6 +13,7 @@ use std::{
     fmt::{Display, Formatter},
     path::PathBuf,
 };
+use surf::subdivision::Subdivision;
 
 impl Display for NdfMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -110,22 +111,31 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioEr
             MeasurementDescription {
                 params: MeasurementParams::Ndf(NdfMeasurementParams::default()),
                 surfaces: vec![
-                    PathBuf::from("path/to/surface1"),
-                    PathBuf::from("path/to/surface2"),
+                    SurfacePath::new(PathBuf::from("path/to/surface1"), None),
+                    SurfacePath::new(
+                        PathBuf::from("path/to/surface2"),
+                        Some(Subdivision::Curved(3)),
+                    ),
                 ],
             },
             MeasurementDescription {
                 params: MeasurementParams::Gaf(GafMeasurementParams::default()),
                 surfaces: vec![
-                    PathBuf::from("path/to/surface1"),
-                    PathBuf::from("path/to/surface2"),
+                    SurfacePath::new(PathBuf::from("path/to/surface1"), None),
+                    SurfacePath::new(
+                        PathBuf::from("path/to/surface2"),
+                        Some(Subdivision::Wiggly(2)),
+                    ),
                 ],
             },
             MeasurementDescription {
                 params: MeasurementParams::Bsdf(BsdfMeasurementParams::default()),
                 surfaces: vec![
-                    PathBuf::from("path/to/surface1"),
-                    PathBuf::from("path/to/surface2"),
+                    SurfacePath::new(PathBuf::from("path/to/surface1"), None),
+                    SurfacePath::new(
+                        PathBuf::from("path/to/surface2"),
+                        Some(Subdivision::Curved(3)),
+                    ),
                 ],
             },
         ]

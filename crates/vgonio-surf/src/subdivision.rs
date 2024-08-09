@@ -9,8 +9,6 @@ pub enum Subdivision {
     /// Regularly subdivide the surface, adding variation to the height of new
     /// vertices.
     Wiggly(u32),
-    /// No subdivision.
-    None,
 }
 
 impl Subdivision {
@@ -18,13 +16,12 @@ impl Subdivision {
     pub fn level(&self) -> u32 {
         match self {
             Subdivision::Curved(level) | Subdivision::Wiggly(level) => *level,
-            Subdivision::None => 0,
         }
     }
 }
 
 /// The kind of subdivision.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum SubdivisionKind {
     Curved,
     Wiggly,
