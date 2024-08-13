@@ -325,7 +325,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         opts.scale.unwrap_or(1.0),
                         opts.log,
                     )
-                        .unwrap();
+                    .unwrap();
                 } else {
                     let brdfs = brdf_hdls
                         .into_iter()
@@ -365,7 +365,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     opts.labels,
                     opts.ylim,
                 )
-                    .unwrap();
+                .unwrap();
                 Ok(())
             }
             PlotKind::Gaf => {
@@ -395,7 +395,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     opts.labels,
                     opts.save,
                 )
-                    .unwrap();
+                .unwrap();
                 Ok(())
             }
             PlotKind::BrdfMap => {
@@ -425,7 +425,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     Degs::new(opts.tstep),
                     opts.save,
                 )
-                    .unwrap();
+                .unwrap();
 
                 Ok(())
             }
@@ -464,7 +464,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         opts.cmap.clone().unwrap_or("viridis".to_string()),
                         opts.scale.unwrap_or(1.0),
                     )
-                        .unwrap();
+                    .unwrap();
                 }
                 Ok(())
             }
@@ -500,7 +500,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     opts.downsample,
                     opts.cmap.unwrap_or("viridis".to_string()),
                 )
-                    .unwrap();
+                .unwrap();
 
                 Ok(())
             }

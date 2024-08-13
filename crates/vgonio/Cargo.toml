@@ -60,3 +60,4 @@ base = { package = "vgonio-base", path = "../vgonio-base", features = ["cli", "w
 bxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf", features = ["cli", "exr"] }
 jabr = { package = "vgonio-jabr", path = "../vgonio-jabr" }
 gfxkit = { package = "vgonio-gfxkit", path = "../vgonio-gfxkit" }
+uikit = { package = "vgonio-uikit", path = "../vgonio-uikit" }

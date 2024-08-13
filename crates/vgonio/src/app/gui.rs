@@ -14,7 +14,6 @@ mod plotter;
 mod prop_inspector;
 pub mod state;
 mod surf_viewer;
-mod theme;
 mod tools;
 mod ui;
 mod visual_grid;
@@ -36,7 +35,6 @@ use crate::{
         gui::{
             bsdf_viewer::BsdfViewer,
             event::{BsdfViewerEvent, DebuggingEvent, EventResponse, VgonioEvent},
-            theme::ThemeState,
         },
     },
     error::RuntimeError,
@@ -44,6 +42,7 @@ use crate::{
 };
 use base::{error::VgonioError, input::InputState};
 use gfxkit::context::{GpuContext, WgpuConfig, WindowSurface};
+use uikit::theme::{DarkTheme, LightTheme, Theme, ThemeKind};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyEvent, WindowEvent},
@@ -142,7 +141,7 @@ pub struct VgonioGuiApp {
     /// The GUI app state.
     ui: VgonioGui,
     /// The theme of the app.
-    theme: ThemeState,
+    theme: (ThemeKind, bool),
     /// The configuration of the app. See [`Config`].
     config: Arc<Config>,
     /// The cache of the app including preloaded datafiles. See
@@ -240,7 +239,7 @@ impl VgonioGuiApp {
             canvas,
             bsdf_viewer,
             surface_viewer_states,
-            theme: Default::default(),
+            theme: (ThemeKind::Light, true),
             event_loop_proxy,
             window,
         })
@@ -266,11 +265,11 @@ impl VgonioGuiApp {
         match event {
             WindowEvent::KeyboardInput {
                 event:
-                    KeyEvent {
-                        physical_key: PhysicalKey::Code(keycode),
-                        state,
-                        ..
-                    },
+                KeyEvent {
+                    physical_key: PhysicalKey::Code(keycode),
+                    state,
+                    ..
+                },
                 ..
             } => {
                 self.input.update_key_map(*keycode, *state);
@@ -377,7 +376,7 @@ impl VgonioGuiApp {
                         active_viewer,
                         &self.input,
                         dt,
-                        &self.theme,
+                        self.theme.0,
                         cache,
                         &surfaces,
                     )
@@ -425,12 +424,21 @@ impl VgonioGuiApp {
             self.canvas.screen_descriptor(),
             &output_view,
             |ctx| {
-                self.theme.update_context(ctx);
-                self.ui.show(ctx, self.theme.kind());
+                if self.theme.1 {
+                    match self.theme.0 {
+                        ThemeKind::Dark => {
+                            ctx.set_style(DarkTheme.style());
+                        }
+                        ThemeKind::Light => {
+                            ctx.set_style(LightTheme.style());
+                        }
+                    }
+                }
+                self.ui.show(ctx, self.theme.0);
             },
         );
 
-        let cmfd: Box<dyn Iterator<Item = wgpu::CommandBuffer>> = match dbg_encoder {
+        let cmfd: Box<dyn Iterator<Item=wgpu::CommandBuffer>> = match dbg_encoder {
             Some(encoder) => Box::new(
                 [viewer_encoder.finish(), encoder.finish()]
                     .into_iter()
@@ -657,10 +665,10 @@ impl VgonioGuiApp {
                                 &self.config,
                                 opts,
                             )
-                            .map_err(|err| {
-                                log::error!("Failed to write measured data to file: {}", err);
-                            })
-                            .unwrap();
+                                .map_err(|err| {
+                                    log::error!("Failed to write measured data to file: {}", err);
+                                })
+                                .unwrap();
                         }
                         self.cache.write(|cache| {
                             let meas = Vec::from(data)
@@ -707,8 +715,11 @@ impl VgonioGuiApp {
                             self.surface_viewer_states.update_shading(uuid, shading)
                         }
                     },
-                    UpdateThemeKind(kind) => {
-                        self.theme.set_theme_kind(kind);
+                    ChangeTheme(kind) => {
+                        if self.theme.0 != kind {
+                            self.theme.0 = kind;
+                            self.theme.1 = true;
+                        }
                     }
                     _ => {}
                 }

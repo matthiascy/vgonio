@@ -24,7 +24,6 @@ use crate::{
             outliner::OutlinerItem,
             plotter::{PlotInspector, PlottingWidget},
             state::GuiRenderer,
-            theme::ThemeKind,
             tools::{SamplingInspector, Scratch, Tools},
             DebuggingInspector,
         },
@@ -45,6 +44,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 use surf::{subdivision::Subdivision, HeightOffset, MicroSurface};
+use uikit::theme::ThemeKind;
 
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
@@ -542,11 +542,11 @@ impl VgonioGui {
             ui.menu_button("Theme", |ui| {
                 if ui.button("☀ Light").clicked() {
                     self.event_loop
-                        .send_event(VgonioEvent::UpdateThemeKind(ThemeKind::Light));
+                        .send_event(VgonioEvent::ChangeTheme(ThemeKind::Light));
                 }
                 if ui.button("🌙 Dark").clicked() {
                     self.event_loop
-                        .send_event(VgonioEvent::UpdateThemeKind(ThemeKind::Dark));
+                        .send_event(VgonioEvent::ChangeTheme(ThemeKind::Dark));
                 }
             });
 

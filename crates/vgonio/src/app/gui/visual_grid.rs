@@ -3,9 +3,7 @@ use gfxkit::{
     camera::ViewProjUniform, context::GpuContext, render_pass::DEFAULT_BIND_GROUP_LAYOUT_DESC,
     texture::Texture,
 };
-
-use super::theme::ThemeKind;
-
+use uikit::theme::ThemeKind;
 // TODO: unify VisualGrid and VisualGridState
 
 pub struct VisualGrid {

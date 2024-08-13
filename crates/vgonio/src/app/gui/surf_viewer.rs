@@ -1,19 +1,3 @@
-use base::input::InputState;
-use egui::{Ui, WidgetText};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, RwLock},
-};
-use uuid::Uuid;
-
-use base::math::{Mat4, Vec4};
-use gfxkit::{
-    camera::{ProjectionKind, ViewProjUniform},
-    context::GpuContext,
-    texture::Texture,
-};
-use surf::MicroSurface;
-
 use crate::app::{
     cache::{Handle, RawCache},
     gui::{
@@ -21,10 +5,26 @@ use crate::app::{
         docking::{Dockable, WidgetKind},
         event::{EventLoopProxy, SurfaceViewerEvent, VgonioEvent},
         state::{camera::CameraState, debug::DebugDrawingState},
-        theme::ThemeState,
         visual_grid::{VisualGridPipeline, VisualGridState},
     },
 };
+use base::{
+    input::InputState,
+    math::{Mat4, Vec4},
+};
+use egui::{Ui, WidgetText};
+use gfxkit::{
+    camera::{ProjectionKind, ViewProjUniform},
+    context::GpuContext,
+    texture::Texture,
+};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, RwLock},
+};
+use surf::MicroSurface;
+use uikit::theme::{DarkTheme, LightTheme, Theme, ThemeKind};
+use uuid::Uuid;
 
 use super::state::{DepthMap, GuiRenderer};
 
@@ -182,7 +182,7 @@ impl SurfaceViewerState {
         surfaces: &[(&Handle<MicroSurface>, &MicroSurfaceProp)],
         input: &InputState,
         dt: std::time::Duration,
-        theme: &ThemeState,
+        theme: ThemeKind,
         gpu: &GpuContext,
         update_camera: bool,
     ) {
@@ -192,13 +192,28 @@ impl SurfaceViewerState {
         let view_proj = self.camera.uniform.view_proj;
         let view_proj_inv = self.camera.uniform.view_proj_inv;
         self.surface.update(gpu, &view_proj, surfaces);
-        self.visual_grid.update(
-            gpu,
-            &view_proj,
-            &view_proj_inv,
-            theme.visuals().grid_line_color,
-            theme.kind(),
-        )
+        let grid_line_color = match theme {
+            ThemeKind::Light => {
+                let c = LightTheme.grid_line_color();
+                wgpu::Color {
+                    r: c.0 as f64,
+                    g: c.1 as f64,
+                    b: c.2 as f64,
+                    a: c.3 as f64,
+                }
+            }
+            ThemeKind::Dark => {
+                let c = DarkTheme.grid_line_color();
+                wgpu::Color {
+                    r: c.0 as f64,
+                    g: c.1 as f64,
+                    b: c.2 as f64,
+                    a: c.3 as f64,
+                }
+            }
+        };
+        self.visual_grid
+            .update(gpu, &view_proj, &view_proj_inv, grid_line_color, theme)
     }
 }
 
@@ -309,7 +324,7 @@ impl SurfaceViewerStates {
         active_viewer: Option<Uuid>,
         input: &InputState,
         dt: std::time::Duration,
-        theme: &ThemeState,
+        theme: ThemeKind,
         cache: &RawCache,
         surfaces: &[(&Handle<MicroSurface>, &MicroSurfaceProp)],
     ) -> wgpu::CommandEncoder {
@@ -318,6 +333,26 @@ impl SurfaceViewerStates {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("vgonio_render_encoder"),
             });
+        let clear_color = match theme {
+            ThemeKind::Light => {
+                let c = LightTheme.clear_color();
+                wgpu::Color {
+                    r: c.0 as f64,
+                    g: c.1 as f64,
+                    b: c.2 as f64,
+                    a: c.3 as f64,
+                }
+            }
+            ThemeKind::Dark => {
+                let c = DarkTheme.clear_color();
+                wgpu::Color {
+                    r: c.0 as f64,
+                    g: c.1 as f64,
+                    b: c.2 as f64,
+                    a: c.3 as f64,
+                }
+            }
+        };
         for (viewer, state) in &mut self.states {
             if let Some(active) = active_viewer {
                 if active == *viewer {
@@ -338,7 +373,7 @@ impl SurfaceViewerStates {
                         // the same as `view` unless multisampling.
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(theme.visuals().clear_color),
+                            load: wgpu::LoadOp::Clear(clear_color),
                             store: wgpu::StoreOp::Store,
                         },
                     },

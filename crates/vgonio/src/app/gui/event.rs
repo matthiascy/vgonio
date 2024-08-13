@@ -7,7 +7,6 @@ use crate::{
         gui::{
             notify::NotifyKind,
             surf_viewer::{OverlayFlags, ShadingMode},
-            theme::ThemeKind,
         },
     },
     io::OutputOptions,
@@ -25,6 +24,7 @@ use base::{
 };
 use std::path::PathBuf;
 use surf::{subdivision::Subdivision, MicroSurface, MicroSurfaceMesh};
+use uikit::theme::ThemeKind;
 use uuid::Uuid;
 
 /// Event loop proxy with Vgonio events.
@@ -77,7 +77,7 @@ pub enum VgonioEvent {
         text: String,
         time: f32,
     },
-    UpdateThemeKind(ThemeKind),
+    ChangeTheme(ThemeKind),
     SurfaceViewer(SurfaceViewerEvent),
     Outliner(OutlinerEvent),
     Graphing {

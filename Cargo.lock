@@ -3355,6 +3355,7 @@ dependencies = [
  "vgonio-gfxkit",
  "vgonio-jabr",
  "vgonio-surf",
+ "vgonio-uikit",
  "wgpu",
  "winit",
 ]
@@ -3445,6 +3446,9 @@ dependencies = [
 [[package]]
 name = "vgonio-uikit"
 version = "0.3.1"
+dependencies = [
+ "egui 0.28.1",
+]
 
 [[package]]
 name = "vgonio-visu"
