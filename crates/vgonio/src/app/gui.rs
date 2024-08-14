@@ -265,11 +265,11 @@ impl VgonioGuiApp {
         match event {
             WindowEvent::KeyboardInput {
                 event:
-                KeyEvent {
-                    physical_key: PhysicalKey::Code(keycode),
-                    state,
-                    ..
-                },
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(keycode),
+                        state,
+                        ..
+                    },
                 ..
             } => {
                 self.input.update_key_map(*keycode, *state);
@@ -438,7 +438,7 @@ impl VgonioGuiApp {
             },
         );
 
-        let cmfd: Box<dyn Iterator<Item=wgpu::CommandBuffer>> = match dbg_encoder {
+        let cmfd: Box<dyn Iterator<Item = wgpu::CommandBuffer>> = match dbg_encoder {
             Some(encoder) => Box::new(
                 [viewer_encoder.finish(), encoder.finish()]
                     .into_iter()
@@ -665,10 +665,10 @@ impl VgonioGuiApp {
                                 &self.config,
                                 opts,
                             )
-                                .map_err(|err| {
-                                    log::error!("Failed to write measured data to file: {}", err);
-                                })
-                                .unwrap();
+                            .map_err(|err| {
+                                log::error!("Failed to write measured data to file: {}", err);
+                            })
+                            .unwrap();
                         }
                         self.cache.write(|cache| {
                             let meas = Vec::from(data)

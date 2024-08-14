@@ -161,8 +161,8 @@ pub trait Theme {
         WidgetVisuals {
             bg_fill,
             weak_bg_fill: bg_fill,
-            bg_stroke: Stroke::new(1.0, self.overlay1()),
-            fg_stroke: Stroke::new(1.0, self.text()),
+            bg_stroke: Stroke::new(0.0, self.overlay1()),
+            fg_stroke: Stroke::new(2.0, self.text()),
             rounding: Rounding::same(6.0),
             expansion: 0.0,
         }
