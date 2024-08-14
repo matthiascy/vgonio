@@ -10,16 +10,18 @@ use winit::window::Window;
 pub struct UiUniforms {
     /// Size of the window in logical pixels (points).
     pub logical_size: [f32; 2],
+    pub dithering: u32,
     /// Padding to align the struct to 16 bytes for the reason of the alignment
     /// requirement of the uniform buffer in WebGL.
-    pub _padding: [f32; 2],
+    pub _padding: u32,
 }
 
 impl Default for UiUniforms {
     fn default() -> Self {
         Self {
             logical_size: [0.0, 0.0],
-            _padding: [0.0, 0.0],
+            dithering: 1,
+            _padding: 0,
         }
     }
 }
@@ -28,7 +30,7 @@ impl From<&ScreenDescriptor> for UiUniforms {
     fn from(desc: &ScreenDescriptor) -> Self {
         Self {
             logical_size: [desc.width as f32, desc.height as f32],
-            _padding: [0.0, 0.0],
+            ..Default::default()
         }
     }
 }
@@ -297,13 +299,13 @@ impl GpuContext {
                 None,
             )
         }
-        .await
-        .unwrap_or_else(|_| {
-            panic!(
-                "Failed to request logical device! {}",
-                concat!(file!(), ":", line!())
-            )
-        });
+            .await
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Failed to request logical device! {}",
+                    concat!(file!(), ":", line!())
+                )
+            });
 
         log::debug!("Device limits: {:#?}", device.limits());
 
@@ -360,13 +362,13 @@ impl GpuContext {
                 None,
             )
         }
-        .await
-        .unwrap_or_else(|_| {
-            panic!(
-                "Failed to request logical device! {}",
-                concat!(file!(), ":", line!())
-            )
-        });
+            .await
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Failed to request logical device! {}",
+                    concat!(file!(), ":", line!())
+                )
+            });
 
         Self {
             instance,

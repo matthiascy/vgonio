@@ -66,7 +66,12 @@ pub trait Theme {
                 stroke: Stroke::new(1.0, self.overlay1()),
             },
             window_shadow: Shadow::NONE,
-            popup_shadow: Shadow::NONE,
+            popup_shadow: Shadow {
+                offset: egui::Vec2 { x: 0.0, y: 0.0 },
+                blur: 10.0,
+                spread: 1.0,
+                color: self.base(),
+            },
             dark_mode: self.is_light(),
             ..Visuals::default()
         }

@@ -5,6 +5,7 @@ use gfxkit::{
 };
 use std::{borrow::Cow, collections::HashMap};
 use type_map::TypeMap;
+use wgpu::PipelineCompilationOptions;
 
 type SetupCallback = dyn Fn(
         &wgpu::Device,
@@ -133,10 +134,10 @@ pub struct GuiRenderer {
 
 impl GuiRenderer {
     const VERTEX_BUFFER_INIT_CAPACITY: wgpu::BufferAddress =
-        1024 * std::mem::size_of::<egui::epaint::Vertex>() as wgpu::BufferAddress;
+        1024 * size_of::<egui::epaint::Vertex>() as wgpu::BufferAddress;
 
     const INDEX_BUFFER_INIT_CAPACITY: wgpu::BufferAddress =
-        3 * 1024 * std::mem::size_of::<u32>() as wgpu::BufferAddress;
+        3 * 1024 * size_of::<u32>() as wgpu::BufferAddress;
 
     /// Returns a new texture ID that can be used to refer to a user-provided
     /// texture.
@@ -154,15 +155,12 @@ impl GuiRenderer {
     ) -> Self {
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("egui_shader"),
-            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("./ui.wgsl"))),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("./egui.wgsl"))),
         });
         use wgpu::util::DeviceExt;
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("egui_uniform_buffer"),
-            contents: bytemuck::cast_slice(&[UiUniforms {
-                logical_size: [0.0, 0.0],
-                _padding: [0.0, 0.0],
-            }]),
+            contents: bytemuck::cast_slice(&[UiUniforms::default()]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
         let uniform_bind_group_layout =
@@ -170,7 +168,7 @@ impl GuiRenderer {
                 label: Some("egui_uniform_bind_group_layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         min_binding_size: None,
                         ty: wgpu::BufferBindingType::Uniform,
@@ -227,10 +225,9 @@ impl GuiRenderer {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: "vs_main",
-                compilation_options: Default::default(),
+                compilation_options: PipelineCompilationOptions::default(),
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<egui::epaint::Vertex>()
-                        as wgpu::BufferAddress,
+                    array_stride: size_of::<epaint::Vertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![
                         0 => Float32x2,
@@ -265,7 +262,7 @@ impl GuiRenderer {
                     format: output_color_format,
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            src_factor: wgpu::BlendFactor::One,
                             dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
                             operation: wgpu::BlendOperation::Add,
                         },
@@ -705,7 +702,7 @@ impl GuiRenderer {
                 0,
                 bytemuck::cast_slice(&[UiUniforms {
                     logical_size: screen_desc.logical_size(),
-                    _padding: [0.0; 2],
+                    ..UiUniforms::default()
                 }]),
             );
         }
@@ -724,15 +721,14 @@ impl GuiRenderer {
         // Resize the vertex and index buffers if needed.
         {
             self.index_buffer.subslices_mut().clear();
-            let required_size = (std::mem::size_of::<u32>() * index_cout) as wgpu::BufferAddress;
+            let required_size = (size_of::<u32>() * index_cout) as wgpu::BufferAddress;
             if self.index_buffer.capacity() < required_size {
                 self.index_buffer.grow(device, queue, required_size, false);
             }
         }
         {
             self.vertex_buffer.subslices_mut().clear();
-            let required_size =
-                (std::mem::size_of::<epaint::Vertex>() * vertex_count) as wgpu::BufferAddress;
+            let required_size = (size_of::<epaint::Vertex>() * vertex_count) as wgpu::BufferAddress;
             if self.vertex_buffer.capacity() < required_size {
                 self.vertex_buffer.grow(device, queue, required_size, false);
             }
