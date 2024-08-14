@@ -38,13 +38,13 @@ use base::{
 };
 use bxdf::brdf::BxdfFamily;
 use egui_file_dialog::{DialogMode, FileDialog, FileDialogConfig};
-use gfxkit::{context::GpuContext, mesh::RenderableMesh};
+use gxtk::{context::GpuContext, mesh::RenderableMesh};
 use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
 use surf::{subdivision::Subdivision, HeightOffset, MicroSurface};
-use uikit::theme::ThemeKind;
+use uxtk::theme::ThemeKind;
 
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {

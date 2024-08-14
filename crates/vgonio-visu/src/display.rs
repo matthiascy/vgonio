@@ -1,5 +1,5 @@
 use crate::{image::TiledImage, RenderParams};
-use gfxkit::context::{GpuContext, WgpuConfig, WindowSurface};
+use gxtk::context::{GpuContext, WgpuConfig, WindowSurface};
 use std::{borrow::Cow, sync::Arc};
 use wgpu::StoreOp;
 use winit::{

@@ -23,7 +23,11 @@ mod widgets;
 use egui::Visuals;
 use std::{
     default::Default,
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, RwLock,
+    },
+    thread,
     time::{Duration, Instant},
 };
 pub(crate) use tools::DebuggingInspector;
@@ -41,8 +45,8 @@ use crate::{
     measure,
 };
 use base::{error::VgonioError, input::InputState};
-use gfxkit::context::{GpuContext, WgpuConfig, WindowSurface};
-use uikit::theme::{DarkTheme, LightTheme, Theme, ThemeKind};
+use gxtk::context::{GpuContext, WgpuConfig, WindowSurface};
+use uxtk::theme::{DarkTheme, LightTheme, Theme, ThemeKind};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyEvent, WindowEvent},

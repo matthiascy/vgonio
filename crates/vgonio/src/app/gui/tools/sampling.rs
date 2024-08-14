@@ -15,7 +15,7 @@ use base::{
     math::{Mat4, Vec3},
     units::{deg, Rads},
 };
-use gfxkit::{
+use gxtk::{
     camera::{Camera, Projection, ProjectionKind},
     context::GpuContext,
     texture::Texture,

@@ -1,9 +1,9 @@
 use base::math::{Mat4, Vec3, IDENTITY_MAT4};
-use gfxkit::{
+use gxtk::{
     camera::ViewProjUniform, context::GpuContext, render_pass::DEFAULT_BIND_GROUP_LAYOUT_DESC,
     texture::Texture,
 };
-use uikit::theme::ThemeKind;
+use uxtk::theme::ThemeKind;
 // TODO: unify VisualGrid and VisualGridState
 
 pub struct VisualGrid {

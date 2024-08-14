@@ -7,8 +7,8 @@ members = [
     "crates/vgonio-jabr",
     "crates/vgonio-surf",
     "crates/vgonio-visu",
-    "crates/vgonio-gfxkit",
-    "crates/vgonio-uikit"
+    "crates/vgonio-gxtk",
+    "crates/vgonio-uxtk"
 ]
 
 [workspace.package]

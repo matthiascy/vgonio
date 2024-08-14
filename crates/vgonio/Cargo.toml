@@ -21,6 +21,7 @@ vvdbg = []
 chrono.workspace = true
 clap.workspace = true
 egui.workspace = true
+eframe = "0.28"
 egui_dock.workspace = true
 egui_extras.workspace = true
 egui-file-dialog.workspace = true
@@ -59,5 +60,5 @@ surf = { package = "vgonio-surf", path = "../vgonio-surf" }
 base = { package = "vgonio-base", path = "../vgonio-base", features = ["cli", "winit", "io"] }
 bxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf", features = ["cli", "exr"] }
 jabr = { package = "vgonio-jabr", path = "../vgonio-jabr" }
-gfxkit = { package = "vgonio-gfxkit", path = "../vgonio-gfxkit" }
-uikit = { package = "vgonio-uikit", path = "../vgonio-uikit" }
+gxtk = { package = "vgonio-gxtk", path = "../vgonio-gxtk" }
+uxtk = { package = "vgonio-uxtk", path = "../vgonio-uxtk" }

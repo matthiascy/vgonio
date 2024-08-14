@@ -4,7 +4,7 @@ mod scratch;
 
 use crate::app::gui::event::EventLoopProxy;
 pub(crate) use debugging::DebuggingInspector;
-use gfxkit::context::GpuContext;
+use gxtk::context::GpuContext;
 pub(crate) use sampling::SamplingInspector;
 pub(crate) use scratch::Scratch;
 use std::sync::{Arc, RwLock};

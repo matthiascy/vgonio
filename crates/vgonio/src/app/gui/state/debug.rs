@@ -17,7 +17,7 @@ use base::{
     math::{Mat4, Sph2, Vec3},
     partition::SphericalPartition,
 };
-use gfxkit::{context::GpuContext, render_pass::RenderPass, vertex::VertexLayout};
+use gxtk::{context::GpuContext, render_pass::RenderPass, vertex::VertexLayout};
 use std::sync::Arc;
 use surf::{MicroSurface, MicroSurfaceMesh};
 use uuid::Uuid;

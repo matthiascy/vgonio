@@ -13,7 +13,7 @@ use base::{
     math::{Mat4, Vec4},
 };
 use egui::{Ui, WidgetText};
-use gfxkit::{
+use gxtk::{
     camera::{ProjectionKind, ViewProjUniform},
     context::GpuContext,
     texture::Texture,
@@ -23,8 +23,8 @@ use std::{
     sync::{Arc, RwLock},
 };
 use surf::MicroSurface;
-use uikit::theme::{DarkTheme, LightTheme, Theme, ThemeKind};
 use uuid::Uuid;
+use uxtk::theme::{DarkTheme, LightTheme, Theme, ThemeKind};
 
 use super::state::{DepthMap, GuiRenderer};
 
@@ -710,7 +710,7 @@ impl MicroSurfaceState {
     /// Update the list of surfaces.
     ///
     /// Updates the lookup table.
-    pub fn update_surfaces_list<'a, S: Iterator<Item = &'a Handle<MicroSurface>>>(
+    pub fn update_surfaces_list<'a, S: Iterator<Item=&'a Handle<MicroSurface>>>(
         &mut self,
         surfs: S,
     ) {

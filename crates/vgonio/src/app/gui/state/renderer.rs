@@ -1,5 +1,5 @@
 use egui::epaint;
-use gfxkit::{
+use gxtk::{
     buffers::SlicedBuffer,
     context::{ScreenDescriptor, UiUniforms},
 };

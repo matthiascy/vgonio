@@ -299,13 +299,13 @@ impl GpuContext {
                 None,
             )
         }
-            .await
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Failed to request logical device! {}",
-                    concat!(file!(), ":", line!())
-                )
-            });
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "Failed to request logical device! {}",
+                concat!(file!(), ":", line!())
+            )
+        });
 
         log::debug!("Device limits: {:#?}", device.limits());
 
@@ -362,13 +362,13 @@ impl GpuContext {
                 None,
             )
         }
-            .await
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Failed to request logical device! {}",
-                    concat!(file!(), ":", line!())
-                )
-            });
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "Failed to request logical device! {}",
+                concat!(file!(), ":", line!())
+            )
+        });
 
         Self {
             instance,

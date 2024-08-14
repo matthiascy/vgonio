@@ -24,8 +24,8 @@ use base::{
 };
 use std::path::PathBuf;
 use surf::{subdivision::Subdivision, MicroSurface, MicroSurfaceMesh};
-use uikit::theme::ThemeKind;
 use uuid::Uuid;
+use uxtk::theme::ThemeKind;
 
 /// Event loop proxy with Vgonio events.
 #[derive(Clone, Debug)]

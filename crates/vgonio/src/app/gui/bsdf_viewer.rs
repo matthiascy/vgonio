@@ -3,7 +3,7 @@ use base::{
     math,
     math::{Mat4, Vec3},
 };
-use gfxkit::{
+use gxtk::{
     camera::{Camera, Projection, ProjectionKind},
     context::GpuContext,
     texture::Texture,

@@ -14,7 +14,7 @@ use crate::{
     measure::{params::SurfacePath, Measurement},
 };
 use base::{error::VgonioError, medium::Medium, optics::ior::RefractiveIndexRegistry, Asset};
-use gfxkit::{context::GpuContext, mesh::RenderableMesh};
+use gxtk::{context::GpuContext, mesh::RenderableMesh};
 use surf::{
     subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern,
 };

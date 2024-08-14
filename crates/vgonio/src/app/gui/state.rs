@@ -10,7 +10,7 @@ pub use context::RawGuiContext;
 use egui_winit::EventResponse;
 pub use renderer::GuiRenderer;
 
-use gfxkit::{
+use gxtk::{
     context::{GpuContext, ScreenDescriptor, WindowSurface},
     render_pass::remap_depth,
     texture::Texture,

@@ -11,7 +11,7 @@ use base::{
     MeasurementKind,
 };
 use bytemuck::{Pod, Zeroable};
-use gfxkit::{
+use gxtk::{
     camera::{Camera, Projection},
     context::{GpuContext, WgpuConfig},
     render_pass::{tex_fmt_bpp, RenderPass},
