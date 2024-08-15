@@ -442,7 +442,7 @@ impl VgonioGuiApp {
             },
         );
 
-        let cmfd: Box<dyn Iterator<Item=wgpu::CommandBuffer>> = match dbg_encoder {
+        let cmd: Box<dyn Iterator<Item=wgpu::CommandBuffer>> = match dbg_encoder {
             Some(encoder) => Box::new(
                 [viewer_encoder.finish(), encoder.finish()]
                     .into_iter()
@@ -458,7 +458,7 @@ impl VgonioGuiApp {
 
         // Submit the command buffers to the GPU: first the user's command buffers, then
         // the main render pass, and finally the UI render pass.
-        self.gpu_ctx.queue.submit(cmfd);
+        self.gpu_ctx.queue.submit(cmd);
 
         // Present the frame to the screen.
         output_frame.present();

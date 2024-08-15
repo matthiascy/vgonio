@@ -710,7 +710,7 @@ impl MicroSurfaceState {
     /// Update the list of surfaces.
     ///
     /// Updates the lookup table.
-    pub fn update_surfaces_list<'a, S: Iterator<Item=&'a Handle<MicroSurface>>>(
+    pub fn update_surfaces_list<'a, S: Iterator<Item = &'a Handle<MicroSurface>>>(
         &mut self,
         surfs: S,
     ) {
