@@ -64,7 +64,6 @@ rustup component add --toolchain nightly-2024-06-28
 
 Currently, VGonio depends on the following libraries:
 
-* [shaderc](https://github.com/google/shaderc)
 * [Embree v3.13.5](https://www.embree.org/):
   You can simply download the precompiled binaries from the [Embree website](https://www.embree.org/downloads.html)
   and extract them to the root directory of VGonio.

@@ -3386,7 +3386,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vgonio"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "approx",
  "bincode",
@@ -3435,7 +3435,7 @@ dependencies = [
 
 [[package]]
 name = "vgonio-base"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "approx",
  "byteorder",
@@ -3458,7 +3458,7 @@ dependencies = [
 
 [[package]]
 name = "vgonio-bxdf"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "chrono",
  "clap",
@@ -3473,7 +3473,7 @@ dependencies = [
 
 [[package]]
 name = "vgonio-gxtk"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "bytemuck",
  "futures-intrusive",
@@ -3490,7 +3490,7 @@ dependencies = [
 
 [[package]]
 name = "vgonio-jabr"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "num-traits",
 ]
@@ -3519,7 +3519,7 @@ dependencies = [
 
 [[package]]
 name = "vgonio-uxtk"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "bytemuck",
  "egui 0.28.1",
@@ -3534,7 +3534,7 @@ dependencies = [
 
 [[package]]
 name = "vgonio-visu"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "clap",
  "image",
