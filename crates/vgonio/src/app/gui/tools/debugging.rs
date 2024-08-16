@@ -4,9 +4,10 @@ use std::{any::Any, default::Default};
 mod microfacet;
 mod shadow_map;
 
-use crate::app::gui::{tools::Tool, widgets::ToggleSwitch};
+use crate::app::gui::tools::Tool;
 use microfacet::MicrofacetDebugging;
 use shadow_map::DepthMapPane;
+use uxtk::widgets::ToggleSwitch;
 
 #[non_exhaustive]
 #[derive(Eq, PartialEq)]

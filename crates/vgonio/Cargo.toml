@@ -21,7 +21,6 @@ vvdbg = []
 chrono.workspace = true
 clap.workspace = true
 egui.workspace = true
-eframe = "0.28"
 egui_dock.workspace = true
 egui_extras.workspace = true
 egui-file-dialog.workspace = true

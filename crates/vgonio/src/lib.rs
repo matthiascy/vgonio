@@ -18,8 +18,6 @@
 #![feature(let_chains)]
 #![feature(generic_const_exprs)]
 #![feature(effects)]
-#![warn(missing_docs)]
-#![warn(unused_crate_dependencies)]
 
 extern crate core;
 
@@ -31,21 +29,7 @@ mod io;
 pub mod measure;
 pub(crate) mod pyplot;
 
-use base::error::VgonioError;
-
-/// Main entry point for the VGonio app.
-pub fn run() -> Result<(), VgonioError> {
-    use app::args::CliArgs;
-    use clap::Parser;
-
-    let args = CliArgs::parse();
-    let config = app::init(&args, std::time::SystemTime::now())?;
-
-    match args.command {
-        None => app::gui::run(config),
-        Some(cmd) => app::cli::run(cmd, config),
-    }
-}
+pub use app::run;
 
 /// Machine epsilon for `f32`.
 pub const MACHINE_EPSILON: f32 = f32::EPSILON * 0.5;

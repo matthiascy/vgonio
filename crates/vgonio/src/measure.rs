@@ -5,7 +5,6 @@ pub mod mfd;
 pub mod params;
 
 use crate::{
-    app::cache::Handle,
     io::{
         vgmo::{vgmo_header_ext_from_data, VgmoHeaderExt},
         OutputFileFormatOption,
@@ -18,6 +17,7 @@ use crate::{
 };
 use base::{
     error::VgonioError,
+    handle::Handle,
     io::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
     },

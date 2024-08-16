@@ -4,11 +4,9 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use super::Tool;
 use crate::{
-    app::gui::{
-        event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
-        state::GuiRenderer,
-    },
+    app::gui::event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
     measure,
 };
 use base::{
@@ -20,9 +18,8 @@ use gxtk::{
     context::GpuContext,
     texture::Texture,
 };
+use uxtk::UiRenderer;
 use wgpu::util::DeviceExt;
-
-use super::Tool;
 
 // TODO: use paint callback in the future
 
@@ -146,7 +143,7 @@ struct Vertex(#[allow(dead_code)] [f32; 3]);
 impl SamplingInspector {
     pub fn new(
         gpu: Arc<GpuContext>,
-        gui: Arc<RwLock<GuiRenderer>>,
+        gui: Arc<RwLock<UiRenderer>>,
         output_format: wgpu::TextureFormat,
         event_loop: EventLoopProxy,
     ) -> SamplingInspector {

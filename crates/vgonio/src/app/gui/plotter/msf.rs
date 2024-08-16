@@ -4,7 +4,7 @@ use crate::app::gui::plotter::{debug_print_angle, debug_print_angle_pair};
 use crate::fitting::FittedModel;
 use crate::{
     app::{
-        cache::{Cache, Handle, RawCache},
+        cache::{Cache, RawCache},
         gui::{
             event::EventLoopProxy,
             plotter::{angle_knob, Curve, VariantData},
@@ -13,6 +13,7 @@ use crate::{
     measure::{mfd::MeasuredGafData, Measurement},
 };
 use base::{
+    handle::Handle,
     range::RangeByStepSizeInclusive,
     units::{rad, Radians},
     MeasurementKind,

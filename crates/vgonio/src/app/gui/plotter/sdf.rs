@@ -1,26 +1,25 @@
+#[cfg(debug_assertions)]
+use crate::app::gui::plotter::debug_print_angle_pair;
 #[cfg(feature = "fitting")]
 use crate::fitting::FittedModel;
 use crate::{
     app::{
-        cache::{Cache, Handle, RawCache},
+        cache::{Cache, RawCache},
         gui::{
             event::EventLoopProxy,
             misc::drag_angle,
             plotter::{angle_knob, Curve, VariantData},
         },
     },
-    measure::Measurement,
+    measure::{mfd::MeasuredSdfData, Measurement},
 };
 use base::{
+    handle::Handle,
     range::RangeByStepSizeInclusive,
     units::{deg, rad, Radians},
 };
 use egui::{Align, Ui};
 use std::any::Any;
-
-#[cfg(debug_assertions)]
-use crate::app::gui::plotter::debug_print_angle_pair;
-use crate::measure::mfd::MeasuredSdfData;
 
 pub struct SlopeDistributionExtra {
     /// The azimuth of the facet normal.

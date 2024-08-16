@@ -1,14 +1,12 @@
 pub(crate) mod camera;
 mod context;
 pub(crate) mod debug;
-mod renderer;
 
 // TODO: create default config folder the first time the app is launched (gui
 // and cli)
 
 pub use context::RawGuiContext;
 use egui_winit::EventResponse;
-pub use renderer::GuiRenderer;
 
 use gxtk::{
     context::{GpuContext, ScreenDescriptor, WindowSurface},
@@ -20,6 +18,7 @@ use std::{
     path::Path,
     sync::{Arc, RwLock},
 };
+use uxtk::UiRenderer;
 use winit::{event::WindowEvent, window::Window};
 
 pub const AZIMUTH_BIN_SIZE_DEG: usize = 5;
@@ -169,7 +168,7 @@ pub struct GuiContext {
     /// Context for GUI painting.
     context: RawGuiContext,
     /// Rendering state for the GUI.
-    pub renderer: Arc<RwLock<GuiRenderer>>, // TODO: make private
+    pub renderer: Arc<RwLock<UiRenderer>>, // TODO: make private
 }
 
 pub struct GuiRenderOutput {
@@ -190,7 +189,7 @@ impl GuiContext {
         msaa_samples: u32,
     ) -> Self {
         let context = RawGuiContext::new(window);
-        let renderer = Arc::new(RwLock::new(GuiRenderer::new(
+        let renderer = Arc::new(RwLock::new(UiRenderer::new(
             &device,
             surface_format,
             None,

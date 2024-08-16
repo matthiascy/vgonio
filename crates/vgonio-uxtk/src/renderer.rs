@@ -2,23 +2,23 @@ use egui::epaint;
 use gxtk::{
     buffers::SlicedBuffer,
     context::{ScreenDescriptor, UiUniforms},
+    wgpu,
 };
 use std::{borrow::Cow, collections::HashMap};
 use type_map::TypeMap;
-use wgpu::PipelineCompilationOptions;
 
 type SetupCallback = dyn Fn(
-        &wgpu::Device,
-        &wgpu::Queue,
-        &mut wgpu::CommandEncoder,
-        &mut TypeMap,
-    ) -> Vec<wgpu::CommandBuffer>
-    + Send
-    + Sync;
+    &wgpu::Device,
+    &wgpu::Queue,
+    &mut wgpu::CommandEncoder,
+    &mut TypeMap,
+) -> Vec<wgpu::CommandBuffer>
++ Send
++ Sync;
 
 type PaintCallback = dyn for<'a, 'b> Fn(epaint::PaintCallbackInfo, &'a mut wgpu::RenderPass<'b>, &'b TypeMap)
-    + Send
-    + Sync;
++ Send
++ Sync;
 
 /// A callback function that can be used to compose an [`epaint::PaintCallback`]
 /// for custom WGPU rendering.
@@ -70,14 +70,14 @@ impl CallbackFn {
     pub fn set_setup_fn<F>(mut self, setup: F) -> Self
     where
         F: Fn(
-                &wgpu::Device,
-                &wgpu::Queue,
-                &mut wgpu::CommandEncoder,
-                &mut TypeMap,
-            ) -> Vec<wgpu::CommandBuffer>
-            + Send
-            + Sync
-            + 'static,
+            &wgpu::Device,
+            &wgpu::Queue,
+            &mut wgpu::CommandEncoder,
+            &mut TypeMap,
+        ) -> Vec<wgpu::CommandBuffer>
+        + Send
+        + Sync
+        + 'static,
     {
         self.setup = Box::new(setup) as _;
         self
@@ -86,9 +86,9 @@ impl CallbackFn {
     pub fn set_paint_fn<F>(mut self, paint: F) -> Self
     where
         F: for<'a, 'b> Fn(epaint::PaintCallbackInfo, &'a mut wgpu::RenderPass<'b>, &'b TypeMap)
-            + Send
-            + Sync
-            + 'static,
+        + Send
+        + Sync
+        + 'static,
     {
         self.paint = Box::new(paint) as _;
         self
@@ -96,7 +96,7 @@ impl CallbackFn {
 }
 
 /// Render state for GUI rendering.
-pub struct GuiRenderer {
+pub struct UiRenderer {
     /// Texture format of the render pipeline output.
     output_format: wgpu::TextureFormat,
 
@@ -132,7 +132,7 @@ pub struct GuiRenderer {
     paint_callback_resources: TypeMap,
 }
 
-impl GuiRenderer {
+impl UiRenderer {
     const VERTEX_BUFFER_INIT_CAPACITY: wgpu::BufferAddress =
         1024 * size_of::<egui::epaint::Vertex>() as wgpu::BufferAddress;
 
@@ -153,6 +153,8 @@ impl GuiRenderer {
         output_depth_format: Option<wgpu::TextureFormat>,
         msaa_samples: u32,
     ) -> Self {
+        profile_function!();
+
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("egui_shader"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("./egui.wgsl"))),
@@ -163,7 +165,8 @@ impl GuiRenderer {
             contents: bytemuck::cast_slice(&[UiUniforms::default()]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
-        let uniform_bind_group_layout =
+        let uniform_bind_group_layout = {
+            profile_scope!("create_uniform_bind_group_layout");
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("egui_uniform_bind_group_layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
@@ -176,7 +179,8 @@ impl GuiRenderer {
                     },
                     count: None,
                 }],
-            });
+            })
+        };
         let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("egui_uniform_bind_group"),
             layout: &uniform_bind_group_layout,
@@ -225,7 +229,7 @@ impl GuiRenderer {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: "vs_main",
-                compilation_options: PipelineCompilationOptions::default(),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: size_of::<epaint::Vertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::VertexStepMode::Vertex,

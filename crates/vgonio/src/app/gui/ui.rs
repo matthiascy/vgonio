@@ -12,7 +12,7 @@ use crate::measure::{
 };
 use crate::{
     app::{
-        cache::{Cache, Handle},
+        cache::Cache,
         gui::{
             data::PropertyData,
             event::{EventLoopProxy, OutlinerEvent, SurfaceViewerEvent, VgonioEvent},
@@ -23,7 +23,6 @@ use crate::{
             notify::{NotifyKind, NotifySystem},
             outliner::OutlinerItem,
             plotter::{PlotInspector, PlottingWidget},
-            state::GuiRenderer,
             tools::{SamplingInspector, Scratch, Tools},
             DebuggingInspector,
         },
@@ -32,6 +31,7 @@ use crate::{
     measure::Measurement,
 };
 use base::{
+    handle::Handle,
     io::{CompressionScheme, FileEncoding},
     range::RangeByStepSizeInclusive,
     MeasurementKind,
@@ -44,7 +44,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 use surf::{subdivision::Subdivision, HeightOffset, MicroSurface};
-use uxtk::theme::ThemeKind;
+use uxtk::{theme::ThemeKind, UiRenderer};
 
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
@@ -90,7 +90,7 @@ impl VgonioGui {
         event_loop: EventLoopProxy,
         config: Arc<Config>,
         gpu: Arc<GpuContext>,
-        gui: Arc<RwLock<GuiRenderer>>,
+        gui: Arc<RwLock<UiRenderer>>,
         // bsdf_viewer: Arc<RwLock<BsdfViewer>>,
         cache: Cache,
     ) -> Self {

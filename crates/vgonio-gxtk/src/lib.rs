@@ -6,3 +6,5 @@ pub mod render_pass;
 pub mod shadow_pass;
 pub mod texture;
 pub mod vertex;
+
+pub use wgpu;

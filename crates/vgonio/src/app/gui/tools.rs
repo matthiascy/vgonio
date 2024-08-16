@@ -8,8 +8,7 @@ use gxtk::context::GpuContext;
 pub(crate) use sampling::SamplingInspector;
 pub(crate) use scratch::Scratch;
 use std::sync::{Arc, RwLock};
-
-use super::state::GuiRenderer;
+use uxtk::UiRenderer;
 
 pub trait Tool {
     fn name(&self) -> &str;
@@ -32,7 +31,7 @@ impl Tools {
     pub fn new(
         event_loop: EventLoopProxy,
         gpu: Arc<GpuContext>,
-        gui: Arc<RwLock<GuiRenderer>>,
+        gui: Arc<RwLock<UiRenderer>>,
     ) -> Self {
         log::info!("Initializing tools...");
         Self {

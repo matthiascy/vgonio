@@ -1,9 +1,10 @@
 use crate::{
-    app::cache::{Handle, RawCache},
+    app::cache::RawCache,
     measure::{params::GafMeasurementParams, MeasuredData, Measurement, MeasurementSource},
 };
 use base::{
     error::VgonioError,
+    handle::Handle,
     impl_measured_data_trait, math,
     math::{Mat4, Vec3},
     range::RangeByStepSizeInclusive,

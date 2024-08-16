@@ -17,7 +17,6 @@ mod surf_viewer;
 mod tools;
 mod ui;
 mod visual_grid;
-mod widgets;
 
 // TODO: MSAA
 use egui::Visuals;
@@ -78,7 +77,7 @@ use crate::{
     measure::params::MeasurementParams,
 };
 
-/// Launches Vgonio GUI application.
+/// Launches Vgonio GUI application native window.
 pub fn run(config: Config) -> Result<(), VgonioError> {
     let event_loop = EventLoopBuilder::<VgonioEvent>::with_user_event()
         .build()
@@ -128,6 +127,7 @@ pub fn run(config: Config) -> Result<(), VgonioError> {
         })
         .map_err(|err| VgonioError::new("Failed to run the application", Some(Box::new(err))))
 }
+
 // TODO: add MSAA
 
 /// Vgonio client app with GUI.
@@ -269,11 +269,11 @@ impl VgonioGuiApp {
         match event {
             WindowEvent::KeyboardInput {
                 event:
-                KeyEvent {
-                    physical_key: PhysicalKey::Code(keycode),
-                    state,
-                    ..
-                },
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(keycode),
+                        state,
+                        ..
+                    },
                 ..
             } => {
                 self.input.update_key_map(*keycode, *state);
@@ -442,7 +442,7 @@ impl VgonioGuiApp {
             },
         );
 
-        let cmd: Box<dyn Iterator<Item=wgpu::CommandBuffer>> = match dbg_encoder {
+        let cmd: Box<dyn Iterator<Item = wgpu::CommandBuffer>> = match dbg_encoder {
             Some(encoder) => Box::new(
                 [viewer_encoder.finish(), encoder.finish()]
                     .into_iter()
@@ -669,10 +669,10 @@ impl VgonioGuiApp {
                                 &self.config,
                                 opts,
                             )
-                                .map_err(|err| {
-                                    log::error!("Failed to write measured data to file: {}", err);
-                                })
-                                .unwrap();
+                            .map_err(|err| {
+                                log::error!("Failed to write measured data to file: {}", err);
+                            })
+                            .unwrap();
                         }
                         self.cache.write(|cache| {
                             let meas = Vec::from(data)

@@ -1,14 +1,12 @@
 use crate::{
-    app::{
-        cache::Handle,
-        gui::{
-            data::PropertyData,
-            docking::{Dockable, WidgetKind},
-            event::{EventLoopProxy, OutlinerEvent, VgonioEvent},
-        },
+    app::gui::{
+        data::PropertyData,
+        docking::{Dockable, WidgetKind},
+        event::{EventLoopProxy, OutlinerEvent, VgonioEvent},
     },
     measure::Measurement,
 };
+use base::handle::Handle;
 use egui::WidgetText;
 use std::sync::{Arc, RwLock};
 use surf::{

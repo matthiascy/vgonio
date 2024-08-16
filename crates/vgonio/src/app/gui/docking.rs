@@ -1,6 +1,13 @@
 use crate::app::{
     cache::Cache,
-    gui::{data::PropertyData, event::EventLoopProxy},
+    gui::{
+        data::PropertyData,
+        event::{EventLoopProxy, SurfaceViewerEvent, VgonioEvent},
+        outliner::Outliner,
+        plotter::PlotInspector,
+        prop_inspector::PropertyInspector,
+        surf_viewer::SurfaceViewer,
+    },
 };
 use egui_dock::DockState;
 use std::{
@@ -9,19 +16,11 @@ use std::{
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
-
-use crate::app::gui::{
-    event::{SurfaceViewerEvent, VgonioEvent},
-    outliner::Outliner,
-    plotter::PlotInspector,
-    prop_inspector::PropertyInspector,
-    state::GuiRenderer,
-    surf_viewer::SurfaceViewer,
-};
+use uxtk::UiRenderer;
 
 /// Docking space for widgets.
 pub struct DockSpace {
-    gui: Arc<RwLock<GuiRenderer>>,
+    gui: Arc<RwLock<UiRenderer>>,
     cache: Cache,
     data: Arc<RwLock<PropertyData>>,
     /// Event loop proxy.
@@ -51,7 +50,7 @@ impl DockSpace {
     /// | 0 | - |
     /// |   | 2 |
     pub fn default_layout(
-        gui: Arc<RwLock<GuiRenderer>>,
+        gui: Arc<RwLock<UiRenderer>>,
         cache: Cache,
         data: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,

@@ -14,7 +14,28 @@ members = [
 [workspace.package]
 authors = ["Yang Chen <y.chen-14@tudelft.nl>"]
 edition = "2021"
+license = "Apache-2.0"
+license-file = "LICENSE-APACHE"
 version = "0.3.1"
+
+[profile.dev]
+split-debuginfo = "unpacked"
+
+[profile.dev.build-override]
+opt-level = 3
+
+[profile.release]
+strip = "debuginfo"
+lto = "fat"
+
+[profile.rel-with-dbg-info]
+inherits = "release"
+strip = "none"
+debug = "full"
+
+[profile.release.build-override]
+opt-level = 3
+codegen-units = 16
 
 [workspace.dependencies]
 ahash = "0.8"
@@ -27,7 +48,7 @@ chrono = "0.4"
 clap = { version = "~4", features = ["derive", "wrap_help"] }
 csv = "1"
 dirs = "5.0"
-egui = { version = "~0.28", features = ["bytemuck"] }
+egui = { version = "~0.28", features = ["bytemuck", "rayon", "puffin", "log", "callstack"] }
 egui_dock = { version = "~0.13" }
 egui_extras = { version = "~0.28", features = ["all_loaders"] }
 egui-winit = { version = "~0.28" }
@@ -51,6 +72,7 @@ numpy = "0.21"
 paste = "1.0"
 pollster = "0.3"
 proptest = "1.0"
+puffin = "~0.19"
 pyo3 = { version = "0.21", features = ["auto-initialize"] }
 rand = "0.8"
 rayon = "1.9"
@@ -61,29 +83,14 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
 static_assertions = "1.1"
+thiserror = "~1.0"
 tobj = "4.0"
 toml = "0.8"
 type-map = "0.5"
 uuid = { version = "1.2", features = ["serde", "v4"] }
 winit = "~0.29"
-wgpu = { version = "22", features = ["spirv"] }
+wgpu = { version = "22", features = ["wgsl"] }
 
-
-[profile.dev]
-split-debuginfo = "unpacked"
-
-[profile.dev.build-override]
-opt-level = 3
-
-[profile.release]
-strip = "debuginfo"
-lto = "fat"
-
-[profile.rel-with-dbg-info]
-inherits = "release"
-strip = "none"
-debug = "full"
-
-[profile.release.build-override]
-opt-level = 3
-codegen-units = 16
+[workspace.lints.clippy]
+missing_docs = "warn"
+unused_crate_dependencies = "warn"

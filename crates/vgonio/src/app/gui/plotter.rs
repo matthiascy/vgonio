@@ -10,13 +10,12 @@ use crate::fitting::FittedModel;
 
 use crate::{
     app::{
-        cache::{Cache, Handle, RawCache},
+        cache::{Cache, RawCache},
         gui::{
             data::PropertyData,
             docking::{Dockable, WidgetKind},
             event::EventLoopProxy,
             plotter::sdf::SlopeDistributionExtra,
-            widgets::{AngleKnob, AngleKnobWinding},
         },
     },
     measure::{
@@ -25,6 +24,7 @@ use crate::{
     },
 };
 use base::{
+    handle::Handle,
     math,
     range::RangeByStepSizeInclusive,
     units::{deg, rad, Radians},
@@ -39,6 +39,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
+use uxtk::widgets::{AngleKnob, AngleKnobWinding};
 
 const LINE_COLORS: [egui::Color32; 16] = [
     egui::Color32::from_rgb(254, 128, 127),

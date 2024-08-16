@@ -2,7 +2,7 @@
 use crate::measure::bsdf::rtc::RayTrajectory;
 use crate::{
     app::{
-        cache::{Cache, Handle},
+        cache::Cache,
         gui::{
             event::{EventLoopProxy, VgonioEvent},
             notify::NotifyKind,
@@ -14,6 +14,7 @@ use crate::{
     },
 };
 use base::{
+    handle::Handle,
     math::{Mat4, Sph2, Vec3},
     partition::SphericalPartition,
 };

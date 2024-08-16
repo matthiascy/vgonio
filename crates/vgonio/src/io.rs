@@ -1,9 +1,5 @@
 use crate::{
-    app::{
-        cache::{Cache, Handle},
-        cli::ansi,
-        Config,
-    },
+    app::{cache::Cache, cli::ansi, Config},
     measure::{
         bsdf::MeasuredBsdfData,
         mfd::{MeasuredGafData, MeasuredNdfData},

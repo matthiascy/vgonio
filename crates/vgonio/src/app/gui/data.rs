@@ -1,14 +1,12 @@
-use base::MeasurementKind;
-use chrono::{DateTime, Local};
-use std::collections::HashMap;
-
 #[cfg(feature = "fitting")]
 use crate::fitting::FittedModels;
-use base::units::LengthUnit;
+use base::{handle::Handle, units::LengthUnit, MeasurementKind};
+use chrono::{DateTime, Local};
+use std::collections::HashMap;
 use surf::{subdivision::SubdivisionKind, MicroSurface};
 
 use crate::{
-    app::cache::{Handle, RawCache},
+    app::cache::RawCache,
     measure::{Measurement, MeasurementSource},
 };
 

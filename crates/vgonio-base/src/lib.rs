@@ -27,6 +27,7 @@ use std::{
 
 mod asset;
 pub mod error;
+pub mod handle;
 pub mod io;
 pub mod math;
 pub mod units;

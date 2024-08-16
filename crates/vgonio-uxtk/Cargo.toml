@@ -3,8 +3,20 @@ name = "vgonio-uxtk"
 authors.workspace = true
 edition.workspace = true
 version.workspace = true
+description = "User interface toolkit for vgonio based on egui and wgpu."
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["wgpu"]
+profile = ["dep:puffin"]
+wgpu = ["dep:gxtk"]
 
 [dependencies]
+bytemuck.workspace = true
 egui.workspace = true
+base = { package = "vgonio-base", path = "../vgonio-base" }
+gxtk = { package = "vgonio-gxtk", path = "../vgonio-gxtk", optional = true }
+surf = { package = "vgonio-surf", path = "../vgonio-surf" }
+log.workspace = true
+puffin = { workspace = true, optional = true }
+thiserror.workspace = true
+type-map.workspace = true

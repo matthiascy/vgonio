@@ -1,5 +1,6 @@
+use super::state::DepthMap;
 use crate::app::{
-    cache::{Handle, RawCache},
+    cache::RawCache,
     gui::{
         data::MicroSurfaceProp,
         docking::{Dockable, WidgetKind},
@@ -9,6 +10,7 @@ use crate::app::{
     },
 };
 use base::{
+    handle::Handle,
     input::InputState,
     math::{Mat4, Vec4},
 };
@@ -24,9 +26,10 @@ use std::{
 };
 use surf::MicroSurface;
 use uuid::Uuid;
-use uxtk::theme::{DarkTheme, LightTheme, Theme, ThemeKind};
-
-use super::state::{DepthMap, GuiRenderer};
+use uxtk::{
+    theme::{DarkTheme, LightTheme, Theme, ThemeKind},
+    UiRenderer,
+};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ShadingMode {
@@ -68,7 +71,7 @@ pub struct SurfaceViewerState {
 impl SurfaceViewerState {
     pub fn new(
         gpu: &GpuContext,
-        gui: &Arc<RwLock<GuiRenderer>>,
+        gui: &Arc<RwLock<UiRenderer>>,
         format: wgpu::TextureFormat,
         c_attachment_id: egui::TextureId,
         surf_globals_layout: &wgpu::BindGroupLayout,
@@ -138,7 +141,7 @@ impl SurfaceViewerState {
         height: u32,
         format: wgpu::TextureFormat,
         gpu: &GpuContext,
-        gui: &Arc<RwLock<GuiRenderer>>,
+        gui: &Arc<RwLock<UiRenderer>>,
     ) {
         let sampler = Arc::new(gpu.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("sampling-debugger-sampler"),
@@ -285,7 +288,7 @@ impl SurfaceViewerStates {
         viewer: Uuid,
         tex_id: egui::TextureId,
         gpu: &GpuContext,
-        gui: &Arc<RwLock<GuiRenderer>>,
+        gui: &Arc<RwLock<UiRenderer>>,
     ) {
         assert!(
             self.states.get(&viewer).is_none(),
@@ -311,7 +314,7 @@ impl SurfaceViewerStates {
         width: u32,
         height: u32,
         gpu: &GpuContext,
-        gui: &Arc<RwLock<GuiRenderer>>,
+        gui: &Arc<RwLock<UiRenderer>>,
     ) {
         if let Some(state) = self.states.get_mut(&viewer) {
             state.resize(width, height, self.format, gpu, gui);
@@ -807,7 +810,7 @@ impl SurfaceViewer {
     /// The viewer's output is rendered to a texture, which can be accessed
     /// by egui through [`color_attachment_id`]. Resources needed for rendering
     /// are allocated by [`SurfaceViewerState`].
-    pub fn new(gui: Arc<RwLock<GuiRenderer>>, event_loop: EventLoopProxy) -> Self {
+    pub fn new(gui: Arc<RwLock<UiRenderer>>, event_loop: EventLoopProxy) -> Self {
         let color_attachment_id = gui.write().unwrap().pre_register_texture_id();
         Self {
             viewport_size: egui::Vec2::new(

@@ -1,14 +1,20 @@
 #[cfg(feature = "fitting")]
 use crate::fitting::{FittedModel, FittingProblemKind};
 
-use crate::app::{
-    cache::{Handle, RawCache},
-    gui::{
-        event::{EventLoopProxy, VgonioEvent},
-        plotter::{angle_knob, Curve, VariantData},
+#[cfg(debug_assertions)]
+use crate::app::gui::plotter::debug_print_angle_pair;
+use crate::{
+    app::{
+        cache::{Cache, RawCache},
+        gui::{
+            event::{EventLoopProxy, VgonioEvent},
+            plotter::{angle_knob, Curve, VariantData},
+        },
     },
+    measure::{mfd::MeasuredNdfData, Measurement},
 };
 use base::{
+    handle::Handle,
     range::RangeByStepSizeInclusive,
     units::{rad, Radians},
     Isotropy,
@@ -16,13 +22,6 @@ use base::{
 use bxdf::distro::{MicrofacetDistribution, MicrofacetDistroKind};
 use egui::{Align, Ui};
 use std::any::Any;
-
-#[cfg(debug_assertions)]
-use crate::app::gui::plotter::debug_print_angle_pair;
-use crate::{
-    app::cache::Cache,
-    measure::{mfd::MeasuredNdfData, Measurement},
-};
 
 struct ModelSelector {
     model: MicrofacetDistroKind,

@@ -1,4 +1,4 @@
-use crate::app::gui::state::GuiRenderer;
+use crate::app::gui::event::EventLoopProxy;
 use base::{
     math,
     math::{Mat4, Vec3},
@@ -12,8 +12,7 @@ use std::{
     borrow::Cow,
     sync::{Arc, RwLock},
 };
-
-use crate::app::gui::event::EventLoopProxy;
+use uxtk::UiRenderer;
 
 pub const SHADER: &str = r#"
 @group(0) @binding(0)
@@ -41,7 +40,7 @@ pub struct BsdfRenderingRecord {
 
 pub struct BsdfViewer {
     gpu: Arc<GpuContext>,
-    gui: Arc<RwLock<GuiRenderer>>,
+    gui: Arc<RwLock<UiRenderer>>,
     sampler: Arc<wgpu::Sampler>,
     records: Vec<BsdfRenderingRecord>,
     depth_attachment: Texture,
@@ -61,7 +60,7 @@ impl BsdfViewer {
 
     pub fn new(
         gpu: Arc<GpuContext>,
-        gui: Arc<RwLock<GuiRenderer>>,
+        gui: Arc<RwLock<UiRenderer>>,
         event_loop: EventLoopProxy,
     ) -> Self {
         let camera = Camera::new(Vec3::new(2.0, 1.5, 2.0), Vec3::ZERO);

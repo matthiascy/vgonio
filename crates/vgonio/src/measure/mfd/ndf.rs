@@ -1,5 +1,5 @@
 use crate::{
-    app::cache::{Handle, RawCache},
+    app::cache::RawCache,
     measure::{
         params::{NdfMeasurementMode, NdfMeasurementParams},
         MeasuredData, Measurement, MeasurementSource,
@@ -7,6 +7,7 @@ use crate::{
 };
 use base::{
     error::VgonioError,
+    handle::Handle,
     impl_measured_data_trait, math,
     math::{Sph2, Vec3Swizzles},
     partition::{DataCarriedOnHemisphereImageWriter, SphericalDomain, SphericalPartition},

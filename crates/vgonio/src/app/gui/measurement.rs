@@ -8,7 +8,7 @@ use crate::app::cache::Cache;
 use crate::{
     app::{
         args::OutputFormat,
-        cache::{Handle, RawCache},
+        cache::RawCache,
         gui::{
             event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
             measurement::{
@@ -17,19 +17,20 @@ use crate::{
             },
             misc,
             notify::NotifyKind,
-            widgets::{SurfaceSelector, ToggleSwitch},
         },
     },
     io::{OutputFileFormatOption, OutputOptions},
     measure::{bsdf::receiver::ReceiverParams, params::MeasurementParams},
 };
 use base::{
+    handle::Handle,
     io::{CompressionScheme, FileEncoding},
     partition::{PartitionScheme, SphericalDomain},
     MeasurementKind,
 };
 use egui::Widget;
 use surf::MicroSurface;
+use uxtk::widgets::{SurfaceSelector, ToggleSwitch};
 
 impl ReceiverParams {
     /// UI for detector parameters.
@@ -152,7 +153,9 @@ impl MeasurementDialog {
     }
 
     pub fn update_surface_selector(&mut self, surfs: &[Handle<MicroSurface>], cache: &RawCache) {
-        self.selector.update(surfs, cache);
+        let surfs = cache.get_micro_surface_records(surfs.iter());
+        let surfs = surfs.iter().map(|r| (r.surf, r.name()));
+        self.selector.update(surfs);
     }
 
     #[cfg(any(feature = "vdbg", debug_assertions))]

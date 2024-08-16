@@ -2,12 +2,9 @@ use super::outliner::OutlinerItem;
 #[cfg(feature = "fitting")]
 use crate::fitting::FittingProblemKind;
 use crate::{
-    app::{
-        cache::Handle,
-        gui::{
-            notify::NotifyKind,
-            surf_viewer::{OverlayFlags, ShadingMode},
-        },
+    app::gui::{
+        notify::NotifyKind,
+        surf_viewer::{OverlayFlags, ShadingMode},
     },
     io::OutputOptions,
     measure::{
@@ -17,6 +14,7 @@ use crate::{
     },
 };
 use base::{
+    handle::Handle,
     math::{IVec2, Sph2},
     partition::SphericalPartition,
     units::Degrees,
