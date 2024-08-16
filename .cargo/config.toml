@@ -1,12 +1,12 @@
 [alias]
 b = "build"
-bef = "build --features embree,fitting"
-bdbg = "build --features debug,embree,fitting,verbose-dbg"
+bef = "build --features fitting"
+bdbg = "build --features debug,fitting,verbose-dbg"
 r = "run"
-ref = "build --features embree,fitting"
-rdbg = "build --features debug,embree,fitting,verbose-dbg"
-opt = "build --features embree,fitting"
-vis = "build --features embree,visu-dbg"
+ref = "build --features fitting"
+rdbg = "build --features debug,fitting,verbose-dbg"
+opt = "build --features fitting"
+vis = "build --features visu-dbg"
 
 [build]
 rustc-wrapper = "sccache"
