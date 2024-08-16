@@ -12,6 +12,9 @@
 - Support subdivision description in the measurement description file
     - `/path/to/the/surface.vgmo ~~ curved/wiggly l2`
 - Implement Doubly Connected Edge List (DCEL) data structure for mesh processing
+- Isolate the UI from the main application
+- Rename crate `gfxkit` to `gxtk`
+- Rename crate `uikit` to `uxtk`
 
 ## 0.3.1 - 2024-06-23
 
