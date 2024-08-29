@@ -120,7 +120,7 @@ pub struct PlotInspector {
     name: String,
     /// The handle to the data to be plotted.
     data_handle: Handle<Measurement>,
-    /// Cache of the application.
+    /// Cache of the app.
     cache: Cache,
     /// Inspector properties data might be used by the plot.
     props: Arc<RwLock<PropertyData>>,
@@ -179,7 +179,7 @@ pub struct Curve {
 }
 
 impl Curve {
-    /// Creates a curve from a ADF or MSF data.
+    /// Creates a curve from an ADF or MSF data.
     ///
     /// # Arguments
     ///
@@ -862,7 +862,7 @@ impl Dockable for PlotInspector {
     fn ui(&mut self, ui: &mut Ui) { PlottingWidget::ui(self, ui); }
 }
 
-/// Calculates the ticks for x axis of the ADF or MSF plot.
+/// Calculates the ticks for x-axis of the ADF or MSF plot.
 fn adf_msf_x_angle_spacer(input: GridInput) -> Vec<GridMark> {
     let mut marks = vec![];
     let (min, max) = input.bounds;

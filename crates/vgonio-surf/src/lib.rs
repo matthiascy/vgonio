@@ -18,7 +18,7 @@ use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
 
 use crate::{
     dcel::HalfEdgeMesh,
-    subdivision::{curved, wiggle, Subdivision},
+    subdivision::{curved, wiggle, Subdivision, SubdivisionKind},
 };
 use base::{
     error::VgonioError,
@@ -959,8 +959,8 @@ impl MicroSurfaceMesh {
         let dcel = HalfEdgeMesh::new(Cow::Borrowed(&self.verts), &self.facets);
         let subdivision = TriangleUVSubdivision::new(opts.level(), self.pattern);
 
-        let subdivided = match opts {
-            Subdivision::Wiggly(lvl) => {
+        let subdivided = match opts.kind() {
+            SubdivisionKind::Wiggly => {
                 dcel.subdivide_by_uvs(&subdivision, wiggle::subdivide_triangle)
             },
             _ => {

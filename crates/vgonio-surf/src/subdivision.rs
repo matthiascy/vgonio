@@ -19,6 +19,13 @@ impl Subdivision {
             Subdivision::Curved(level) | Subdivision::Wiggly(level) => *level,
         }
     }
+
+    pub fn kind(&self) -> SubdivisionKind {
+        match self {
+            Subdivision::Curved(_) => SubdivisionKind::Curved,
+            Subdivision::Wiggly(_) => SubdivisionKind::Wiggly,
+        }
+    }
 }
 
 /// The kind of subdivision.
