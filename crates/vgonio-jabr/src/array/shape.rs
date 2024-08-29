@@ -1,7 +1,8 @@
 use crate::array::{dim::DimSeq, mem::MemLayout};
 
+// TODO: #[const_trait], blocked by effects feature and new const traits
+// implementation See: https://github.com/rust-lang/rust/issues/110395
 /// Common trait for types that can be used to represent the shape of an array.
-#[const_trait]
 pub trait Shape {
     /// The underlying type used to store the shape.
     type Underlying: DimSeq;
@@ -16,9 +17,10 @@ pub trait ShapeMetadata: Clone + PartialEq {
     fn dimension(&self) -> usize;
 }
 
+// TODO: constify
 /// Computes the index of an element in a multidimensional array given its
 /// coordinates and the layout of the array.
-pub const fn compute_index<M, const L: MemLayout>(meta: &M, index: &[usize]) -> usize
+pub fn compute_index<M, const L: MemLayout>(meta: &M, index: &[usize]) -> usize
 where
     M: ShapeMetadata,
 {
@@ -138,7 +140,7 @@ pub trait ConstShape: Sized + Clone + Copy + PartialEq {
     const COL_MAJOR_STRIDES: Self::Underlying;
 }
 
-impl<T, const N: usize> const Shape for T
+impl<T, const N: usize> Shape for T
 where
     T: ConstShape<Underlying = [usize; N]>,
 {

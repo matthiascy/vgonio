@@ -1,9 +1,7 @@
 #![feature(adt_const_params)]
-#![feature(const_fn_floating_point_arithmetic)]
 #![feature(const_mut_refs)]
 #![feature(const_trait_impl)]
 #![feature(decl_macro)]
-#![feature(effects)]
 #![feature(generic_const_exprs)]
 #![feature(allocator_api)]
 #![feature(thin_box)]
@@ -12,6 +10,8 @@
 #![feature(negative_impls)]
 #![feature(min_specialization)]
 #![feature(specialization)]
+// TODO: Enable this feature when it is stable to use const generics in the
+// whole project. #![feature(effects)]
 
 extern crate core;
 

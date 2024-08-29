@@ -4,6 +4,8 @@ use crate::array::{
 };
 use std::ops::{Index, IndexMut};
 
+// TODO: constify all methods if possible
+
 /// Base struct for all arrays.
 pub(crate) struct ArrCore<D, S, const L: MemLayout = { MemLayout::RowMajor }>
 where
@@ -35,23 +37,23 @@ where
 
     /// Returns the shape of the array.
     #[inline]
-    pub const fn shape(&self) -> &[usize] { self.meta.shape() }
+    pub fn shape(&self) -> &[usize] { self.meta.shape() }
 
     /// Returns the strides of the array.
     #[inline]
-    pub const fn strides(&self) -> &[usize] { self.meta.strides::<L>() }
+    pub fn strides(&self) -> &[usize] { self.meta.strides::<L>() }
 
     /// Returns the number of dimensions of the array.
     #[inline]
-    pub const fn dimension(&self) -> usize { self.meta.dimension() }
+    pub fn dimension(&self) -> usize { self.meta.dimension() }
 
     /// Returns the layout of the array.
     #[inline]
-    pub const fn order(&self) -> MemLayout { L }
+    pub fn order(&self) -> MemLayout { L }
 
     /// Returns the total number of elements in the array.
     #[inline]
-    pub const fn len(&self) -> usize { shape::compute_n_elems(self.meta.shape()) }
+    pub fn len(&self) -> usize { shape::compute_n_elems(self.meta.shape()) }
 }
 
 impl<D, S, const L: MemLayout> Clone for ArrCore<D, S, L>

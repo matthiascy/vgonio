@@ -18,22 +18,23 @@ impl<T> Scalar<T> for T {
     type Type = <T as Decay>::Output;
 }
 
+// TODO: #[const_trait], blocked by effects feature and new const traits
+// implementation See: https://github.com/rust-lang/rust/issues/110395
 /// Tells whether a type is arithmetic.
-#[const_trait]
 pub trait IsArithmetic {
     // NOTE: not using const value here because of `specialization` feature being
     // unsound.
     fn is_arithmetic() -> bool;
 }
 
-impl<T> const IsArithmetic for T {
+impl<T> IsArithmetic for T {
     default fn is_arithmetic() -> bool { false }
 }
 
 macro_rules! impl_is_arithmetic {
     ($($t:ty),*) => {
         $(
-            impl const IsArithmetic for $t {
+            impl IsArithmetic for $t {
                 fn is_arithmetic() -> bool { true }
             }
         )*
@@ -42,20 +43,21 @@ macro_rules! impl_is_arithmetic {
 
 impl_is_arithmetic!(u8, u16, u32, u64, u128, i8, i16, i32, i64, i128, f32, f64);
 
+// TODO: #[const_trait], blocked by effects feature and new const traits
+// implementation See: https://github.com/rust-lang/rust/issues/110395
 /// Tells whether a type is integral.
-#[const_trait]
 pub trait IsIntegral<T> {
     fn is_integral() -> bool;
 }
 
-impl<T> const IsIntegral<T> for T {
+impl<T> IsIntegral<T> for T {
     default fn is_integral() -> bool { false }
 }
 
 macro_rules! impl_is_integral {
     ($($t:ty),*) => {
         $(
-            impl const IsIntegral<$t> for $t {
+            impl IsIntegral<$t> for $t {
                 fn is_integral() -> bool { true }
             }
         )*
@@ -64,20 +66,21 @@ macro_rules! impl_is_integral {
 
 impl_is_integral!(u8, u16, u32, u64, u128, i8, i16, i32, i64, i128);
 
+// TODO: #[const_trait], blocked by effects feature and new const traits
+// implementation See: https://github.com/rust-lang/rust/issues/110395
 /// Tells whether a type is a floating point.
-#[const_trait]
 pub trait IsFloat<T> {
     fn is_float() -> bool;
 }
 
-impl<T> const IsFloat<T> for T {
+impl<T> IsFloat<T> for T {
     default fn is_float() -> bool { false }
 }
 
 macro_rules! impl_is_float {
     ($($t:ty),*) => {
         $(
-            impl const IsFloat<$t> for $t {
+            impl IsFloat<$t> for $t {
                 fn is_float() -> bool { true }
             }
         )*

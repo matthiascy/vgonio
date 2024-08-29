@@ -1,5 +1,6 @@
 use crate::Vec3;
 
+// TODO: constify
 /// Reflects a vector 'wi' about the given normal 'n'.
 ///
 /// # Arguments
@@ -19,7 +20,7 @@ use crate::Vec3;
 /// the incident ray is coming from.
 #[must_use]
 #[inline(always)]
-pub const fn reflect(wi: &Vec3, n: &Vec3) -> Vec3 {
+pub fn reflect(wi: &Vec3, n: &Vec3) -> Vec3 {
     debug_assert!(
         wi.dot(n) <= 0.0,
         "The incident direction must be pointing towards the boundary."

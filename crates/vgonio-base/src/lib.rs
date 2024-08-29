@@ -17,7 +17,8 @@
 #![feature(stdarch_x86_avx512)]
 #![feature(seek_stream_len)]
 #![warn(missing_docs)]
-#![feature(effects)]
+// TODO: Enable this feature when it is stable to use const generics in the
+// whole project. #![feature(effects)]
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -44,7 +45,7 @@ pub mod partition;
 
 /// Indicates whether something is uniform in all directions or not.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[derive(Debug, Copy, Clone, Hash)]
+#[derive(Debug, Copy, Clone, Hash, ConstParamTy)]
 pub enum Isotropy {
     /// Uniformity in all directions.
     #[cfg_attr(feature = "cli", clap(alias = "iso"))]
@@ -80,8 +81,6 @@ impl PartialEq<Self> for Isotropy {
         }
     }
 }
-
-impl ConstParamTy for Isotropy {}
 
 /// Version of anything in vgonio.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

@@ -17,6 +17,7 @@ use base::{
     partition::SphericalPartition,
     units::Nanometres,
 };
+#[cfg(feature = "exr")]
 use chrono::{DateTime, Local};
 use jabr::array::DyArr;
 use std::{borrow::Cow, collections::HashMap, ops::Index, path::Path};

@@ -413,15 +413,15 @@ impl<A: AngleUnit> core::ops::Neg for Angle<A> {
 
 super::impl_ops_assign!(AddAssign, SubAssign for Angle where A, B: AngleUnit);
 
-impl const NumericCast<Angle<URadian>> for usize {
+impl NumericCast<Angle<URadian>> for usize {
     fn cast(&self) -> Angle<URadian> { Angle::new(*self as f32) }
 }
 
-impl<A: AngleUnit> const NumericCast<f32> for Angle<A> {
+impl<A: AngleUnit> NumericCast<f32> for Angle<A> {
     fn cast(&self) -> f32 { self.value }
 }
 
-impl<A: AngleUnit> const NumericCast<Angle<A>> for f32 {
+impl<A: AngleUnit> NumericCast<Angle<A>> for f32 {
     fn cast(&self) -> Angle<A> { Angle::new(*self) }
 }
 

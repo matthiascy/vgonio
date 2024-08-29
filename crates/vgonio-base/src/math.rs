@@ -19,9 +19,11 @@ pub use glam::*;
 use num_traits::Float;
 
 // TODO: self-contained math library, tailored for specific use cases
+// TODO: constify as much as possible
 
+// TODO: #[const_trait], blocked by effects feature and new const traits
+// implementation See: https://github.com/rust-lang/rust/issues/110395
 /// Trait for converting from one primitive numeric type to another.
-#[const_trait]
 pub trait NumericCast<T> {
     /// Casts `self` to `T`.
     fn cast(&self) -> T;
@@ -29,7 +31,7 @@ pub trait NumericCast<T> {
 
 macro impl_as_primitive($t0:ty as $($t1:ty),*) {
 $(
-        impl const NumericCast<$t1> for $t0 {
+        impl NumericCast<$t1> for $t0 {
             fn cast(&self) -> $t1 {
                 *self as $t1
             }
