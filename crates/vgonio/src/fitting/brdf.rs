@@ -131,7 +131,7 @@ macro_rules! switch_isotropy {
                 >::new($brdf, $model, &$self.iors_i, &$self.iors_t);
                 let (result, report) = $solver.minimize(problem);
                 (result.model, report)
-            }
+            },
             Isotropy::Anisotropic => {
                 let problem = BrdfFittingProblemProxy::<
                     $brdf_params_ty,
@@ -140,7 +140,7 @@ macro_rules! switch_isotropy {
                 >::new($brdf, $model, &$self.iors_i, &$self.iors_t);
                 let (result, report) = $solver.minimize(problem);
                 (result.model, report)
-            }
+            },
         }
     };
 }

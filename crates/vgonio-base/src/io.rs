@@ -101,14 +101,14 @@ impl fmt::Display for ParseError {
                     "error while parsing line {} at position {}: ",
                     self.line, self.position
                 )?;
-            }
+            },
             FileEncoding::Binary => {
                 write!(
                     f,
                     "error while parsing byte at position {}: ",
                     self.position
                 )?;
-            }
+            },
         }
         match &self.kind {
             ParseErrorKind::InvalidMagicNumber => write!(f, "invalid magic number"),
@@ -502,7 +502,7 @@ pub fn write_f32_data_samples_binary<'a, W: Write>(
     match comp {
         CompressionScheme::None => {
             writer.write_all(&bytes)?;
-        }
+        },
         CompressionScheme::Zlib => {
             let encoder_buf = Vec::with_capacity(samples.len() * 4);
             let mut zlib_encoder =
@@ -510,14 +510,14 @@ pub fn write_f32_data_samples_binary<'a, W: Write>(
 
             zlib_encoder.write_all(&bytes)?;
             writer.write_all(&zlib_encoder.flush_finish()?)?;
-        }
+        },
         CompressionScheme::Gzip => {
             let encoder_buf = Vec::with_capacity(samples.len() * 4);
             let mut gzip_encoder =
                 flate2::write::GzEncoder::new(encoder_buf, flate2::Compression::default());
             gzip_encoder.write_all(&bytes)?;
             writer.write_all(&gzip_encoder.finish()?)?;
-        }
+        },
     }
     Ok(())
 }
@@ -537,11 +537,11 @@ pub fn read_f32_data_samples<R: Read>(
         CompressionScheme::Zlib => {
             zlib_decoder = flate2::bufread::ZlibDecoder::new(reader);
             Box::new(&mut zlib_decoder)
-        }
+        },
         CompressionScheme::Gzip => {
             gzip_decoder = flate2::bufread::GzDecoder::new(reader);
             Box::new(&mut gzip_decoder)
-        }
+        },
     };
 
     let mut samples = vec![0.0; count].into_boxed_slice();
@@ -635,7 +635,7 @@ where
                 Ok(parsed) => {
                     *sample = parsed;
                     Ok(())
-                }
+                },
                 Err(err) => Err(err),
             }
         })

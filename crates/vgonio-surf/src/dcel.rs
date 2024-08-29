@@ -403,7 +403,7 @@ impl<'a> HalfEdgeMesh<'a> {
                     VertLoc::Vert(_) => {
                         // The vertex comes from the original face.
                         // Do nothing.
-                    }
+                    },
                     l @ (VertLoc::Edge(_) | VertLoc::Inside) => {
                         // Update the shared edges.
                         if let Some(edge_loc) = l.edge_idx() {
@@ -434,7 +434,7 @@ impl<'a> HalfEdgeMesh<'a> {
                             new_pnt.z as f32,
                         ));
                         next_new_tri_vert_idx += 1;
-                    }
+                    },
                 }
             }
 
@@ -455,8 +455,8 @@ impl<'a> HalfEdgeMesh<'a> {
                             // The vertex comes from the original face.
                             *rep = old_tri_indis[*i as usize];
                             return;
-                        }
-                        VertLoc::Inside => {}
+                        },
+                        VertLoc::Inside => {},
                         e @ VertLoc::Edge(i) => {
                             // Shared edge.
                             if local_shared[*i as usize] != u32::MAX {
@@ -479,7 +479,7 @@ impl<'a> HalfEdgeMesh<'a> {
                                     return;
                                 }
                             }
-                        }
+                        },
                     }
 
                     if idx as u32 > sub.n_ctrl_pnts - 1 {

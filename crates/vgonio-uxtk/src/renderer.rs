@@ -8,17 +8,17 @@ use std::{borrow::Cow, collections::HashMap};
 use type_map::TypeMap;
 
 type SetupCallback = dyn Fn(
-    &wgpu::Device,
-    &wgpu::Queue,
-    &mut wgpu::CommandEncoder,
-    &mut TypeMap,
-) -> Vec<wgpu::CommandBuffer>
-+ Send
-+ Sync;
+        &wgpu::Device,
+        &wgpu::Queue,
+        &mut wgpu::CommandEncoder,
+        &mut TypeMap,
+    ) -> Vec<wgpu::CommandBuffer>
+    + Send
+    + Sync;
 
 type PaintCallback = dyn for<'a, 'b> Fn(epaint::PaintCallbackInfo, &'a mut wgpu::RenderPass<'b>, &'b TypeMap)
-+ Send
-+ Sync;
+    + Send
+    + Sync;
 
 /// A callback function that can be used to compose an [`epaint::PaintCallback`]
 /// for custom WGPU rendering.
@@ -70,14 +70,14 @@ impl CallbackFn {
     pub fn set_setup_fn<F>(mut self, setup: F) -> Self
     where
         F: Fn(
-            &wgpu::Device,
-            &wgpu::Queue,
-            &mut wgpu::CommandEncoder,
-            &mut TypeMap,
-        ) -> Vec<wgpu::CommandBuffer>
-        + Send
-        + Sync
-        + 'static,
+                &wgpu::Device,
+                &wgpu::Queue,
+                &mut wgpu::CommandEncoder,
+                &mut TypeMap,
+            ) -> Vec<wgpu::CommandBuffer>
+            + Send
+            + Sync
+            + 'static,
     {
         self.setup = Box::new(setup) as _;
         self
@@ -86,9 +86,9 @@ impl CallbackFn {
     pub fn set_paint_fn<F>(mut self, paint: F) -> Self
     where
         F: for<'a, 'b> Fn(epaint::PaintCallbackInfo, &'a mut wgpu::RenderPass<'b>, &'b TypeMap)
-        + Send
-        + Sync
-        + 'static,
+            + Send
+            + Sync
+            + 'static,
     {
         self.paint = Box::new(paint) as _;
         self
@@ -384,7 +384,7 @@ impl UiRenderer {
                     } else {
                         log::warn!("Missing texture: {:?}", mesh.texture_id);
                     }
-                }
+                },
                 epaint::Primitive::Callback(callback) => {
                     let Some(callback_fn) = callback.callback.downcast_ref::<CallbackFn>() else {
                         continue;
@@ -423,7 +423,7 @@ impl UiRenderer {
                             &self.paint_callback_resources,
                         );
                     }
-                }
+                },
             }
         }
         render_pass.set_scissor_rect(0, 0, screen_physical_size[0], screen_physical_size[1]);
@@ -454,7 +454,7 @@ impl UiRenderer {
                     "Image texture size and texel count mismatch"
                 );
                 Cow::Borrowed(&image.pixels)
-            }
+            },
             epaint::ImageData::Font(image) => {
                 assert_eq!(
                     width as usize * height as usize,
@@ -462,7 +462,7 @@ impl UiRenderer {
                     "Image texture size and texel count mismatch"
                 );
                 Cow::Owned(image.srgba_pixels(None).collect::<Vec<_>>())
-            }
+            },
         };
         let data_bytes: &[u8] = bytemuck::cast_slice(data_color32.as_slice());
         let queue_write_data_to_texture = |texture, origin| {
@@ -717,7 +717,7 @@ impl UiRenderer {
                 match &clipped_primitive.primitive {
                     epaint::Primitive::Mesh(mesh) => {
                         (acc.0 + mesh.vertices.len(), acc.1 + mesh.indices.len())
-                    }
+                    },
                     epaint::Primitive::Callback(_) => acc,
                 }
             });
@@ -763,7 +763,7 @@ impl UiRenderer {
                             .subslices_mut()
                             .push(vertex_offset..vertex_offset + data.len() as wgpu::BufferAddress);
                     }
-                }
+                },
                 epaint::Primitive::Callback(callback) => {
                     let Some(callback) = callback.callback.downcast_ref::<CallbackFn>() else {
                         log::warn!("Unknown paint callback function: expected `CallbackFn`");
@@ -775,7 +775,7 @@ impl UiRenderer {
                         encoder,
                         &mut self.paint_callback_resources,
                     ));
-                }
+                },
             }
         }
         user_command_buffers

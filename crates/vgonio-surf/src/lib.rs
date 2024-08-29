@@ -596,13 +596,13 @@ impl MicroSurface {
                 log::debug!("Subdividing the mesh with level: {}", lvl);
                 mesh.curved_smooth(lvl);
                 log::debug!("Microfacet Area(subdivided): {}", mesh.facet_total_area);
-            }
+            },
             Some(Subdivision::Wiggly(lvl)) => {
                 log::debug!("Subdividing the mesh with level: {}", lvl);
                 mesh.wiggly_smooth(lvl);
                 log::debug!("Microfacet Area(subdivided): {}", mesh.facet_total_area);
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         mesh
@@ -966,10 +966,10 @@ impl MicroSurfaceMesh {
         let subdivided = match opts {
             Subdivision::Wiggly(lvl) => {
                 dcel.subdivide_by_uvs(&subdivision, wiggle::subdivide_triangle)
-            }
+            },
             _ => {
                 unreachable!("Only wiggly subdivision is supported for now!");
-            }
+            },
         };
     }
 

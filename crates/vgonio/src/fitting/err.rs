@@ -34,7 +34,7 @@ pub fn compute_microfacet_brdf_err<M: AnalyticalFit + Sync>(
                     MicrofacetDistroKind::TrowbridgeReitz => {
                         Box::new(TrowbridgeReitzBrdf::new(alpha_x, alpha_y))
                             as Box<dyn Bxdf<Params = [f64; 2]>>
-                    }
+                    },
                 };
                 let modelled = measured.new_analytical_from_self(&*m, iors);
                 err_chunks[j].write(measured.distance(&modelled, metric));

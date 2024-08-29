@@ -43,7 +43,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     Err(err) => {
                         log::warn!("Failed to load measurement description file: {}", err);
                         None
-                    }
+                    },
                 }
             })
         })
@@ -161,7 +161,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     );
                 }
                 cache.read(|cache| measure::bsdf::measure_bsdf_rt(params, &surfaces, cache))
-            }
+            },
             MeasurementParams::Ndf(measurement) => {
                 match &measurement.mode {
                     NdfMeasurementMode::ByPoints { azimuth, zenith } => {
@@ -176,7 +176,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                             azimuth.pretty_print(),
                             zenith.pretty_print(),
                         );
-                    }
+                    },
                     NdfMeasurementMode::ByPartition { precision } => {
                         println!(
                             "  {}>{} Measuring microfacet area distribution:
@@ -188,12 +188,12 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                             ansi::RESET,
                             precision.prettified()
                         );
-                    }
+                    },
                 }
                 cache.read(|cache| {
                     measure::mfd::measure_area_distribution(measurement, &surfaces, cache)
                 })
-            }
+            },
             MeasurementParams::Gaf(measurement) => {
                 println!(
                     "  {}>{} Measuring microfacet masking-shadowing function:
@@ -216,7 +216,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                 cache.read(|cache| {
                     measure::mfd::measure_masking_shadowing_function(measurement, &surfaces, cache)
                 })
-            }
+            },
             MeasurementParams::Sdf(params) => {
                 println!(
                     "  {}>{} Measuring slope distribution function...",
@@ -226,7 +226,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                 cache.read(|cache| {
                     measure::mfd::measure_slope_distribution(&surfaces, params, cache)
                 })
-            }
+            },
         };
 
         println!(

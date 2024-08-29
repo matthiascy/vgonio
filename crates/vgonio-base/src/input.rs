@@ -72,7 +72,7 @@ impl InputState {
         self.scroll_delta = match delta {
             MouseScrollDelta::LineDelta(_, y) => {
                 -y * 100.0 // assuming a line is about 100 pixels
-            }
+            },
             MouseScrollDelta::PixelDelta(pos) => -pos.y as f32,
         };
     }

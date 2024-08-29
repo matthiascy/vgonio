@@ -240,16 +240,16 @@ impl Display for MeasurementKind {
         match self {
             MeasurementKind::Bsdf => {
                 write!(f, "BSDF")
-            }
+            },
             MeasurementKind::Ndf => {
                 write!(f, "NDF")
-            }
+            },
             MeasurementKind::Gaf => {
                 write!(f, "GAF")
-            }
+            },
             MeasurementKind::Sdf => {
                 write!(f, "SDF")
-            }
+            },
         }
     }
 }

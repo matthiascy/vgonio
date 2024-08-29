@@ -102,7 +102,7 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
                     opts.max_height,
                     LengthUnit::UM,
                 )
-            }
+            },
             RandomGenMethod::WorleyNoise => {
                 println!(
                     "    {}>{} Generating surface from Worley noise...",
@@ -118,10 +118,10 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
                     opts.num_seeds.unwrap() as usize,
                     LengthUnit::UM,
                 )
-            }
+            },
             _ => {
                 todo!()
-            }
+            },
         },
         SurfGenKind::Gaussian2D => {
             println!(
@@ -146,7 +146,7 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
                         .exp()
                 },
             )
-        }
+        },
     };
 
     let filename = if opts.kind == SurfGenKind::Random {

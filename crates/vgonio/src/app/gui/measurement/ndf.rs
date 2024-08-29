@@ -55,13 +55,13 @@ impl NdfMeasurementTab {
                         ui.label("Azimuthal angle φ:");
                         range_step_size_inclusive_angle_ui(azimuth, ui);
                         ui.end_row();
-                    }
+                    },
                     NdfMeasurementMode::ByPartition { precision } => {
                         ui.label("Partition precision:");
                         ui.horizontal_wrapped(|ui| {
                             misc::drag_angle(precision, "θ").ui(ui);
                         });
-                    }
+                    },
                 }
             });
     }

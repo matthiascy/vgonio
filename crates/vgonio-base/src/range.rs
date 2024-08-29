@@ -695,7 +695,7 @@ where
                 Ok(Self::Inclusive(RangeByStepSizeInclusive::new(
                     start, stop, step_size,
                 )))
-            }
+            },
             Some(_) => {
                 // Exclusive
                 let stop = stop_str[..]
@@ -704,7 +704,7 @@ where
                 Ok(Self::Exclusive(RangeByStepSizeExclusive::new(
                     start, stop, step_size,
                 )))
-            }
+            },
             None => Err(format!("Invalid range stop value: {value}")),
         }
     }
@@ -822,7 +822,7 @@ where
                 Ok(Self::Inclusive(RangeByStepCountInclusive::new(
                     start, stop, step_count,
                 )))
-            }
+            },
             Some(_) => {
                 // Exclusive
                 let stop = stop_str[..]
@@ -831,7 +831,7 @@ where
                 Ok(Self::Exclusive(RangeByStepCountExclusive::new(
                     start, stop, step_count,
                 )))
-            }
+            },
             None => Err(format!("Invalid range stop value: {value}")),
         }
     }

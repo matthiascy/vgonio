@@ -92,7 +92,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                                         );
                                     let (result, report) = solver.minimize(problem);
                                     (result.model, report)
-                                }
+                                },
                                 Isotropy::Anisotropic => {
                                     let problem =
                                         NdfFittingProblemProxy::<{ Isotropy::Anisotropic }>::new(
@@ -100,7 +100,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                                         );
                                     let (result, report) = solver.minimize(problem);
                                     (result.model, report)
-                                }
+                                },
                             };
                             log::debug!(
                                 "Fitted αx = {} αy = {}, report: {:?}",
@@ -114,7 +114,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                             }
                         })
                         .collect()
-                }
+                },
                 MfdFittingData::Msf(measured) => initialise_microfacet_mdf_models(
                     0.001,
                     2.0,
@@ -136,7 +136,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                             };
                             let (result, report) = solver.minimize(problem);
                             (result.model, report)
-                        }
+                        },
                         Isotropy::Anisotropic => {
                             let problem = MsfFittingProblemProxy::<{ Isotropy::Anisotropic }> {
                                 measured,
@@ -144,7 +144,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                             };
                             let (result, report) = solver.minimize(problem);
                             (result.model, report)
-                        }
+                        },
                     };
                     log::debug!(
                         "Fitted αx = {} αy = {}, report: {:?}",
@@ -285,7 +285,7 @@ fn eval_ndf_residuals<'a>(
                 model.eval_ndf(theta.cos() as f64, phi.cos() as f64) - *meas as f64 * scale as f64
             });
             OMatrix::<f64, Dyn, U1>::from_iterator(residuals.len(), residuals)
-        }
+        },
         NdfMeasurementMode::ByPartition { .. } => {
             let partition = partition.unwrap();
             let residuals =
@@ -299,7 +299,7 @@ fn eval_ndf_residuals<'a>(
                             - *meas as f64 * scale as f64
                     });
             OMatrix::<f64, Dyn, U1>::from_iterator(residuals.len(), residuals)
-        }
+        },
     }
 }
 
@@ -331,7 +331,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
                 Some(OMatrix::<f64, Dyn, U2>::from_row_slice(
                     &self.model.pd_ndf(&cos_thetas, &cos_phis),
                 ))
-            }
+            },
             NdfMeasurementMode::ByPartition { .. } => {
                 let partition = self.partition.as_ref().unwrap();
                 let (cos_thetas, cos_phis): (Vec<_>, Vec<_>) = partition
@@ -347,7 +347,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
                 Some(OMatrix::<f64, Dyn, U2>::from_row_slice(
                     &self.model.pd_ndf(&cos_thetas, &cos_phis),
                 ))
-            }
+            },
         }
     }
 }
@@ -376,7 +376,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for NdfFittingProblemProxy<'a, { Isot
                 Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
                     &self.model.pd_ndf_iso(&cos_thetas),
                 ))
-            }
+            },
             NdfMeasurementMode::ByPartition { .. } => {
                 let partition = self.partition.as_ref().unwrap();
                 let cos_thetas = partition
@@ -387,7 +387,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for NdfFittingProblemProxy<'a, { Isot
                 Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
                     &self.model.pd_ndf_iso(&cos_thetas),
                 ))
-            }
+            },
         }
     }
 }

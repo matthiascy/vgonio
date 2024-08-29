@@ -92,7 +92,7 @@ impl Projection {
         match kind {
             ProjectionKind::Perspective => {
                 Mat4::perspective_rh(self.fov, self.aspect, self.near, self.far)
-            }
+            },
             ProjectionKind::Orthographic => Mat4::orthographic_rh(
                 -self.width / 2.0,
                 self.width / 2.0,

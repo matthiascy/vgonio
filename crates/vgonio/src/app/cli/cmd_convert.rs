@@ -156,7 +156,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                                     } else {
                                         MicroSurface::read_from_file(&filepath, None)
                                     }
-                                }
+                                },
                             };
                             #[cfg(not(feature = "surf-obj"))]
                             let loaded = MicroSurface::read_from_file(&filepath, None);
@@ -238,7 +238,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                     )
                 }
                 println!("{}✓{} Done!", ansi::BRIGHT_CYAN, ansi::RESET);
-            }
+            },
         }
     }
     Ok(())

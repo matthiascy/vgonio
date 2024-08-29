@@ -74,23 +74,23 @@ pub mod vgmo {
                 VgmoHeaderExt::Bsdf {
                     params: bsdf.params.clone(),
                 }
-            }
+            },
             MeasurementKind::Ndf => {
                 let ndf = data.downcast_ref::<MeasuredNdfData>().unwrap();
                 VgmoHeaderExt::Ndf {
                     params: ndf.params.clone(),
                 }
-            }
+            },
             MeasurementKind::Gaf => {
                 let msf = data.downcast_ref::<MeasuredGafData>().unwrap();
                 VgmoHeaderExt::Gaf {
                     params: msf.params.clone(),
                 }
-            }
+            },
             MeasurementKind::Sdf => VgmoHeaderExt::Sdf,
             _ => {
                 unreachable!("Unsupported measurement kind: {}", data.kind())
-            }
+            },
         }
     }
 
@@ -122,7 +122,7 @@ pub mod vgmo {
                                     params.use_facet_area as u8,
                                 ])?;
                                 write_adf_or_msf_params_to_vgmo(azimuth, zenith, writer, true)?;
-                            }
+                            },
                             NdfMeasurementMode::ByPartition { precision } => {
                                 log::debug!("Writing NDF header ext (by partition) to VGMO file");
                                 writer.write_all(&[
@@ -139,9 +139,9 @@ pub mod vgmo {
                                 let mut buf = vec![0u8; partition.total_required_size()];
                                 partition.write_to_buf(&mut buf);
                                 writer.write_all(&buf)?;
-                            }
+                            },
                         }
-                    }
+                    },
                     Self::Gaf { params } => {
                         writer.write_all(&[MeasurementKind::Gaf as u8])?;
                         write_adf_or_msf_params_to_vgmo(
@@ -150,18 +150,18 @@ pub mod vgmo {
                             writer,
                             false,
                         )?;
-                    }
+                    },
                     Self::Bsdf { params } => {
                         writer.write_all(&[MeasurementKind::Bsdf as u8])?;
                         params.write_to_vgmo(version, writer)?;
-                    }
+                    },
                     VgmoHeaderExt::Sdf => {
                         writer.write_all(&[MeasurementKind::Sdf as u8])?;
-                    }
+                    },
                 },
                 _ => {
                     log::error!("Unsupported VGMO version: {}", version.as_string());
-                }
+                },
             }
             Ok(())
         }
@@ -184,7 +184,7 @@ pub mod vgmo {
                 MeasurementKind::Sdf => Ok(Self::Sdf),
                 _ => {
                     unreachable!("Unsupported measurement kind: {}", kind[0])
-                }
+                },
             }
         }
     }
@@ -208,7 +208,7 @@ pub mod vgmo {
                     header.meta.encoding,
                     header.meta.compression,
                 )?))
-            }
+            },
             VgmoHeaderExt::Ndf { params } => {
                 log::debug!(
                     "Reading ADF data of {} samples from VGMO file",
@@ -225,7 +225,7 @@ pub mod vgmo {
                     params: *params,
                     samples,
                 }))
-            }
+            },
             VgmoHeaderExt::Gaf { params } => {
                 log::debug!(
                     "Reading MSF data of {} samples from VGMO file",
@@ -242,7 +242,7 @@ pub mod vgmo {
                     params: *params,
                     samples,
                 }))
-            }
+            },
             VgmoHeaderExt::Sdf => {
                 log::debug!("Reading SDF data from VGMO file");
                 let mut buf = [0u8; 4];
@@ -264,7 +264,7 @@ pub mod vgmo {
                     },
                     slopes,
                 }))
-            }
+            },
         }
     }
 
@@ -293,33 +293,33 @@ pub mod vgmo {
                         let cols = match &ndf.params.mode {
                             NdfMeasurementMode::ByPoints { zenith, .. } => {
                                 zenith.step_count_wrapped()
-                            }
+                            },
                             NdfMeasurementMode::ByPartition { .. } => ndf.samples.len(),
                         };
                         (&ndf.samples, cols)
-                    }
+                    },
                     MeasurementKind::Gaf => {
                         let msf = measured.downcast_ref::<MeasuredGafData>().unwrap();
                         (&msf.samples, msf.params.zenith.step_count_wrapped())
-                    }
+                    },
                     _ => {
                         unreachable!("Unsupported measurement kind: {}", mfd)
-                    }
+                    },
                 };
                 match header.meta.encoding {
                     FileEncoding::Ascii => {
                         io::write_data_samples_ascii(writer, samples, cols as u32)
-                    }
+                    },
                     FileEncoding::Binary => {
                         io::write_f32_data_samples_binary(writer, header.meta.compression, samples)
-                    }
+                    },
                 }
                 .map_err(WriteFileErrorKind::Write)?;
-            }
+            },
             MeasurementKind::Bsdf => {
                 let bsdf = measured.downcast_ref::<MeasuredBsdfData>().unwrap();
                 bsdf.write_to_vgmo(writer, header.meta.encoding, header.meta.compression)?;
-            }
+            },
             MeasurementKind::Sdf => {
                 let sdf = measured.downcast_ref::<MeasuredSdfData>().unwrap();
                 writer.write(&(sdf.slopes.len() as u32).to_le_bytes())?;
@@ -331,8 +331,8 @@ pub mod vgmo {
                 };
                 io::write_f32_data_samples_binary(writer, header.meta.compression, samples)
                     .map_err(WriteFileErrorKind::Write)?;
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         #[cfg(feature = "bench")]
@@ -410,7 +410,7 @@ pub mod vgmo {
                     } else {
                         Some(56)
                     }
-                }
+                },
                 _ => None,
             }
         }
@@ -462,10 +462,10 @@ pub mod vgmo {
                         azimuth,
                         spectrum,
                     }
-                }
+                },
                 _ => {
                     panic!("Unsupported VGMO[EmitterPrams] version: {}", version);
-                }
+                },
             }
         }
 
@@ -501,10 +501,10 @@ pub mod vgmo {
                     offset += 16;
                     self.spectrum.write_to_buf(&mut buf[offset..offset + 16]);
                     required_size
-                }
+                },
                 _ => {
                     panic!("Unsupported VGMO[EmitterParams] version: {}", version);
-                }
+                },
             }
         }
     }
@@ -552,10 +552,10 @@ pub mod vgmo {
                         "Receiver's partition patch count does not match the precision",
                     );
                     params
-                }
+                },
                 _ => {
                     panic!("Unsupported VGMO version: {}", version);
-                }
+                },
             }
         }
 
@@ -575,10 +575,10 @@ pub mod vgmo {
                     patch: 0,
                 } => {
                     self.partitioning().write_to_buf(buf);
-                }
+                },
                 _ => {
                     log::error!("Unsupported VGMO[ReceiverParams] version: {version}");
-                }
+                },
             }
         }
     }
@@ -626,7 +626,7 @@ pub mod vgmo {
                                 )
                             );
                             NdfMeasurementMode::ByPoints { azimuth, zenith }
-                        }
+                        },
                         1 => {
                             let (domain, scheme, precision, _n_rings, _n_patches) =
                                 SphericalPartition::read_skipping_rings(reader);
@@ -643,10 +643,10 @@ pub mod vgmo {
                             NdfMeasurementMode::ByPartition {
                                 precision: precision.theta,
                             }
-                        }
+                        },
                         _ => {
                             panic!("Invalid NDF measurement mode");
-                        }
+                        },
                     };
 
                     Ok(Self {
@@ -654,7 +654,7 @@ pub mod vgmo {
                         crop_to_disk: common_info[1] != 0,
                         use_facet_area: common_info[2] != 0,
                     })
-                }
+                },
                 _ => Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Unsupported VGMO[AdfMeasurementParams] version {}", version),
@@ -691,7 +691,7 @@ pub mod vgmo {
                         resolution: 512,
                         strict: true,
                     })
-                }
+                },
                 _ => Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Unsupported VGMO[MsfMeasurementParams] version {}", version),
@@ -739,7 +739,7 @@ pub mod vgmo {
                         receivers: vec![receiver],
                         fresnel,
                     })
-                }
+                },
                 _ => Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!(
@@ -767,11 +767,11 @@ pub mod vgmo {
                 } => {
                     11 + EmitterParams::required_size(version, nrays64).unwrap()
                         + ReceiverParams::required_size(version, receiver.num_rings()).unwrap()
-                }
+                },
                 _ => {
                     log::error!("Unsupported VGMO version: {}", version.as_string());
                     return Ok(());
-                }
+                },
             };
             let mut buf = vec![0u8; buf_size].into_boxed_slice();
             buf[0] = self.kind as u8;
@@ -1236,7 +1236,7 @@ pub mod vgmo {
                         write_f64_slice_as_f32_to_buf(&be.energy_per_bounce, &mut buf[offset..]);
                     }
                     writer.write_all(&buf)
-                }
+                },
             }
         }
     }
@@ -1299,10 +1299,10 @@ pub mod vgmo {
                 match Self::read_vgonio_brdf(reader, n_wi, n_wo, n_spectrum, brdf.as_mut_ptr()) {
                     Ok(level) => {
                         brdfs.insert(level, brdf);
-                    }
+                    },
                     Err(_) => {
                         break;
-                    }
+                    },
                 }
             }
             Ok(brdfs)
@@ -1383,11 +1383,11 @@ pub mod vgmo {
                         CompressionScheme::Zlib => {
                             zlib_decoder = flate2::bufread::ZlibDecoder::new(reader);
                             Box::new(&mut zlib_decoder)
-                        }
+                        },
                         CompressionScheme::Gzip => {
                             gzip_decoder = flate2::bufread::GzDecoder::new(reader);
                             Box::new(&mut gzip_decoder)
-                        }
+                        },
                         _ => Box::new(reader),
                     };
                     let spectrum = params.emitter.spectrum.values().collect::<Vec<_>>();
@@ -1446,7 +1446,7 @@ pub mod vgmo {
                             >(bsdfs)
                         },
                     })
-                }
+                },
             }
         }
 
@@ -1466,22 +1466,22 @@ pub mod vgmo {
                 CompressionScheme::None => {
                     Self::write_raw_measured_data(writer, &self.raw, nrays64)?;
                     Self::write_measured_bsdf_data(writer, self.bsdfs.iter())?;
-                }
+                },
                 CompressionScheme::Zlib => {
                     let mut zlib_encoder =
                         flate2::write::ZlibEncoder::new(vec![], flate2::Compression::default());
                     Self::write_raw_measured_data(&mut zlib_encoder, &self.raw, nrays64)?;
                     Self::write_measured_bsdf_data(&mut zlib_encoder, self.bsdfs.iter())?;
                     writer.write_all(&zlib_encoder.flush_finish()?)?
-                }
+                },
                 CompressionScheme::Gzip => {
                     let mut gzip_encoder =
                         flate2::write::GzEncoder::new(vec![], flate2::Compression::default());
                     Self::write_raw_measured_data(&mut gzip_encoder, &self.raw, nrays64)?;
                     Self::write_measured_bsdf_data(&mut gzip_encoder, self.bsdfs.iter())?;
                     writer.write_all(&gzip_encoder.finish()?)?
-                }
-                _ => {}
+                },
+                _ => {},
             }
             Ok(())
         }
@@ -1937,7 +1937,7 @@ pub fn write_measured_data_to_file(
                         output_dir.display(),
                         format
                     );
-                }
+                },
                 Err(err) => {
                     eprintln!(
                         "        {} Failed to save to \"{}\" with format {:?}: {}",
@@ -1946,7 +1946,7 @@ pub fn write_measured_data_to_file(
                         format,
                         err,
                     );
-                }
+                },
             }
         }
     }
@@ -2001,7 +2001,7 @@ pub fn write_single_measured_data_to_file(
                 ansi::CYAN_CHECK,
                 filepath.display()
             );
-        }
+        },
         Err(err) => {
             eprintln!(
                 "        {} Failed to save as \"{}\": {}",
@@ -2009,7 +2009,7 @@ pub fn write_single_measured_data_to_file(
                 filepath.display(),
                 err
             );
-        }
+        },
     }
     Ok(())
 }

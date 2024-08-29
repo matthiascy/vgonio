@@ -159,24 +159,24 @@ impl Measurement {
                         "Failed to flush VGMO file.",
                     )
                 })?;
-            }
+            },
             OutputFileFormatOption::Exr { resolution } => match self.measured.kind() {
                 MeasurementKind::Bsdf => {
                     let bsdf = self.measured.downcast_ref::<MeasuredBsdfData>().unwrap();
                     bsdf.write_as_exr(&filepath, &self.timestamp, *resolution)?
-                }
+                },
                 MeasurementKind::Ndf => {
                     let ndf = self.measured.downcast_ref::<MeasuredNdfData>().unwrap();
                     ndf.write_as_exr(&filepath, &self.timestamp, *resolution)?
-                }
+                },
                 MeasurementKind::Gaf => {
                     todo!("Writing MSF to EXR is not supported yet.");
-                }
+                },
                 MeasurementKind::Sdf => {
                     let sdf = self.measured.downcast_ref::<MeasuredSdfData>().unwrap();
                     sdf.write_histogram_as_exr(&filepath, &self.timestamp, *resolution)?;
-                }
-                _ => {}
+                },
+                _ => {},
             },
         }
         Ok(())

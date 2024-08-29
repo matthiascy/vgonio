@@ -129,7 +129,7 @@ impl DockSpace {
             let widget: Box<dyn Dockable> = match new_tab.kind {
                 WidgetKind::Outliner => {
                     Box::new(Outliner::new(data.clone(), self.event_loop.clone()))
-                }
+                },
                 WidgetKind::SurfViewer => {
                     let widget = Box::new(SurfaceViewer::new(
                         self.gui.clone(),
@@ -142,7 +142,7 @@ impl DockSpace {
                         },
                     ));
                     widget
-                }
+                },
                 WidgetKind::Properties => Box::new(PropertyInspector::new(
                     self.event_loop.clone(),
                     self.cache.clone(),

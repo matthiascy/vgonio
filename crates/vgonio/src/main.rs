@@ -9,6 +9,6 @@ fn main() {
         Err(ref e) => {
             eprintln!("{e}");
             1
-        }
+        },
     })
 }

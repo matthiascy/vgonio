@@ -98,7 +98,7 @@ impl NdfMeasurementMode {
         match self {
             NdfMeasurementMode::ByPoints { azimuth, zenith } => {
                 Sph2::new(zenith.step_size, azimuth.step_size)
-            }
+            },
             NdfMeasurementMode::ByPartition { precision, .. } => Sph2::new(*precision, rad!(0.0)),
         }
     }
@@ -128,10 +128,10 @@ impl NdfMeasurementParams {
         match self.mode {
             NdfMeasurementMode::ByPoints { azimuth, zenith } => {
                 azimuth.step_count_wrapped() * zenith.step_count_wrapped()
-            }
+            },
             NdfMeasurementMode::ByPartition { precision } => {
                 PartitionScheme::Beckers.num_patches(Sph2::new(precision, rad!(0.0)))
-            }
+            },
         }
     }
 
@@ -179,7 +179,7 @@ impl NdfMeasurementParams {
                         Some(Box::new(RuntimeError::InvalidParameters)),
                     ));
                 }
-            }
+            },
             NdfMeasurementMode::ByPartition { precision } => {
                 if precision <= rad!(0.0) {
                     return Err(VgonioError::new(
@@ -187,7 +187,7 @@ impl NdfMeasurementParams {
                         Some(Box::new(RuntimeError::InvalidParameters)),
                     ));
                 }
-            }
+            },
         }
         Ok(self)
     }
@@ -330,7 +330,7 @@ where
                 let value = rest.parse::<f32>().map_err(Error::custom)?;
                 Ok(constant * value)
             }
-        }
+        },
     }
 }
 

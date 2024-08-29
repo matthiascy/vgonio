@@ -262,7 +262,7 @@ pub fn run<F>(
         } => match win_event {
             WindowEvent::CloseRequested => {
                 evlp.exit();
-            }
+            },
             WindowEvent::RedrawRequested => {
                 print!("\rFPS: {:.2}", fps);
                 film.clear();
@@ -279,13 +279,13 @@ pub fn run<F>(
                 fps = 1.0 / elapsed;
 
                 display.window.as_ref().request_redraw();
-            }
-            _ => {}
+            },
+            _ => {},
         },
         Event::AboutToWait => {
             display.window.request_redraw();
-        }
-        _ => {}
+        },
+        _ => {},
     })
     .expect("Event loop failed to run.");
 }

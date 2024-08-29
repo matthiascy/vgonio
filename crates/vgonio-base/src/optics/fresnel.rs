@@ -558,11 +558,11 @@ pub fn reflectance(cos_i: f32, ior_i: &Ior, ior_t: &Ior) -> f32 {
         // One is a dielectric and the other is a conductor (entering the conductor).
         (true, false) => {
             reflectance_dielectric_conductor(cos_i.abs(), ior_i.eta, ior_t.eta, ior_t.k)
-        }
+        },
         // One is a conductor and the other is a dielectric.
         (false, true) => {
             unimplemented!("reflectance from a conductor to a dielectric is not implemented")
-        }
+        },
         // Both are conductors.
         (false, false) => unimplemented!("reflectance between two conductors is not implemented"),
     }

@@ -218,17 +218,17 @@ impl BsdfViewer {
         count: u32,
     ) {
         match self.records.iter_mut().find(|v| v.texture_id == id) {
-            None => {}
+            None => {},
             Some(record) => {
                 record.data = buffer;
                 record.vertex_count = count;
-            }
+            },
         }
     }
 
     pub fn rotate(&mut self, id: egui::TextureId, angle: f32) {
         match self.records.iter().position(|v| v.texture_id == id) {
-            None => {}
+            None => {},
             Some(idx) => {
                 self.records[idx].rotation += angle;
                 // Update the uniform buffer
@@ -239,7 +239,7 @@ impl BsdfViewer {
                         * Mat4::from_rotation_y(self.records[idx].rotation))
                     .to_cols_array()]),
                 );
-            }
+            },
         };
     }
 

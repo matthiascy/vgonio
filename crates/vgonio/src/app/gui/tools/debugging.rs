@@ -63,10 +63,10 @@ impl Tool for DebuggingInspector {
         match self.opened_pane {
             PaneKind::ShadowMap => {
                 ui.add(&mut self.depth_map_pane);
-            }
+            },
             PaneKind::Microfacet => {
                 ui.add(&mut self.microfacet_debugging);
-            }
+            },
         }
     }
 

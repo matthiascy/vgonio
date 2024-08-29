@@ -46,7 +46,7 @@ impl ReceiverParams {
                 let num_rings = (Radians::HALF_PI / self.precision.theta).round() as u32;
                 let ks = base::partition::beckers::compute_ks(1, num_rings);
                 ks[num_rings as usize - 1] as usize
-            }
+            },
             PartitionScheme::EqualAngle => {
                 let num_rings = (Radians::HALF_PI / self.precision.theta).round() as usize + 1;
                 let num_patches_per_ring = RangeByStepSizeInclusive::new(
@@ -56,7 +56,7 @@ impl ReceiverParams {
                 )
                 .step_count_wrapped();
                 num_rings * num_patches_per_ring
-            }
+            },
         };
         match self.domain {
             SphericalDomain::Whole => num_patches_hemi * 2,
@@ -224,7 +224,7 @@ impl Receiver {
                                     None => {
                                         n_missed.fetch_add(1, atomic::Ordering::Relaxed);
                                         None
-                                    }
+                                    },
                                     Some(last) => {
                                         // 1. Get the outgoing ray direction it's the last ray of
                                         //    the trajectory.
@@ -259,7 +259,7 @@ impl Receiver {
                                                         if *e <= 0.0 {
                                                             *energy = Energy::Absorbed;
                                                         }
-                                                    }
+                                                    },
                                                     _ => unreachable!(
                                                         "energy initially is not reflected"
                                                     ),
@@ -294,7 +294,7 @@ impl Receiver {
                                                             atomic::Ordering::Relaxed,
                                                         );
                                                     }
-                                                }
+                                                },
                                             }
                                         }
 
@@ -310,7 +310,7 @@ impl Receiver {
                                                 patch_idx,
                                             })
                                         })
-                                    }
+                                    },
                                 }
                             })
                             .collect::<Vec<_>>()
@@ -356,7 +356,7 @@ impl Receiver {
                     .zip(patch_samples.iter_mut())
                     .enumerate()
                     .for_each(|(j, (energy, patch))| match energy {
-                        Energy::Absorbed => {}
+                        Energy::Absorbed => {},
                         Energy::Reflected(e) => {
                             let mut_patch = {
                                 if patch.is_none() {
@@ -373,7 +373,7 @@ impl Receiver {
                             stats.n_captured_mut()[j] += 1;
                             stats.energy_per_bounce[j * n_bounce + bounce_idx] += energy;
                             stats.e_captured[j] += energy;
-                        }
+                        },
                     });
             }
 
@@ -392,10 +392,10 @@ impl Receiver {
             match out_stats {
                 None => {
                     *out_stats = Some(stats);
-                }
+                },
                 Some(existing) => {
                     existing.merge(stats);
-                }
+                },
             }
 
             unsafe {
@@ -549,10 +549,10 @@ impl Receiver {
             match out_stats {
                 None => {
                     *out_stats = Some(stats);
-                }
+                },
                 Some(existing) => {
                     existing.merge(stats);
-                }
+                },
             }
         }
     }

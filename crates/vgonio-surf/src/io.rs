@@ -61,10 +61,10 @@ pub mod vgms {
                     writer.write_all(&self.rows.to_le_bytes())?;
                     writer.write_all(&self.du.to_le_bytes())?;
                     writer.write_all(&self.dv.to_le_bytes())?;
-                }
+                },
                 _ => {
                     log::error!("Unsupported VGMS version: {}", version.as_string());
-                }
+                },
             }
             Ok(())
         }
@@ -108,7 +108,7 @@ pub mod vgms {
                         dv,
                         unit,
                     })
-                }
+                },
                 _ => Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!(
@@ -155,10 +155,10 @@ pub mod vgms {
         match header.meta.encoding {
             FileEncoding::Ascii => {
                 base::io::write_data_samples_ascii(writer, samples, header.extra.cols)
-            }
+            },
             FileEncoding::Binary => {
                 base::io::write_f32_data_samples_binary(writer, header.meta.compression, samples)
-            }
+            },
         }
         .map_err(WriteFileErrorKind::Write)?;
 

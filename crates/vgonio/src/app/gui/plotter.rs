@@ -204,7 +204,7 @@ impl Curve {
                     .take(zenith_step_count - 1)
                     .map(|(y, x)| [x, *y as f64]);
                 Curve::from(second_part_points.chain(first_part))
-            }
+            },
         }
     }
 }
@@ -412,13 +412,13 @@ impl PlottingWidget for PlotInspector {
                     });
                 if ui.button("Graph").clicked() {
                     match self.new_curve_kind {
-                        CurveKind::None => {}
+                        CurveKind::None => {},
                         CurveKind::BeckmannNdf => {
                             self.ndf_models.push((
                                 Box::new(BeckmannDistribution::new(0.5, 0.5)),
                                 Uuid::new_v4(),
                             ));
-                        }
+                        },
                         CurveKind::TrowbridgeReitzNdf => self.ndf_models.push((
                             Box::new(TrowbridgeReitzDistribution::new(0.5, 0.5)),
                             Uuid::new_v4(),
@@ -541,7 +541,7 @@ impl PlottingWidget for PlotInspector {
             match self.measurement_data_kind() {
                 MeasurementKind::Bsdf => {
                     todo!("bsdf plot");
-                }
+                },
                 MeasurementKind::Ndf => {
                     if let Some(variant) = &mut self.variant {
                         let zenith = self.cache.read(|cache| {
@@ -692,7 +692,7 @@ impl PlottingWidget for PlotInspector {
                             });
                         }
                     }
-                }
+                },
                 MeasurementKind::Gaf => {
                     if let Some(extra) = &mut self.variant {
                         let variant = extra
@@ -767,7 +767,7 @@ impl PlottingWidget for PlotInspector {
                             });
                         }
                     }
-                }
+                },
                 MeasurementKind::Sdf => {
                     if let Some(variant) = &mut self.variant {
                         variant.ui(ui, &self.event_loop, self.data_handle, &self.cache);
@@ -831,8 +831,8 @@ impl PlottingWidget for PlotInspector {
                             });
                         }
                     }
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
     }
@@ -847,7 +847,7 @@ impl PlottingWidget for PlotInspector {
             3 => MeasurementKind::Sdf,
             _ => {
                 unreachable!("Invalid measurement data handle variant id")
-            }
+            },
         }
     }
 }

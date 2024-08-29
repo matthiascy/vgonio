@@ -143,7 +143,7 @@ impl PropertyInspector {
                                 // );
                                 // ui.end_row();
                             });
-                        }
+                        },
                         OutlinerItem::MeasurementData(meas) => {
                             let state = properties.measured.get(&meas).unwrap();
                             Self::grid_layout(ui, |ui| {
@@ -167,11 +167,11 @@ impl PropertyInspector {
                                             "Surface path: {}",
                                             path.display()
                                         ));
-                                    }
+                                    },
                                     MeasurementSource::Measured(hdl) => {
                                         ui.add(egui::Label::new("Measured"))
                                             .on_hover_text(format!("Surface ID: {}", hdl));
-                                    }
+                                    },
                                 }
                                 ui.end_row();
 
@@ -223,7 +223,7 @@ impl PropertyInspector {
                                                         ));
                                                         ui.end_row()
                                                     }
-                                                }
+                                                },
                                                 NdfMeasurementMode::ByPartition { precision } => {
                                                     ui.label("Precision:");
                                                     ui.label(format!("{:.4}", precision));
@@ -236,9 +236,9 @@ impl PropertyInspector {
                                                             precision
                                                         )
                                                     ));
-                                                }
+                                                },
                                             }
-                                        }
+                                        },
                                         MeasurementKind::Gaf => {
                                             let msf =
                                                 measured.downcast_ref::<MeasuredGafData>().unwrap();
@@ -279,8 +279,8 @@ impl PropertyInspector {
                                                 ));
                                                 ui.end_row()
                                             }
-                                        }
-                                        _ => {}
+                                        },
+                                        _ => {},
                                     }
                                 })
                             });
@@ -356,12 +356,12 @@ impl PropertyInspector {
                                     });
                                 }
                             });
-                        }
+                        },
                     }
-                }
+                },
                 None => {
                     ui.label("No object selected");
-                }
+                },
             }
         });
     }

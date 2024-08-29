@@ -58,7 +58,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                 as Box<dyn Bxdf<Params = [f64; 2]>>);
                         }
                         models.into_boxed_slice()
-                    }
+                    },
                     MicrofacetDistroKind::TrowbridgeReitz => {
                         let mut models = vec![];
                         for alpha in alphas {
@@ -66,7 +66,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                 as Box<dyn Bxdf<Params = [f64; 2]>>);
                         }
                         models.into_boxed_slice()
-                    }
+                    },
                 },
                 _ => unimplemented!("Only microfacet-based BxDFs are supported."),
             };
@@ -187,7 +187,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                 alpha,
                                 &cache.iors,
                             );
-                        }
+                        },
                         Some(brdfs) => {
                             let brdf = brdfs.brdf_at(MeasuredBrdfLevel::from(opts.level)).unwrap();
                             measured_brdf_fitting(
@@ -198,7 +198,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                 alpha,
                                 &cache.iors,
                             )
-                        }
+                        },
                     }
                 }
             }
@@ -271,7 +271,7 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
             let problem =
                 MicrofacetBrdfFittingProblem::new(brdf, opts.distro, alpha, opts.level, iors);
             problem.lsq_lm_fit(opts.isotropy).print_fitting_report();
-        }
+        },
     }
 }
 

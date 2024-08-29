@@ -117,12 +117,12 @@ pub fn run(config: Config) -> Result<(), VgonioError> {
                     ref event,
                 } if window_id == win_id => {
                     vgonio.on_window_event(event, elwt);
-                }
+                },
                 Event::AboutToWait => {
                     vgonio.update_and_render(elwt, dt);
                     window.request_redraw();
-                }
-                _ => {}
+                },
+                _ => {},
             }
         })
         .map_err(|err| VgonioError::new("Failed to run the application", Some(Box::new(err))))
@@ -277,24 +277,24 @@ impl VgonioGuiApp {
                 ..
             } => {
                 self.input.update_key_map(*keycode, *state);
-            }
+            },
             WindowEvent::MouseWheel { delta, .. } => {
                 self.input.update_scroll_delta(*delta);
-            }
+            },
             WindowEvent::MouseInput { state, button, .. } => {
                 self.input.update_mouse_map(*button, *state);
-            }
+            },
             WindowEvent::CursorMoved { position, .. } => {
                 self.input.update_cursor_delta((*position).cast::<f32>());
-            }
+            },
             WindowEvent::Resized(new_size) => {
                 self.resize(*new_size, Some(self.window.scale_factor() as f32));
-            }
+            },
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 self.resize(self.window.inner_size(), Some(*scale_factor as f32));
-            }
+            },
             WindowEvent::CloseRequested => elwt.exit(),
-            _ => {}
+            _ => {},
         }
     }
 
@@ -306,7 +306,7 @@ impl VgonioGuiApp {
                     let properties = self.ui.properties.read().unwrap();
                     let prop = properties.surfaces.get(&surface).unwrap();
                     (prop.min, prop.max, prop.scale)
-                }
+                },
                 None => (0.0, 1.0, 1.0),
             };
             let viewer = self.dbg_drawing_state.output_viewer.unwrap();
@@ -432,10 +432,10 @@ impl VgonioGuiApp {
                     match self.theme.0 {
                         ThemeKind::Dark => {
                             ctx.set_style(DarkTheme.style());
-                        }
+                        },
                         ThemeKind::Light => {
                             ctx.set_style(LightTheme.style());
-                        }
+                        },
                     }
                 }
                 self.ui.show(ctx, self.theme.0);
@@ -476,14 +476,14 @@ impl VgonioGuiApp {
                 match event {
                     Quit => {
                         elwt.exit();
-                    }
-                    RequestRedraw => {}
+                    },
+                    RequestRedraw => {},
                     Debugging(event) => {
                         // TODO: handle events inside the DebuggingState.
                         match event {
                             DebuggingEvent::ToggleSamplingRendering(enabled) => {
                                 self.dbg_drawing_state.sampling_debug_enabled = enabled;
-                            }
+                            },
                             DebuggingEvent::UpdateDepthMap => {
                                 // self.depth_map.copy_to_buffer(
                                 //     &self.gpu_ctx,
@@ -503,58 +503,58 @@ impl VgonioGuiApp {
                                 //         self.depth_map.width,
                                 //         self.canvas.height(),
                                 //     );
-                            }
+                            },
                             DebuggingEvent::FocusSurfaceViewer(viewer) => {
                                 self.dbg_drawing_state.output_viewer = viewer;
-                            }
+                            },
                             DebuggingEvent::UpdateEmitterSamples(samples) => {
                                 log::trace!("Updating emitter samples: {:?}", samples.len());
                                 self.dbg_drawing_state
                                     .update_emitter_samples(&self.gpu_ctx, samples);
-                            }
+                            },
                             DebuggingEvent::UpdateMeasurementPoints(points) => {
                                 log::trace!("Updating measurement points: {:?}", points.len());
                                 self.dbg_drawing_state
                                     .update_measurement_points(&self.gpu_ctx, points);
-                            }
+                            },
                             DebuggingEvent::ToggleMeasurementPointsDrawing(status) => {
                                 log::trace!("Toggling measurement points drawing: {:?}", status);
                                 self.dbg_drawing_state.emitter_points_drawing = status;
-                            }
+                            },
                             DebuggingEvent::UpdateEmitterPosition { position } => {
                                 log::trace!("Updating emitter position: {:?}", position);
                                 self.dbg_drawing_state
                                     .update_emitter_position(&self.gpu_ctx, position);
-                            }
+                            },
                             DebuggingEvent::EmitRays => {
                                 log::trace!("Emitting rays");
                                 self.dbg_drawing_state.emit_rays(&self.gpu_ctx);
-                            }
+                            },
                             DebuggingEvent::ToggleDebugDrawing(status) => {
                                 log::trace!("Toggling debug drawing: {:?}", status);
                                 self.dbg_drawing_state.enabled = status;
-                            }
+                            },
                             DebuggingEvent::ToggleDetectorDomeDrawing(status) => {
                                 log::trace!("Toggling detector dome drawing: {:?}", status);
                                 self.dbg_drawing_state.detector_dome_drawing = status;
-                            }
+                            },
                             DebuggingEvent::UpdateDetectorPatches(patches) => {
                                 log::trace!("Updating detector patches: {:?}", patches.n_patches());
                                 self.dbg_drawing_state
                                     .update_detector_drawing(&self.gpu_ctx, patches);
-                            }
+                            },
                             DebuggingEvent::UpdateRayParams { t } => {
                                 log::trace!("Updating ray params: {t}");
                                 self.dbg_drawing_state.update_ray_params(&self.gpu_ctx, t);
-                            }
+                            },
                             DebuggingEvent::ToggleEmitterRaysDrawing(status) => {
                                 log::trace!("Toggling emitter rays drawing: {:?}", status);
                                 self.dbg_drawing_state.emitter_rays_drawing = status;
-                            }
+                            },
                             DebuggingEvent::ToggleEmitterSamplesDrawing(status) => {
                                 log::trace!("Toggling emitter samples drawing: {:?}", status);
                                 self.dbg_drawing_state.emitter_samples_drawing = status;
-                            }
+                            },
                             DebuggingEvent::UpdateRayTrajectoriesDrawing {
                                 index,
                                 missed,
@@ -572,42 +572,42 @@ impl VgonioGuiApp {
                                 self.dbg_drawing_state.ray_trajectories_drawing_reflected =
                                     reflected;
                                 self.dbg_drawing_state.ray_trajectories_drawing_missed = missed;
-                            }
+                            },
                             DebuggingEvent::ToggleCollectedRaysDrawing(status) => {
                                 self.dbg_drawing_state.detector_ray_hit_points_drawing = status;
-                            }
+                            },
                             DebuggingEvent::UpdateSurfacePrimitiveId { id, status } => {
                                 log::trace!("Updating surface primitive id: {:?}", id);
                                 self.dbg_drawing_state
                                     .update_surface_primitive_id(id, status);
-                            }
+                            },
                             DebuggingEvent::UpdateFocusedSurface(surf) => {
                                 log::trace!("Updating focused surface: {:?}", surf);
                                 self.dbg_drawing_state.update_focused_surface(surf);
-                            }
+                            },
                             DebuggingEvent::UpdateGridCellDrawing { .. } => {
                                 todo!("UpdateGridCellDrawing")
-                            }
+                            },
                             DebuggingEvent::UpdateMicroSurface { surf, mesh } => {
                                 self.dbg_drawing_state.microsurface = Some((surf, mesh));
-                            }
+                            },
                         }
-                    }
+                    },
                     BsdfViewer(event) => match event {
                         BsdfViewerEvent::ToggleView(id) => {
                             self.bsdf_viewer.write().unwrap().toggle_view(id);
-                        }
+                        },
                         BsdfViewerEvent::UpdateBuffer { id, buffer, count } => {
                             log::debug!("Updating buffer for id: {:?}", id);
                             self.bsdf_viewer
                                 .write()
                                 .unwrap()
                                 .update_bsdf_data_buffer(id, buffer, count);
-                        }
+                        },
                         BsdfViewerEvent::Rotate { id, angle } => {
                             log::debug!("Rotating bsdf viewer id: {:?}", id);
                             self.bsdf_viewer.write().unwrap().rotate(id, angle);
-                        }
+                        },
                     },
                     Measure {
                         params,
@@ -657,7 +657,7 @@ impl VgonioGuiApp {
                                 self.cache.read(|cache| {
                                     measure::bsdf::measure_bsdf_rt(params, &surfaces, cache)
                                 })
-                            }
+                            },
                             MeasurementParams::Sdf(params) => self.cache.read(|cache| {
                                 measure::mfd::measure_slope_distribution(&surfaces, params, cache)
                             }),
@@ -684,7 +684,7 @@ impl VgonioGuiApp {
                             let mut properties = self.ui.properties.write().unwrap();
                             properties.update_measurement_data(&meas, cache);
                         });
-                    }
+                    },
                     SurfaceViewer(event) => match event {
                         SurfaceViewerEvent::Create {
                             uuid,
@@ -696,7 +696,7 @@ impl VgonioGuiApp {
                                 &self.gpu_ctx,
                                 &self.gui_ctx.renderer,
                             );
-                        }
+                        },
                         SurfaceViewerEvent::Resize { uuid, size } => {
                             self.surface_viewer_states.resize_viewport(
                                 uuid,
@@ -705,29 +705,29 @@ impl VgonioGuiApp {
                                 &self.gpu_ctx,
                                 &self.gui_ctx.renderer,
                             );
-                        }
+                        },
                         SurfaceViewerEvent::Close { .. } => {
                             todo!("SurfaceViewerEvent::Close")
-                        }
+                        },
                         SurfaceViewerEvent::UpdateSurfaceList { surfaces } => {
                             self.surface_viewer_states.update_surfaces_list(&surfaces)
-                        }
+                        },
                         SurfaceViewerEvent::UpdateOverlay { uuid, overlay } => {
                             self.surface_viewer_states.update_overlay(uuid, overlay)
-                        }
+                        },
                         SurfaceViewerEvent::UpdateShading { uuid, shading } => {
                             self.surface_viewer_states.update_shading(uuid, shading)
-                        }
+                        },
                     },
                     ChangeTheme(kind) => {
                         if self.theme.0 != kind {
                             self.theme.0 = kind;
                             self.theme.1 = true;
                         }
-                    }
-                    _ => {}
+                    },
+                    _ => {},
                 }
-            }
+            },
         }
     }
 
@@ -735,7 +735,7 @@ impl VgonioGuiApp {
     pub fn update_and_render(&mut self, elwt: &EventLoopWindowTarget<VgonioEvent>, dt: Duration) {
         let window = self.window.clone();
         match self.render_frame(&window, dt) {
-            Ok(_) => {}
+            Ok(_) => {},
             Err(RuntimeError::Rhi(error)) => {
                 if error.is_surface_error() {
                     if let Some(surface_error) = error.get::<wgpu::SurfaceError>() {
@@ -743,7 +743,7 @@ impl VgonioGuiApp {
                             // Reconfigure the surface if lost
                             wgpu::SurfaceError::Lost => {
                                 self.canvas.reconfigure(&self.gpu_ctx.device)
-                            }
+                            },
                             // The system is out of memory, we should quit
                             wgpu::SurfaceError::OutOfMemory => elwt.exit(),
                             // All other errors (Outdated, Timeout) should be resolved by the next
@@ -752,8 +752,8 @@ impl VgonioGuiApp {
                         }
                     }
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 }

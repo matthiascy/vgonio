@@ -280,14 +280,14 @@ pub(crate) const fn compute_strides(shape: &[usize], strides: &mut [usize], layo
                 stride *= shape[n - i - 1];
                 i += 1;
             }
-        }
+        },
         MemLayout::ColMajor => {
             while i < n {
                 strides[i] = stride;
                 stride *= shape[i];
                 i += 1;
             }
-        }
+        },
     }
 }
 

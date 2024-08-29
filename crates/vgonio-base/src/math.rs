@@ -594,7 +594,7 @@ impl PartialEq for QuadraticSolution {
             (QuadraticSolution::One(x), QuadraticSolution::One(y)) => ulp_eq(*x, *y),
             (QuadraticSolution::Two(x1, x2), QuadraticSolution::Two(y1, y2)) => {
                 (ulp_eq(*x1, *y1) && ulp_eq(*x2, *y2)) || (ulp_eq(*x1, *y2) && ulp_eq(*x2, *y1))
-            }
+            },
             _ => false,
         }
     }

@@ -318,7 +318,7 @@ impl RawCache {
                     );
                     Ok((msurf_hdl, mesh_hdl))
                 }
-            }
+            },
         }
     }
 
@@ -377,7 +377,7 @@ impl RawCache {
                     self.measurements.insert(handle, data);
                     Ok(handle)
                 }
-            }
+            },
         }
     }
 

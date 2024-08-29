@@ -143,41 +143,41 @@ impl VgonioGui {
             VgonioEvent::OpenFiles(paths) => {
                 self.on_open_files(paths);
                 EventResponse::Handled
-            }
+            },
             VgonioEvent::Notify { kind, text, time } => {
                 self.notif.notify(*kind, text.clone(), *time as f64);
                 EventResponse::Handled
-            }
+            },
             VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Create { uuid, .. }) => {
                 #[cfg(any(feature = "vdbg", debug_assertions))]
                 self.measurement.update_surface_viewers(&[*uuid]);
                 EventResponse::Ignored(event)
-            }
+            },
             VgonioEvent::Outliner(outliner_event) => match outliner_event {
                 OutlinerEvent::SelectItem(item) => {
                     let mut properties = self.properties.write().unwrap();
                     properties.on_item_selected(*item);
                     EventResponse::Handled
-                }
+                },
                 OutlinerEvent::RemoveItem(item) => {
                     let mut properties = self.properties.write().unwrap();
                     self.cache.write(|cache| match item {
                         OutlinerItem::MicroSurface(handle) => {
                             properties.surfaces.remove(handle);
                             cache.unload_micro_surface(*handle).unwrap();
-                        }
+                        },
                         _ => {
                             todo!("Remove measured data from cache")
-                        }
+                        },
                     });
                     EventResponse::Handled
-                }
+                },
             },
             VgonioEvent::ExportMeasurement(meas) => {
                 self.file_dialog.save_file();
                 self.export = Some(*meas);
                 EventResponse::Handled
-            }
+            },
             VgonioEvent::Graphing {
                 kind,
                 data,
@@ -223,7 +223,7 @@ impl VgonioGui {
                         )),
                         _ => {
                             unreachable!("Unsupported measurement kind: {:?}", kind)
-                        }
+                        },
                     };
                     if *independent {
                         self.plotters.push((true, plotter));
@@ -232,7 +232,7 @@ impl VgonioGui {
                     }
                 }
                 EventResponse::Handled
-            }
+            },
             #[cfg(feature = "fitting")]
             VgonioEvent::Fitting { kind, data, scale } => {
                 match kind {
@@ -261,10 +261,10 @@ impl VgonioGui {
                                 });
                                 report.print_fitting_report();
                                 // TODO: update the fitted models
-                            }
+                            },
                             _ => unimplemented!("Fitting BxDF family: {:?}", family),
                         }
-                    }
+                    },
                     FittingProblemKind::Mfd { model, isotropy } => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
@@ -297,7 +297,7 @@ impl VgonioGui {
                                         "Measurement kind not supported for fitting NDF or MSF."
                                     );
                                     return FittingReport::empty();
-                                }
+                                },
                             };
                             let problem =
                                 MicrofacetDistributionFittingProblem::new(data, *model, *scale);
@@ -309,10 +309,10 @@ impl VgonioGui {
                         } else {
                             log::warn!("No model fitted");
                         }
-                    }
+                    },
                 }
                 EventResponse::Handled
-            }
+            },
             VgonioEvent::SubdivideSurface { surf, subdivision } => {
                 // Temporary: disable subdivision
                 // if subdivision.level() == 0 {
@@ -353,7 +353,7 @@ impl VgonioGui {
                 });
 
                 EventResponse::Handled
-            }
+            },
             _ => EventResponse::Ignored(event),
         }
     }
@@ -584,16 +584,16 @@ impl VgonioGui {
                             match cache.load_micro_surface_measurement(&self.config, &filepath) {
                                 Ok(hdl) => {
                                     measurements.push(hdl);
-                                }
+                                },
                                 Err(e) => {
                                     log::error!(
                                         "Failed to load micro surface measurement: {:?}",
                                         e
                                     );
-                                }
+                                },
                             }
                         })
-                    }
+                    },
                     "vgms" | "txt" | "os3d" => {
                         // Micro-surface profile
                         log::debug!("Opening micro-surface profile: {:?}", filepath);
@@ -604,20 +604,20 @@ impl VgonioGui {
                                         .create_micro_surface_renderable_mesh(&self.gpu_ctx, surf)
                                         .unwrap();
                                     surfaces.push(surf)
-                                }
+                                },
                                 Err(e) => {
                                     log::error!("Failed to load micro surface: {:?}", e);
-                                }
+                                },
                             }
                         })
-                    }
+                    },
                     "spd" => {
                         todo!()
-                    }
+                    },
                     "csv" => {
                         todo!()
-                    }
-                    _ => {}
+                    },
+                    _ => {},
                 }
             } else {
                 log::warn!("File {:?} has no extension, ignoring", filepath);

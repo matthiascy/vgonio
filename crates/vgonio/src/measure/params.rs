@@ -126,10 +126,10 @@ impl Serialize for SurfacePath {
         match &self.subdivision {
             Some(Subdivision::Curved(level)) => {
                 serializer.serialize_str(&format!("{} ~~ curved l{}", self.path.display(), level))
-            }
+            },
             Some(Subdivision::Wiggly(level)) => {
                 serializer.serialize_str(&format!("{} ~~ wiggly l{}", self.path.display(), level))
-            }
+            },
             None => serializer.serialize_str(&self.path.display().to_string()),
         }
     }
@@ -161,7 +161,7 @@ impl<'de> Deserialize<'de> for SurfacePath {
                                 "Invalid subdivision kind: {}",
                                 kind
                             )))
-                        }
+                        },
                     }
                 } else {
                     None

@@ -739,13 +739,13 @@ impl DebugDrawingState {
                                 reflected_count += 2;
                             }
                             j += 1;
-                        }
+                        },
                         Some(next) => {
                             reflected.push(org);
                             reflected.push(next.org.into());
                             reflected_count += 2;
                             j += 1;
-                        }
+                        },
                     }
                 }
             }

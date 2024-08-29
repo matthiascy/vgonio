@@ -134,7 +134,7 @@ impl PartitionScheme {
                 let num_rings = (Radians::HALF_PI / precision.theta).round() as u32;
                 let ks = beckers::compute_ks(1, num_rings);
                 ks[num_rings as usize - 1] as usize
-            }
+            },
             PartitionScheme::EqualAngle => {
                 debug_assert!(
                     precision.theta > Radians::ZERO && precision.phi > Radians::ZERO,
@@ -145,7 +145,7 @@ impl PartitionScheme {
                 let zenith =
                     RangeByStepSizeInclusive::new(Radians::ZERO, Radians::HALF_PI, precision.theta);
                 azimuth.step_count_wrapped() * zenith.step_count_wrapped()
-            }
+            },
         }
     }
 }
@@ -635,7 +635,7 @@ impl SphericalPartition {
                             }
                     }
                 }
-            }
+            },
             PartitionScheme::EqualAngle => {
                 // Calculate the patch index for each pixel.
                 let half_phi_bin_width = self.precision.phi * 0.5;
@@ -656,7 +656,7 @@ impl SphericalPartition {
                             }
                     }
                 }
-            }
+            },
         }
     }
 }

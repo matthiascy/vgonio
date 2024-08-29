@@ -122,7 +122,7 @@ impl RefractiveIndexRegistry {
                                 let eta = record[1].parse::<f32>().unwrap();
                                 let k = record[2].parse::<f32>().unwrap();
                                 Some(RefractiveIndexRecord::new(wavelength.into(), eta, k))
-                            }
+                            },
                             Err(_) => None,
                         })
                         .collect::<Box<_>>()
@@ -133,7 +133,7 @@ impl RefractiveIndexRegistry {
                                 let wavelength = record[0].parse::<f32>().unwrap() * coefficient;
                                 let eta = record[1].parse::<f32>().unwrap();
                                 Some(RefractiveIndexRecord::new(wavelength.into(), eta, 0.0))
-                            }
+                            },
                             Err(_) => None,
                         })
                         .collect::<Box<_>>()

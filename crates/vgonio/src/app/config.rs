@@ -351,7 +351,7 @@ impl Config {
                 } else {
                     Ok(resolved.unwrap())
                 }
-            }
+            },
             None => Ok(self.output_dir().to_path_buf()),
         }
     }
@@ -438,14 +438,14 @@ pub(crate) fn normalise_path(path: &Path) -> PathBuf {
             Component::Prefix(..) => unreachable!(),
             Component::RootDir => {
                 ret.push(component.as_os_str());
-            }
-            Component::CurDir => {}
+            },
+            Component::CurDir => {},
             Component::ParentDir => {
                 ret.pop();
-            }
+            },
             Component::Normal(c) => {
                 ret.push(c);
-            }
+            },
         }
     }
     ret

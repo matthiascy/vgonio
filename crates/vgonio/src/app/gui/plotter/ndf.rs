@@ -144,7 +144,7 @@ impl VariantData for AreaDistributionExtra {
                             && *scale == *existing_scale
                             && model.isotropy() == existing.isotropy()
                     })
-                }
+                },
             })
             .collect::<Vec<_>>();
 
@@ -188,10 +188,10 @@ impl VariantData for AreaDistributionExtra {
                         })
                         .collect();
                     self.fitted.push((model.clone_box(), *scale, curves));
-                }
+                },
                 _ => {
                     unreachable!("Wrong model type for area distribution!")
-                }
+                },
             }
         }
     }

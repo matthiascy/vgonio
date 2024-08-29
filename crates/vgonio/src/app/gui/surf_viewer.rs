@@ -204,7 +204,7 @@ impl SurfaceViewerState {
                     b: c.2 as f64,
                     a: c.3 as f64,
                 }
-            }
+            },
             ThemeKind::Dark => {
                 let c = DarkTheme.grid_line_color();
                 wgpu::Color {
@@ -213,7 +213,7 @@ impl SurfaceViewerState {
                     b: c.2 as f64,
                     a: c.3 as f64,
                 }
-            }
+            },
         };
         self.visual_grid
             .update(gpu, &view_proj, &view_proj_inv, grid_line_color, theme)
@@ -345,7 +345,7 @@ impl SurfaceViewerStates {
                     b: c.2 as f64,
                     a: c.3 as f64,
                 }
-            }
+            },
             ThemeKind::Dark => {
                 let c = DarkTheme.clear_color();
                 wgpu::Color {
@@ -354,7 +354,7 @@ impl SurfaceViewerStates {
                     b: c.2 as f64,
                     a: c.3 as f64,
                 }
-            }
+            },
         };
         for (viewer, state) in &mut self.states {
             if let Some(active) = active_viewer {

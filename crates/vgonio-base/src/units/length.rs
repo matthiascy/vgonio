@@ -47,19 +47,19 @@ impl Display for LengthUnit {
         match self {
             LengthUnit::M => {
                 write!(f, "m")
-            }
+            },
             LengthUnit::CM => {
                 write!(f, "cm")
-            }
+            },
             LengthUnit::MM => {
                 write!(f, "mm")
-            }
+            },
             LengthUnit::UM => {
                 write!(f, "um")
-            }
+            },
             LengthUnit::NM => {
                 write!(f, "nm")
-            }
+            },
         }
     }
 }

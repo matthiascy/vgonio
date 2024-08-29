@@ -378,7 +378,7 @@ impl FromStr for MeasuredBrdfLevel {
                         )
                     },
                 )?))
-            }
+            },
         }
     }
 }
@@ -739,19 +739,19 @@ impl Display for BsdfKind {
         match self {
             BsdfKind::Brdf => {
                 write!(f, "brdf")
-            }
+            },
             BsdfKind::Btdf => {
                 write!(f, "btdf")
-            }
+            },
             BsdfKind::Bssdf => {
                 write!(f, "bssdf")
-            }
+            },
             BsdfKind::Bssrdf => {
                 write!(f, "bssrdf")
-            }
+            },
             BsdfKind::Bsstdf => {
                 write!(f, "bsstdf")
-            }
+            },
         }
     }
 }
@@ -1609,7 +1609,7 @@ pub fn measure_bsdf_rt(
                         measured: Box::new(MeasuredBsdfData { params, raw, bsdfs }),
                     });
                 }
-            }
+            },
             SimulationKind::WaveOptics => {
                 println!(
                     "    {} Measuring {} with wave optics...",
@@ -1617,7 +1617,7 @@ pub fn measure_bsdf_rt(
                     params.kind
                 );
                 todo!("Wave optics simulation is not yet implemented")
-            }
+            },
         }
     }
 

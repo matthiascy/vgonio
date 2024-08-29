@@ -80,10 +80,10 @@ impl Material for Dielectric {
         match optics::refract_cos(&dir, &n, cos_i, eta) {
             Refracted::Reflection(dir_r) => {
                 Some((Ray::new(hit.p, dir_r), attenuation * reflectance))
-            }
+            },
             Refracted::Refraction { dir_t, .. } => {
                 Some((Ray::new(hit.p, dir_t), attenuation * (1.0 - reflectance)))
-            }
+            },
         }
     }
 }

@@ -200,7 +200,7 @@ impl MeasurementDialog {
                                             "Viewer-{}",
                                             &uuid.to_string()[..6].to_ascii_uppercase()
                                         )
-                                    }
+                                    },
                                 })
                                 .show_ui(ui, |ui| {
                                     for viewer in &self.debug.surface_viewers {
@@ -294,13 +294,13 @@ impl MeasurementDialog {
                             #[cfg(feature = "vdbg")]
                             orbit_radius,
                         )
-                    }
+                    },
                     MeasurementKind::Ndf => self.tab_adf.ui(ui),
                     MeasurementKind::Gaf => self.tab_msf.ui(ui),
                     MeasurementKind::Sdf => {
                         self.tab_sdf.ui(ui);
-                    }
-                    _ => {}
+                    },
+                    _ => {},
                 }
                 ui.separator();
 
@@ -390,13 +390,13 @@ impl MeasurementDialog {
                         let params = match self.kind {
                             MeasurementKind::Bsdf => {
                                 MeasurementParams::Bsdf(self.tab_bsdf.params.clone())
-                            }
+                            },
                             MeasurementKind::Ndf => MeasurementParams::Ndf(self.tab_adf.params),
                             MeasurementKind::Gaf => MeasurementParams::Gaf(self.tab_msf.params),
                             MeasurementKind::Sdf => MeasurementParams::Sdf(self.tab_sdf.params),
                             _ => {
                                 unreachable!("Invalid measurement kind")
-                            }
+                            },
                         };
                         let options = self.write_to_file.then(|| match self.format {
                             OutputFormat::Vgmo => OutputOptions {

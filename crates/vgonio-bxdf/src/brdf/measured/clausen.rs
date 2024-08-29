@@ -154,7 +154,7 @@ impl ClausenBrdf {
                     "Can't read Clausen BRDF from files without extension!".to_string(),
                     None,
                 ))
-            }
+            },
             // TODO: use OsStr::display() once it's stable
             Some(ext) => match ext.to_str().unwrap() {
                 "json" => Self::load_from_reader(BufReader::new(File::open(filepath).unwrap())),

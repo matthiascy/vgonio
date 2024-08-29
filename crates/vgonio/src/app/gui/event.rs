@@ -33,10 +33,10 @@ impl EventLoopProxy {
     /// Send an event to the event loop.
     pub fn send_event(&self, event: VgonioEvent) {
         match self.0.send_event(event) {
-            Ok(_) => {}
+            Ok(_) => {},
             Err(err) => {
                 log::error!("Failed to send event: {}", err);
-            }
+            },
         }
     }
 

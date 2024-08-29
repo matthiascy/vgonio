@@ -284,10 +284,10 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     plot_brdf_vgonio_clausen(&itrp, meas, opts.dense).unwrap();
                 }
                 Ok(())
-            }
+            },
             PlotKind::ComparisonVgonio => {
                 todo!("Implement comparison between VgonioBrdf and VgonioBrdf.")
-            }
+            },
             slc @ (PlotKind::BrdfSlice | PlotKind::BrdfSliceInPlane) => {
                 let brdf_hdls = opts
                     .inputs
@@ -341,7 +341,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     plot_brdf_slice_in_plane(&brdfs, phi_i).unwrap();
                 }
                 Ok(())
-            }
+            },
             PlotKind::Ndf => {
                 // TODO: unload if the input is not ndf
                 let hdls = opts
@@ -367,7 +367,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 )
                 .unwrap();
                 Ok(())
-            }
+            },
             PlotKind::Gaf => {
                 let hdls = opts
                     .inputs
@@ -397,7 +397,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 )
                 .unwrap();
                 Ok(())
-            }
+            },
             PlotKind::BrdfMap => {
                 use exr::prelude::*;
                 let imgs = opts
@@ -428,7 +428,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 .unwrap();
 
                 Ok(())
-            }
+            },
             PlotKind::Brdf3D => {
                 let hdls = opts
                     .inputs
@@ -467,7 +467,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     .unwrap();
                 }
                 Ok(())
-            }
+            },
             PlotKind::Surface => {
                 let surfaces = opts
                     .inputs
@@ -477,10 +477,10 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         subdivision: match (opts.subdiv_kind, opts.subdiv_level) {
                             (Some(SubdivisionKind::Curved), Some(level)) => {
                                 Some(Subdivision::Curved(level))
-                            }
+                            },
                             (Some(SubdivisionKind::Wiggly), Some(level)) => {
                                 Some(Subdivision::Wiggly(level))
-                            }
+                            },
                             _ => None,
                         },
                     })
@@ -503,10 +503,10 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 .unwrap();
 
                 Ok(())
-            }
+            },
             PlotKind::BrdfFitting => {
                 todo!("Implement BRDF fitting.")
-            }
+            },
         }
     })
 }

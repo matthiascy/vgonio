@@ -325,7 +325,7 @@ pub fn plot_ndf(
                                 numpy::PyArray1::from_slice_bound(py, spls),
                                 numpy::PyArray1::from_slice_bound(py, opp_spls.unwrap()),
                             )
-                        }
+                        },
                         NdfMeasurementMode::ByPartition { .. } => {
                             let sampler = DataCarriedOnHemisphereSampler::new(ndf).unwrap();
                             let partition = sampler.extra.as_ref().unwrap();
@@ -348,7 +348,7 @@ pub fn plot_ndf(
                                 sampler.sample_slice_at(phi_opp).into_vec(),
                             );
                             (label, theta, slice_phi, slice_phi_opp)
-                        }
+                        },
                     }
                 })
                 .collect::<Vec<_>>(),
@@ -477,7 +477,7 @@ pub fn plot_brdf_map(
                                 img_data.as_slice_mut().unwrap().copy_from_slice(&pixels);
                             }
                             img_data
-                        }
+                        },
                         _ => panic!("Only f32 data is supported!"),
                     };
                     let name = format!(

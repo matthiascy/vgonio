@@ -32,7 +32,7 @@ impl Display for NdfMeasurementParams {
                     zenith.step_size.prettified(),
                     zenith.step_count_wrapped(),
                 )
-            }
+            },
             NdfMeasurementMode::ByPartition { precision } => {
                 write!(
                     f,
@@ -40,7 +40,7 @@ impl Display for NdfMeasurementParams {
                      Beckers\n    - precision: {}",
                     precision.prettified()
                 )
-            }
+            },
         }
     }
 }
@@ -73,17 +73,17 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioEr
         Some(kind) => match kind {
             PrintInfoKind::Config => {
                 prints[0] = true;
-            }
+            },
             PrintInfoKind::Defaults => {
                 prints[1] = true;
-            }
+            },
             PrintInfoKind::MeasurementDescription => {
                 prints[2] = true;
-            }
+            },
         },
         None => {
             prints = [true, true, true];
-        }
+        },
     };
 
     if prints[0] {

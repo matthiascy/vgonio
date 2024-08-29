@@ -683,7 +683,7 @@ impl Grid<BaseCell> {
                 } else {
                     unreachable!("The ray should not intersect with two triangles")
                 }
-            }
+            },
             (Some(isect), None) => {
                 // Intersects with the first triangle.
                 // Check if the ray intersects with other edges, get the adjacent triangle
@@ -727,7 +727,7 @@ impl Grid<BaseCell> {
                     geom_id: 0,
                     prim_id: cell.tris[0],
                 };
-            }
+            },
             (None, Some(isect)) => {
                 // Intersects with the second triangle.
                 // Check if the ray intersects with other edges, get the adjacent triangle
@@ -771,11 +771,11 @@ impl Grid<BaseCell> {
                     geom_id: 0,
                     prim_id: cell.tris[1],
                 };
-            }
+            },
             (None, None) => {
                 hit.geom_id = u32::MAX;
                 hit.prim_id = u32::MAX;
-            }
+            },
         }
     }
 
@@ -1200,7 +1200,7 @@ impl<'ms> MultilevelGrid<'ms> {
         hit.invalidate();
 
         match ray.intersects_aabb(&self.mesh.bounds) {
-            None => {}
+            None => {},
             Some(isect) => {
                 // The ray is emitted from the micro surface, which means that the
                 // ray has been reflected. We don't need to trace the coarse grid.
@@ -1212,7 +1212,7 @@ impl<'ms> MultilevelGrid<'ms> {
                     let init_level = self.level - 1;
                     trace_coarse(self, init_level, *ray, hit);
                 }
-            }
+            },
         }
     }
 }

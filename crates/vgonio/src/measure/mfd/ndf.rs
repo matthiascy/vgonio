@@ -123,10 +123,10 @@ impl MeasuredNdfData {
                             *v = self.samples[i_adf];
                         }
                     });
-            }
+            },
             NdfMeasurementMode::ByPartition { .. } => {
                 samples_per_patch.copy_from_slice(&self.samples);
-            }
+            },
         }
 
         DataCarriedOnHemisphereImageWriter::new(&partition, resolution).write_as_exr(
@@ -153,7 +153,7 @@ impl MeasuredNdfData {
             NdfMeasurementMode::ByPartition { .. } => {
                 eprintln!("Measurement range is not available for the partition mode.");
                 None
-            }
+            },
         }
     }
 
@@ -165,7 +165,7 @@ impl MeasuredNdfData {
             NdfMeasurementMode::ByPartition { .. } => {
                 eprintln!("Zenith range is not available for the partition mode.");
                 None
-            }
+            },
         }
     }
 }
@@ -190,10 +190,10 @@ pub fn measure_area_distribution(
     let measurements = match params.mode {
         NdfMeasurementMode::ByPoints { .. } => {
             measure_area_distribution_by_points(surfaces, params)
-        }
+        },
         NdfMeasurementMode::ByPartition { .. } => {
             measure_area_distribution_by_partition(surfaces, params)
-        }
+        },
     };
 
     #[cfg(feature = "bench")]
@@ -378,7 +378,7 @@ fn measure_area_distribution_by_partition<'a>(
     let precision = match params.mode {
         NdfMeasurementMode::ByPoints { .. } => {
             panic!("The partition mode is not supported for the ByPoints mode.")
-        }
+        },
         NdfMeasurementMode::ByPartition { precision } => precision,
     };
     let partition = SphericalPartition::new_beckers(SphericalDomain::Upper, precision);
@@ -418,10 +418,10 @@ fn measure_area_distribution_by_partition<'a>(
                     match partition.contains(Sph2::from_cartesian(*normal)) {
                         None => {
                             log::warn!("Facet normal {} is not contained in any patch.", normal);
-                        }
+                        },
                         Some(patch_idx) => {
                             normals_per_patch[patch_idx].push(facet_idx);
-                        }
+                        },
                     }
                 }
                 if params.use_facet_area {
@@ -449,10 +449,10 @@ fn measure_area_distribution_by_partition<'a>(
                     match partition.contains(Sph2::from_cartesian(*normal)) {
                         None => {
                             log::warn!("Facet normal {} is not contained in any patch.", normal);
-                        }
+                        },
                         Some(patch_idx) => {
                             normals_per_patch[patch_idx].push(facet_idx);
-                        }
+                        },
                     }
                 }
                 if params.use_facet_area {
