@@ -165,44 +165,34 @@ impl<'a, P: BrdfParameterisation> FittingProblem for MicrofacetBrdfFittingProble
                 let kind = model.family();
                 let (model, report) = match self.measured.kind() {
                     MeasuredBrdfKind::Clausen => {
-                        let brdf = self
-                            .measured
-                            .as_any()
-                            .downcast_ref::<ClausenBrdf>()
-                            .unwrap();
-                        let problem = BrdfFittingProblemProxy::<ClausenBrdfParameterisation, ClausenBrdf, { Isotropy::Isotropic }>::new(
-                            brdf, model, &self.iors_i, &self.iors_t
-                        );
+                        let brdf = self.measured.as_any().downcast_ref::<ClausenBrdf>().unwrap();
+                        let problem = BrdfFittingProblemProxy::<
+                            ClausenBrdfParameterisation,
+                            ClausenBrdf,
+                            { Isotropy::Isotropic },
+                        >::new(brdf, model, &self.iors_i, &self.iors_t);
                         let (result, report) = solver.minimize(problem);
                         (result.model, report)
-                    }
+                    },
                     MeasuredBrdfKind::Vgonio => {
-                        let brdf = self
-                            .measured
-                            .as_any().downcast_ref::<VgonioBrdf>()
-                            .unwrap();
+                        let brdf = self.measured.as_any().downcast_ref::<VgonioBrdf>().unwrap();
                         switch_isotropy!(VgonioBrdf<VgonioBrdfParameterisation> => isotropy, self, brdf, model, solver)
-                    }
+                    },
                     _ => {
                         log::warn!("Unsupported BRDF kind: {:?}", self.measured.kind());
                         return None;
-                    }
+                    },
                 };
                 log::debug!(
-                    "Fitting {} BRDF model: {:?} with αx = {} αy = {}\n    - fitted αx = {} αy = \
-                     {}\n    - report: {:?}",
-                    isotropy,
-                    kind,
+                    "Fitting {isotropy} BRDF model: {kind:?} with αx = {} αy = {}\n    - fitted αx = {} αy = {}\n    - report: \
+                     {report:?}",
                     init_guess[0],
                     init_guess[1],
                     model.params()[0],
                     model.params()[1],
-                    report
                 );
                 match report.termination {
-                    TerminationReason::Converged { .. } | TerminationReason::LostPatience => {
-                        Some((model, report))
-                    }
+                    TerminationReason::Converged { .. } | TerminationReason::LostPatience => Some((model, report)),
                     _ => None,
                 }
             })
