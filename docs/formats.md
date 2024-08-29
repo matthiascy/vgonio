@@ -53,12 +53,11 @@ Following the meta information, the first byte of the data-specific information 
 
 ##### NDF measurement
 
-| Offset (dec - hex) | Size     | Value | Purpose                                                 |
-|--------------------|----------|-------|---------------------------------------------------------|
-| 49 - 0x31          | 1 byte   | u8    | Measurement mode: by points=0x00 or by partition=0x01   |
-| 50 - 0x32          | 1 byte   | u8    | Crop to disk: true = 0x01, false = 0x00                 |
-| 51 - 0x33          | 1 byte   | u8    | Use facet area: true = 0x01, false = 0x00               |
-| -----------        | -------- | ----  | ------------------------------------------------------- |
+| Offset (dec - hex) | Size   | Value | Purpose                                               |
+|--------------------|--------|-------|-------------------------------------------------------|
+| 49 - 0x31          | 1 byte | u8    | Measurement mode: by points=0x00 or by partition=0x01 |
+| 50 - 0x32          | 1 byte | u8    | Crop to disk: true = 0x01, false = 0x00               |
+| 51 - 0x33          | 1 byte | u8    | Use facet area: true = 0x01, false = 0x00             |
 
 Depending on the measurement mode, the header part of the file is different.
 
@@ -69,7 +68,7 @@ Depending on the measurement mode, the header part of the file is different.
   The header part of the file is 84 bytes in total with 36 bytes for measurement points information.
 
   | Offset (dec - hex) | Size    | Value | Purpose                                                         |
-                                                                    |-------------------|---------|-------|-----------------------------------------------------------------|
+  |-------------------|---------|-------|-----------------------------------------------------------------|
   | 52 - 0x34          | 4 bytes | f32   | Start point of the measurement along azimuthal angle in radians |
   |  56 - 0x38         | 4 bytes | f32   | Stop point of the measurement along azimuthal angle in radians  |
   |  60 - 0x3C         | 4 bytes | f32   | Bin size of the measurement along azimuthal angle in radians    |
@@ -85,7 +84,7 @@ Depending on the measurement mode, the header part of the file is different.
   Defaults to Beckers' partition
 
   | Offset (dec - hex) | Size            | Value | Purpose                                                                                                 |
-                                                                  |--------------------|-----------------|-------|---------------------------------------------------------------------------------------------------------|
+  |--------------------|-----------------|-------|---------------------------------------------------------------------------------------------------------|
   | 52 - 0x34          | 4 bytes         | u32   | Receiver domain: upper hemisphere = 0x01, lower = 0x02, whole = 0x00                                    |
   | 56 - 0x38          | 4 bytes         | u32   | Partition scheme: beckers = 0x00, tregenza = 0x01, equal-angle = 0x02                                   |
   | 60 - 0x3C          | 4 bytes         | f32   | Precision of the partition (inclination angle step size) in radians                                     |
@@ -97,7 +96,7 @@ Depending on the measurement mode, the header part of the file is different.
     - Ring information
 
       | Offset (dec - hex) | Size    | Value | Purpose                                                     |
-                                                                                                                                                                                                                                                                                                                                        |--------------------|---------|-------|-------------------------------------------------------------|
+      |--------------------|---------|-------|-------------------------------------------------------------|
       | 0 - 0x00           | 4 bytes | f32   | Minimum colatitude of the annulus.                          |
       | 4 - 0x04           | 4 bytes | f32   | Maximum colatitude of the annulus.                          |
       | 8 - 0x08           | 4 bytes | u32   | Step size of the longitude inside the annulus.              |
@@ -149,25 +148,25 @@ Depending on the measurement mode, the header part of the file is different.
 
 - Receiver information
 
-  | Offset (dec - hex) | Size          | Value | Purpose                                                                                                   |
-                                                                                      |--------------------|---------------|-------|-----------------------------------------------------------------------------------------------------------|
-  | 0 - 0x00           | 4 bytes       | u32   | Receiver domain: upper hemisphere = 0x01, lower = 0x02, whole = 0x00                                      |
-  | 4 - 0x04           | 4 bytes       | u32   | Partition scheme: beckers = 0x00, tregenza = 0x01, equal-angle = 0x02                                     |
-  | 8 - 0x08           | 4 bytes       | f32   | Precision of the partition (inclination angle step size) in radians                                       |
-  | 12 - 0x0C          | 4 bytes       | f32   | Precision of the partition (azimuthal angle step size) in radians, only used when scheme is equal-angle   |
-  | 16 - 0x10          | 4 bytes       | u32   | Number of rings (`Nr`)                                                                                    |
-  | 20 - 0x14          | 4 bytes       | u32   | Number of patches (`Np`)                                                                                  |
-  | 24 - 0x18          | 20 * Nr bytes |       | Information of each ring                                                                                  |
+  | Offset (dec - hex) | Size          | Value | Purpose                                                                                                 |
+  |--------------------|---------------|-------|---------------------------------------------------------------------------------------------------------|
+  | 0 - 0x00           | 4 bytes       | u32   | Receiver domain: upper hemisphere = 0x01, lower = 0x02, whole = 0x00                                    |
+  | 4 - 0x04           | 4 bytes       | u32   | Partition scheme: beckers = 0x00, tregenza = 0x01, equal-angle = 0x02                                   |
+  | 8 - 0x08           | 4 bytes       | f32   | Precision of the partition (inclination angle step size) in radians                                     |
+  | 12 - 0x0C          | 4 bytes       | f32   | Precision of the partition (azimuthal angle step size) in radians, only used when scheme is equal-angle |
+  | 16 - 0x10          | 4 bytes       | u32   | Number of rings (`Nr`)                                                                                  |
+  | 20 - 0x14          | 4 bytes       | u32   | Number of patches (`Np`)                                                                                |
+  | 24 - 0x18          | 20 * Nr bytes |       | Information of each ring                                                                                |
 
 - Ring information
 
-  | Offset (dec - hex) | Size     | Value | Purpose                                                     | 
-                                                                            |--------------------|----------|-------|-------------------------------------------------------------|
-  | 0 - 0x00           | 4 bytes  | f32   | Minimum colatitude of the annulus.                          |
-  | 4 - 0x04           | 4 bytes  | f32   | Maximum colatitude of the annulus.                          |
-  | 8 - 0x08           | 4 bytes  | u32   | Step size of the longitude inside the annulus.              |
-  | 12 - 0x0C          | 4 bytes  | u32   | Number of patches in the annulus.                           |
-  | 16 - 0x10          | 4 bytes  | u32   | Base index of the patch of the annulus in the patches data. |
+  | Offset (dec - hex) | Size    | Value | Purpose                                                     |
+  |--------------------|---------|-------|-------------------------------------------------------------|
+  | 0 - 0x00           | 4 bytes | f32   | Minimum colatitude of the annulus.                          |
+  | 4 - 0x04           | 4 bytes | f32   | Maximum colatitude of the annulus.                          |
+  | 8 - 0x08           | 4 bytes | u32   | Step size of the longitude inside the annulus.              |
+  | 12 - 0x0C          | 4 bytes | u32   | Number of patches in the annulus.                           |
+  | 16 - 0x10          | 4 bytes | u32   | Base index of the patch of the annulus in the patches data. |
 
 ##### SDF measurement
 

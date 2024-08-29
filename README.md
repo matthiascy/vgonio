@@ -53,11 +53,12 @@ git clone https://github.com/matthiascy/vgonio.git
 VGonio is written in Rust, so you need to have Rust installed on your system to build it. You can install Rust by
 following the instructions on the [official website](https://www.rust-lang.org/tools/install).
 
-As VGonio relies on some unstable features, you need to use the nightly version of Rust. After installing Rust and
-cloning the repository, you can switch to the nightly version specified in the `rust-toolchain.toml` file by running:
+As VGonio relies on some unstable features, you need to use the nightly version of Rust. By default, when you run the
+`cargo build` command, it will automatically download the nightly version specified in the `rust-toolchain.toml` file.
+In case you have not installed the nightly version, you can install it using `rustup`:
 
 ```shell
-rustup component add --toolchain nightly-2024-06-28
+rustup toolchain install nightly
 ```
 
 ### Installing Dependencies
