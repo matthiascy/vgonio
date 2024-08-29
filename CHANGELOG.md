@@ -2,6 +2,10 @@
 
 ### ✨ Overview & highlights
 
+## 0.3.3
+
+- Remove nightly channel specific date
+
 ## 0.3.2 - 2024-08-16
 
 - Replace native file dialogue [rfd](https://crates.io/crates/rfd)
