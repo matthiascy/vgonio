@@ -9,7 +9,6 @@ use base::{
     io::{CompressionScheme, FileEncoding},
 };
 use std::{path::PathBuf, time::Instant};
-use surf::subdivision::Subdivision;
 
 /// Measure different metrics of the micro-surface.
 pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {

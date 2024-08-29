@@ -37,13 +37,13 @@ use base::{
     MeasurementKind,
 };
 use bxdf::brdf::BxdfFamily;
-use egui_file_dialog::{DialogMode, FileDialog, FileDialogConfig};
+use egui_file_dialog::{DialogMode, FileDialog};
 use gxtk::{context::GpuContext, mesh::RenderableMesh};
 use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use surf::{subdivision::Subdivision, HeightOffset, MicroSurface};
+use surf::{HeightOffset, MicroSurface};
 use uxtk::{theme::ThemeKind, UiRenderer};
 
 /// Implementation of the GUI for vgonio application.
@@ -138,7 +138,7 @@ impl VgonioGui {
     ///
     /// Returns [`EventResponse::Ignored`] if the event was not handled,
     /// otherwise returns [`EventResponse::Handled`].
-    pub fn on_user_event(&mut self, event: VgonioEvent, ctx: &egui::Context) -> EventResponse {
+    pub fn on_user_event(&mut self, event: VgonioEvent, _ctx: &egui::Context) -> EventResponse {
         match &event {
             VgonioEvent::OpenFiles(paths) => {
                 self.on_open_files(paths);

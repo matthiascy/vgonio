@@ -32,12 +32,10 @@ use base::{
     Asset, Version,
 };
 use glam::{DVec3, Vec2};
-use log::log;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
-    collections::HashMap,
     fs::File,
     io::{BufReader, BufWriter, Read, Seek, Write},
     path::{Path, PathBuf},
@@ -928,10 +926,8 @@ impl MicroSurfaceMesh {
 
     /// Constructs an embree geometry from the `MicroSurfaceMesh`.
     #[cfg(feature = "embree")]
-    pub fn as_embree_geometry<'g>(&'g self, device: &Device) -> Geometry<'g> {
-        let mut geom = device
-            .create_geometry::<'g>(GeometryKind::TRIANGLE)
-            .unwrap();
+    pub fn as_embree_geometry(&self, device: &Device) -> Geometry {
+        let mut geom = device.create_geometry(GeometryKind::TRIANGLE).unwrap();
         geom.set_new_buffer(BufferUsage::VERTEX, 0, Format::FLOAT3, 16, self.num_verts)
             .unwrap()
             .view_mut::<[f32; 4]>()
@@ -960,7 +956,7 @@ impl MicroSurfaceMesh {
             return;
         }
 
-        let mut dcel = HalfEdgeMesh::new(Cow::Borrowed(&self.verts), &self.facets);
+        let dcel = HalfEdgeMesh::new(Cow::Borrowed(&self.verts), &self.facets);
         let subdivision = TriangleUVSubdivision::new(opts.level(), self.pattern);
 
         let subdivided = match opts {
@@ -1148,7 +1144,7 @@ impl MicroSurfaceMesh {
             .zip(subdivided.faces.iter().enumerate())
             .for_each(|(((f, normal), area), (i, _))| {
                 let darts_of_face = subdivided.darts_of_face(i);
-                for ((dart_idx, dart), v) in darts_of_face.iter().zip(f.iter_mut()) {
+                for ((dart_idx, _), v) in darts_of_face.iter().zip(f.iter_mut()) {
                     *v = subdivided.darts[*dart_idx as usize].vert;
                 }
                 let p0 = subdivided.positions[f[0] as usize].as_dvec3();

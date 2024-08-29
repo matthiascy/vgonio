@@ -8,7 +8,7 @@ use crate::{
     app::cli::ansi,
     measure::{
         bsdf::{
-            emitter::{Emitter, EmitterCircularSector},
+            emitter::EmitterCircularSector,
             rtc,
             rtc::{Hit, HitInfo, Ray, MAX_RAY_STREAM_SIZE},
             SingleSimResult,

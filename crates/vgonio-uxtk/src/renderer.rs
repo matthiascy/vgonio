@@ -96,10 +96,10 @@ impl CallbackFn {
 }
 
 /// Render state for GUI rendering.
+///
+/// The output format of the render pipeline is specified by the `RenderPass`
+/// when invoking `render`.
 pub struct UiRenderer {
-    /// Texture format of the render pipeline output.
-    output_format: wgpu::TextureFormat,
-
     /// Render pipeline for egui rendering.
     pipeline: wgpu::RenderPipeline,
 
@@ -310,7 +310,6 @@ impl UiRenderer {
             samplers: HashMap::new(),
             // next_user_texture_id: 0,
             paint_callback_resources: TypeMap::new(),
-            output_format: output_color_format,
         }
     }
 

@@ -2,6 +2,7 @@
 pub mod curved;
 pub mod wiggle;
 
+/// Subdivision scheme with a level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Subdivision {
     /// Subdivide the surface using curved PN triangles (3D Bezier triangles).

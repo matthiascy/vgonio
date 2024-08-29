@@ -187,7 +187,7 @@ pub fn plot_brdf_slice(
                         PyArray1::from_iter_bound(py, brdf.spectrum.iter().map(|x| x.as_f32()));
                     let slice_phi = {
                         let data = sampler.sample_slice_at(wi, phi_o).unwrap();
-                        let mut slice = PyArray2::zeros_bound(py, [theta.len(), n_spectrum], false);
+                        let slice = PyArray2::zeros_bound(py, [theta.len(), n_spectrum], false);
                         unsafe {
                             slice.as_slice_mut().unwrap().copy_from_slice(&data);
                         }
@@ -198,7 +198,7 @@ pub fn plot_brdf_slice(
                             .sample_slice_at(wi, opposite_phi_o)
                             .unwrap()
                             .into_vec();
-                        let mut slice = PyArray2::zeros_bound(py, [theta.len(), n_spectrum], false);
+                        let slice = PyArray2::zeros_bound(py, [theta.len(), n_spectrum], false);
                         unsafe {
                             slice.as_slice_mut().unwrap().copy_from_slice(&data);
                         }
@@ -329,7 +329,7 @@ pub fn plot_ndf(
                         NdfMeasurementMode::ByPartition { .. } => {
                             let sampler = DataCarriedOnHemisphereSampler::new(ndf).unwrap();
                             let partition = sampler.extra.as_ref().unwrap();
-                            let mut theta =
+                            let theta =
                                 numpy::PyArray1::zeros_bound(py, [partition.n_rings()], false);
                             partition
                                 .rings
@@ -468,7 +468,7 @@ pub fn plot_brdf_map(
 
                     let pixels = match &data.sample_data {
                         FlatSamples::F32(pixels) => {
-                            let mut img_data = PyArray2::zeros_bound(
+                            let img_data = PyArray2::zeros_bound(
                                 py,
                                 (size.0 as usize, size.1 as usize),
                                 false,
@@ -565,7 +565,7 @@ pub fn plot_brdf_3d(
         let n_spectrum = brdf.spectrum.len();
         let vals = {
             let sampler = DataCarriedOnHemisphereSampler::new(brdf).unwrap();
-            let mut data = PyArray2::zeros_bound(py, [n_theta, n_phi], false);
+            let data = PyArray2::zeros_bound(py, [n_theta, n_phi], false);
             unsafe {
                 let mut spectrum_samples = vec![0.0; n_spectrum].into_boxed_slice();
                 let slice = data.as_slice_mut().unwrap();

@@ -64,7 +64,7 @@ impl Tool for SamplingInspector {
         ui.add(
             egui::DragValue::new(&mut self.sample_count)
                 .speed(1)
-                .clamp_range(1..=u32::MAX),
+                .range(1..=u32::MAX),
         );
         // TODO: strict bounds
         ui.horizontal(|ui| {
@@ -72,14 +72,14 @@ impl Tool for SamplingInspector {
             ui.add(
                 egui::DragValue::new(&mut self.zenith_min)
                     .speed(0.1)
-                    .clamp_range(0.0..=180.0)
+                    .range(0.0..=180.0)
                     .suffix("°")
                     .prefix("min: "),
             );
             ui.add(
                 egui::DragValue::new(&mut self.zenith_max)
                     .speed(0.1)
-                    .clamp_range(0.0..=180.0)
+                    .range(0.0..=180.0)
                     .suffix("°")
                     .prefix("max: "),
             );
@@ -89,14 +89,14 @@ impl Tool for SamplingInspector {
             ui.add(
                 egui::DragValue::new(&mut self.azimuth_min)
                     .speed(0.1)
-                    .clamp_range(0.0..=360.0)
+                    .range(0.0..=360.0)
                     .suffix("°")
                     .prefix("min: "),
             );
             ui.add(
                 egui::DragValue::new(&mut self.azimuth_max)
                     .speed(0.1)
-                    .clamp_range(0.0..=360.0)
+                    .range(0.0..=360.0)
                     .suffix("°")
                     .prefix("max: "),
             );

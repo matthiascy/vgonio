@@ -1,7 +1,6 @@
 //! vgonio is a library for micro-level light transport simulation.
 
 #![feature(async_closure)]
-#![feature(const_fn_floating_point_arithmetic)]
 #![feature(const_mut_refs)]
 #![feature(const_trait_impl)]
 #![feature(decl_macro)]

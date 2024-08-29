@@ -43,7 +43,7 @@ impl Tool for Scratch {
 impl Scratch {
     fn ui_control(&mut self, ui: &mut Ui) -> Response {
         ui.horizontal(|ui| {
-            egui::stroke_ui(ui, &mut self.stroke, "");
+            ui.add(&mut self.stroke);
             ui.separator();
             if ui.button("Clear").clicked() {
                 self.lines.clear();

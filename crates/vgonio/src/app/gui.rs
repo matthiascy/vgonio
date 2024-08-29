@@ -19,14 +19,9 @@ mod ui;
 mod visual_grid;
 
 // TODO: MSAA
-use egui::Visuals;
 use std::{
     default::Default,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, RwLock,
-    },
-    thread,
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 pub(crate) use tools::DebuggingInspector;

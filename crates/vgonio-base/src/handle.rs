@@ -1,3 +1,5 @@
+//! Strongly typed handle referencing loaded assets.
+
 use crate::Asset;
 use std::{
     any::TypeId,
@@ -11,6 +13,7 @@ pub struct Handle<T>
 where
     T: Asset,
 {
+    /// Id of the handle.
     pub id: Uuid,
     _phantom: std::marker::PhantomData<fn() -> T>,
 }
@@ -50,6 +53,7 @@ impl<T> Handle<T>
 where
     T: Asset,
 {
+    /// Creates a new handle with a random id.
     pub fn new() -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -74,6 +78,7 @@ where
         Self::with_id(Uuid::from_bytes(id))
     }
 
+    /// Creates a new handle with the given id.
     pub fn with_id(id: Uuid) -> Self {
         Self {
             id,

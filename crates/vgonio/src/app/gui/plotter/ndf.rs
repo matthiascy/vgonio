@@ -266,7 +266,7 @@ impl VariantData for AreaDistributionExtra {
             ui.add(
                 egui::DragValue::new(&mut self.scale_factor)
                     .speed(0.01)
-                    .clamp_range(1.0..=1024.0),
+                    .range(1.0..=1024.0),
             );
             ui.toggle_value(&mut self.show_slope_distribution, "Show slope distribution");
         });

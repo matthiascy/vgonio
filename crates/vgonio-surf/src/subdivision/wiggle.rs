@@ -1,4 +1,6 @@
-use crate::dcel::HalfEdgeMesh;
+//! Surface subdivision algorithm based on adding variation to the height of new
+//! vertices.
+
 use glam::{DVec3, Vec2, Vec3};
 use rand::distributions::{Distribution, Uniform};
 

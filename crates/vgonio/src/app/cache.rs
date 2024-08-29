@@ -1,20 +1,17 @@
 use std::{
-    any::TypeId,
     collections::HashMap,
-    fmt::{Debug, Display, Formatter},
+    fmt::Debug,
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
     str::FromStr,
 };
-
-use uuid::Uuid;
 
 use crate::{
     app::{cli::ansi, Config},
     measure::{params::SurfacePath, Measurement},
 };
 use base::{
-    error::VgonioError, handle::Handle, medium::Medium, optics::ior::RefractiveIndexRegistry, Asset,
+    error::VgonioError, handle::Handle, medium::Medium, optics::ior::RefractiveIndexRegistry,
 };
 use gxtk::{context::GpuContext, mesh::RenderableMesh};
 use surf::{

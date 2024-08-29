@@ -5,11 +5,10 @@
 
 use crate::{TriangleUVSubdivision, TriangulationPattern, VertLoc};
 use glam::{DVec3, Vec2, Vec3};
-use log::log;
 use std::{borrow::Cow, collections::VecDeque};
 
-use rayon::iter::{IntoParallelRefMutIterator, ParallelBridge, ParallelIterator};
-use std::{collections::HashMap, ptr::addr_of_mut, sync::RwLock};
+use rayon::iter::{ParallelBridge, ParallelIterator};
+use std::collections::HashMap;
 
 type NoHashMap<K, V> = HashMap<K, V, nohash_hasher::BuildNoHashHasher<K>>;
 
@@ -42,6 +41,7 @@ impl Vert {
 /// the counter-clockwise direction of the face.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Face {
+    /// The incident half-edge of the face.
     pub dart: u32,
 }
 
@@ -241,7 +241,7 @@ impl<'a> HalfEdgeMesh<'a> {
 
         // Iterate over the boundary darts and set the next and previous darts.
         for (dart_idx, (start, end)) in boundary_darts_ends.iter() {
-            let mut dart = &mut darts[*dart_idx as usize];
+            let dart = &mut darts[*dart_idx as usize];
             dart.next = boundary_darts_ends
                 .iter()
                 .find(|(_, (s, _))| s == end)
@@ -349,7 +349,7 @@ impl<'a> HalfEdgeMesh<'a> {
         let mut replacement = vec![u32::MAX; sub.n_pnts as usize].into_boxed_slice();
         let is_bottom_left_to_top_right = sub.pattern == TriangulationPattern::BottomLeftToTopRight;
         // Loop over the faces and subdivide each face.
-        for (old_face_idx, (face, new_tris)) in self
+        for (old_face_idx, (_, new_tris)) in self
             .faces
             .iter()
             .zip(new_triangles.chunks_mut(sub.n_tris as usize * 3))
@@ -529,6 +529,7 @@ impl<'a> HalfEdgeMesh<'a> {
     /// Get the number of faces.
     pub fn n_faces(&self) -> usize { self.faces.len() }
 
+    /// Print the vertices, faces, and darts of the mesh.
     pub fn debug_print(&self) {
         log::debug!("Vertices: {:?}", self.verts);
         log::debug!("Faces: {:?}", self.faces);

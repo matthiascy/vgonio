@@ -104,7 +104,7 @@ pub struct MeasurementDescription {
 ///
 /// If the subdivision level is 0, it means no subdivision is applied.
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) struct SurfacePath {
+pub struct SurfacePath {
     /// Path to the surface file.
     pub path: PathBuf,
     /// Subdivision to apply to the surface if any.

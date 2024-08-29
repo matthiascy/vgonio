@@ -11,13 +11,10 @@ use base::{
     io::{CompressionScheme, FileEncoding},
     math,
 };
-use chrono::DateTime;
-use egui_gizmo::GizmoOrientation::Local;
 use std::{
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
 };
-use surf::MicroSurface;
 
 pub mod vgmo {
     use super::*;

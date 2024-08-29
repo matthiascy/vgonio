@@ -30,7 +30,7 @@ impl GafMeasurementTab {
                 ui.add(
                     egui::DragValue::new(&mut self.params.resolution)
                         .speed(1.0)
-                        .clamp_range(256.0..=2048.0),
+                        .range(256.0..=2048.0),
                 );
                 ui.end_row();
             });

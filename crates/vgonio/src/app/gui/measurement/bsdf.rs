@@ -58,7 +58,7 @@ impl EmitterParams {
                         ui.add(
                             egui::DragValue::new(&mut self.num_rays)
                                 .speed(1.0)
-                                .clamp_range(1..=100_000_000),
+                                .range(1..=100_000_000),
                         );
                         ui.end_row();
 
@@ -66,7 +66,7 @@ impl EmitterParams {
                         ui.add(
                             egui::DragValue::new(&mut self.max_bounces)
                                 .speed(1.0)
-                                .clamp_range(1..=100),
+                                .range(1..=100),
                         );
                         ui.end_row();
 

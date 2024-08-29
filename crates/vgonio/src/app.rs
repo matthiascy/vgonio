@@ -1,15 +1,6 @@
-use std::{
-    fmt,
-    io::Write,
-    path::{Path, PathBuf},
-};
-
-use serde::{Deserialize, Serialize};
-
-use crate::error::RuntimeError;
 use args::CliArgs;
 use base::error::VgonioError;
-use surf::TriangulationPattern;
+use std::io::Write;
 
 pub(crate) mod args;
 

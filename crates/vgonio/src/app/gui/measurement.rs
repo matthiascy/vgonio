@@ -366,8 +366,7 @@ impl MeasurementDialog {
                                 ui.horizontal_wrapped(|ui| {
                                     ui.label("Image resolution: ");
                                     ui.add(
-                                        egui::DragValue::new(&mut self.img_res)
-                                            .clamp_range(256..=2048),
+                                        egui::DragValue::new(&mut self.img_res).range(256..=2048),
                                     );
                                 });
                             });
