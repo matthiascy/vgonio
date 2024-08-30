@@ -5,6 +5,8 @@
 ## 0.3.3
 
 - Remove nightly channel specific date
+- Fix the initial microfacet total area calculation
+- Unify the surface subdivision scheme
 
 ## 0.3.2 - 2024-08-16
 
