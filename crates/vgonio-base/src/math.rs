@@ -741,6 +741,24 @@ pub fn calc_aligned_size(size: u32, alignment: u32) -> u32 {
     (size + mask) & !mask
 }
 
+/// Pairwise summation of the given values.
+///
+/// This is a more accurate way of summing up floating point numbers, especially
+/// when small values are added to large values.
+pub fn pairwise_sum<F: Float>(values: &[F]) -> F {
+    if values.is_empty() {
+        return F::zero();
+    } else if values.len() == 1 {
+        return values[0];
+    } else if values.len() == 2 {
+        return values[0] + values[1];
+    }
+
+    let mid = values.len() / 2;
+    let (left, right) = values.split_at(mid);
+    pairwise_sum(left) + pairwise_sum(right)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

@@ -12,7 +12,13 @@ use rand::distributions::{Distribution, Uniform};
 /// * `uvs` - The uv coordinates of the desired interpolation points on the
 ///  triangle.
 /// * `ovs` - The output points of the sub-triangulation.
-pub fn subdivide_triangle(vs: &[Vec3], uvs: &[Vec2], ovs: &mut [DVec3]) {
+pub fn subdivide_triangle(
+    vs: &[Vec3],
+    uvs: &[Vec2],
+    _ns: Option<&[Vec3]>,
+    ovs: &mut [DVec3],
+    _ons: Option<&mut [Vec3]>,
+) {
     debug_assert!(vs.len() >= 3, "The input vertices must be a triangle.");
     debug_assert!(
         uvs.len() == ovs.len(),

@@ -318,24 +318,32 @@ impl<'a> HalfEdgeMesh<'a> {
     ///   and the edge from the third to the origin is the v-axis. See
     ///   [`TriangleUVSubdivision::calc_pnts_uvs`] for more details.
     ///
-    /// * `interp` - The interpolation function that takes the uv coordinates,
-    ///   the positions of the vertices of the face, and the output positions of
-    ///   the new vertices.
+    /// * `interp` - The interpolation function that takes:
+    ///   - the positions of the vertices on the triangle face,
+    ///   - the uv coordinates of the vertices on the triangle face,
+    ///   - the normals of the vertices on the triangle face, optional,
+    ///   - the interpolated vertices of the face,
+    ///   - the interpolated normals of the face, only if the normals are
+    ///     provided
+    /// * `normals` - The normals of the vertices of the mesh.
     pub fn subdivide_by_uvs<I>(
         &self,
         sub: &TriangleUVSubdivision,
         interp: I,
-    ) -> HalfEdgeMesh<'static>
+        normals: Option<&[Vec3]>,
+    ) -> (HalfEdgeMesh<'static>, Option<Box<[Vec3]>>)
     where
-        I: Fn(&[Vec3], &[Vec2], &mut [DVec3]),
+        I: Fn(&[Vec3], &[Vec2], Option<&[Vec3]>, &mut [DVec3], Option<&mut [Vec3]>),
     {
         log::debug!("Subdividing the mesh by uvs.: {:?}", sub);
         let new_num_faces = sub.n_tris as usize * self.faces.len();
         let mut new_positions = self.positions.to_vec();
         let mut new_triangles = vec![u32::MAX; new_num_faces * 3];
+        let mut new_normals = normals.map(|ns| ns.to_vec());
 
         // The new triangles that will be added to the mesh.
         let mut interp_pnts_per_face = vec![DVec3::ZERO; sub.uvs.len()].into_boxed_slice();
+        let mut interp_nmls_per_face = vec![Vec3::ZERO; sub.uvs.len()].into_boxed_slice();
         let mut new_tris_per_face = sub.indices.clone();
 
         // Records the shared edges of the face.
@@ -356,23 +364,36 @@ impl<'a> HalfEdgeMesh<'a> {
             .enumerate()
         {
             log::trace!("Processing face: {}", old_face_idx);
+            let do_process_normal = normals.is_some();
+
             // 1. Get the vertices of the face.
             let mut old_tri_verts = [Vec3::ZERO; 3];
             let mut old_tri_indis = [u32::MAX; 3];
+            let mut old_tri_nrmls = [Vec3::ZERO; 3];
             let darts_of_face = self.darts_of_face(old_face_idx);
             assert_eq!(darts_of_face.len(), 3, "The face must be a triangle.");
             old_tri_verts
                 .iter_mut()
                 .zip(darts_of_face.iter())
                 .zip(old_tri_indis.iter_mut())
-                .for_each(|((v, (_, d)), i)| {
+                .zip(old_tri_nrmls.iter_mut())
+                .for_each(|(((v, (_, d)), i), n)| {
                     let vert_idx = d.vert as usize;
                     *v = self.positions[vert_idx];
                     *i = vert_idx as u32;
+                    if do_process_normal {
+                        *n = normals.unwrap()[vert_idx];
+                    }
                 });
 
             // 2. Interpolate the new vertices.
-            interp(&old_tri_verts, &sub.uvs, &mut interp_pnts_per_face);
+            interp(
+                &old_tri_verts,
+                &sub.uvs,
+                Some(&old_tri_nrmls),
+                &mut interp_pnts_per_face,
+                Some(&mut interp_nmls_per_face),
+            );
 
             // Index is the edge, value is dart index.
             let mut local_shared = [u32::MAX; 3];
@@ -398,7 +419,11 @@ impl<'a> HalfEdgeMesh<'a> {
             let new_tri_vert_idx_offset = new_positions.len() as u32;
             log::trace!("num verts start: {}", new_positions.len());
             let mut next_new_tri_vert_idx = new_tri_vert_idx_offset;
-            for (new_pnt, loc) in interp_pnts_per_face.iter().zip(sub.locations.iter()) {
+            for ((new_pnt, new_nml), loc) in interp_pnts_per_face
+                .iter()
+                .zip(interp_nmls_per_face.iter())
+                .zip(sub.locations.iter())
+            {
                 match loc {
                     VertLoc::Vert(_) => {
                         // The vertex comes from the original face.
@@ -433,6 +458,9 @@ impl<'a> HalfEdgeMesh<'a> {
                             new_pnt.y as f32,
                             new_pnt.z as f32,
                         ));
+                        if do_process_normal {
+                            new_normals.as_mut().unwrap().push(*new_nml);
+                        }
                         next_new_tri_vert_idx += 1;
                     },
                 }
@@ -520,7 +548,10 @@ impl<'a> HalfEdgeMesh<'a> {
 
         new_positions.shrink_to_fit();
         new_triangles.shrink_to_fit();
-        HalfEdgeMesh::new(Cow::Owned(new_positions), &new_triangles)
+        (
+            HalfEdgeMesh::new(Cow::Owned(new_positions), &new_triangles),
+            new_normals.map(|ns| ns.into_boxed_slice()),
+        )
     }
 
     /// Get the number of vertices.

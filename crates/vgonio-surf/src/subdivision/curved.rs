@@ -17,11 +17,13 @@ use glam::{DVec3, Vec2, Vec3};
 /// * `ons` - The output normals of triangulated points.
 pub fn subdivide_triangle(
     vs: &[Vec3],
-    ns: &[Vec3],
     uvs: &[Vec2],
+    ns: Option<&[Vec3]>,
     ovs: &mut [DVec3],
-    ons: &mut [Vec3],
+    ons: Option<&mut [Vec3]>,
 ) {
+    let ns = ns.unwrap();
+    let ons = ons.unwrap();
     debug_assert!(vs.len() >= 3, "The input vertices must be a triangle.");
     debug_assert!(ns.len() >= 3, "The input normals must be a triangle.");
     debug_assert!(

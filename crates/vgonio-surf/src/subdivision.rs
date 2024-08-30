@@ -1,4 +1,5 @@
 //! Surface smoothing algorithms.
+
 pub mod curved;
 pub mod wiggle;
 
@@ -20,6 +21,7 @@ impl Subdivision {
         }
     }
 
+    /// Get the kind of subdivision.
     pub fn kind(&self) -> SubdivisionKind {
         match self {
             Subdivision::Curved(_) => SubdivisionKind::Curved,
@@ -31,6 +33,9 @@ impl Subdivision {
 /// The kind of subdivision.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum SubdivisionKind {
+    /// Subdivide the surface using curved PN triangles (3D Bezier triangles).
     Curved,
+    /// Regularly subdivide the surface, adding variation to the height of new
+    /// vertices.
     Wiggly,
 }
