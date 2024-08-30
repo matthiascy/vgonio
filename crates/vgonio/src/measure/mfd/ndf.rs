@@ -9,7 +9,7 @@ use base::{
     error::VgonioError,
     handle::Handle,
     impl_measured_data_trait, math,
-    math::{Sph2, Vec3Swizzles},
+    math::{theta, Sph2, Vec3Swizzles},
     partition::{DataCarriedOnHemisphereImageWriter, SphericalDomain, SphericalPartition},
     range::RangeByStepSizeInclusive,
     units,
@@ -273,7 +273,8 @@ fn measure_area_distribution_by_points<'a>(
                     if center.length() > radius {
                         continue;
                     }
-                    macro_area += mesh.facet_areas[facet_idx];
+                    macro_area +=
+                        mesh.facet_areas[facet_idx] * theta(&mesh.facet_normals[facet_idx]).cos();
                     num_normals += 1;
                     let zen = math::theta(normal);
                     for idx in classify_normal_by_zenith(zen, zenith, 1.0) {
