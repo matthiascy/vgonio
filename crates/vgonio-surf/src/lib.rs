@@ -1,5 +1,4 @@
 #![feature(seek_stream_len)]
-#![feature(new_uninit)]
 //! Heightfield
 #![warn(missing_docs)]
 

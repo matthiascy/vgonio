@@ -1,5 +1,4 @@
 #![feature(decl_macro)]
-#![feature(new_uninit)]
 #![feature(associated_type_defaults)]
 #![feature(downcast_unchecked)]
 

@@ -5,7 +5,6 @@
 #![feature(generic_const_exprs)]
 #![feature(allocator_api)]
 #![feature(thin_box)]
-#![feature(new_uninit)]
 #![feature(associated_type_defaults)]
 #![feature(negative_impls)]
 #![feature(min_specialization)]

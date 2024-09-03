@@ -10,7 +10,6 @@
 #![feature(adt_const_params)]
 #![feature(seek_stream_len)]
 #![feature(trait_upcasting)]
-#![feature(new_uninit)]
 #![feature(portable_simd)]
 #![feature(slice_pattern)]
 #![feature(os_str_display)]
