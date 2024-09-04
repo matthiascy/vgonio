@@ -1,4 +1,6 @@
 #[cfg(feature = "fitting")]
+use crate::app::gui::event::VgonioEvent;
+#[cfg(feature = "fitting")]
 use crate::fitting::{FittedModel, FittingProblemKind};
 
 #[cfg(debug_assertions)]
@@ -7,18 +9,20 @@ use crate::{
     app::{
         cache::{Cache, RawCache},
         gui::{
-            event::{EventLoopProxy, VgonioEvent},
+            event::EventLoopProxy,
             plotter::{angle_knob, Curve, VariantData},
         },
     },
     measure::{mfd::MeasuredNdfData, Measurement},
 };
+#[cfg(feature = "fitting")]
+use base::Isotropy;
 use base::{
     handle::Handle,
     range::RangeByStepSizeInclusive,
     units::{rad, Radians},
-    Isotropy,
 };
+
 use bxdf::distro::{MicrofacetDistribution, MicrofacetDistroKind};
 use egui::{Align, Ui};
 use std::any::Any;

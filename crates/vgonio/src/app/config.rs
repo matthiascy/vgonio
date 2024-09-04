@@ -104,7 +104,7 @@ impl Config {
     /// + On *nix system: "$XDG_CONFIG_HOME" or "$HOME/.config"
     ///
     /// + On windows system: `%APPDATA%` which is usually
-    /// "C:\Users\username\AppData\Roaming"
+    ///   "C:\Users\username\AppData\Roaming"
     ///
     /// + On macos system: "$HOME/Library/Application Support"
     ///
@@ -113,7 +113,7 @@ impl Config {
     /// + On *nix system: "$XDG_CACHE_HOME" or "$HOME/.cache"
     ///
     /// + On windows system: `%LOCALAPPDATA%` which is usually
-    /// "C:\Users\username\AppData\Local"
+    ///   "C:\Users\username\AppData\Local"
     ///
     /// + On macos system: "$HOME/Library/Caches"
     ///
@@ -122,10 +122,10 @@ impl Config {
     /// + On *nix system: "$XDG_DATA_HOME" or "$HOME/.local/share"
     ///
     /// + On windows system: `%LOCALAPPDATA%` which is usually
-    /// "C:\Users\username\AppData\Local" (same as cache directory)
+    ///   "C:\Users\username\AppData\Local" (same as cache directory)
     ///
-    /// + On macos system: "$HOME/Library/Application Support"
-    /// (same as configuration directory)
+    /// + On macos system: "$HOME/Library/Application Support" (same as
+    ///   configuration directory)
     pub fn load_config(filepath: Option<&Path>) -> Result<Self, VgonioError> {
         log::info!("Loading configurations...");
         let sys_config_dir = {

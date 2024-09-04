@@ -232,215 +232,207 @@ impl BsdfMeasurementTab {
                             ui.end_row();
                         }
                     });
+                // TODO: Emitter sector
+                #[cfg(feature = "vdbg")]
                 self.params.emitter.ui(ui, |params, ui| {
-                    // TODO: Emitter sector
-                    #[cfg(feature = "vdbg")]
-                    {
-                        if debug_draw {
-                            ui.label("Samples");
-                            ui.horizontal_wrapped(|ui| {
-                                if ui
-                                    .button("Generate")
-                                    .on_hover_text("Generate samples")
-                                    .clicked()
-                                {
-                                    self.event_loop.send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::UpdateEmitterSamples(
-                                            params.generate_unit_samples(
-                                                Rads::ZERO,
-                                                Rads::TAU,
-                                                params.num_rays as usize,
-                                            ),
+                    if debug_draw {
+                        ui.label("Samples");
+                        ui.horizontal_wrapped(|ui| {
+                            if ui
+                                .button("Generate")
+                                .on_hover_text("Generate samples")
+                                .clicked()
+                            {
+                                self.event_loop.send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::UpdateEmitterSamples(
+                                        params.generate_unit_samples(
+                                            Rads::ZERO,
+                                            Rads::TAU,
+                                            params.num_rays as usize,
                                         ),
+                                    ),
+                                ));
+                            }
+                            if ui
+                                .add(ToggleSwitch::new(&mut self.debug.emitter_samples_drawing))
+                                .changed()
+                            {
+                                self.event_loop.send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::ToggleEmitterSamplesDrawing(
+                                        self.debug.emitter_samples_drawing,
+                                    ),
+                                ));
+                            }
+                        });
+                        ui.end_row();
+
+                        ui.label("Sample rays:");
+                        ui.horizontal_wrapped(|ui| {
+                            if ui
+                                .add(ToggleSwitch::new(&mut self.debug.emitter_rays_drawing))
+                                .changed()
+                            {
+                                self.event_loop.send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::ToggleEmitterRaysDrawing(
+                                        self.debug.emitter_rays_drawing,
+                                    ),
+                                ));
+
+                                if self.debug.emitter_rays_drawing {
+                                    self.event_loop.send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::EmitRays,
                                     ));
                                 }
-                                if ui
-                                    .add(ToggleSwitch::new(&mut self.debug.emitter_samples_drawing))
-                                    .changed()
-                                {
-                                    self.event_loop.send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::ToggleEmitterSamplesDrawing(
-                                            self.debug.emitter_samples_drawing,
-                                        ),
-                                    ));
-                                }
-                            });
-                            ui.end_row();
+                            }
 
-                            ui.label("Sample rays:");
-                            ui.horizontal_wrapped(|ui| {
-                                if ui
-                                    .add(ToggleSwitch::new(&mut self.debug.emitter_rays_drawing))
-                                    .changed()
-                                {
-                                    self.event_loop.send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::ToggleEmitterRaysDrawing(
-                                            self.debug.emitter_rays_drawing,
-                                        ),
-                                    ));
-
-                                    if self.debug.emitter_rays_drawing {
-                                        self.event_loop.send_event(VgonioEvent::Debugging(
-                                            DebuggingEvent::EmitRays,
-                                        ));
-                                    }
-                                }
-
-                                if ui
-                                    .add(
-                                        egui::Slider::new(
-                                            &mut self.debug.emitter_ray_param_t,
-                                            1.0..=orbit_radius * 2.0,
-                                        )
-                                        .text("t"),
+                            if ui
+                                .add(
+                                    egui::Slider::new(
+                                        &mut self.debug.emitter_ray_param_t,
+                                        1.0..=orbit_radius * 2.0,
                                     )
-                                    .changed()
-                                {
-                                    self.event_loop.send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::UpdateRayParams {
-                                            t: self.debug.emitter_ray_param_t,
-                                        },
-                                    ));
-                                }
-                            });
-                            ui.end_row();
+                                    .text("t"),
+                                )
+                                .changed()
+                            {
+                                self.event_loop.send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::UpdateRayParams {
+                                        t: self.debug.emitter_ray_param_t,
+                                    },
+                                ));
+                            }
+                        });
+                        ui.end_row();
 
-                            ui.label("Measurement Points:");
-                            ui.horizontal_wrapped(|ui| {
-                                let zenith_count = params.zenith.step_count_wrapped();
-                                let count = zenith_count * params.azimuth.step_count_wrapped();
+                        ui.label("Measurement Points:");
+                        ui.horizontal_wrapped(|ui| {
+                            let zenith_count = params.zenith.step_count_wrapped();
+                            let count = zenith_count * params.azimuth.step_count_wrapped();
 
-                                let old_index = self.debug.measurement_point_index;
+                            let old_index = self.debug.measurement_point_index;
 
-                                if ui.button("\u{25C0}").clicked() {
-                                    self.debug.measurement_point_index =
-                                        (self.debug.measurement_point_index - 1).max(0)
-                                            % count as i32;
-                                }
+                            if ui.button("\u{25C0}").clicked() {
+                                self.debug.measurement_point_index =
+                                    (self.debug.measurement_point_index - 1).max(0) % count as i32;
+                            }
 
-                                if ui.button("\u{25B6}").clicked() {
-                                    self.debug.measurement_point_index =
-                                        (self.debug.measurement_point_index + 1).max(0)
-                                            % count as i32;
-                                }
+                            if ui.button("\u{25B6}").clicked() {
+                                self.debug.measurement_point_index =
+                                    (self.debug.measurement_point_index + 1).max(0) % count as i32;
+                            }
 
-                                if old_index != self.debug.measurement_point_index {
-                                    let azimuth_idx =
-                                        self.debug.measurement_point_index / zenith_count as i32;
-                                    let zenith_idx =
-                                        self.debug.measurement_point_index % zenith_count as i32;
-                                    let zenith = params.zenith.step(zenith_idx as usize);
-                                    let azimuth = params.azimuth.step(azimuth_idx as usize);
+                            if old_index != self.debug.measurement_point_index {
+                                let azimuth_idx =
+                                    self.debug.measurement_point_index / zenith_count as i32;
+                                let zenith_idx =
+                                    self.debug.measurement_point_index % zenith_count as i32;
+                                let zenith = params.zenith.step(zenith_idx as usize);
+                                let azimuth = params.azimuth.step(azimuth_idx as usize);
 
-                                    self.event_loop.send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::UpdateEmitterPosition {
-                                            position: Sph2::new(zenith, azimuth),
-                                        },
-                                    ));
-                                }
+                                self.event_loop.send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::UpdateEmitterPosition {
+                                        position: Sph2::new(zenith, azimuth),
+                                    },
+                                ));
+                            }
 
-                                if ui
-                                    .add(ToggleSwitch::new(
-                                        &mut self.debug.measurement_points_drawing,
-                                    ))
-                                    .changed()
-                                {
-                                    self.event_loop.send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::ToggleMeasurementPointsDrawing(
-                                            self.debug.measurement_points_drawing,
-                                        ),
-                                    ));
-                                    self.event_loop.send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::UpdateMeasurementPoints(
-                                            params.generate_measurement_points(),
-                                        ),
-                                    ));
-                                }
-                            });
-                            ui.end_row();
-                        }
+                            if ui
+                                .add(ToggleSwitch::new(
+                                    &mut self.debug.measurement_points_drawing,
+                                ))
+                                .changed()
+                            {
+                                self.event_loop.send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::ToggleMeasurementPointsDrawing(
+                                        self.debug.measurement_points_drawing,
+                                    ),
+                                ));
+                                self.event_loop.send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::UpdateMeasurementPoints(
+                                        params.generate_measurement_points(),
+                                    ),
+                                ));
+                            }
+                        });
+                        ui.end_row();
                     }
                 });
                 // TODO: Add multiple receivers
+                #[cfg(feature = "vdbg")]
                 for receiver in &mut self.params.receivers {
                     receiver.ui(ui, |params, ui| {
-                        #[cfg(feature = "vdbg")]
-                        {
-                            if debug_draw {
-                                ui.label("Dome:");
-                                ui.horizontal_wrapped(|ui| {
-                                    if ui.button("update").clicked() {
-                                        self.event_loop.send_event(VgonioEvent::Debugging(
-                                            DebuggingEvent::UpdateDetectorPatches(
-                                                params.partitioning(),
-                                            ),
-                                        ));
-                                    }
-                                    if ui
-                                        .add(ToggleSwitch::new(
-                                            &mut self.debug.detector_dome_drawing,
-                                        ))
-                                        .changed()
-                                    {
-                                        self.event_loop.send_event(VgonioEvent::Debugging(
-                                            DebuggingEvent::ToggleDetectorDomeDrawing(
-                                                self.debug.detector_dome_drawing,
-                                            ),
-                                        ));
-                                    }
-                                });
-                                ui.end_row();
-
-                                ui.label("Trajectories:");
-                                ui.horizontal_wrapped(|ui| {
-                                    let mut ray_trajectory_index_changed = false;
-                                    if ui.button("\u{25C0}").clicked() {
-                                        self.debug.ray_trajectory_index =
-                                            (self.debug.ray_trajectory_index - 1).max(0);
-                                        ray_trajectory_index_changed = true;
-                                    }
-                                    if ui.button("\u{25B6}").clicked() {
-                                        self.debug.ray_trajectory_index =
-                                            (self.debug.ray_trajectory_index + 1).max(0);
-                                        ray_trajectory_index_changed = true;
-                                    }
-                                    ui.label("reflected");
-                                    let changed0 = ui
-                                        .add(ToggleSwitch::new(
-                                            &mut self.debug.ray_trajectories_drawing_reflected,
-                                        ))
-                                        .changed();
-                                    ui.label("missed");
-                                    let changed1 = ui
-                                        .add(ToggleSwitch::new(
-                                            &mut self.debug.ray_trajectories_drawing_missed,
-                                        ))
-                                        .changed();
-                                    if changed0 || changed1 || ray_trajectory_index_changed {
-                                        self.event_loop.send_event(VgonioEvent::Debugging(
-                                            DebuggingEvent::UpdateRayTrajectoriesDrawing {
-                                                index: self.debug.ray_trajectory_index as usize,
-                                                missed: self.debug.ray_trajectories_drawing_missed,
-                                                reflected: self
-                                                    .debug
-                                                    .ray_trajectories_drawing_reflected,
-                                            },
-                                        ));
-                                    }
-                                });
-                                ui.end_row();
-
-                                ui.label("Collected rays:");
-                                if ui
-                                    .add(ToggleSwitch::new(&mut self.debug.ray_hit_points_drawing))
-                                    .changed()
-                                {
+                        if debug_draw {
+                            ui.label("Dome:");
+                            ui.horizontal_wrapped(|ui| {
+                                if ui.button("update").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Debugging(
-                                        DebuggingEvent::ToggleCollectedRaysDrawing(
-                                            self.debug.ray_hit_points_drawing,
+                                        DebuggingEvent::UpdateDetectorPatches(
+                                            params.partitioning(),
                                         ),
                                     ));
                                 }
+                                if ui
+                                    .add(ToggleSwitch::new(&mut self.debug.detector_dome_drawing))
+                                    .changed()
+                                {
+                                    self.event_loop.send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::ToggleDetectorDomeDrawing(
+                                            self.debug.detector_dome_drawing,
+                                        ),
+                                    ));
+                                }
+                            });
+                            ui.end_row();
+
+                            ui.label("Trajectories:");
+                            ui.horizontal_wrapped(|ui| {
+                                let mut ray_trajectory_index_changed = false;
+                                if ui.button("\u{25C0}").clicked() {
+                                    self.debug.ray_trajectory_index =
+                                        (self.debug.ray_trajectory_index - 1).max(0);
+                                    ray_trajectory_index_changed = true;
+                                }
+                                if ui.button("\u{25B6}").clicked() {
+                                    self.debug.ray_trajectory_index =
+                                        (self.debug.ray_trajectory_index + 1).max(0);
+                                    ray_trajectory_index_changed = true;
+                                }
+                                ui.label("reflected");
+                                let changed0 = ui
+                                    .add(ToggleSwitch::new(
+                                        &mut self.debug.ray_trajectories_drawing_reflected,
+                                    ))
+                                    .changed();
+                                ui.label("missed");
+                                let changed1 = ui
+                                    .add(ToggleSwitch::new(
+                                        &mut self.debug.ray_trajectories_drawing_missed,
+                                    ))
+                                    .changed();
+                                if changed0 || changed1 || ray_trajectory_index_changed {
+                                    self.event_loop.send_event(VgonioEvent::Debugging(
+                                        DebuggingEvent::UpdateRayTrajectoriesDrawing {
+                                            index: self.debug.ray_trajectory_index as usize,
+                                            missed: self.debug.ray_trajectories_drawing_missed,
+                                            reflected: self
+                                                .debug
+                                                .ray_trajectories_drawing_reflected,
+                                        },
+                                    ));
+                                }
+                            });
+                            ui.end_row();
+
+                            ui.label("Collected rays:");
+                            if ui
+                                .add(ToggleSwitch::new(&mut self.debug.ray_hit_points_drawing))
+                                .changed()
+                            {
+                                self.event_loop.send_event(VgonioEvent::Debugging(
+                                    DebuggingEvent::ToggleCollectedRaysDrawing(
+                                        self.debug.ray_hit_points_drawing,
+                                    ),
+                                ));
                             }
                         }
                     });

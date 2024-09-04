@@ -64,7 +64,7 @@ pub mod vgmo {
 
     /// Returns the corresponding [`VgmoHeaderExt`] variant for the given
     /// measurement data.
-    pub fn vgmo_header_ext_from_data(data: &Box<dyn MeasuredData>) -> VgmoHeaderExt {
+    pub fn vgmo_header_ext_from_data(data: &(dyn MeasuredData + 'static)) -> VgmoHeaderExt {
         match data.kind() {
             MeasurementKind::Bsdf => {
                 let bsdf = data.downcast_ref::<MeasuredBsdfData>().unwrap();
@@ -74,15 +74,11 @@ pub mod vgmo {
             },
             MeasurementKind::Ndf => {
                 let ndf = data.downcast_ref::<MeasuredNdfData>().unwrap();
-                VgmoHeaderExt::Ndf {
-                    params: ndf.params.clone(),
-                }
+                VgmoHeaderExt::Ndf { params: ndf.params }
             },
             MeasurementKind::Gaf => {
                 let msf = data.downcast_ref::<MeasuredGafData>().unwrap();
-                VgmoHeaderExt::Gaf {
-                    params: msf.params.clone(),
-                }
+                VgmoHeaderExt::Gaf { params: msf.params }
             },
             MeasurementKind::Sdf => VgmoHeaderExt::Sdf,
             _ => {
@@ -201,7 +197,7 @@ pub mod vgmo {
                 );
                 Ok(Box::new(MeasuredBsdfData::read_from_vgmo(
                     reader,
-                    &params,
+                    params,
                     header.meta.encoding,
                     header.meta.compression,
                 )?))
@@ -269,7 +265,7 @@ pub mod vgmo {
     pub fn write<W: Write + Seek>(
         writer: &mut BufWriter<W>,
         header: Header<VgmoHeaderExt>,
-        measured: &Box<dyn MeasuredData>,
+        measured: &(dyn MeasuredData + 'static),
     ) -> Result<(), WriteFileErrorKind> {
         let init_size = writer.stream_len().unwrap();
         log::debug!("Writing VGMO file with writer at position {}", init_size);
@@ -535,7 +531,7 @@ pub mod vgmo {
                         SphericalPartition::read_skipping_rings(reader);
                     let params = ReceiverParams {
                         domain,
-                        precision: precision,
+                        precision,
                         scheme,
                     };
                     let expected_num_rings = params.num_rings();
@@ -723,7 +719,7 @@ pub mod vgmo {
                             vec![0u8; EmitterParams::required_size(version, nrays64).unwrap()]
                                 .into_boxed_slice();
                         reader.read_exact(&mut buf)?;
-                        EmitterParams::read_from_buf(version, &mut buf, nrays64)
+                        EmitterParams::read_from_buf(version, &buf, nrays64)
                     };
                     // TODO: read multiple receivers
                     let receiver = ReceiverParams::read(version, reader);
@@ -821,11 +817,11 @@ pub mod vgmo {
     /// Writes the given slice to the buffer in little-endian format.
     #[track_caller]
     pub fn write_slice_to_buf<T: LittleEndianWrite>(src: &[T], dst: &mut [u8]) {
-        let size: usize = mem::size_of::<T>();
+        let size: usize = size_of::<T>();
         debug_assert!(
-            dst.len() >= src.len() * size,
+            dst.len() >= size_of_val(src),
             "Write array to buffer: desired size {}, got {}",
-            src.len() * size,
+            size_of_val(src),
             dst.len()
         );
         for i in 0..src.len() {
@@ -834,9 +830,9 @@ pub mod vgmo {
     }
 
     pub fn write_u64_slice_as_u32_to_buf(src: &[u64], dst: &mut [u8]) {
-        let size: usize = mem::size_of::<u32>();
+        let size: usize = size_of::<u32>();
         debug_assert!(
-            dst.len() >= src.len() * size,
+            dst.len() >= size_of_val(src),
             "Write array to buffer: desired size {}, got {}",
             src.len() * size,
             dst.len()
@@ -1138,8 +1134,8 @@ pub mod vgmo {
 
             Ok(Self {
                 n_bounce,
-                n_received: n_received as u64,
-                n_missed: n_missed as u64,
+                n_received,
+                n_missed,
                 n_spectrum,
                 n_ray_stats,
                 e_captured,
@@ -1991,7 +1987,7 @@ pub fn write_single_measured_data_to_file(
         }
     };
 
-    match measured.write_to_file(&filepath, &format) {
+    match measured.write_to_file(filepath, &format) {
         Ok(_) => {
             println!(
                 "      {} Successfully saved as \"{}\"",

@@ -97,7 +97,7 @@ impl<const N: usize> Shape for [usize; N] {
     type Metadata = DynShapeMetadata<[usize; N]>;
 
     fn new_metadata(dims: &Self::Underlying, layout: MemLayout) -> Self::Metadata {
-        let shape = dims.clone();
+        let shape = *dims;
         let mut strides = [0usize; N];
         compute_strides(dims.as_slice(), &mut strides, layout);
         DynShapeMetadata { shape, strides }

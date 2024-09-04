@@ -521,7 +521,7 @@ impl RawCache {
             let refractive_indices = RefractiveIndexRegistry::read_iors_from_file(path).unwrap();
             let iors = iors.entry(medium).or_default();
             for ior in refractive_indices.iter() {
-                if !iors.contains(&ior) {
+                if !iors.contains(ior) {
                     iors.push(*ior);
                 }
             }

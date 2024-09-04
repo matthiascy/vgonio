@@ -128,7 +128,7 @@ impl Measurement {
                         encoding: *encoding,
                         compression: *compression,
                     },
-                    extra: vgmo_header_ext_from_data(&self.measured),
+                    extra: vgmo_header_ext_from_data(&*self.measured),
                 };
                 let filepath = filepath.with_extension("vgmo");
                 let file = std::fs::OpenOptions::new()
@@ -140,7 +140,7 @@ impl Measurement {
                         VgonioError::from_io_error(err, "Failed to open measurement file.")
                     })?;
                 let mut writer = BufWriter::new(file);
-                crate::io::vgmo::write(&mut writer, header, &self.measured).map_err(|err| {
+                crate::io::vgmo::write(&mut writer, header, &*self.measured).map_err(|err| {
                     VgonioError::from_write_file_error(
                         WriteFileError {
                             path: filepath.to_owned().into_boxed_path(),
@@ -163,18 +163,18 @@ impl Measurement {
             OutputFileFormatOption::Exr { resolution } => match self.measured.kind() {
                 MeasurementKind::Bsdf => {
                     let bsdf = self.measured.downcast_ref::<MeasuredBsdfData>().unwrap();
-                    bsdf.write_as_exr(&filepath, &self.timestamp, *resolution)?
+                    bsdf.write_as_exr(filepath, &self.timestamp, *resolution)?
                 },
                 MeasurementKind::Ndf => {
                     let ndf = self.measured.downcast_ref::<MeasuredNdfData>().unwrap();
-                    ndf.write_as_exr(&filepath, &self.timestamp, *resolution)?
+                    ndf.write_as_exr(filepath, &self.timestamp, *resolution)?
                 },
                 MeasurementKind::Gaf => {
                     todo!("Writing MSF to EXR is not supported yet.");
                 },
                 MeasurementKind::Sdf => {
                     let sdf = self.measured.downcast_ref::<MeasuredSdfData>().unwrap();
-                    sdf.write_histogram_as_exr(&filepath, &self.timestamp, *resolution)?;
+                    sdf.write_histogram_as_exr(filepath, &self.timestamp, *resolution)?;
                 },
                 _ => {},
             },
@@ -419,13 +419,7 @@ impl DataCarriedOnHemisphere for VgonioBrdf {
 impl DataCarriedOnHemisphere for MeasuredNdfData {
     type Extra = SphericalPartition;
 
-    fn is_carried_by_hemisphere(&self) -> bool {
-        if self.params.mode.is_by_points() {
-            false
-        } else {
-            true
-        }
-    }
+    fn is_carried_by_hemisphere(&self) -> bool { !self.params.mode.is_by_points() }
 
     fn new_extra(&self) -> Option<Box<SphericalPartition>> {
         match self.params.mode {
@@ -476,10 +470,10 @@ impl<'a> DataCarriedOnHemisphereSampler<'a, VgonioBrdf> {
     ///
     /// * `wi` - The incident direction; it must exist in the BSDF snapshots.
     /// * `wo` - The outgoing direction; if it doesn't exist in the BSDF
-    ///  snapshots, it will be interpolated.
+    ///   snapshots, it will be interpolated.
     /// * `out` - The interpolated BSDF values at the given position; it should
-    /// be pre-allocated, and the number of elements should NOT exceed the
-    /// number of wavelengths in the BSDF data; panics in case it's empty.
+    ///   be pre-allocated, and the number of elements should NOT exceed the
+    ///   number of wavelengths in the BSDF data; panics in case it's empty.
     pub fn sample_point_at(&self, wi: Sph2, wo: Sph2, out: &mut [f32]) {
         log::trace!(
             "Sampling at wi: ({}, {}), wo: ({} {})",
@@ -789,7 +783,8 @@ impl<'a> DataCarriedOnHemisphereSampler<'a, MeasuredNdfData> {
                 patch2_sample
             );
             log::trace!("  - Barycentric coordinates: ({}, {}, {})", u, v, w);
-            return u * patch0_sample + v * patch1_sample + w * patch2_sample;
+
+            u * patch0_sample + v * patch1_sample + w * patch2_sample
         } else if upper_ring_idx == lower_ring_idx && upper_ring_idx == partition.n_rings() - 1 {
             // This should be the last ring.
             // Interpolate between two patches.
@@ -818,7 +813,8 @@ impl<'a> DataCarriedOnHemisphereSampler<'a, MeasuredNdfData> {
             let t = (math::circular_angle_dist(wm.phi, center.0.phi)
                 / math::circular_angle_dist(center.1.phi, center.0.phi))
             .clamp(0.0, 1.0);
-            return (1.0 - t) * patch0_samples + t * patch1_samples;
+
+            (1.0 - t) * patch0_samples + t * patch1_samples
         } else {
             // Interpolate inside a quadrilateral.
             let (upper_t, upper_patch_center, upper_patch_idx) = {
@@ -918,7 +914,8 @@ impl<'a> DataCarriedOnHemisphereSampler<'a, MeasuredNdfData> {
                 (1.0 - upper_t) * upper_patch0_sample + upper_t * upper_patch1_samples;
             let lower_interp =
                 (1.0 - lower_t) * lower_patch0_samples + lower_t * lower_patch1_samples;
-            return (1.0 - s) * upper_interp + s * lower_interp;
+
+            (1.0 - s) * upper_interp + s * lower_interp
         }
     }
 

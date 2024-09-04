@@ -291,7 +291,7 @@ impl SurfaceViewerStates {
         gui: &Arc<RwLock<UiRenderer>>,
     ) {
         assert!(
-            self.states.get(&viewer).is_none(),
+            !self.states.contains_key(&viewer),
             "Surface viewer with the same UUID already exists"
         );
         let mut state = SurfaceViewerState::new(

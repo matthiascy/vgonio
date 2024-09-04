@@ -674,7 +674,7 @@ impl VisibilityEstimator {
         as_image: bool,
     ) -> Result<(), VgonioError> {
         log::info!("Saving depth attachment to {:?}", dir);
-        self.depth_attachment.save(device, dir, &names, as_image)
+        self.depth_attachment.save(device, dir, names, as_image)
     }
 
     fn compute_area(&self, device: &wgpu::Device, color_attachment: &ColorAttachment) -> Vec<u32> {
@@ -1417,7 +1417,7 @@ impl MeasuredGafData {
         RangeByStepSizeInclusive<Radians>,
         RangeByStepSizeInclusive<Radians>,
     ) {
-        (self.params.azimuth.clone(), self.params.zenith.clone())
+        (self.params.azimuth, self.params.zenith)
     }
 
     /// Returns the Masking Shadowing Function data slice for the given

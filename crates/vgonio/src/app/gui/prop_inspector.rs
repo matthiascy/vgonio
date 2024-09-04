@@ -1,4 +1,7 @@
-use base::{partition::beckers, Isotropy, MeasurementKind};
+#[cfg(feature = "fitting")]
+use base::Isotropy;
+use base::{partition::beckers, MeasurementKind};
+#[cfg(feature = "fitting")]
 use bxdf::{brdf::BxdfFamily, distro::MicrofacetDistroKind};
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;

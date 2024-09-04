@@ -144,9 +144,11 @@ impl RefractiveIndexRegistry {
 }
 
 /// Material's complex refractive index, which varies with the wavelength of the
-/// light, mainly used in [`RefractiveIndexRegistry`].
-/// Wavelengths are in *nanometres*; 0.0 means that the refractive index
-/// is constant over all the wavelengths.
+/// light, mainly used in [`RefractiveIndexRegistry`]. Wavelengths are in
+/// *nanometres*.
+///
+/// Wavelength 0.0 means that the refractive index is constant over all the
+/// wavelengths.
 #[derive(Copy, Clone, PartialEq)]
 pub struct RefractiveIndexRecord {
     /// corresponding wavelength in nanometres.

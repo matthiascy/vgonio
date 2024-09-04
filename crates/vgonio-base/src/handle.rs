@@ -71,7 +71,7 @@ where
     pub fn with_type_id(variant: u8) -> Self {
         let mut id = Uuid::new_v4().into_bytes();
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        hasher.write_u128(unsafe { std::mem::transmute(TypeId::of::<T>()) });
+        hasher.write_u128(unsafe { std::mem::transmute::<TypeId, u128>(TypeId::of::<T>()) });
         let type_id = hasher.finish();
         id[8..].copy_from_slice(&type_id.to_le_bytes());
         id[7] = variant;
@@ -104,7 +104,7 @@ where
     pub fn same_type_id_as<U: 'static>(&self) -> bool {
         let embedded = u64::from_le_bytes(self.id.as_bytes()[8..].try_into().unwrap());
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        hasher.write_u128(unsafe { std::mem::transmute(TypeId::of::<U>()) });
+        hasher.write_u128(unsafe { std::mem::transmute::<TypeId, u128>(TypeId::of::<U>()) });
         let type_id_hash = hasher.finish();
         embedded == type_id_hash
     }

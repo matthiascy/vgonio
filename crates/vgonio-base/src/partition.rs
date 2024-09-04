@@ -338,18 +338,16 @@ impl SphericalPartition {
             } else {
                 (ring_idx - 1, ring_idx)
             }
+        } else if ring_idx == self.rings.len() - 1 {
+            (ring_idx, ring_idx)
         } else {
-            if ring_idx == self.rings.len() - 1 {
-                (ring_idx, ring_idx)
-            } else {
-                (ring_idx, ring_idx + 1)
-            }
+            (ring_idx, ring_idx + 1)
         }
     }
 
     /// Mirror the patches and rings of the upper hemisphere to the lower
     /// hemisphere.
-    fn mirror_partition(patches: &mut Vec<Patch>, rings: &mut Vec<Ring>) {
+    fn mirror_partition(patches: &mut [Patch], rings: &mut [Ring]) {
         for ring in rings.iter_mut() {
             ring.theta_min = std::f32::consts::PI - ring.theta_min;
             ring.theta_max = std::f32::consts::PI - ring.theta_max;

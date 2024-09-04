@@ -226,7 +226,7 @@ pub fn refract_cos(wi: &Vec3, n: &Vec3, cos: f64, eta: f64) -> Refracted {
 ///   boundary between two media (ends up on the point of incidence).
 /// * `n` - The normal vector (must be normalized).
 /// * `eta_o` - The refractive index of the outside medium (where `n` is
-///  pointing, primary medium or incident medium).
+///   pointing, primary medium or incident medium).
 /// * `eta_i` - The refractive index of the inside medium (transmitted medium).
 #[must_use]
 #[inline(always)]
@@ -269,7 +269,7 @@ pub fn refract2(wi: &Vec3, n: &Vec3, eta_o: f64, eta_i: f64) -> Refracted {
 /// * `eta_t` - The refractive index of the transmitted medium.
 pub fn reflectance_schlick(cos_i: f64, eta_i: f64, eta_t: f64) -> f64 {
     debug_assert!(
-        cos_i >= 0.0 && cos_i <= 1.0,
+        (0.0..=1.0).contains(&cos_i),
         "The cosine of the incident angle must be in the range [0, 1]."
     );
     debug_assert!(

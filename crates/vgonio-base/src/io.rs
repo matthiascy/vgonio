@@ -493,7 +493,7 @@ pub fn write_binary_samples<W: Write>(
 }
 
 /// Write the data samples to the given writer.
-pub fn write_f32_data_samples_binary<'a, W: Write>(
+pub fn write_f32_data_samples_binary<W: Write>(
     writer: &mut BufWriter<W>,
     comp: CompressionScheme,
     samples: &[f32],

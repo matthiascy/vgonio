@@ -172,7 +172,7 @@ pub fn plot_brdf_slice(
                 .into();
         let brdfs = PyList::new_bound(
             py,
-            brdf.into_iter()
+            brdf.iter()
                 .map(|(brdf, label)| {
                     let sampler = DataCarriedOnHemisphereSampler::new(*brdf).unwrap();
                     let theta = brdf
@@ -243,7 +243,7 @@ pub fn plot_brdf_slice_in_plane(brdf: &[&VgonioBrdf], phi: Radians) -> PyResult<
                 .into();
         let brdfs = PyList::new_bound(
             py,
-            brdf.into_iter()
+            brdf.iter()
                 .map(|&brdf| {
                     let sampler = DataCarriedOnHemisphereSampler::new(brdf).unwrap();
                     let mut theta_i = brdf
@@ -305,7 +305,7 @@ pub fn plot_ndf(
                 .into();
         let slices = PyList::new_bound(
             py,
-            ndf.into_iter()
+            ndf.iter()
                 .enumerate()
                 .map(|(i, &ndf)| {
                     let label = labels
@@ -378,7 +378,7 @@ pub fn plot_gaf(
                 .into();
         let slices = PyList::new_bound(
             py,
-            gaf.into_iter()
+            gaf.iter()
                 .enumerate()
                 .map(|(i, &gaf)| {
                     let label = labels
@@ -468,13 +468,9 @@ pub fn plot_brdf_map(
 
                     let pixels = match &data.sample_data {
                         FlatSamples::F32(pixels) => {
-                            let img_data = PyArray2::zeros_bound(
-                                py,
-                                (size.0 as usize, size.1 as usize),
-                                false,
-                            );
+                            let img_data = PyArray2::zeros_bound(py, (size.0, size.1), false);
                             unsafe {
-                                img_data.as_slice_mut().unwrap().copy_from_slice(&pixels);
+                                img_data.as_slice_mut().unwrap().copy_from_slice(pixels);
                             }
                             img_data
                         },

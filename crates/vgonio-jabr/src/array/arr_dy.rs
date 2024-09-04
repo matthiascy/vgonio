@@ -54,7 +54,7 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
     /// * `shape` - The shape of the array. Only one dimension size can be -1,
     ///   which means that the size of that dimension is inferred.
     /// * `iter` - The iterator to create the array from. The number of elements
-    ///  in the iterator must be equal to the number of elements in the shape.
+    ///   in the iterator must be equal to the number of elements in the shape.
     pub fn from_iterator(shape: [isize; N], iter: impl IntoIterator<Item = T>) -> Self {
         let num_minuses = shape.iter().filter(|&&x| x == -1).count();
         assert!(

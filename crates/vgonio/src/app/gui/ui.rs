@@ -1,11 +1,10 @@
 use super::{docking::DockSpace, event::EventResponse};
 #[cfg(feature = "fitting")]
 use crate::fitting::{
-    FittedModel, FittingProblem, FittingProblemKind, MicrofacetBrdfFittingProblem,
-    MicrofacetDistributionFittingProblem,
+    FittedModel, FittingProblem, FittingProblemKind, FittingReport, MfdFittingData,
+    MicrofacetBrdfFittingProblem, MicrofacetDistributionFittingProblem,
 };
 #[cfg(feature = "fitting")]
-use crate::fitting::{FittingReport, MfdFittingData};
 use crate::measure::{
     bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
     mfd::{MeasuredGafData, MeasuredNdfData},
@@ -30,12 +29,14 @@ use crate::{
     },
     measure::Measurement,
 };
+#[cfg(feature = "fitting")]
+use base::range::RangeByStepSizeInclusive;
 use base::{
     handle::Handle,
     io::{CompressionScheme, FileEncoding},
-    range::RangeByStepSizeInclusive,
     MeasurementKind,
 };
+#[cfg(feature = "fitting")]
 use bxdf::brdf::BxdfFamily;
 use egui_file_dialog::{DialogMode, FileDialog};
 use gxtk::{context::GpuContext, mesh::RenderableMesh};
@@ -581,7 +582,7 @@ impl VgonioGui {
                         // Micro-surface measurement data
                         log::debug!("Opening micro-surface measurement output: {:?}", filepath);
                         self.cache.write(|cache| {
-                            match cache.load_micro_surface_measurement(&self.config, &filepath) {
+                            match cache.load_micro_surface_measurement(&self.config, filepath) {
                                 Ok(hdl) => {
                                     measurements.push(hdl);
                                 },

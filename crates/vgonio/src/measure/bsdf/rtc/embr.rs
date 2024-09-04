@@ -435,7 +435,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
         #[cfg(not(feature = "vdbg"))]
         iors_t,
     );
-    #[cfg(all(debug_assertions))]
+    #[cfg(debug_assertions)]
     println!(
         "        {} Trace {} rays ({} streams rays)",
         ansi::YELLOW_GT,

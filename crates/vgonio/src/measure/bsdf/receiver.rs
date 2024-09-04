@@ -378,7 +378,7 @@ impl Receiver {
             }
 
             debug_assert!(stats.is_valid(), "stats is invalid");
-            #[cfg(all(debug_assertions))]
+            #[cfg(debug_assertions)]
             log::debug!("{:?}", stats);
 
             #[cfg(feature = "bench")]
@@ -462,9 +462,7 @@ impl Receiver {
 
                         // Compute the index of the patch where the ray is
                         // collected.
-                        let patch_idx = self
-                            .patches
-                            .contains(Sph2::from_cartesian((*ray.dir).into()));
+                        let patch_idx = self.patches.contains(Sph2::from_cartesian(*ray.dir));
 
                         // Update the number of rays reflected by the surface.
                         for (i, energy) in ray.energy.iter().enumerate() {
@@ -543,7 +541,7 @@ impl Receiver {
                 stats.n_escaped_mut()[i] = escaped;
             }
 
-            #[cfg(all(debug_assertions))]
+            #[cfg(debug_assertions)]
             log::debug!("{:?}", stats);
 
             match out_stats {

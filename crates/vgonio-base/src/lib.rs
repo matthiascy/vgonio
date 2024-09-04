@@ -21,6 +21,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
+    hash::Hash,
     marker::{ConstParamTy, StructuralPartialEq},
 };
 
@@ -43,7 +44,7 @@ pub mod partition;
 
 /// Indicates whether something is uniform in all directions or not.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[derive(Debug, Copy, Clone, Hash, ConstParamTy)]
+#[derive(Debug, Copy, Clone, ConstParamTy)]
 pub enum Isotropy {
     /// Uniformity in all directions.
     #[cfg_attr(feature = "cli", clap(alias = "iso"))]
@@ -72,10 +73,19 @@ impl Eq for Isotropy {}
 
 impl PartialEq<Self> for Isotropy {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Isotropy::Isotropic, Isotropy::Isotropic) => true,
-            (Isotropy::Anisotropic, Isotropy::Anisotropic) => true,
-            _ => false,
+        matches!(
+            (self, other),
+            (Isotropy::Isotropic, Isotropy::Isotropic)
+                | (Isotropy::Anisotropic, Isotropy::Anisotropic)
+        )
+    }
+}
+
+impl Hash for Isotropy {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Isotropy::Isotropic => 0.hash(state),
+            Isotropy::Anisotropic => 1.hash(state),
         }
     }
 }

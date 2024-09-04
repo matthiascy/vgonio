@@ -49,7 +49,6 @@ pub fn diff(opts: DiffOptions, config: Config) -> Result<(), VgonioError> {
         .collect::<Option<Vec<_>>>()
         .unwrap();
     let layers = (1..images.len())
-        .into_iter()
         .map(|i| {
             let diff = channels[0]
                 .sample_data
@@ -88,7 +87,7 @@ pub fn diff(opts: DiffOptions, config: Config) -> Result<(), VgonioError> {
     let diff_image = Image::from_layers(images[0].attributes.clone(), layers);
     diff_image.write().to_file(out_path).map_err(|err| {
         VgonioError::new(
-            &format!("Failed to write the difference data to file: {}", err),
+            format!("Failed to write the difference data to file: {}", err),
             Some(Box::new(err)),
         )
     })?;

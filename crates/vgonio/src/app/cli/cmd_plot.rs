@@ -306,7 +306,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     };
                     let brdfs = brdf_hdls
                         .into_iter()
-                        .zip(labels.into_iter())
+                        .zip(labels)
                         .filter_map(|(hdl, label)| {
                             cache
                                 .get_measurement(hdl)
@@ -335,7 +335,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                                 .unwrap()
                                 .measured
                                 .downcast_ref::<MeasuredBsdfData>()
-                                .and_then(|meas| meas.brdf_at(opts.level).map(|brdf| brdf))
+                                .and_then(|meas| meas.brdf_at(opts.level))
                         })
                         .collect::<Vec<_>>();
                     plot_brdf_slice_in_plane(&brdfs, phi_i).unwrap();
@@ -443,19 +443,19 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                             .unwrap()
                             .measured
                             .downcast_ref::<MeasuredBsdfData>()
-                            .and_then(|meas| meas.brdf_at(opts.level).map(|brdf| brdf))
+                            .and_then(|meas| meas.brdf_at(opts.level))
                     })
                     .collect::<Vec<_>>();
                 let lambda = Nanometres::new(opts.lambda);
                 for brdf in &brdfs {
-                    if !brdf.spectrum.iter().find(|&l| *l == lambda).is_some() {
+                    if !brdf.spectrum.iter().any(|&l| l == lambda) {
                         return Err(VgonioError::new(
                             "The wavelength is not in the spectrum of the BRDF.",
                             None,
                         ));
                     }
                     plot_brdf_3d(
-                        &brdf,
+                        brdf,
                         Sph2::new(
                             Radians::from_degrees(opts.theta_i),
                             Radians::from_degrees(opts.phi_i),

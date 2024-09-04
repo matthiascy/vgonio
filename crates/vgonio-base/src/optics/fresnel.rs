@@ -285,7 +285,7 @@ pub fn refract_cos(wi: Vec3A, n: Vec3A, eta: f32, cos: f32) -> RefractionResult 
 ///
 /// * `wi` - Incident vector (normalised), ends up on the point of incidence.
 /// * `n` - Normal vector (normalised), always points towards the outside of the
-///  incident medium.
+///   incident medium.
 /// * `eta_i` - Refractive index of the incident medium.
 /// * `eta_t` - Refractive index of the transmitted medium.
 pub fn refract2(wi: Vec3A, n: Vec3A, eta_i: f32, eta_t: f32) -> RefractionResult {
@@ -538,7 +538,7 @@ pub fn reflectance_dielectric_conductor(cos_i_abs: f32, eta_i: f32, eta_t: f32, 
 /// # Arguments
 ///
 /// * `cos_i` - cosine of the angle between the normal and the incident
-///  direction (originated from the ray's origin).
+///   direction (originated from the ray's origin).
 /// * `ior_i` - refractive index of the outside medium.
 /// * `ior_t` - refractive index of the inside medium.
 ///

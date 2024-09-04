@@ -18,6 +18,7 @@ use base::{
     units::{rad, Radians},
     MeasurementKind,
 };
+#[cfg(feature = "fitting")]
 use bxdf::distro::MicrofacetDistribution;
 use egui::{Align, Ui};
 use std::any::Any;

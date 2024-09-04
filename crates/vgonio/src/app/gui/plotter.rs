@@ -184,10 +184,10 @@ impl Curve {
     /// # Arguments
     ///
     /// * `first_part` - The first part of the data, which is the measured data
-    /// for the selected azimuthal angle.
+    ///   for the selected azimuthal angle.
     /// * `opposite` - The second part of the data, which is the measured data
-    /// for the opposite azimuthal angle. If `None`, the curve is created from
-    /// the first part only.
+    ///   for the opposite azimuthal angle. If `None`, the curve is created from
+    ///   the first part only.
     fn from_adf_or_msf_data(
         first_part: impl Iterator<Item = [f64; 2]>,
         opposite: Option<&[f32]>,

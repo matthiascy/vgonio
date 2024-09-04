@@ -334,6 +334,7 @@ pub fn ray_aabb_intersects(ray: &Ray, bbox: &Aabb) -> bool {
 }
 
 /// Tests intersection between AABB and Ray using slab method.
+///
 /// The idea is to treat the AABB as the space inside of three pairs of
 /// parallel planes. The ray is clipped by each pair of parallel planes,
 /// and if any portion of the ray remains, it intersects the box.

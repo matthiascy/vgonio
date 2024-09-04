@@ -159,7 +159,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                                 },
                             };
                             #[cfg(not(feature = "surf-obj"))]
-                            let loaded = MicroSurface::read_from_file(&filepath, None);
+                            let loaded = MicroSurface::read_from_file(filepath, None);
 
                             if let Ok(loaded) = loaded {
                                 let (w, h) = if let Some(new_size) = opts.resize.as_ref() {

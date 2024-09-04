@@ -791,6 +791,7 @@ pub struct SingleBsdfMeasurementStats {
     /// 2. hit the surface and were reflected, or
     /// 3. hit the surface and were captured by the collector or
     /// 4. hit the surface and escaped.
+    ///
     /// The statistics are variant over wavelength. The data is stored as a
     /// flat array in row-major order with the dimensions (statistics,
     /// wavelength). The index of the statistics is defined by the constants
@@ -1595,10 +1596,10 @@ pub fn measure_bsdf_rt(
                         raw.compute_bsdfs(params.incident_medium, params.transmitted_medium);
                     let params = BsdfMeasurementParams {
                         kind: params.kind,
-                        sim_kind: params.sim_kind.clone(),
+                        sim_kind: params.sim_kind,
                         incident_medium: params.incident_medium,
                         transmitted_medium: params.transmitted_medium,
-                        emitter: params.emitter.clone(),
+                        emitter: params.emitter,
                         receivers: vec![rparams],
                         fresnel: params.fresnel,
                     };
