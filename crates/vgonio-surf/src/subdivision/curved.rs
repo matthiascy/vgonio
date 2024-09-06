@@ -21,6 +21,7 @@ pub fn subdivide_triangle(
     ns: Option<&[Vec3]>,
     ovs: &mut [DVec3],
     ons: Option<&mut [Vec3]>,
+    _offset: Option<f64>,
 ) {
     let ns = ns.unwrap();
     let ons = ons.unwrap();

@@ -35,8 +35,8 @@ type: !bsdf
 #        phi: 0.5 deg # only for equal-angle scheme
 #      scheme: beckers
 surfaces:
-  - usr://surfaces/olaf/aluminium4bar100.vgms ~~ curly l1
-  #  - usr://surfaces/olaf/aluminiummirror.vgms
+  # - usr://surfaces/olaf/aluminium4bar100.vgms ~~ curved l1
+  - usr://surfaces/olaf/aluminiummirror.vgms ~~ wiggly l1 k100
   #  - usr://surfaces/al064.txt
   #  - usr://surfaces/olaf/aluminium65bar100.vgms
   #  - usr://surfaces/olaf/aluminium1bar100.vgms

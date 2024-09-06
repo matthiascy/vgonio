@@ -47,6 +47,9 @@ pub struct MicroSurfaceProp {
     pub subdivision_level: u32,
     /// The kind of subdivision.
     pub subdivision_kind: SubdivisionKind,
+    /// The offset along the z-axis. This is used for the wiggly subdivision.
+    /// See [`Subdivision::Wiggly`].
+    pub subdivision_offset: u32,
 }
 
 /// Measured data properties.
@@ -117,6 +120,7 @@ impl PropertyData {
                     rms_slope_y: surf.rms_slope_y(),
                     subdivision_level: 0,
                     subdivision_kind: SubdivisionKind::Curved,
+                    subdivision_offset: 100,
                 });
             }
         }

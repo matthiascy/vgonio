@@ -10,14 +10,17 @@ use rand::distributions::{Distribution, Uniform};
 ///
 /// * `vs` - The vertices of the triangle.
 /// * `uvs` - The uv coordinates of the desired interpolation points on the
-///  triangle.
+///   triangle.
 /// * `ovs` - The output points of the sub-triangulation.
+/// * `offset` - The offset to add randomly to the z coordinate of the new
+///   points.
 pub fn subdivide_triangle(
     vs: &[Vec3],
     uvs: &[Vec2],
     _ns: Option<&[Vec3]>,
     ovs: &mut [DVec3],
     _ons: Option<&mut [Vec3]>,
+    offset: Option<f64>,
 ) {
     debug_assert!(vs.len() >= 3, "The input vertices must be a triangle.");
     debug_assert!(
@@ -25,9 +28,9 @@ pub fn subdivide_triangle(
         "The input uvs must be the same count as the output points."
     );
     let vs: [DVec3; 3] = [vs[0].into(), vs[1].into(), vs[2].into()];
-    let min_z = vs[0].z.min(vs[1].z).min(vs[2].z);
-    let max_z = vs[0].z.max(vs[1].z).max(vs[2].z);
-    let z_dist = max_z - min_z;
+    // let min_z = vs[0].z.min(vs[1].z).min(vs[2].z);
+    // let max_z = vs[0].z.max(vs[1].z).max(vs[2].z);
+    // let z_dist = max_z - min_z;
     let uniform_dist = Uniform::new(-0.5, 0.5);
     let mut rng = rand::thread_rng();
 
@@ -44,7 +47,7 @@ pub fn subdivide_triangle(
             || (v - 1.0).abs() < f64::EPSILON
             || (w - 1.0).abs() < f64::EPSILON)
         {
-            ov.z += uniform_dist.sample(&mut rng) * z_dist;
+            ov.z += uniform_dist.sample(&mut rng) * offset.unwrap();
         }
     });
 }

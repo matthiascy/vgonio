@@ -99,6 +99,14 @@ pub struct PlotOptions {
     pub subdiv_level: Option<u32>,
 
     #[clap(
+        long = "offset",
+        help = "The offset to add randomly to the z coordinate of the new points.",
+        required_if_eq("subdiv_kind", "wiggly"),
+        default_value = "100"
+    )]
+    pub subdiv_offset: Option<u32>,
+
+    #[clap(
         long = "ti",
         help = "The polar angle to plot the BRDF at.",
         default_value = "0.0",
@@ -479,7 +487,10 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                                 Some(Subdivision::Curved(level))
                             },
                             (Some(SubdivisionKind::Wiggly), Some(level)) => {
-                                Some(Subdivision::Wiggly(level))
+                                Some(Subdivision::Wiggly {
+                                    level,
+                                    offset: opts.subdiv_offset.unwrap(),
+                                })
                             },
                             _ => None,
                         },

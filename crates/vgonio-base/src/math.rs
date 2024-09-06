@@ -543,7 +543,7 @@ pub fn madd(a: f32, b: f32, c: f32) -> f32 {
             use std::arch::x86_64::{_mm_cvtss_f32, _mm_fmadd_ss, _mm_set_ss};
             unsafe { _mm_cvtss_f32(_mm_fmadd_ss(_mm_set_ss(a), _mm_set_ss(b), _mm_set_ss(c))) }
         } else {
-            a * b + c
+            a.mul_add(b, c)
         }
     }
 }

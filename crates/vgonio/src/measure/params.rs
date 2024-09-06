@@ -127,9 +127,12 @@ impl Serialize for SurfacePath {
             Some(Subdivision::Curved(level)) => {
                 serializer.serialize_str(&format!("{} ~~ curved l{}", self.path.display(), level))
             },
-            Some(Subdivision::Wiggly(level)) => {
-                serializer.serialize_str(&format!("{} ~~ wiggly l{}", self.path.display(), level))
-            },
+            Some(Subdivision::Wiggly { level, offset }) => serializer.serialize_str(&format!(
+                "{} ~~ wiggly l{} k{}",
+                self.path.display(),
+                level,
+                offset
+            )),
             None => serializer.serialize_str(&self.path.display().to_string()),
         }
     }
@@ -141,33 +144,42 @@ impl<'de> Deserialize<'de> for SurfacePath {
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
+        // Split the string into path and subdivision parts
         let parts: Vec<&str> = s.split("~~").map(|s| s.trim()).collect();
         let path = PathBuf::from(parts[0]);
         let subdivision = if parts.len() > 1 {
+            // Split the subdivision to get the level and possibly the offset for
+            // the wiggly subdivision
             let parts: Vec<&str> = parts[1].split_whitespace().collect();
-            if parts.len() == 2 {
-                let kind = parts[0];
-                let level = parts[1]
+            if parts.len() < 2 {
+                return Err(serde::de::Error::custom(
+                    "Invalid subdivision format, expected kind and level",
+                ));
+            }
+            let kind = parts[0];
+            let level = parts[1]
+                .trim()
+                .trim_matches('l')
+                .parse::<u32>()
+                .map_err(serde::de::Error::custom)?;
+            let offset = if parts.len() > 2 {
+                parts[2]
                     .trim()
-                    .trim_matches('l')
+                    .trim_matches('k')
                     .parse::<u32>()
-                    .map_err(serde::de::Error::custom)?;
-                if level != 0 {
-                    match kind {
-                        "curved" => Some(Subdivision::Curved(level)),
-                        "wiggly" => Some(Subdivision::Wiggly(level)),
-                        _ => {
-                            return Err(serde::de::Error::custom(format!(
-                                "Invalid subdivision kind: {}",
-                                kind
-                            )))
-                        },
-                    }
-                } else {
-                    None
-                }
+                    .map_err(serde::de::Error::custom)?
             } else {
-                return Err(serde::de::Error::custom("Invalid subdivision format"));
+                100
+            };
+            match kind {
+                "curved" => Some(Subdivision::Curved(level)),
+                "wiggly" => Some(Subdivision::Wiggly { level, offset }),
+                _ => {
+                    return Err(serde::de::Error::custom(format!(
+                        "Invalid subdivision kind: {}",
+                        kind
+                    )))
+                },
             }
         } else {
             None

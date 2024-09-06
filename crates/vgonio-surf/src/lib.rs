@@ -17,7 +17,7 @@ use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
 
 use crate::{
     dcel::HalfEdgeMesh,
-    subdivision::{curved, wiggle, Subdivision, SubdivisionKind},
+    subdivision::{curved, wiggle, Subdivision},
 };
 use base::{
     error::VgonioError,
@@ -581,6 +581,8 @@ impl MicroSurface {
             msurf: self.uuid,
             num_rows: self.rows,
             unit: self.unit,
+            du: self.du,
+            dv: self.dv,
             height_offset,
             facet_total_area,
             num_cols: self.cols,
@@ -588,15 +590,12 @@ impl MicroSurface {
         };
         log::debug!("Total microfacet Area: {}", facet_total_area);
 
-        match subdiv {
-            Some(subdivision) => {
-                mesh.subdivide(subdivision);
-                log::debug!(
-                    "Total microfacet area(subdivided): {}",
-                    mesh.facet_total_area
-                );
-            },
-            _ => {},
+        if let Some(subdivision) = subdiv {
+            mesh.subdivide(subdivision);
+            log::debug!(
+                "Total microfacet area(subdivided): {}",
+                mesh.facet_total_area
+            );
         }
 
         mesh
@@ -890,6 +889,14 @@ pub struct MicroSurfaceMesh {
     /// [`MicroSurface`](`crate::MicroSurface`).
     pub unit: LengthUnit,
 
+    /// Original horizontal spacing between samples points in the unit specified
+    /// by the `unit` field.
+    pub du: f32,
+
+    /// Original vertical spacing between samples points in the unit specified
+    /// by the `unit` field.
+    pub dv: f32,
+
     /// Triangulation pattern used to generate the mesh.
     pub pattern: TriangulationPattern,
 }
@@ -947,7 +954,12 @@ impl MicroSurfaceMesh {
 
     /// Subdivide the mesh.
     pub fn subdivide(&mut self, opts: Subdivision) {
-        log::debug!("Subdividing the mesh with level: {}", opts.level());
+        log::debug!(
+            "Subdividing the mesh with scheme: {:?}, level: {}, offset: {:?}",
+            opts.kind(),
+            opts.level(),
+            opts.offset()
+        );
         if opts.level() == 0 {
             return;
         }
@@ -960,15 +972,18 @@ impl MicroSurfaceMesh {
         let dcel = HalfEdgeMesh::new(Cow::Borrowed(&self.verts), &self.facets);
         let subdivision = TriangleUVSubdivision::new(opts.level(), self.pattern);
 
-        let (subdivided, vert_normals) = match opts.kind() {
-            SubdivisionKind::Wiggly => {
-                dcel.subdivide_by_uvs(&subdivision, wiggle::subdivide_triangle, None)
-            },
-            _ => dcel.subdivide_by_uvs(
+        let (subdivided, vert_normals) = match opts {
+            Subdivision::Curved(_) => dcel.subdivide_by_uvs(
                 &subdivision,
                 curved::subdivide_triangle,
                 Some(&self.vert_normals),
+                None,
             ),
+            Subdivision::Wiggly { offset, .. } => {
+                let offset =
+                    (sqr(self.du as f64) + sqr(self.dv as f64)).sqrt() * offset as f64 * 0.01;
+                dcel.subdivide_by_uvs(&subdivision, wiggle::subdivide_triangle, None, Some(offset))
+            },
         };
 
         let mut new_facets = vec![u32::MAX; subdivided.n_faces() * 3].into_boxed_slice();
@@ -1027,6 +1042,9 @@ impl MicroSurfaceMesh {
 }
 
 /// Helper struct for micro-surface mesh subdivision.
+///
+/// This information stored in this struct is agnostic to the actual
+/// mesh representation.
 #[derive(Debug)]
 pub struct TriangleUVSubdivision {
     /// Level of subdivision.

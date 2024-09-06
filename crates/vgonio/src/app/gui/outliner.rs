@@ -104,6 +104,7 @@ impl CollapsableHeader<Handle<MicroSurface>> {
             let scale = &mut surf_props.scale;
             let subdivision_level = &mut surf_props.subdivision_level;
             let subdivision_kind = &mut surf_props.subdivision_kind;
+            let subdivision_offset = &mut surf_props.subdivision_offset;
             egui::Grid::new("surface_collapsable_header_grid")
                 .num_columns(3)
                 .spacing([20.0, 4.0])
@@ -134,11 +135,23 @@ impl CollapsableHeader<Handle<MicroSurface>> {
                     });
                     ui.end_row();
 
+                    if subdivision_kind == &SubdivisionKind::Wiggly {
+                        ui.add(egui::Label::new("Offset:")).on_hover_text(
+                            "The offset to add randomly to the z coordinate of the new points in \
+                             percentage.",
+                        );
+                        ui.add(egui::Slider::new(subdivision_offset, 0..=500).trailing_fill(true));
+                        ui.end_row();
+                    }
+
                     if ui.button("Subdivide").clicked() {
                         let subdivision = if *subdivision_kind == SubdivisionKind::Curved {
                             Subdivision::Curved(*subdivision_level)
                         } else {
-                            Subdivision::Wiggly(*subdivision_level)
+                            Subdivision::Wiggly {
+                                level: *subdivision_level,
+                                offset: *subdivision_offset,
+                            }
                         };
                         event_loop.send_event(VgonioEvent::SubdivideSurface {
                             surf: self.item,

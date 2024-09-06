@@ -124,7 +124,10 @@ pub fn print_info(opts: PrintInfoOptions, config: Config) -> Result<(), VgonioEr
                     SurfacePath::new(PathBuf::from("path/to/surface1"), None),
                     SurfacePath::new(
                         PathBuf::from("path/to/surface2"),
-                        Some(Subdivision::Wiggly(2)),
+                        Some(Subdivision::Wiggly {
+                            level: 2,
+                            offset: 100,
+                        }),
                     ),
                 ],
             },

@@ -1,6 +1,6 @@
-//! Implementation of a doubly connected edge list (DCEL) data structure, known
-//! also as half-edge data structure, which is used to represent the geometry of
-//! a surface mesh.
+//! Implementation of a Doubly Connected Edge List (DCEL) data structure, known
+//! also as half-edge data structure.
+//!
 //! Any valid half-edge mesh must be manifold, oriented, and closed.
 
 use crate::{TriangleUVSubdivision, TriangulationPattern, VertLoc};
@@ -126,7 +126,7 @@ impl<'a> HalfEdgeMesh<'a> {
             vert.pos = i as u32;
         }
 
-        // The pointer to the darts as one dart will not be accessed by multiple threads
+        // The pointer to the darts as one dart not accessed by multiple threads
         // in the later loop.
         struct DartsPtr(pub *mut Dart);
         unsafe impl Send for DartsPtr {}
@@ -242,18 +242,16 @@ impl<'a> HalfEdgeMesh<'a> {
         // Iterate over the boundary darts and set the next and previous darts.
         for (dart_idx, (start, end)) in boundary_darts_ends.iter() {
             let dart = &mut darts[*dart_idx as usize];
-            dart.next = boundary_darts_ends
+            dart.next = *boundary_darts_ends
                 .iter()
                 .find(|(_, (s, _))| s == end)
                 .unwrap()
-                .0
-                .clone();
-            dart.prev = boundary_darts_ends
+                .0;
+            dart.prev = *boundary_darts_ends
                 .iter()
                 .find(|(_, (_, e))| e == start)
                 .unwrap()
-                .0
-                .clone();
+                .0;
         }
 
         #[cfg(feature = "bench")]
@@ -331,9 +329,10 @@ impl<'a> HalfEdgeMesh<'a> {
         sub: &TriangleUVSubdivision,
         interp: I,
         normals: Option<&[Vec3]>,
+        offset: Option<f64>,
     ) -> (HalfEdgeMesh<'static>, Option<Box<[Vec3]>>)
     where
-        I: Fn(&[Vec3], &[Vec2], Option<&[Vec3]>, &mut [DVec3], Option<&mut [Vec3]>),
+        I: Fn(&[Vec3], &[Vec2], Option<&[Vec3]>, &mut [DVec3], Option<&mut [Vec3]>, Option<f64>),
     {
         log::debug!("Subdividing the mesh by uvs.: {:?}", sub);
         let new_num_faces = sub.n_tris as usize * self.faces.len();
@@ -341,15 +340,15 @@ impl<'a> HalfEdgeMesh<'a> {
         let mut new_triangles = vec![u32::MAX; new_num_faces * 3];
         let mut new_normals = normals.map(|ns| ns.to_vec());
 
-        // The new triangles that will be added to the mesh.
+        // The new triangles added to the mesh.
         let mut interp_pnts_per_face = vec![DVec3::ZERO; sub.uvs.len()].into_boxed_slice();
         let mut interp_nmls_per_face = vec![Vec3::ZERO; sub.uvs.len()].into_boxed_slice();
         let mut new_tris_per_face = sub.indices.clone();
 
         // Records the shared edges of the face.
-        // u32 - the dart index of the shared edge.
-        // VertLoc - the location of the shared edge.
-        // Box<u32> - the indices of the new vertices.
+        // Key: u32 - the dart index of the shared edge.
+        // Value: - VertLoc - the location of the shared edge.
+        //        - Box<u32> - the indices of the new vertices.
         let mut shared: NoHashMap<u32, (VertLoc, VecDeque<u32>)> = NoHashMap::default();
         let mut shared_to_remove = [u32::MAX; 3];
 
@@ -393,6 +392,7 @@ impl<'a> HalfEdgeMesh<'a> {
                 Some(&old_tri_nrmls),
                 &mut interp_pnts_per_face,
                 Some(&mut interp_nmls_per_face),
+                offset,
             );
 
             // Index is the edge, value is dart index.
@@ -402,7 +402,7 @@ impl<'a> HalfEdgeMesh<'a> {
                 if dart.has_twin() {
                     local_shared[i] = *dart_idx;
                     if !shared.contains_key(&dart.twin) {
-                        // We don't know yet the actual vertex index of the newly created vertex.
+                        // The actual vertex index of the newly created vertex isn't known yet.
                         shared.insert(
                             *dart_idx,
                             (
@@ -438,13 +438,13 @@ impl<'a> HalfEdgeMesh<'a> {
                             if dart_idx != u32::MAX {
                                 log::trace!(" - Shared edge: {}, dart: {}", edge_loc, dart_idx);
 
-                                // Do not construct new vertices for the vertices that are shared.
+                                // Don't construct new vertices for the vertices that are shared.
                                 if shared.contains_key(&self.darts[dart_idx as usize].twin) {
                                     continue;
                                 }
 
-                                // The first time we encounter the shared edge, we need to
-                                // construct the new vertices.
+                                // Construct the new vertices as long as the shared edge is
+                                // being processed for the first time.
                                 shared
                                     .get_mut(&dart_idx)
                                     .unwrap()
@@ -470,7 +470,6 @@ impl<'a> HalfEdgeMesh<'a> {
             log::trace!("num verts after: {}", new_positions.len());
 
             // 4. Build vertex index replacement table.
-            // let mut replacement = vec![u32::MAX; sub.n_pnts as usize].into_boxed_slice();
             let mut n_shared = 0;
             let mut shared_to_remove_idx = 0;
             replacement
@@ -489,7 +488,7 @@ impl<'a> HalfEdgeMesh<'a> {
                             // Shared edge.
                             if local_shared[*i as usize] != u32::MAX {
                                 let dart = self.darts[local_shared[*i as usize] as usize];
-                                // Can we find the vertex index from the shared edges?
+                                // If the edge is shared, the vertex index is already known.
                                 if let Some((_, verts)) = shared.get_mut(&dart.twin) {
                                     *rep = if e == &VertLoc::E02
                                         || (e == &VertLoc::E12 && is_bottom_left_to_top_right)
