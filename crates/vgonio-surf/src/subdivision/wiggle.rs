@@ -28,9 +28,6 @@ pub fn subdivide_triangle(
         "The input uvs must be the same count as the output points."
     );
     let vs: [DVec3; 3] = [vs[0].into(), vs[1].into(), vs[2].into()];
-    // let min_z = vs[0].z.min(vs[1].z).min(vs[2].z);
-    // let max_z = vs[0].z.max(vs[1].z).max(vs[2].z);
-    // let z_dist = max_z - min_z;
     let uniform_dist = Uniform::new(-0.5, 0.5);
     let mut rng = rand::thread_rng();
 

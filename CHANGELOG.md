@@ -6,6 +6,10 @@
 - Fix the initial microfacet total area calculation
 - Unify the surface subdivision scheme
 - Enable manually setting the height offset during the wiggly surface subdivision
+- Define the random height offset range for the wiggly surface subdivision
+    - the base height offset is the diagonal of one height field cell
+    - the actual offset is expressed as a percentage of the base offset
+    - described as `/path/to/the/surface.vgmo ~~ wiggly l2 k100` in measurement description file
 
 ## 0.3.2 - 2024-08-16
 
@@ -24,6 +28,6 @@
 - Rename crate `uikit` to `uxtk`
 - Adopt [catpuccin](https://catppuccin.com/) pastel theme for the UI
 
-## 0.3.1 - 2024-06-23
+## 0.3.1 - 2024-07-23
 
 First public release.
