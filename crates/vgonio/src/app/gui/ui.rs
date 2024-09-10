@@ -44,7 +44,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use surf::{HeightOffset, MicroSurface};
+use surf::{subdivision::SubdivisionKind, HeightOffset, MicroSurface};
 use uxtk::{theme::ThemeKind, UiRenderer};
 
 /// Implementation of the GUI for vgonio application.
@@ -315,11 +315,10 @@ impl VgonioGui {
                 EventResponse::Handled
             },
             VgonioEvent::SubdivideSurface { surf, subdivision } => {
-                // Temporary: disable subdivision
-                // if subdivision.level() == 0 {
-                //     log::debug!("No subdivision requested, skipping");
-                //     return EventResponse::Handled;
-                // }
+                if subdivision.level() == 0 {
+                    log::debug!("No subdivision requested, skipping");
+                    return EventResponse::Handled;
+                }
 
                 // Don't touch the original surface, just subdivide into a new one mesh.
                 // Regenerate the mesh with more vertices.
@@ -336,6 +335,7 @@ impl VgonioGui {
                         &new_mesh,
                         new_renderable_hdl.id(),
                     );
+                    let new_micro_facet_area = new_mesh.facet_total_area;
                     let new_mesh_hdl = Handle::with_id(new_mesh.uuid);
                     cache.meshes.insert(new_mesh_hdl, new_mesh);
                     cache.renderables.insert(new_renderable_hdl, new_renderable);
@@ -351,6 +351,21 @@ impl VgonioGui {
                     // Remove the old mesh and renderable.
                     cache.meshes.remove(&old_mesh_hdl);
                     cache.renderables.remove(&old_renderable_hdl);
+
+                    // Update the properties related to the surface.
+                    let mut props = self.properties.write().unwrap();
+                    let surf_props = props.surfaces.get_mut(surf).unwrap();
+                    if let Some(idx) = surf_props
+                        .subdivided_micro_area
+                        .iter()
+                        .position(|(s, _)| s == subdivision)
+                    {
+                        surf_props.subdivided_micro_area[idx].1 = new_micro_facet_area;
+                    } else {
+                        surf_props
+                            .subdivided_micro_area
+                            .push((*subdivision, new_micro_facet_area));
+                    }
                 });
 
                 EventResponse::Handled

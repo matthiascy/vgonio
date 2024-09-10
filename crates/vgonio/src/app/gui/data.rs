@@ -1,13 +1,15 @@
 #[cfg(feature = "fitting")]
 use crate::fitting::FittedModels;
-use base::{handle::Handle, units::LengthUnit, MeasurementKind};
-use chrono::{DateTime, Local};
-use std::collections::HashMap;
-use surf::{subdivision::SubdivisionKind, MicroSurface};
-
 use crate::{
     app::cache::RawCache,
     measure::{Measurement, MeasurementSource},
+};
+use base::{handle::Handle, units::LengthUnit, MeasurementKind};
+use chrono::{DateTime, Local};
+use std::collections::HashMap;
+use surf::{
+    subdivision::{Subdivision, SubdivisionKind},
+    MicroSurface,
 };
 
 use super::outliner::OutlinerItem;
@@ -50,6 +52,8 @@ pub struct MicroSurfaceProp {
     /// The offset along the z-axis. This is used for the wiggly subdivision.
     /// See [`Subdivision::Wiggly`].
     pub subdivision_offset: u32,
+    /// The micro surface area with different levels of subdivision.
+    pub subdivided_micro_area: Vec<(Subdivision, f32)>,
 }
 
 /// Measured data properties.
@@ -121,6 +125,7 @@ impl PropertyData {
                     subdivision_level: 0,
                     subdivision_kind: SubdivisionKind::Curved,
                     subdivision_offset: 100,
+                    subdivided_micro_area: vec![],
                 });
             }
         }

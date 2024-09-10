@@ -1,12 +1,12 @@
+use crate::app::gui::docking::{Dockable, WidgetKind};
 #[cfg(feature = "fitting")]
 use base::Isotropy;
 use base::{partition::beckers, MeasurementKind};
 #[cfg(feature = "fitting")]
 use bxdf::{brdf::BxdfFamily, distro::MicrofacetDistroKind};
 use std::sync::{Arc, RwLock};
+use surf::subdivision::SubdivisionKind;
 use uuid::Uuid;
-
-use crate::app::gui::docking::{Dockable, WidgetKind};
 
 #[cfg(feature = "fitting")]
 use crate::fitting::FittingProblemKind;
@@ -145,6 +145,47 @@ impl PropertyInspector {
                                 //         .trailing_fill(true),
                                 // );
                                 // ui.end_row();
+
+                                let curved_subdivided = state
+                                    .subdivided_micro_area
+                                    .iter()
+                                    .filter(|(s, _)| s.kind() == SubdivisionKind::Curved)
+                                    .collect::<Box<_>>();
+
+                                if !curved_subdivided.is_empty() {
+                                    ui.add(egui::Label::new("Curved Subdivision:"));
+                                    ui.end_row();
+
+                                    for curved in curved_subdivided {
+                                        ui.add(egui::Label::new(format!(
+                                            "  L#{}:",
+                                            curved.0.level()
+                                        )));
+                                        ui.add(egui::Label::new(format!("{}", curved.1)));
+                                        ui.end_row();
+                                    }
+                                }
+
+                                let wiggly_subdivided = state
+                                    .subdivided_micro_area
+                                    .iter()
+                                    .filter(|(s, _)| s.kind() == SubdivisionKind::Wiggly)
+                                    .collect::<Box<_>>();
+
+                                if !wiggly_subdivided.is_empty() {
+                                    ui.add(egui::Label::new("Wiggly Subdivision:"));
+                                    ui.end_row();
+
+                                    for wiggly in wiggly_subdivided {
+                                        ui.add(egui::Label::new(format!(
+                                            "  L#{}, offset {}:",
+                                            wiggly.0.level(),
+                                            wiggly.0.offset().unwrap_or(0)
+                                        )));
+                                        ui.add(egui::Label::new(format!("{}", wiggly.1)));
+                                        ui.end_row();
+                                    }
+                                }
                             });
                         },
                         OutlinerItem::MeasurementData(meas) => {

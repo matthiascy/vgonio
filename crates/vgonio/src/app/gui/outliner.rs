@@ -107,7 +107,7 @@ impl CollapsableHeader<Handle<MicroSurface>> {
             let subdivision_offset = &mut surf_props.subdivision_offset;
             egui::Grid::new("surface_collapsable_header_grid")
                 .num_columns(3)
-                .spacing([20.0, 4.0])
+                .spacing([20.0, 8.0])
                 .show(ui, |ui| {
                     ui.add(egui::Label::new("Scale:")).on_hover_text(
                         "Scales the surface visually. Doest not affect the actual surface.",
