@@ -43,6 +43,7 @@ impl Subdivision {
         }
     }
 
+    /// Get the offset used in wiggly subdivision.
     pub fn offset(&self) -> Option<u32> {
         match self {
             Subdivision::Curved(_) => None,

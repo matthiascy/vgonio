@@ -44,7 +44,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use surf::{subdivision::SubdivisionKind, HeightOffset, MicroSurface};
+use surf::{HeightOffset, MicroSurface};
 use uxtk::{theme::ThemeKind, UiRenderer};
 
 /// Implementation of the GUI for vgonio application.

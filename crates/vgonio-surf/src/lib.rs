@@ -10,15 +10,16 @@ mod gen;
 pub use gen::*;
 pub mod dcel;
 pub mod io;
+
 pub mod subdivision;
 
 #[cfg(feature = "embree")]
 use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
 
-use crate::{
-    dcel::HalfEdgeMesh,
-    subdivision::{curved, wiggle, Subdivision},
-};
+use crate::dcel::HalfEdgeMesh;
+
+use crate::subdivision::{curved, wiggle, Subdivision};
+
 use base::{
     error::VgonioError,
     io::{

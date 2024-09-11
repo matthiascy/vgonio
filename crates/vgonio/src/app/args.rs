@@ -2,7 +2,7 @@
 use crate::app::cli::FitOptions;
 #[cfg(feature = "surf-gen")]
 use crate::app::cli::GenerateOptions;
-use crate::app::cli::{ConvertOptions, DiffOptions, MeasureOptions, PlotOptions};
+use crate::app::cli::{ConvertOptions, DiffOptions, MeasureOptions, PlotOptions, SubdivideOptions};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -96,6 +96,9 @@ pub enum SubCommand {
 
     /// Plots the measured data.
     Plot(PlotOptions),
+
+    /// Subdivides the surfaces and prints the statistics.
+    Subdivide(SubdivideOptions),
 }
 
 #[derive(clap::Args, Debug)]
