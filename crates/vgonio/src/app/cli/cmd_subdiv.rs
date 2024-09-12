@@ -48,7 +48,7 @@ pub fn subdivide(opts: SubdivideOptions, config: Config) -> Result<(), VgonioErr
     let cache = Cache::new(&config.cache_dir());
     let surfaces = opts
         .inputs
-        .into_iter()
+        .iter()
         .map(SurfacePath::from)
         .collect::<Box<_>>();
     let subdivisions: Box<_> = opts
@@ -91,7 +91,13 @@ pub fn subdivide(opts: SubdivideOptions, config: Config) -> Result<(), VgonioErr
             })
             .collect::<Box<_>>();
 
-        println!("{:?}", info);
+        opts.inputs
+            .iter()
+            .zip(info.iter())
+            .for_each(|(input, info)| {
+                print!("{}: ", input.display());
+                println!("{:?}", info);
+            });
     });
 
     Ok(())

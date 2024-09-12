@@ -122,6 +122,10 @@ impl From<PathBuf> for SurfacePath {
     fn from(path: PathBuf) -> Self { Self::new(path, None) }
 }
 
+impl From<&PathBuf> for SurfacePath {
+    fn from(path: &PathBuf) -> Self { Self::new(path.clone(), None) }
+}
+
 impl Serialize for SurfacePath {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
