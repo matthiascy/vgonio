@@ -94,9 +94,8 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
             let path = config.resolve_path(&input);
             if path.is_none() {
                 continue;
-            } else {
-                path.unwrap()
             }
+            path.unwrap()
         };
         log::debug!("Resolved path: {:?}", resolved);
         let files = if resolved.is_dir() {

@@ -315,7 +315,7 @@ pub mod vgmo {
             },
             MeasurementKind::Sdf => {
                 let sdf = measured.downcast_ref::<MeasuredSdfData>().unwrap();
-                writer.write(&(sdf.slopes.len() as u32).to_le_bytes())?;
+                let _ = writer.write(&(sdf.slopes.len() as u32).to_le_bytes())?;
                 let samples = unsafe {
                     std::slice::from_raw_parts(
                         sdf.slopes.as_ptr() as *const f32,
@@ -829,10 +829,11 @@ pub mod vgmo {
         }
     }
 
+    #[track_caller]
     pub fn write_u64_slice_as_u32_to_buf(src: &[u64], dst: &mut [u8]) {
         let size: usize = size_of::<u32>();
         debug_assert!(
-            dst.len() >= size_of_val(src),
+            dst.len() >= src.len() * size,
             "Write array to buffer: desired size {}, got {}",
             src.len() * size,
             dst.len()

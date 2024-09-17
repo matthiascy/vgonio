@@ -1,22 +1,17 @@
 //! BRDF measured in the paper "Investigation and Simulation of Diffraction on
 //! Rough Surfaces" by O. Clausen, Y. Chen, A. Fuhrmann and R. Marroquim.
-#[cfg(feature = "fitting")]
-use crate::brdf::measured::AnalyticalFit;
-use crate::{
-    brdf::{
-        measured::{
-            BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind,
-        },
-        Bxdf,
-    },
-    Scattering,
+use crate::brdf::measured::{
+    BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind,
 };
+#[cfg(feature = "fitting")]
+use crate::{brdf::measured::AnalyticalFit, Bxdf, Scattering};
+#[cfg(feature = "fitting")]
+use base::optics::ior::RefractiveIndexRegistry;
 use base::{
     error::VgonioError,
     impl_measured_data_trait,
     math::Sph2,
     medium::Medium,
-    optics::ior::RefractiveIndexRegistry,
     units::{nm, Nanometres, Radians},
     MeasuredData, MeasurementKind,
 };
@@ -27,6 +22,8 @@ use std::{
     path::Path,
 };
 
+/// Parameterisation for the Clausen BRDF.
+///
 /// BRDFs measured in the paper "Investigation and Simulation of Diffraction on
 /// Rough Surfaces" are in-plane BRDFs where the incident direction and the
 /// outgoing direction are in the same plane. Moreover, there are no
@@ -149,12 +146,10 @@ impl ClausenBrdf {
         }
 
         match filepath.as_ref().extension() {
-            None => {
-                return Err(VgonioError::new(
-                    "Can't read Clausen BRDF from files without extension!".to_string(),
-                    None,
-                ))
-            },
+            None => Err(VgonioError::new(
+                "Can't read Clausen BRDF from files without extension!".to_string(),
+                None,
+            )),
             // TODO: use OsStr::display() once it's stable
             Some(ext) => match ext.to_str().unwrap() {
                 "json" => Self::load_from_reader(BufReader::new(File::open(filepath).unwrap())),
@@ -243,13 +238,13 @@ impl ClausenBrdf {
             }
 
             // then sort by phi_o
-            return if wo_a.phi < wo_b.phi {
+            if wo_a.phi < wo_b.phi {
                 std::cmp::Ordering::Less
             } else if wo_a.phi > wo_b.phi {
                 std::cmp::Ordering::Greater
             } else {
                 std::cmp::Ordering::Equal
-            };
+            }
         });
 
         // TODO: remove, unordered_samples ==> outgoing

@@ -239,6 +239,7 @@ impl Config {
                     let mut config_file = std::fs::OpenOptions::new()
                         .write(true)
                         .create(true)
+                        .truncate(true)
                         .open(&config_in_sys)
                         .map_err(|err| {
                             VgonioError::from_io_error(

@@ -200,7 +200,15 @@ impl RawMeasuredBsdfData {
                         let patch = &self.outgoing.patches[wo_idx];
                         let cos_o = patch.center().theta.cos() as f64;
                         let solid_angle = patch.solid_angle().as_f64();
-                        let e_o = patch_energy.as_ref().unwrap().energy_per_bounce[b];
+                        let e_o = patch_energy
+                            .as_ref()
+                            .unwrap()
+                            .energy_per_bounce
+                            .get(b)
+                            .unwrap_or(&0.0);
+                        if e_o == &0.0 {
+                            continue;
+                        }
                         if cos_o != 0.0 {
                             let l_o = e_o * rcp_f64(cos_o) * rcp_f64(solid_angle);
                             let val = l_o * rcp_e_i;
@@ -863,6 +871,20 @@ impl SingleBsdfMeasurementStats {
             e_captured: vec![0.0; n_spectrum].into_boxed_slice(),
             n_ray_per_bounce: vec![0; n_spectrum * max_bounce].into_boxed_slice(),
             energy_per_bounce: vec![0.0; n_spectrum * max_bounce].into_boxed_slice(),
+        }
+    }
+
+    /// Creates an empty `SingleBsdfMeasurementStats`.
+    pub fn empty() -> Self {
+        Self {
+            n_bounce: 0,
+            n_received: 0,
+            n_missed: 0,
+            n_spectrum: 0,
+            n_ray_stats: Box::new([]),
+            e_captured: Box::new([]),
+            n_ray_per_bounce: Box::new([]),
+            energy_per_bounce: Box::new([]),
         }
     }
 
@@ -1576,9 +1598,13 @@ pub fn measure_bsdf_rt(
                     .collect::<Box<_>>();
                 #[cfg(feature = "vdbg")]
                 let hit_points = hit_points.into_boxed_slice();
+
                 for (receiver, records, stats, rparams) in receivers {
                     let stats = unsafe {
-                        std::mem::transmute::<_, Box<[SingleBsdfMeasurementStats]>>(stats)
+                        std::mem::transmute::<
+                            Box<[Option<SingleBsdfMeasurementStats>]>,
+                            Box<[SingleBsdfMeasurementStats]>,
+                        >(stats)
                     };
                     let raw = RawMeasuredBsdfData {
                         n_zenith_in: emitter.params.zenith.step_count_wrapped(),

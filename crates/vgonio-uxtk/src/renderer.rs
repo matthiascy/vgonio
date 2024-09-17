@@ -26,14 +26,12 @@ type PaintCallback = dyn for<'a, 'b> Fn(epaint::PaintCallbackInfo, &'a mut wgpu:
 /// The callback is composed of two functions: `setup` and `paint`:
 ///
 /// - `setup` is called once per frame right before `paint`, and can use the
-///   passed-in
-/// [`wgpu::Device`] and [`wgpu::Buffer`] to allocate or modify GPU resources
-/// such as buffers.
+///   passed-in [`wgpu::Device`] and [`wgpu::Buffer`] to allocate or modify GPU
+///   resources such as buffers.
 ///
 /// - `paint` is called after `setup` and is given access to the
-///   [`wgpu::RenderPass`] so
-/// that it can issue draw commands into the same [`wgpu::RenderPass`] that is
-/// used for all other egui elements.
+///   [`wgpu::RenderPass`] so that it can issue draw commands into the same
+///   [`wgpu::RenderPass`] that is used for all other egui elements.
 ///
 /// The final argument of both the `setup` and `paint` functions is the
 pub struct CallbackFn {

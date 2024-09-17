@@ -71,6 +71,7 @@ pub trait BrdfParameterisation: PartialEq {
     fn kind() -> ParametrisationKind;
 }
 
+#[cfg(feature = "fitting")]
 use crate::brdf::Bxdf;
 pub use clausen::*;
 pub use merl::*;

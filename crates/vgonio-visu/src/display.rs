@@ -46,11 +46,13 @@ impl Display {
             winit::window::WindowBuilder::new()
                 .with_title("Vgonio-Visu")
                 .with_inner_size(winit::dpi::PhysicalSize::new(w, h))
-                .build(&evlp)
+                .build(evlp)
                 .unwrap(),
         );
-        let mut wgpu_config = WgpuConfig::default();
-        wgpu_config.present_mode = wgpu::PresentMode::AutoNoVsync;
+        let wgpu_config = WgpuConfig {
+            present_mode: wgpu::PresentMode::AutoNoVsync,
+            ..WgpuConfig::default()
+        };
 
         evlp.set_control_flow(ControlFlow::Poll);
         let (ctx, surface) = GpuContext::onscreen(window.clone(), &wgpu_config).await;
@@ -61,7 +63,7 @@ impl Display {
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("display_shader"),
-                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&WGSL_DISPLAY)),
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(WGSL_DISPLAY)),
             });
         let idx_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("index_buffer"),
@@ -189,7 +191,7 @@ impl Display {
         let h = self.surface.height();
         self.ctx.queue.write_texture(
             self.texture.as_image_copy(),
-            &film,
+            film,
             wgpu::ImageDataLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * w),

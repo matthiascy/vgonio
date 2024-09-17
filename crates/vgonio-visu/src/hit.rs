@@ -45,17 +45,12 @@ pub trait Hittable: Send + Sync {
     fn hit(&self, ray: &Ray, t: RangeInclusive<f64>) -> Option<Hit>;
 }
 
+#[derive(Default)]
 pub struct HittableList {
     objects: Vec<Arc<dyn Hittable>>,
 }
 
 impl HittableList {
-    pub fn new() -> Self {
-        HittableList {
-            objects: Vec::new(),
-        }
-    }
-
     pub fn add(&mut self, object: Arc<dyn Hittable>) { self.objects.push(object); }
 
     pub fn clear(&mut self) { self.objects.clear(); }

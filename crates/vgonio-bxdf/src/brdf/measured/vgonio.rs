@@ -1,10 +1,9 @@
 //! BRDF from the VGonio simulator.
-#[cfg(feature = "fitting")]
-use crate::brdf::measured::AnalyticalFit;
-use crate::brdf::{
-    measured::{BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind},
-    Bxdf,
+use crate::brdf::measured::{
+    BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind,
 };
+#[cfg(feature = "fitting")]
+use crate::brdf::{measured::AnalyticalFit, Bxdf};
 #[cfg(feature = "fitting")]
 use crate::Scattering;
 #[cfg(feature = "fitting")]
@@ -191,7 +190,7 @@ impl VgonioBrdf {
             let layer_attrib = LayerAttributes {
                 owner: Text::new_or_none("vgonio"),
                 capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
-                    &timestamp,
+                    timestamp,
                 )),
                 software_name: Text::new_or_none("vgonio"),
                 other: HashMap::new(), // TODO: encode more info: self.params.to_exr_extra_info(),

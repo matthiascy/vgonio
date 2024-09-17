@@ -110,9 +110,9 @@ impl Scattering {
     ///
     /// * `brdf` - The BRDF model.
     /// * `wi` - The incident direction, assumed to be normalized, pointing away
-    /// from the surface.
+    ///   from the surface.
     /// * `wo` - The outgoing direction, assumed to be normalized, pointing away
-    /// from the surface.
+    ///   from the surface.
     /// * `ior_i` - The refractive index of the incident medium.
     /// * `ior_t` - The refractive index of the transmitted medium.
     pub fn eval_reflectance<P: 'static>(

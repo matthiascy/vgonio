@@ -45,7 +45,7 @@ pub fn subdivide(opts: SubdivideOptions, config: Config) -> Result<(), VgonioErr
         ));
     }
     let offsets = opts.offsets.into_iter().collect::<HashSet<u32>>();
-    let cache = Cache::new(&config.cache_dir());
+    let cache = Cache::new(config.cache_dir());
     let surfaces = opts
         .inputs
         .iter()
@@ -71,23 +71,29 @@ pub fn subdivide(opts: SubdivideOptions, config: Config) -> Result<(), VgonioErr
         })
         .collect();
 
+    println!("{:?}", subdivisions);
+
     let loaded = cache
         .write(|cache| cache.load_micro_surfaces(&config, &surfaces, config.user.triangulation))?;
 
     cache.read(|cache| {
         let info = loaded
             .into_iter()
-            .flat_map(|hdl| {
+            .map(|hdl| {
                 let surface = cache.get_micro_surface(hdl).unwrap();
 
-                subdivisions.iter().clone().map(|subdiv| {
-                    let mesh = surface.as_micro_surface_mesh(
-                        HeightOffset::Grounded,
-                        config.user.triangulation,
-                        Some(*subdiv),
-                    );
-                    (*subdiv, mesh.facet_total_area)
-                })
+                subdivisions
+                    .iter()
+                    .clone()
+                    .map(|subdiv| {
+                        let mesh = surface.as_micro_surface_mesh(
+                            HeightOffset::Grounded,
+                            config.user.triangulation,
+                            Some(*subdiv),
+                        );
+                        (*subdiv, mesh.facet_total_area)
+                    })
+                    .collect::<Box<_>>()
             })
             .collect::<Box<_>>();
 

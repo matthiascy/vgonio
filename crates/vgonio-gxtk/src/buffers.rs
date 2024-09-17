@@ -3,9 +3,11 @@ use core::ops::{Range, RangeBounds};
 // use egui::NumExt;
 
 /// A contiguous non-growable GPU buffer containing sub-buffer ranges with the
-/// same buffer usages. It aims reducing the number of allocated buffers by
-/// pre-allocating a large buffer then sub-allocating from it. Sub-allocation
-/// is indicated by a range of `wgpu::BufferAddress` in the buffer.
+/// same buffer usages.
+/// It aims reducing the number of allocated buffers by pre-allocating a large
+/// buffer, then sub-allocating from it.
+/// Sub-allocation is indicated by a range of `wgpu::BufferAddress` in the
+/// buffer.
 pub struct SlicedBuffer {
     /// The buffer containing all the sub-buffers.
     buf: wgpu::Buffer,
@@ -116,6 +118,9 @@ impl SlicedBuffer {
 
     /// Get the length of the buffer in bytes.
     pub fn len(&self) -> wgpu::BufferAddress { self.len }
+
+    /// Get if the buffer is empty.
+    pub fn is_empty(&self) -> bool { self.len == 0 }
 
     /// Get the buffer usages.
     pub fn usages(&self) -> wgpu::BufferUsages { self.usages }

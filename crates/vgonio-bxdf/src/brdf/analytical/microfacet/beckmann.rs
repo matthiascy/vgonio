@@ -1,7 +1,10 @@
+use base::math::{cart_to_sph, cos_theta, Vec3};
+#[cfg(feature = "fitting")]
 use base::{
-    math::{cart_to_sph, cbr, cos_theta, rcp_f64, sqr, Vec3},
+    math::{cbr, rcp_f64, sqr},
     optics::{fresnel, ior::Ior},
 };
+#[cfg(feature = "fitting")]
 use libm::erf;
 
 use crate::{
@@ -35,8 +38,8 @@ impl Bxdf for BeckmannBrdf {
     fn eval(&self, i: &Vec3, o: &Vec3) -> f64 {
         debug_assert!(i.is_normalized(), "Incident direction is not normalized");
         debug_assert!(o.is_normalized(), "Outgoing direction is not normalized");
-        let cos_theta_i = cos_theta(&i);
-        let cos_theta_o = cos_theta(&o);
+        let cos_theta_i = cos_theta(i);
+        let cos_theta_o = cos_theta(o);
         let cos_theta_io = (cos_theta_i * cos_theta_o) as f64;
         if cos_theta_io <= 1e-16 {
             return 0.0;

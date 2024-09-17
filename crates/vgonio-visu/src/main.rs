@@ -63,7 +63,7 @@ fn main() {
     }
 
     let camera = Camera::new(image_width, image_height, args.vfov_in_deg);
-    let mut world = HittableList::new();
+    let mut world = HittableList::default();
 
     let material_ground = Arc::new(Lambertian {
         albedo: Clr3::new(0.8, 0.8, 0.0),

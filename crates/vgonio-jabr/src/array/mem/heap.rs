@@ -157,7 +157,7 @@ where
     T: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        mem::print_slice(f, &self.as_slice())
+        mem::print_slice(f, self.as_slice())
     }
 }
 

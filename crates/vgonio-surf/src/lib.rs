@@ -518,6 +518,7 @@ impl MicroSurface {
         pattern: TriangulationPattern,
         subdiv: Option<Subdivision>,
     ) -> MicroSurfaceMesh {
+        log::debug!("Triangulating height field with subdivision: {:?}", subdiv);
         let height_offset = match offset {
             HeightOffset::Arbitrary(val) => val,
             HeightOffset::Centered => -0.5 * (self.min + self.max),
@@ -1035,7 +1036,7 @@ impl MicroSurfaceMesh {
             .map(|x| *x as f32)
             .collect::<Box<[f32]>>();
         self.facets = new_facets;
-        self.verts = new_verts.to_owned().into();
+        self.verts = new_verts.into_owned().into();
         self.num_facets = num_facets;
         self.num_verts = num_verts;
         self.vert_normals = new_verts_normals;

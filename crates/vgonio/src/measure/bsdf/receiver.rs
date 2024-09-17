@@ -427,6 +427,13 @@ impl Receiver {
 
             let n_bounce = result.bounces.iter().max().copied().unwrap();
             assert!(n_bounce > 0, "no bounces");
+            // TODO: deal with the grazing angle 90 degrees, especially while storing and
+            // reading. General suggestion: avoid 90 degrees
+            if n_bounce == 0 {
+                log::warn!("no bounces at {}", result.wi);
+                *out_stats = Some(SingleBsdfMeasurementStats::empty());
+                return;
+            }
             log::debug!("collecting -- n_bounce: {}", n_bounce);
 
             let n_received = AtomicU64::new(0);

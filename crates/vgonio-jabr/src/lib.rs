@@ -1,5 +1,4 @@
 #![feature(adt_const_params)]
-#![feature(const_mut_refs)]
 #![feature(const_trait_impl)]
 #![feature(decl_macro)]
 #![feature(generic_const_exprs)]

@@ -6,8 +6,6 @@
 #![feature(decl_macro)]
 // Enable const trait implementation
 #![feature(const_trait_impl)]
-// Enable const mut references
-#![feature(const_mut_refs)]
 #![feature(const_format_args)]
 #![feature(adt_const_params)]
 #![feature(structural_match)]
