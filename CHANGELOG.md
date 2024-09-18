@@ -10,6 +10,7 @@
     - the base height offset is the diagonal of one height field cell
     - the actual offset is expressed as a percentage of the base offset
     - described as `/path/to/the/surface.vgmo ~~ wiggly l2 k100` in measurement description file
+- Enable excluding data points during BRDF fitting
 
 ## 0.3.2 - 2024-08-16
 
