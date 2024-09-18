@@ -11,10 +11,12 @@ use base::optics::ior::RefractiveIndexRegistry;
 
 use base::{
     error::VgonioError,
+    math,
     math::{Sph2, Vec3},
     medium::Medium,
     partition::SphericalPartition,
-    units::Nanometres,
+    units::{Nanometres, Radians},
+    ErrorMetric,
 };
 #[cfg(feature = "exr")]
 use chrono::{DateTime, Local};
@@ -287,6 +289,52 @@ impl AnalyticalFit for VgonioBrdf {
             spectrum: DyArr::from_slice([n_spectrum], spectrum),
             samples,
         }
+    }
+
+    /// Returns the distance between two VGonio BRDFs considering only the
+    /// samples that are lower than the given limit.
+    fn filtered_distance(&self, other: &Self, metric: ErrorMetric, limit: Radians) -> f64 {
+        assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
+        if self.params != other.params {
+            panic!("Parameterization must be the same!");
+        }
+        if (limit.as_f64() - std::f64::consts::FRAC_PI_2).abs() < 1e-6 {
+            return self.distance(other, metric);
+        }
+        let n_wo = self.params.n_wo();
+        let n_wi_filtered = self
+            .params
+            .incoming
+            .iter()
+            .position(|sph| sph.theta >= limit)
+            .unwrap();
+        let n_wo_filtered = self
+            .params
+            .outgoing
+            .patches
+            .iter()
+            .position(|patch| patch.center().theta >= limit)
+            .unwrap();
+        let n_spectrum = self.spectrum.len();
+        let n_samples = n_wi_filtered * n_wo_filtered * n_spectrum;
+
+        let factor = match metric {
+            ErrorMetric::Mse => math::rcp_f64(n_samples as f64),
+            ErrorMetric::Nllsq => 0.5,
+        };
+
+        let mut dist = 0.0;
+        for i in 0..n_wi_filtered {
+            for j in 0..n_wo_filtered {
+                for k in 0..n_spectrum {
+                    let offset = i * n_wo * n_spectrum + j * n_spectrum + k;
+                    let diff = self.samples[offset] as f64 - other.samples[offset] as f64;
+                    dist += math::sqr(diff) * factor;
+                }
+            }
+        }
+
+        dist
     }
 }
 

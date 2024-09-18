@@ -1,6 +1,9 @@
 //! Error computation for fitting measured data to a model.
 
-use base::{optics::ior::RefractiveIndexRegistry, range::RangeByStepSizeInclusive, ErrorMetric};
+use base::{
+    optics::ior::RefractiveIndexRegistry, range::RangeByStepSizeInclusive, units::Radians,
+    ErrorMetric,
+};
 use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
@@ -17,9 +20,22 @@ pub fn compute_microfacet_brdf_err<M: AnalyticalFit + Sync>(
     distro: MicrofacetDistroKind,
     alpha: RangeByStepSizeInclusive<f64>,
     iors: &RefractiveIndexRegistry,
+    theta_limit: Radians,
     metric: ErrorMetric,
 ) -> Box<[f64]> {
     let count = alpha.step_count();
+    let equals_half_pi = approx::abs_diff_eq!(
+        theta_limit.as_f64(),
+        std::f64::consts::FRAC_PI_2,
+        epsilon = 1e-6
+    );
+
+    if equals_half_pi {
+        log::debug!("compute full distance");
+    } else {
+        log::debug!("compute filtered distance");
+    }
+
     const CHUNK_SIZE: usize = 32;
     let mut errs = Box::new_uninit_slice(count);
     errs.par_chunks_mut(CHUNK_SIZE)
@@ -37,7 +53,11 @@ pub fn compute_microfacet_brdf_err<M: AnalyticalFit + Sync>(
                     },
                 };
                 let modelled = measured.new_analytical_from_self(&*m, iors);
-                err_chunks[j].write(measured.distance(&modelled, metric));
+                if equals_half_pi {
+                    err_chunks[j].write(measured.distance(&modelled, metric));
+                } else {
+                    err_chunks[j].write(measured.filtered_distance(&modelled, metric, theta_limit));
+                }
             }
         });
     unsafe { errs.assume_init() }

@@ -398,7 +398,7 @@ pub fn rcp_f64(x: f64) -> f64 {
                         _mm_cvtsd_f64(_mm_mul_sd(r, _mm_sub_sd(_mm_set_sd(2.0), _mm_mul_sd(r, a))))
                     }
                 } else {
-                    // There is no _mm_rcp_sd intrinsic, so we use _mm_rcp_ss instead.
+                    // There's no _mm_rcp_sd intrinsic, so use _mm_rcp_ss instead.
                     rcp_f32(x as f32) as f64
                 }
             }

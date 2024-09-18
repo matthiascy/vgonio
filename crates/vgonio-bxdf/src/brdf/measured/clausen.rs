@@ -9,11 +9,11 @@ use crate::{brdf::measured::AnalyticalFit, Bxdf, Scattering};
 use base::optics::ior::RefractiveIndexRegistry;
 use base::{
     error::VgonioError,
-    impl_measured_data_trait,
+    impl_measured_data_trait, math,
     math::Sph2,
     medium::Medium,
     units::{nm, Nanometres, Radians},
-    MeasuredData, MeasurementKind,
+    ErrorMetric, MeasuredData, MeasurementKind,
 };
 use jabr::array::DyArr;
 use std::{
@@ -361,5 +361,48 @@ impl AnalyticalFit for ClausenBrdf {
             spectrum: DyArr::from_slice([n_spectrum], spectrum),
             samples,
         }
+    }
+
+    fn filtered_distance(&self, other: &Self, metric: ErrorMetric, limit: Radians) -> f64 {
+        log::debug!("Filtering distance with limit: {}", limit.prettified());
+        assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
+        if self.params() != other.params() {
+            panic!("Parameterization must be the same!");
+        }
+        let n_spectrum = self.n_spectrum();
+        let n_samples = self
+            .params
+            .all_wi_wo_iter()
+            .filter(|(wi, wo)| wi.theta < limit && wo.theta < limit)
+            .count()
+            * n_spectrum;
+        log::debug!(
+            "Number of samples: {}, total: {}",
+            n_samples,
+            self.samples.len()
+        );
+        let factor = match metric {
+            ErrorMetric::Mse => math::rcp_f64(n_samples as f64),
+            ErrorMetric::Nllsq => 0.5,
+        };
+        self.params
+            .all_wi_wo_iter()
+            .zip(
+                self.samples
+                    .as_slice()
+                    .chunks(n_spectrum)
+                    .zip(other.samples.as_slice().chunks(n_spectrum)),
+            )
+            .fold(0.0, |acc, ((wi, wo), (s1, s2))| {
+                if wi.theta < limit && wo.theta < limit {
+                    let mut diff = 0.0f64;
+                    for (a, b) in s1.iter().zip(s2.iter()) {
+                        diff += math::sqr(*a as f64 - *b as f64) * factor;
+                    }
+                    acc + diff
+                } else {
+                    acc
+                }
+            })
     }
 }

@@ -34,6 +34,7 @@ use base::range::RangeByStepSizeInclusive;
 use base::{
     handle::Handle,
     io::{CompressionScheme, FileEncoding},
+    units::Radians,
     MeasurementKind,
 };
 #[cfg(feature = "fitting")]
@@ -251,12 +252,14 @@ impl VgonioGui {
                                         .measured
                                         .downcast_ref::<MeasuredBsdfData>()
                                         .unwrap();
+                                    // TODO: add ui to select the theta limit
                                     let problem = MicrofacetBrdfFittingProblem::new(
                                         measured_brdf_data.brdf_at(MeasuredBrdfLevel::L0).unwrap(),
                                         distro.unwrap(),
                                         RangeByStepSizeInclusive::new(0.001, 1.0, 0.01),
                                         MeasuredBrdfLevel::L0,
                                         &cache.iors,
+                                        Radians::HALF_PI,
                                     );
                                     problem.lsq_lm_fit(*isotropy)
                                 });

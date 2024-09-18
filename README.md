@@ -169,6 +169,12 @@ specified in the measurement description should be an absolute path or a path re
 in the configuration file (`data_dir`). The specified data directory can be referenced using `usr://` in the measurement
 description.
 
+```shell
+vgonio measure -i meas/brdf.yaml -f vgmo-exr
+```
+
+### Fitting
+
 ### Plotting
 
 The `plot` subcommand is used to plot the measured data.

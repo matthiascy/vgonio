@@ -6,6 +6,7 @@ use base::{
     math::Vec3,
     optics::ior::{Ior, RefractiveIndexRegistry},
     range::RangeByStepSizeInclusive,
+    units::Radians,
     Isotropy,
 };
 use bxdf::{
@@ -43,6 +44,8 @@ pub struct MicrofacetBrdfFittingProblem<'a, P: BrdfParameterisation> {
     pub iors_t: Box<[Ior]>,
     /// The initial guess for the roughness parameter.
     pub initial_guess: RangeByStepSizeInclusive<f64>,
+    /// The polar angle limit for the data fitting.
+    pub theta_limit: Radians,
 }
 
 impl<'a, P: BrdfParameterisation> Display for MicrofacetBrdfFittingProblem<'a, P> {
@@ -66,6 +69,7 @@ impl<'a, P: BrdfParameterisation> MicrofacetBrdfFittingProblem<'a, P> {
         initial: RangeByStepSizeInclusive<f64>,
         level: MeasuredBrdfLevel, // temporarily only one level is supported
         iors: &'a RefractiveIndexRegistry,
+        theta_limit: Radians,
     ) -> Self {
         let spectrum = measured.spectrum();
         let iors_i = iors
@@ -91,6 +95,7 @@ impl<'a, P: BrdfParameterisation> MicrofacetBrdfFittingProblem<'a, P> {
             iors_i,
             iors_t,
             initial_guess: initial,
+            theta_limit,
         }
     }
 }
@@ -128,7 +133,13 @@ macro_rules! switch_isotropy {
                     $brdf_params_ty,
                     $brdf_ty,
                     { Isotropy::Isotropic },
-                >::new($brdf, $model, &$self.iors_i, &$self.iors_t);
+                >::new(
+                    $brdf,
+                    $model,
+                    &$self.iors_i,
+                    &$self.iors_t,
+                    $self.theta_limit,
+                );
                 let (result, report) = $solver.minimize(problem);
                 (result.model, report)
             },
@@ -137,7 +148,13 @@ macro_rules! switch_isotropy {
                     $brdf_params_ty,
                     $brdf_ty,
                     { Isotropy::Anisotropic },
-                >::new($brdf, $model, &$self.iors_i, &$self.iors_t);
+                >::new(
+                    $brdf,
+                    $model,
+                    &$self.iors_i,
+                    &$self.iors_t,
+                    $self.theta_limit,
+                );
                 let (result, report) = $solver.minimize(problem);
                 (result.model, report)
             },
@@ -170,7 +187,7 @@ impl<'a, P: BrdfParameterisation> FittingProblem for MicrofacetBrdfFittingProble
                             ClausenBrdfParameterisation,
                             ClausenBrdf,
                             { Isotropy::Isotropic },
-                        >::new(brdf, model, &self.iors_i, &self.iors_t);
+                        >::new(brdf, model, &self.iors_i, &self.iors_t, self.theta_limit);
                         let (result, report) = solver.minimize(problem);
                         (result.model, report)
                     },
@@ -218,6 +235,10 @@ where
     /// The refractive indices of the transmitted medium at the measured
     /// wavelengths.
     iors_t: &'a [Ior],
+    /// Polar angle limits for the data fitting.
+    /// This is used to filter out the aberrant data points close to the grazing
+    /// angles.
+    theta_limit: Radians,
     /// Cached data for the fitting problem.
     cache: Box<dyn Any>,
 }
@@ -236,6 +257,7 @@ impl<'a, const I: Isotropy> BrdfFittingProblemProxy<'a, VgonioBrdfParameterisati
         model: Box<dyn Bxdf<Params = [f64; 2]>>,
         iors_i: &'a [Ior],
         iors_t: &'a [Ior],
+        theta_limit: Radians,
     ) -> Self {
         let cache = VgonioBrdfFittingCache {
             wis: measured.params().incoming_cartesian(),
@@ -246,12 +268,14 @@ impl<'a, const I: Isotropy> BrdfFittingProblemProxy<'a, VgonioBrdfParameterisati
             model,
             iors_i,
             iors_t,
+            theta_limit,
             cache: Box::new(cache),
         }
     }
 
     /// Evaluates the residuals of the fitting problem.
     pub fn eval_residuals(&self) -> Box<[f64]> {
+        log::debug!("evaluating residuals");
         // The number of residuals is n_wi * n_wo * n_spectrum.
         let n_wo = self.measured.params.n_wo();
         let n_wi = self.measured.params.n_wi();
@@ -286,30 +310,62 @@ impl<'a, const I: Isotropy> BrdfFittingProblemProxy<'a, VgonioBrdfParameterisati
         }
         unsafe { rs.assume_init() }
     }
-}
 
-impl<'a> LeastSquaresProblem<f64, Dyn, U1>
-    for BrdfFittingProblemProxy<'a, VgonioBrdfParameterisation, VgonioBrdf, { Isotropy::Isotropic }>
-{
-    type ResidualStorage = VecStorage<f64, Dyn, U1>;
-    type JacobianStorage = Owned<f64, Dyn, U1>;
-    type ParameterStorage = Owned<f64, U1, U1>;
-
-    fn set_params(&mut self, params: &Vector<f64, U1, Self::ParameterStorage>) {
-        self.model.set_params(&[params[0], params[0]]);
+    pub fn eval_residuals_filtered(&self) -> Box<[f64]> {
+        log::debug!("evaluating residuals with filtering");
+        // The number of residuals is n_wi * n_wo * n_spectrum.
+        let n_wo = self.measured.params.n_wo();
+        let n_wi = self.measured.params.n_wi();
+        let n_spectrum = self.measured.spectrum.len();
+        let cache = self.cache.downcast_ref::<VgonioBrdfFittingCache>().unwrap();
+        let n_wi_filtered = cache
+            .wis
+            .iter()
+            .position(|wi| base::math::theta(wi) >= self.theta_limit)
+            .unwrap();
+        let n_wo_filtered = cache
+            .wos
+            .iter()
+            .position(|wo| base::math::theta(wo) >= self.theta_limit)
+            .unwrap();
+        // Row-major [snapshot, patch, wavelength] = [wi, wo, wavelength]
+        let mut rs = Box::new_uninit_slice(n_wi_filtered * n_wo_filtered * n_spectrum);
+        // Incident directions.
+        for (i, snapshot) in self.measured.snapshots().enumerate() {
+            if i >= n_wi_filtered {
+                break;
+            }
+            let wi = snapshot.wi.to_cartesian();
+            // Outgoing directions.
+            for (j, (wo, samples)) in cache
+                .wos
+                .iter()
+                .zip(snapshot.samples.chunks(n_spectrum))
+                .enumerate()
+            {
+                if j >= n_wo_filtered {
+                    break;
+                }
+                let modelled_values = Scattering::eval_reflectance_spectrum(
+                    self.model.as_ref(),
+                    &wi,
+                    &wo,
+                    self.iors_i,
+                    self.iors_t,
+                );
+                // Wavelengths.
+                for (k, (measured, modelled)) in
+                    samples.iter().zip(modelled_values.iter()).enumerate()
+                {
+                    rs[i * n_wo_filtered * n_spectrum + j * n_spectrum + k]
+                        .write(modelled - *measured as f64);
+                }
+            }
+        }
+        unsafe { rs.assume_init() }
     }
 
-    fn params(&self) -> Vector<f64, U1, Self::ParameterStorage> {
-        Vector::<f64, U1, Self::ParameterStorage>::new(self.model.params()[0])
-    }
-
-    fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
-        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
-            &self.eval_residuals(),
-        ))
-    }
-
-    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
+    fn jacobian_iso(&self) -> Box<[f64]> {
         let n_spectrum = self.measured.spectrum.len();
         let n_wi = self.measured.params.n_wi();
         let n_wo = self.measured.params.n_wo();
@@ -334,37 +390,89 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
                 }
             }
         }
-        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&jacobian))
-    }
-}
-
-impl<'a> LeastSquaresProblem<f64, Dyn, U2>
-    for BrdfFittingProblemProxy<
-        'a,
-        VgonioBrdfParameterisation,
-        VgonioBrdf,
-        { Isotropy::Anisotropic },
-    >
-{
-    type ResidualStorage = VecStorage<f64, Dyn, U1>;
-    type JacobianStorage = Owned<f64, Dyn, U2>;
-    type ParameterStorage = Owned<f64, U2, U1>;
-
-    fn set_params(&mut self, params: &Vector<f64, U2, Self::ParameterStorage>) {
-        self.model.set_params(&[params[0], params[1]]);
+        jacobian
     }
 
-    fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> {
-        Vector::<f64, U2, Self::ParameterStorage>::from(self.model.params())
+    fn jacobian_iso_filtered(&self) -> Box<[f64]> {
+        let n_spectrum = self.measured.spectrum.len();
+        let n_wi = self.measured.params.n_wi();
+        let n_wo = self.measured.params.n_wo();
+        let cache = self.cache.downcast_ref::<VgonioBrdfFittingCache>().unwrap();
+        let n_wi_filtered = cache
+            .wis
+            .iter()
+            .position(|wi| base::math::theta(wi) >= self.theta_limit)
+            .unwrap();
+        let n_wo_filtered = cache
+            .wos
+            .iter()
+            .position(|wo| base::math::theta(wo) >= self.theta_limit)
+            .unwrap();
+        let derivative_per_wavelength = self
+            .iors_i
+            .iter()
+            .zip(self.iors_t.iter())
+            .map(|(ior_i, ior_t)| {
+                self.model
+                    .pds_iso(cache.wis.as_ref(), cache.wos.as_ref(), ior_i, ior_t)
+            })
+            .collect::<Vec<_>>();
+        // Re-arrange the shape of the derivatives to match the residuals:
+        // [snapshot, patch, wavelength]
+        let mut jacobian = vec![0.0; n_wi_filtered * n_wo_filtered * n_spectrum].into_boxed_slice();
+        for i in 0..n_wi_filtered {
+            for j in 0..n_wo_filtered {
+                for k in 0..n_spectrum {
+                    let offset = i * n_wo_filtered * n_spectrum + j * n_spectrum + k;
+                    jacobian[offset] = derivative_per_wavelength[k][i * n_wo + j];
+                }
+            }
+        }
+        jacobian
     }
 
-    fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> {
-        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
-            &self.eval_residuals(),
-        ))
+    fn jacobian_aniso(&self) -> Box<[f64]> {
+        let n_wi = self.measured.params.n_wi();
+        let n_wo = self.measured.params.n_wo();
+        let cache = self.cache.downcast_ref::<VgonioBrdfFittingCache>().unwrap();
+        let n_wi_filtered = cache
+            .wis
+            .iter()
+            .position(|wi| base::math::theta(wi) >= self.theta_limit)
+            .unwrap();
+        let n_wo_filtered = cache
+            .wos
+            .iter()
+            .position(|wo| base::math::theta(wo) >= self.theta_limit)
+            .unwrap();
+        let derivative_per_wavelength = self
+            .iors_i
+            .iter()
+            .zip(self.iors_t.iter())
+            .map(|(ior_i, ior_t)| {
+                self.model
+                    .pds(cache.wis.as_ref(), cache.wos.as_ref(), ior_i, ior_t)
+            })
+            .collect::<Vec<_>>();
+        let n_spectrum = self.measured.spectrum.len();
+        // Re-arrange the shape of the derivatives to match the residuals:
+        // [snapshot, patch, wavelength, alpha]
+        //  n_snapshot, n_patch, n_wavelength, 2
+        let mut jacobian =
+            vec![0.0; n_wi_filtered * n_wo_filtered * n_spectrum * 2].into_boxed_slice();
+        for i in 0..n_wi_filtered {
+            for j in 0..n_wo_filtered {
+                for k in 0..n_spectrum {
+                    let offset = i * n_wo_filtered * n_spectrum * 2 + j * n_spectrum * 2 + k * 2;
+                    jacobian[offset] = derivative_per_wavelength[k][i * n_wo * 2 + j * 2];
+                    jacobian[offset + 1] = derivative_per_wavelength[k][i * n_wo * 2 + j * 2 + 1];
+                }
+            }
+        }
+        jacobian
     }
 
-    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
+    fn jacobian_aniso_filtered(&self) -> Box<[f64]> {
         let n_wi = self.measured.params.n_wi();
         let n_wo = self.measured.params.n_wo();
         let cache = self.cache.downcast_ref::<VgonioBrdfFittingCache>().unwrap();
@@ -391,7 +499,88 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
                 }
             }
         }
-        Some(OMatrix::<f64, Dyn, U2>::from_row_slice(&jacobian))
+        jacobian
+    }
+}
+
+// Macro to generate the residuals method for the fitting problem proxy to avoid
+// code duplication.
+macro_rules! residuals {
+    ($self:ident) => {
+        if ($self.theta_limit.as_f64() - std::f64::consts::FRAC_PI_2).abs() < 1e-6 {
+            Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
+                &$self.eval_residuals(),
+            ))
+        } else {
+            Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
+                &$self.eval_residuals_filtered(),
+            ))
+        }
+    };
+}
+
+impl<'a> LeastSquaresProblem<f64, Dyn, U1>
+    for BrdfFittingProblemProxy<'a, VgonioBrdfParameterisation, VgonioBrdf, { Isotropy::Isotropic }>
+{
+    type ResidualStorage = VecStorage<f64, Dyn, U1>;
+    type JacobianStorage = Owned<f64, Dyn, U1>;
+    type ParameterStorage = Owned<f64, U1, U1>;
+
+    fn set_params(&mut self, params: &Vector<f64, U1, Self::ParameterStorage>) {
+        self.model.set_params(&[params[0], params[0]]);
+    }
+
+    fn params(&self) -> Vector<f64, U1, Self::ParameterStorage> {
+        Vector::<f64, U1, Self::ParameterStorage>::new(self.model.params()[0])
+    }
+
+    fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> { residuals!(self) }
+
+    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
+        if (self.theta_limit.as_f64() - std::f64::consts::FRAC_PI_2).abs() < 1e-6 {
+            Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
+                &self.jacobian_iso(),
+            ))
+        } else {
+            Some(OMatrix::<f64, Dyn, U1>::from_row_slice(
+                &self.jacobian_iso_filtered(),
+            ))
+        }
+    }
+}
+
+impl<'a> LeastSquaresProblem<f64, Dyn, U2>
+    for BrdfFittingProblemProxy<
+        'a,
+        VgonioBrdfParameterisation,
+        VgonioBrdf,
+        { Isotropy::Anisotropic },
+    >
+{
+    type ResidualStorage = VecStorage<f64, Dyn, U1>;
+    type JacobianStorage = Owned<f64, Dyn, U2>;
+    type ParameterStorage = Owned<f64, U2, U1>;
+
+    fn set_params(&mut self, params: &Vector<f64, U2, Self::ParameterStorage>) {
+        self.model.set_params(&[params[0], params[1]]);
+    }
+
+    fn params(&self) -> Vector<f64, U2, Self::ParameterStorage> {
+        Vector::<f64, U2, Self::ParameterStorage>::from(self.model.params())
+    }
+
+    fn residuals(&self) -> Option<Matrix<f64, Dyn, U1, Self::ResidualStorage>> { residuals!(self) }
+
+    fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
+        if (self.theta_limit.as_f64() - std::f64::consts::FRAC_PI_2).abs() < 1e-6 {
+            Some(OMatrix::<f64, Dyn, U2>::from_row_slice(
+                &self.jacobian_aniso(),
+            ))
+        } else {
+            Some(OMatrix::<f64, Dyn, U2>::from_row_slice(
+                &self.jacobian_aniso_filtered(),
+            ))
+        }
     }
 }
 
@@ -403,12 +592,14 @@ impl<'a, const I: Isotropy>
         model: Box<dyn Bxdf<Params = [f64; 2]>>,
         iors_i: &'a [Ior],
         iors_t: &'a [Ior],
+        theta_limit: Radians,
     ) -> Self {
         Self {
             measured,
             model,
             iors_i,
             iors_t,
+            theta_limit,
             cache: Box::new(()),
         }
     }
@@ -420,30 +611,40 @@ impl<'a, const I: Isotropy>
         self.measured
             .params
             .wi_wos_iter()
-            .flat_map(|(i, (wi, wos))| {
+            .filter_map(|(i, (wi, wos))| {
+                if wi.theta >= self.theta_limit {
+                    return None;
+                }
                 let wi = wi.to_cartesian();
-                wos.iter().enumerate().flat_map(move |(j, wo)| {
-                    let wo = wo.to_cartesian();
-                    // Reuse the memory of the modelled samples to store the residuals.
-                    let mut modelled = Scattering::eval_reflectance_spectrum(
-                        self.model.as_ref(),
-                        &wi,
-                        &wo,
-                        &self.iors_i,
-                        &self.iors_t,
-                    )
-                    .into_vec();
-                    let offset = i * n_wo * n_spectrum + j * n_spectrum;
-                    let measured = &self.measured.samples.as_slice()[offset..offset + n_spectrum];
-                    modelled
-                        .iter_mut()
-                        .zip(measured.iter())
-                        .for_each(|(modelled, measured)| {
-                            *modelled = *measured as f64 - *modelled;
-                        });
-                    modelled.into_iter()
-                })
+                Some(
+                    wos.iter()
+                        .enumerate()
+                        .filter(|(_, wo)| wo.theta < self.theta_limit)
+                        .flat_map(move |(j, wo)| {
+                            let wo = wo.to_cartesian();
+                            // Reuse the memory of the modelled samples to store the residuals.
+                            let mut modelled = Scattering::eval_reflectance_spectrum(
+                                self.model.as_ref(),
+                                &wi,
+                                &wo,
+                                &self.iors_i,
+                                &self.iors_t,
+                            )
+                            .into_vec();
+                            let offset = i * n_wo * n_spectrum + j * n_spectrum;
+                            let measured =
+                                &self.measured.samples.as_slice()[offset..offset + n_spectrum];
+
+                            modelled.iter_mut().zip(measured.iter()).for_each(
+                                |(modelled, measured)| {
+                                    *modelled = *measured as f64 - *modelled;
+                                },
+                            );
+                            modelled.into_iter()
+                        }),
+                )
             })
+            .flatten()
             .collect::<Box<_>>()
     }
 }
@@ -479,14 +680,20 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
             .measured
             .params
             .all_wi_wo_iter()
-            .flat_map(|(wi_sph, wo_sph)| {
-                let wi = wi_sph.to_cartesian();
-                let wo = wo_sph.to_cartesian();
-                self.iors_i
-                    .iter()
-                    .zip(self.iors_t)
-                    .map(move |(ior_i, ior_t)| self.model.pd_iso(&wi, &wo, ior_i, ior_t))
+            .filter_map(|(wi, wo)| {
+                if wi.theta >= self.theta_limit || wo.theta >= self.theta_limit {
+                    return None;
+                }
+                let wi = wi.to_cartesian();
+                let wo = wo.to_cartesian();
+                Some(
+                    self.iors_i
+                        .iter()
+                        .zip(self.iors_t.iter())
+                        .map(move |(ior_i, ior_t)| self.model.pd_iso(&wi, &wo, ior_i, ior_t)),
+                )
             })
+            .flatten()
             .collect::<Vec<_>>();
         Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&pds))
     }

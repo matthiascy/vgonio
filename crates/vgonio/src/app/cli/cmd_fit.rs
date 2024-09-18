@@ -11,13 +11,15 @@ use base::{
     optics::ior::RefractiveIndexRegistry,
     partition::{PartitionScheme, SphericalDomain},
     range::RangeByStepSizeInclusive,
-    units::{nm, Rads},
+    units::{nm, Radians, Rads},
     ErrorMetric, Isotropy,
 };
 use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
-        measured::{AnalyticalFit, ClausenBrdf, VgonioBrdf, VgonioBrdfParameterisation},
+        measured::{
+            AnalyticalFit, ClausenBrdf, MeasuredBrdfKind, VgonioBrdf, VgonioBrdfParameterisation,
+        },
         Bxdf, BxdfFamily,
     },
     distro::MicrofacetDistroKind,
@@ -33,6 +35,9 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
         ansi::RESET,
         opts.family,
     );
+    let theta_limit = opts
+        .theta_limit
+        .and_then(|t| Some(Radians::from_degrees(t)));
     // Load the data from the cache if the fitting is BxDF
     let cache = Cache::new(config.cache_dir());
     let alpha = RangeByStepSizeInclusive::new(
@@ -123,7 +128,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
             }
         } else {
             if opts.clausen {
-                println!("Fitting to Clausen's data.");
+                println!("Fitting simulated data to Clausen's data.");
                 if opts.inputs.len() % 2 != 0 {
                     return Err(VgonioError::new(
                         "The input files should be in pairs of measured data and corresponding \
@@ -168,7 +173,15 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         )
                     };
                     log::debug!("BRDF extraction done, starting fitting.");
-                    measured_brdf_fitting(opts.method, &pair[0], &brdf, &opts, alpha, &cache.iors);
+                    measured_brdf_fitting(
+                        opts.method,
+                        &pair[0],
+                        &brdf,
+                        &opts,
+                        alpha,
+                        &cache.iors,
+                        theta_limit,
+                    );
                 }
             } else {
                 for input in &opts.inputs {
@@ -186,6 +199,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                 &opts,
                                 alpha,
                                 &cache.iors,
+                                theta_limit,
                             );
                         },
                         Some(brdfs) => {
@@ -197,6 +211,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                 &opts,
                                 alpha,
                                 &cache.iors,
+                                theta_limit,
                             )
                         },
                     }
@@ -219,6 +234,9 @@ fn brdf_fitting_brute_force<F: AnalyticalFit + Sync>(
         opts.distro,
         alpha,
         iors,
+        opts.theta_limit
+            .and_then(|t| Some(Radians::from_degrees(t)))
+            .unwrap_or(Radians::HALF_PI),
         opts.error_metric.unwrap_or(ErrorMetric::Mse),
     );
     let min_err = errs.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
@@ -255,21 +273,47 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
     opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,
     iors: &RefractiveIndexRegistry,
+    theta_limit: Option<Radians>,
 ) {
+    let limit = theta_limit.unwrap_or(Radians::HALF_PI);
     println!(
-        "    {}>{} Fitting to model: {:?} , distro: {:?}, isotropy: {}, method: {:?}",
+        "    {}>{} Fitting ({:?}) to model: {:?} , distro: {:?}, isotropy: {}, method: {:?}, \
+         theta limit: {}",
         ansi::BRIGHT_YELLOW,
         ansi::RESET,
+        brdf.kind(),
         opts.family,
         opts.distro,
         opts.isotropy,
         opts.method,
+        limit.prettified()
     );
+    if brdf.kind() == MeasuredBrdfKind::Clausen {
+        let brdf = brdf.as_any().downcast_ref::<ClausenBrdf>().unwrap();
+        println!(
+            "    {}>{} Clausen's data, data point positions:",
+            ansi::BRIGHT_YELLOW,
+            ansi::RESET,
+        );
+        for (_, (wi, wos)) in brdf.params.wi_wos_iter() {
+            print!("        wi: {} - wo:", wi);
+            for wo in wos.iter() {
+                print!(" {}", wo);
+            }
+            println!();
+        }
+    }
     match method {
         FittingMethod::Brute => brdf_fitting_brute_force(brdf, filepath, opts, alpha, iors),
         FittingMethod::Nllsq => {
-            let problem =
-                MicrofacetBrdfFittingProblem::new(brdf, opts.distro, alpha, opts.level, iors);
+            let problem = MicrofacetBrdfFittingProblem::new(
+                brdf,
+                opts.distro,
+                alpha,
+                opts.level,
+                iors,
+                limit,
+            );
             problem.lsq_lm_fit(opts.isotropy).print_fitting_report();
         },
     }
@@ -369,6 +413,9 @@ pub struct FitOptions {
         default_value = "0.01"
     )]
     pub alpha_step: Option<f64>,
+
+    #[clap(long, help = "Theta limit for the fitting in degrees. Default to 90°.")]
+    pub theta_limit: Option<f32>,
 
     #[clap(
         short,

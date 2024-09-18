@@ -253,14 +253,14 @@ impl Bxdf for TrowbridgeReitzBrdf {
     }
 }
 
-/// Trowbridge-Reitz(GGX) microfacet BRDF model.
+/// Trowbridge-Reitz (GGX) microfacet BRDF model.
 /// See [Trowbridge-Reitz
 /// Distribution](crate::dist::TrowbridgeReitzDistribution).
 #[derive(Debug, Clone, Copy)]
 pub struct TrowbridgeReitzBrdfModel {
-    /// Roughness parameter of the originated from microfacet distribution
+    /// Roughness parameter of originated from microfacet distribution
     pub alpha_x: f64,
-    /// Roughness parameter of the originated from microfacet distribution
+    /// Roughness parameter of originated from microfacet distribution
     pub alpha_y: f64,
 }
 

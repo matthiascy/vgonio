@@ -188,19 +188,18 @@ impl<M> FittingReport<M> {
     where
         M: Debug,
     {
-        println!("Fitting report:");
-        println!(
-            "  Best model: {:?}, Err: {}",
-            self.best_model(),
-            self.best_model_report().unwrap().1.objective_function
-        );
-        println!("  Reports (first 16):");
+        println!("Fitting reports (first 16):");
         for (m, r) in self.reports.iter().take(16) {
             println!(
                 "    - Model: {:?}, objective_function: {}",
                 m, r.objective_function
             );
         }
+        println!(
+            "  Best model: {:?}, Err: {}",
+            self.best_model(),
+            self.best_model_report().unwrap().1.objective_function
+        );
     }
 }
 

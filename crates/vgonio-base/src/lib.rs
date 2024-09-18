@@ -170,7 +170,7 @@ pub enum ErrorMetric {
     /// Which is the half of the sum of the squares of the differences between
     /// the measured data and the model.
     #[default]
-    Nlls,
+    Nllsq,
 }
 
 /// Trait for the different kinds of measurement data.

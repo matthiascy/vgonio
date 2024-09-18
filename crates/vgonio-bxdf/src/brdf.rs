@@ -154,8 +154,8 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Note
     ///
-    /// For each incident direction wi, the derivatives with respect to params
-    /// are evaluated for each outgoing direction wo.
+    /// For each incident direction *i*, the derivatives with respect to params
+    /// are evaluated for each outgoing direction *o*.
     /// The returned vector has the length of number of parameters times the
     /// length of `i` times the length of `o`.
     fn pds_iso(&self, i: &[Vec3], o: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;

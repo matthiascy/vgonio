@@ -2,6 +2,7 @@ use base::{medium::Medium, units::Nanometres};
 use jabr::array::DyArr;
 use std::fmt::Debug;
 
+use base::units::Radians;
 #[cfg(feature = "fitting")]
 use base::{math, optics::ior::RefractiveIndexRegistry, ErrorMetric};
 
@@ -135,11 +136,11 @@ pub trait AnalyticalFit {
     {
         assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
         if self.params() != other.params() {
-            panic!("Parameterisations must be the same!");
+            panic!("Parameterization must be the same!");
         }
         let factor = match metric {
             ErrorMetric::Mse => math::rcp_f64(self.samples().len() as f64),
-            ErrorMetric::Nlls => 0.5,
+            ErrorMetric::Nllsq => 0.5,
         };
         self.samples()
             .iter()
@@ -149,6 +150,12 @@ pub trait AnalyticalFit {
                 acc + math::sqr(diff) * factor
             })
     }
+
+    /// Returns the distance between two BRDFs with a filter applied to exclude
+    /// certain polar angles.
+    fn filtered_distance(&self, other: &Self, metric: ErrorMetric, limit: Radians) -> f64
+    where
+        Self: Sized;
 
     /// Returns the wavelengths at which the BRDF is measured.
     fn spectrum(&self) -> &[Nanometres];
