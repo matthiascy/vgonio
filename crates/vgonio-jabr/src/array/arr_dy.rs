@@ -30,8 +30,13 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
     }
 
     /// Creates a new array from a vector.
+    #[track_caller]
     pub fn from_vec(shape: [usize; N], vec: Vec<T>) -> Self {
-        assert_eq!(compute_n_elems(&shape), vec.len());
+        assert_eq!(
+            compute_n_elems(&shape),
+            vec.len(),
+            "Shape and vector length mismatch"
+        );
         Self(ArrCore::new(shape, DynSized::from_vec(vec)))
     }
 
@@ -55,6 +60,7 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
     ///   which means that the size of that dimension is inferred.
     /// * `iter` - The iterator to create the array from. The number of elements
     ///   in the iterator must be equal to the number of elements in the shape.
+    #[track_caller]
     pub fn from_iterator(shape: [isize; N], iter: impl IntoIterator<Item = T>) -> Self {
         let num_minuses = shape.iter().filter(|&&x| x == -1).count();
         assert!(
