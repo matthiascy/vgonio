@@ -19,7 +19,6 @@ use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
 use crate::dcel::HalfEdgeMesh;
 
 use crate::subdivision::{curved, wiggle, Subdivision};
-
 use base::{
     error::VgonioError,
     io::{

@@ -1,4 +1,5 @@
 use super::{docking::DockSpace, event::EventResponse};
+use crate::fitting::ResidualErrorMetric;
 #[cfg(feature = "fitting")]
 use crate::fitting::{
     FittedModel, FittingProblem, FittingProblemKind, FittingReport, MfdFittingData,
@@ -261,7 +262,7 @@ impl VgonioGui {
                                         &cache.iors,
                                         Radians::HALF_PI,
                                     );
-                                    problem.lsq_lm_fit(*isotropy)
+                                    problem.lsq_lm_fit(*isotropy, ResidualErrorMetric::Identity)
                                 });
                                 report.print_fitting_report();
                                 // TODO: update the fitted models
@@ -305,7 +306,7 @@ impl VgonioGui {
                             };
                             let problem =
                                 MicrofacetDistributionFittingProblem::new(data, *model, *scale);
-                            problem.lsq_lm_fit(*isotropy)
+                            problem.lsq_lm_fit(*isotropy, ResidualErrorMetric::Identity)
                         });
                         report.print_fitting_report();
                         if let Some(model) = report.best_model() {

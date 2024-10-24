@@ -1,5 +1,5 @@
 use crate::{
-    fitting::{FittingProblem, FittingReport},
+    fitting::{FittingProblem, FittingReport, ResidualErrorMetric},
     measure::{
         mfd::{MeasuredGafData, MeasuredNdfData},
         params::NdfMeasurementMode,
@@ -66,7 +66,11 @@ impl<'a> MicrofacetDistributionFittingProblem<'a> {
 impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
     type Model = Box<dyn MicrofacetDistribution<Params = [f64; 2]>>;
 
-    fn lsq_lm_fit(self, isotropy: Isotropy) -> FittingReport<Self::Model> {
+    fn lsq_lm_fit(
+        self,
+        isotropy: Isotropy,
+        _re: ResidualErrorMetric,
+    ) -> FittingReport<Self::Model> {
         println!("Fitting MDF with isotropy: {:?}", isotropy);
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();

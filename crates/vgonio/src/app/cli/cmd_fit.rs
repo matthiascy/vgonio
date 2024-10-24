@@ -1,6 +1,6 @@
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
-    fitting::{err, FittingProblem, MicrofacetBrdfFittingProblem},
+    fitting::{err, FittingProblem, MicrofacetBrdfFittingProblem, ResidualErrorMetric},
     measure::bsdf::{receiver::ReceiverParams, MeasuredBrdfLevel, MeasuredBsdfData},
     pyplot::plot_err,
 };
@@ -314,7 +314,9 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
                 iors,
                 limit,
             );
-            problem.lsq_lm_fit(opts.isotropy).print_fitting_report();
+            problem
+                .lsq_lm_fit(opts.isotropy, opts.residual_error_metric)
+                .print_fitting_report();
         },
     }
 }
@@ -432,6 +434,13 @@ pub struct FitOptions {
         required_if_eq_all([("method", "bruteforce"), ("generate", "false")])
     )]
     pub error_metric: Option<ErrorMetric>,
+
+    #[clap(
+        long,
+        help = "The error metric to use to weight the measured data.",
+        default_value = "identity"
+    )]
+    pub residual_error_metric: ResidualErrorMetric,
 
     #[clap(
         long,
