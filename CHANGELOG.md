@@ -11,6 +11,8 @@
     - the actual offset is expressed as a percentage of the base offset
     - described as `/path/to/the/surface.vgmo ~~ wiggly l2 k100` in measurement description file
 - Enable excluding data points during BRDF fitting
+- Enable logarithmic scale for the residual calculation from the paper: BRDF Models for Accurate and Efficient Rendering
+  of Glossy Surfaces
 
 ## 0.3.2 - 2024-08-16
 
