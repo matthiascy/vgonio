@@ -16,8 +16,14 @@ impl RawGuiContext {
     pub(crate) fn new(window: &Window) -> Self {
         let context = egui::Context::default();
         egui_extras::install_image_loaders(&context);
-        let state =
-            egui_winit::State::new(context.clone(), egui::ViewportId::ROOT, window, None, None);
+        let state = egui_winit::State::new(
+            context.clone(),
+            egui::ViewportId::ROOT,
+            window,
+            None,
+            None,
+            None,
+        );
         Self {
             inner: context,
             state,
@@ -43,7 +49,7 @@ impl RawGuiContext {
     }
 
     /// Runs the Ui code for one frame then returns the output.
-    pub fn run(&mut self, ui: impl FnOnce(&egui::Context)) -> egui::FullOutput {
+    pub fn run(&mut self, ui: impl FnMut(&egui::Context)) -> egui::FullOutput {
         self.inner.run(self.input.take(), ui)
     }
 }

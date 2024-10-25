@@ -44,9 +44,9 @@ use uxtk::theme::{DarkTheme, LightTheme, Theme, ThemeKind};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyEvent, WindowEvent},
-    event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopWindowTarget},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopBuilder},
     keyboard::PhysicalKey,
-    window::{Window, WindowBuilder},
+    window::{Window, WindowAttributes},
 };
 
 /// Initial window width.
@@ -74,11 +74,9 @@ use crate::{
 
 /// Launches Vgonio GUI application native window.
 pub fn run(config: Config) -> Result<(), VgonioError> {
-    let event_loop = EventLoopBuilder::<VgonioEvent>::with_user_event()
-        .build()
-        .unwrap();
+    let event_loop = EventLoop::<VgonioEvent>::with_user_event().build().unwrap();
     let (window, win_id) = {
-        let window = WindowBuilder::new()
+        let attributes = WindowAttributes::default()
             .with_decorations(true)
             .with_resizable(true)
             .with_transparent(false)
@@ -86,9 +84,8 @@ pub fn run(config: Config) -> Result<(), VgonioError> {
                 width: WIN_INITIAL_WIDTH,
                 height: WIN_INITIAL_HEIGHT,
             })
-            .with_title("vgonio")
-            .build(&event_loop)
-            .unwrap();
+            .with_title("vgonio");
+        let window = event_loop.create_window(attributes).unwrap();
         let id = window.id();
         (Arc::new(window), id)
     };
@@ -253,11 +250,7 @@ impl VgonioGuiApp {
         );
     }
 
-    pub fn on_window_event(
-        &mut self,
-        event: &WindowEvent,
-        elwt: &EventLoopWindowTarget<VgonioEvent>,
-    ) {
+    pub fn on_window_event(&mut self, event: &WindowEvent, event_loop: &ActiveEventLoop) {
         let _ = self.gui_ctx.on_window_event(&self.window, event);
         // Even if the event was consumed by the UI, we still need to update the
         // input state.
@@ -288,7 +281,7 @@ impl VgonioGuiApp {
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 self.resize(self.window.inner_size(), Some(*scale_factor as f32));
             },
-            WindowEvent::CloseRequested => elwt.exit(),
+            WindowEvent::CloseRequested => event_loop.exit(),
             _ => {},
         }
     }
@@ -461,7 +454,7 @@ impl VgonioGuiApp {
         Ok(())
     }
 
-    pub fn on_user_event(&mut self, event: VgonioEvent, elwt: &EventLoopWindowTarget<VgonioEvent>) {
+    pub fn on_user_event(&mut self, event: VgonioEvent, event_loop: &ActiveEventLoop) {
         use VgonioEvent::*;
 
         // Handle events from the UI.
@@ -470,7 +463,7 @@ impl VgonioGuiApp {
             EventResponse::Ignored(event) => {
                 match event {
                     Quit => {
-                        elwt.exit();
+                        event_loop.exit();
                     },
                     RequestRedraw => {},
                     Debugging(event) => {
@@ -727,7 +720,7 @@ impl VgonioGuiApp {
     }
 
     /// Update the state of the app then render the current frame.
-    pub fn update_and_render(&mut self, elwt: &EventLoopWindowTarget<VgonioEvent>, dt: Duration) {
+    pub fn update_and_render(&mut self, event_loop: &ActiveEventLoop, dt: Duration) {
         let window = self.window.clone();
         match self.render_frame(&window, dt) {
             Ok(_) => {},
@@ -740,7 +733,7 @@ impl VgonioGuiApp {
                                 self.canvas.reconfigure(&self.gpu_ctx.device)
                             },
                             // The system is out of memory, we should quit
-                            wgpu::SurfaceError::OutOfMemory => elwt.exit(),
+                            wgpu::SurfaceError::OutOfMemory => event_loop.exit(),
                             // All other errors (Outdated, Timeout) should be resolved by the next
                             // frame
                             error => eprintln!("{error:?}"),

@@ -74,6 +74,7 @@ impl DepthMapPane {
                 minification: TextureFilter::Nearest,
                 magnification: TextureFilter::Nearest,
                 wrap_mode: TextureWrapMode::MirroredRepeat,
+                mipmap_mode: Some(TextureFilter::Nearest),
             },
         ));
     }

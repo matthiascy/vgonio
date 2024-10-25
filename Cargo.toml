@@ -48,13 +48,13 @@ chrono = "0.4"
 clap = { version = "~4", features = ["derive", "wrap_help"] }
 csv = "1"
 dirs = "5.0"
-egui = { version = "~0.28", features = ["bytemuck", "rayon", "puffin", "log", "callstack"] }
-egui_dock = { version = "~0.13" }
-egui_extras = { version = "~0.28", features = ["all_loaders"] }
-egui-winit = { version = "~0.28" }
+egui = { version = "~0.29", features = ["bytemuck", "rayon", "puffin", "log", "callstack"] }
+egui_dock = { version = "~0.14" }
+egui_extras = { version = "~0.29", features = ["all_loaders"] }
+egui-winit = { version = "~0.29" }
 egui-gizmo = { git = "https://github.com/matthiascy/egui-gizmo.git", branch = "own" }
-egui_plot = "~0.28"
-egui-file-dialog = "0.6"
+egui_plot = "~0.29"
+egui-file-dialog = "0.7"
 egui-toast = { git = "https://github.com/matthiascy/egui-toast.git", branch = "main" }
 env_logger = "~0.11"
 embree = { git = "https://github.com/matthiascy/embree-rs.git", branch = "own" }
@@ -88,7 +88,7 @@ tobj = "4.0"
 toml = "0.8"
 type-map = "0.5"
 uuid = { version = "1.2", features = ["serde", "v4"] }
-winit = "~0.29"
+winit = "~0.30"
 wgpu = { version = "22", features = ["wgsl"] }
 
 [workspace.lints.clippy]

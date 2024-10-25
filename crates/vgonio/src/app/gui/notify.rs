@@ -43,6 +43,7 @@ impl NotifySystem {
                 .duration_in_seconds(secs)
                 .show_icon(true)
                 .show_icon(true),
+            style: Default::default(),
         });
     }
 }

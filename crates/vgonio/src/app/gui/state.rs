@@ -215,7 +215,7 @@ impl GuiContext {
         window: &Window,
         screen_desc: ScreenDescriptor,
         target: &wgpu::TextureView,
-        ui: impl FnOnce(&egui::Context),
+        ui: impl FnMut(&egui::Context),
     ) -> GuiRenderOutput {
         let mut ui_cmd_encoder =
             self.device
