@@ -126,7 +126,7 @@ fn initialise_microfacet_bsdf_models(
 }
 
 macro_rules! switch_isotropy {
-    ($brdf_ty:ident<$brdf_params_ty:ident> => $isotropy:ident, $self:ident, $brdf:ident, $model:ident, $solver:ident, $em:ident) => {
+    ($brdf_ty:ident<$brdf_params_ty:ident> => $isotropy:ident, $self:ident, $brdf:ident, $model:ident, $solver:ident, $rmetric:ident) => {
         match $isotropy {
             Isotropy::Isotropic => {
                 let problem = BrdfFittingProblemProxy::<
@@ -139,7 +139,7 @@ macro_rules! switch_isotropy {
                     &$self.iors_i,
                     &$self.iors_t,
                     $self.theta_limit,
-                    $em,
+                    $rmetric,
                 );
                 let (result, report) = $solver.minimize(problem);
                 (result.model, report)
@@ -155,7 +155,7 @@ macro_rules! switch_isotropy {
                     &$self.iors_i,
                     &$self.iors_t,
                     $self.theta_limit,
-                    $em,
+                    $rmetric,
                 );
                 let (result, report) = $solver.minimize(problem);
                 (result.model, report)
@@ -168,7 +168,11 @@ macro_rules! switch_isotropy {
 impl<'a, P: BrdfParameterisation> FittingProblem for MicrofacetBrdfFittingProblem<'a, P> {
     type Model = Box<dyn Bxdf<Params = [f64; 2]>>;
 
-    fn lsq_lm_fit(self, isotropy: Isotropy, re: ResidualErrorMetric) -> FittingReport<Self::Model> {
+    fn lsq_lm_fit(
+        self,
+        isotropy: Isotropy,
+        rmetric: ResidualErrorMetric,
+    ) -> FittingReport<Self::Model> {
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
         let mut results = {
@@ -189,13 +193,13 @@ impl<'a, P: BrdfParameterisation> FittingProblem for MicrofacetBrdfFittingProble
                             ClausenBrdfParameterisation,
                             ClausenBrdf,
                             { Isotropy::Isotropic },
-                        >::new(brdf, model, &self.iors_i, &self.iors_t, self.theta_limit, re);
+                        >::new(brdf, model, &self.iors_i, &self.iors_t, self.theta_limit, rmetric);
                         let (result, report) = solver.minimize(problem);
                         (result.model, report)
                     },
                     MeasuredBrdfKind::Vgonio => {
                         let brdf = self.measured.as_any().downcast_ref::<VgonioBrdf>().unwrap();
-                        switch_isotropy!(VgonioBrdf<VgonioBrdfParameterisation> => isotropy, self, brdf, model, solver, re)
+                        switch_isotropy!(VgonioBrdf<VgonioBrdfParameterisation> => isotropy, self, brdf, model, solver, rmetric)
                     },
                     _ => {
                         log::warn!("Unsupported BRDF kind: {:?}", self.measured.kind());
@@ -305,26 +309,29 @@ impl<'a, const I: Isotropy> BrdfFittingProblemProxy<'a, VgonioBrdfParameterisati
                         self.iors_i,
                         self.iors_t,
                     );
-                    if self.error_metric == ResidualErrorMetric::Identity {
-                        samples
-                            .iter()
-                            .zip(modelled_values.iter())
-                            .enumerate()
-                            .for_each(|(k, (measured, modelled))| {
-                                rs[i * n_wo * n_spectrum + j * n_spectrum + k]
-                                    .write(modelled - *measured as f64);
-                            });
-                        return;
-                    } else if self.error_metric == ResidualErrorMetric::JLow {
-                        samples
-                            .iter()
-                            .zip(modelled_values.iter())
-                            .enumerate()
-                            .for_each(|(k, (measured, modelled))| {
-                                let me = (*measured as f64 * cos_theta_i + 1.0).ln();
-                                let md = (*modelled as f64 * cos_theta_i + 1.0).ln();
-                                rs[i * n_wo * n_spectrum + j * n_spectrum + k].write(md - me);
-                            });
+                    match self.error_metric {
+                        ResidualErrorMetric::Identity => {
+                            samples
+                                .iter()
+                                .zip(modelled_values.iter())
+                                .enumerate()
+                                .for_each(|(k, (measured, modelled))| {
+                                    rs[i * n_wo * n_spectrum + j * n_spectrum + k]
+                                        .write(modelled - *measured as f64);
+                                });
+                            return;
+                        },
+                        ResidualErrorMetric::JLow => {
+                            samples
+                                .iter()
+                                .zip(modelled_values.iter())
+                                .enumerate()
+                                .for_each(|(k, (measured, modelled))| {
+                                    let me = (*measured as f64 * cos_theta_i + 1.0).ln();
+                                    let md = (*modelled * cos_theta_i + 1.0).ln();
+                                    rs[i * n_wo * n_spectrum + j * n_spectrum + k].write(md - me);
+                                });
+                        },
                     }
                 });
         }

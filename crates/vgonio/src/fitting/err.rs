@@ -1,5 +1,6 @@
 //! Error computation for fitting measured data to a model.
 
+use crate::fitting::ResidualErrorMetric;
 use base::{
     optics::ior::RefractiveIndexRegistry, range::RangeByStepSizeInclusive, units::Radians,
     ErrorMetric,
@@ -22,6 +23,7 @@ pub fn compute_microfacet_brdf_err<M: AnalyticalFit + Sync>(
     iors: &RefractiveIndexRegistry,
     theta_limit: Radians,
     metric: ErrorMetric,
+    rmetric: ResidualErrorMetric,
 ) -> Box<[f64]> {
     let count = alpha.step_count();
     let equals_half_pi = approx::abs_diff_eq!(
@@ -54,9 +56,14 @@ pub fn compute_microfacet_brdf_err<M: AnalyticalFit + Sync>(
                 };
                 let modelled = measured.new_analytical_from_self(&*m, iors);
                 if equals_half_pi {
-                    err_chunks[j].write(measured.distance(&modelled, metric));
+                    err_chunks[j].write(measured.distance(&modelled, metric, rmetric));
                 } else {
-                    err_chunks[j].write(measured.filtered_distance(&modelled, metric, theta_limit));
+                    err_chunks[j].write(measured.filtered_distance(
+                        &modelled,
+                        metric,
+                        rmetric,
+                        theta_limit,
+                    ));
                 }
             }
         });

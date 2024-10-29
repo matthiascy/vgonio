@@ -13,7 +13,7 @@ use base::{
     math::Sph2,
     medium::Medium,
     units::{nm, Nanometres, Radians},
-    ErrorMetric, MeasuredData, MeasurementKind,
+    ErrorMetric, MeasuredData, MeasurementKind, ResidualErrorMetric,
 };
 use jabr::array::DyArr;
 use std::{
@@ -363,7 +363,54 @@ impl AnalyticalFit for ClausenBrdf {
         }
     }
 
-    fn filtered_distance(&self, other: &Self, metric: ErrorMetric, limit: Radians) -> f64 {
+    /// Computes the distance between the measured data and the model.
+    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: ResidualErrorMetric) -> f64 {
+        assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
+        if self.params() != other.params() {
+            panic!("Parameterization must be the same!");
+        }
+        let factor = match metric {
+            ErrorMetric::Mse => math::rcp_f64(self.samples().len() as f64),
+            ErrorMetric::Nllsq => 0.5,
+        };
+        match rmetric {
+            ResidualErrorMetric::Identity => self
+                .samples()
+                .iter()
+                .zip(other.samples().iter())
+                .fold(0.0f64, |acc, (a, b)| {
+                    let diff = *a as f64 - *b as f64;
+                    acc + math::sqr(diff) * factor
+                }),
+            ResidualErrorMetric::JLow => {
+                let n_spectrum = self.n_spectrum();
+                let n_wo = self.n_wo();
+                self.params
+                    .wi_wos_iter()
+                    .fold(0.0f64, |acc, (i, (wi, wos))| {
+                        let cos_theta_i = wi.theta.cos() as f64;
+                        acc + wos.iter().enumerate().fold(0.0f64, |acc, (j, wo)| {
+                            let offset = i * n_wo * n_spectrum + j * n_spectrum;
+                            let a = &self.samples.as_slice()[offset..offset + n_spectrum];
+                            let b = &other.samples.as_slice()[offset..offset + n_spectrum];
+                            acc + a.iter().zip(b.iter()).fold(0.0, |acc, (a, b)| {
+                                let diff = (*a as f64 * cos_theta_i + 1.0).ln()
+                                    - (*b as f64 * cos_theta_i + 1.0).ln();
+                                acc + math::sqr(diff) * factor
+                            })
+                        })
+                    })
+            },
+        }
+    }
+
+    fn filtered_distance(
+        &self,
+        other: &Self,
+        metric: ErrorMetric,
+        rmetric: ResidualErrorMetric,
+        limit: Radians,
+    ) -> f64 {
         log::debug!("Filtering distance with limit: {}", limit.prettified());
         assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
         if self.params() != other.params() {

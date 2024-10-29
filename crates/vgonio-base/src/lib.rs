@@ -173,6 +173,20 @@ pub enum ErrorMetric {
     Nllsq,
 }
 
+/// Loss function to use for the least-squares fitting.
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResidualErrorMetric {
+    /// Nothing applied to the measured data and model values.
+    #[clap(name = "identity")]
+    Identity,
+    /// From paper "BRDF Models for Accurate and Efficient Rendering of Glossy
+    /// Surfaces".
+    /// ln(1 + cos_theta_i * d) where d is the measured data or model value.
+    #[clap(name = "jlow")]
+    JLow,
+}
+
 /// Trait for the different kinds of measurement data.
 ///
 /// Measurement data can be of different kinds, such as

@@ -1,6 +1,6 @@
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
-    fitting::{err, FittingProblem, MicrofacetBrdfFittingProblem, ResidualErrorMetric},
+    fitting::{err, FittingProblem, MicrofacetBrdfFittingProblem},
     measure::bsdf::{receiver::ReceiverParams, MeasuredBrdfLevel, MeasuredBsdfData},
     pyplot::plot_err,
 };
@@ -12,7 +12,7 @@ use base::{
     partition::{PartitionScheme, SphericalDomain},
     range::RangeByStepSizeInclusive,
     units::{nm, Radians, Rads},
-    ErrorMetric, Isotropy,
+    ErrorMetric, Isotropy, ResidualErrorMetric,
 };
 use bxdf::{
     brdf::{
@@ -173,15 +173,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         )
                     };
                     log::debug!("BRDF extraction done, starting fitting.");
-                    measured_brdf_fitting(
-                        opts.method,
-                        &pair[0],
-                        &brdf,
-                        &opts,
-                        alpha,
-                        &cache.iors,
-                        theta_limit,
-                    );
+                    measured_brdf_fitting(&opts, &pair[0], &brdf, alpha, &cache.iors, theta_limit);
                 }
             } else {
                 for input in &opts.inputs {
@@ -193,10 +185,9 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         None => {
                             let brdf = measured.downcast_ref::<ClausenBrdf>().unwrap();
                             measured_brdf_fitting(
-                                opts.method,
+                                &opts,
                                 &input,
                                 brdf,
-                                &opts,
                                 alpha,
                                 &cache.iors,
                                 theta_limit,
@@ -205,10 +196,9 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         Some(brdfs) => {
                             let brdf = brdfs.brdf_at(MeasuredBrdfLevel::from(opts.level)).unwrap();
                             measured_brdf_fitting(
-                                opts.method,
+                                &opts,
                                 &input,
                                 brdf,
-                                &opts,
                                 alpha,
                                 &cache.iors,
                                 theta_limit,
@@ -238,6 +228,7 @@ fn brdf_fitting_brute_force<F: AnalyticalFit + Sync>(
             .and_then(|t| Some(Radians::from_degrees(t)))
             .unwrap_or(Radians::HALF_PI),
         opts.error_metric.unwrap_or(ErrorMetric::Mse),
+        opts.residual_error_metric,
     );
     let min_err = errs.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
     let min_idx = errs.iter().position(|&x| x == min_err).unwrap();
@@ -267,22 +258,22 @@ fn brdf_fitting_brute_force<F: AnalyticalFit + Sync>(
 }
 
 fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
-    method: FittingMethod,
+    opts: &FitOptions,
     filepath: &PathBuf,
     brdf: &F,
-    opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,
     iors: &RefractiveIndexRegistry,
     theta_limit: Option<Radians>,
 ) {
     let limit = theta_limit.unwrap_or(Radians::HALF_PI);
     println!(
-        "    {}>{} Fitting ({:?}) to model: {:?} , distro: {:?}, isotropy: {}, method: {:?}, \
-         theta limit: {}",
+        "    {}>{} Fitting ({:?}) to model: {:?} [{:?}], distro: {:?}, isotropy: {}, method: \
+         {:?}, theta limit: {}",
         ansi::BRIGHT_YELLOW,
         ansi::RESET,
         brdf.kind(),
         opts.family,
+        opts.residual_error_metric,
         opts.distro,
         opts.isotropy,
         opts.method,
@@ -303,7 +294,7 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
             println!();
         }
     }
-    match method {
+    match opts.method {
         FittingMethod::Brute => brdf_fitting_brute_force(brdf, filepath, opts, alpha, iors),
         FittingMethod::Nllsq => {
             let problem = MicrofacetBrdfFittingProblem::new(

@@ -90,7 +90,7 @@ impl SurfaceSelector {
     }
 
     /// Ui for the surface selector.
-    pub fn ui(&mut self, id_source: impl Hash, ui: &mut egui::Ui) {
+    pub fn ui(&mut self, id_salt: impl Hash, ui: &mut egui::Ui) {
         let mut to_be_added: Option<Handle<MicroSurface>> = None;
         egui::Grid::new("surface_selector_grid")
             .num_columns(2)
@@ -110,7 +110,7 @@ impl SurfaceSelector {
                     }
                     ui.end_row();
                 }
-                egui::ComboBox::from_id_source(id_source)
+                egui::ComboBox::from_id_salt(id_salt)
                     .selected_text("Select micro-surface")
                     .show_ui(ui, |ui| {
                         for (hdl, name) in &self.surfaces {

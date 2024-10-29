@@ -16,7 +16,7 @@ use base::{
     medium::Medium,
     partition::SphericalPartition,
     units::{Nanometres, Radians},
-    ErrorMetric,
+    ErrorMetric, ResidualErrorMetric,
 };
 #[cfg(feature = "exr")]
 use chrono::{DateTime, Local};
@@ -291,15 +291,60 @@ impl AnalyticalFit for VgonioBrdf {
         }
     }
 
+    /// Returns the distance between two VGonio BRDFs.
+    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: ResidualErrorMetric) -> f64 {
+        assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
+        if self.params() != other.params() {
+            panic!("Parameterization must be the same!");
+        }
+        let factor = match metric {
+            ErrorMetric::Mse => math::rcp_f64(self.samples().len() as f64),
+            ErrorMetric::Nllsq => 0.5,
+        };
+        match rmetric {
+            ResidualErrorMetric::Identity => self
+                .samples()
+                .iter()
+                .zip(other.samples().iter())
+                .fold(0.0f64, |acc, (a, b)| {
+                    let diff = *a as f64 - *b as f64;
+                    acc + math::sqr(diff) * factor
+                }),
+            ResidualErrorMetric::JLow => {
+                self.snapshots()
+                    .zip(other.snapshots())
+                    .fold(0.0f64, |acc, (xs, ys)| {
+                        let cos_theta_i = xs.wi.theta.cos() as f64;
+                        let diff =
+                            xs.samples
+                                .iter()
+                                .zip(ys.samples.iter())
+                                .fold(0.0f64, |acc, (a, b)| {
+                                    let diff = (*a as f64 * cos_theta_i + 1.0).ln()
+                                        - (*b as f64 * cos_theta_i + 1.0).ln();
+                                    acc + math::sqr(diff) * factor
+                                });
+                        acc + diff
+                    })
+            },
+        }
+    }
+
     /// Returns the distance between two VGonio BRDFs considering only the
     /// samples that are lower than the given limit.
-    fn filtered_distance(&self, other: &Self, metric: ErrorMetric, limit: Radians) -> f64 {
+    fn filtered_distance(
+        &self,
+        other: &Self,
+        metric: ErrorMetric,
+        rmetric: ResidualErrorMetric,
+        limit: Radians,
+    ) -> f64 {
         assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
         if self.params != other.params {
             panic!("Parameterization must be the same!");
         }
         if (limit.as_f64() - std::f64::consts::FRAC_PI_2).abs() < 1e-6 {
-            return self.distance(other, metric);
+            return self.distance(other, metric, rmetric);
         }
         let n_wo = self.params.n_wo();
         let n_wi_filtered = self

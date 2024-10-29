@@ -32,7 +32,7 @@ mod mfd;
 pub use brdf::*;
 pub use mfd::*;
 
-use base::Isotropy;
+use base::{Isotropy, ResidualErrorMetric};
 use bxdf::{
     brdf::{Bxdf, BxdfFamily},
     distro::{MicrofacetDistribution, MicrofacetDistroKind},
@@ -203,24 +203,15 @@ impl<M> FittingReport<M> {
     }
 }
 
-/// Loss function to use for the least-squares fitting.
-#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResidualErrorMetric {
-    /// Nothing applied to the measured data and model values.
-    #[clap(name = "identity")]
-    Identity,
-    /// From paper "BRDF Models for Accurate and Efficient Rendering of Glossy
-    /// Surfaces".
-    /// ln(1 + cos_theta_i * d) where d is the measured data or model value.
-    #[clap(name = "jlow")]
-    JLow,
-}
-
 /// A fitting problem.
 pub trait FittingProblem {
     /// The model to fit.
     type Model;
 
     /// Non-linear least squares fitting using Levenberg-Marquardt algorithm.
-    fn lsq_lm_fit(self, isotropy: Isotropy, rm: ResidualErrorMetric) -> FittingReport<Self::Model>;
+    fn lsq_lm_fit(
+        self,
+        isotropy: Isotropy,
+        rmetric: ResidualErrorMetric,
+    ) -> FittingReport<Self::Model>;
 }

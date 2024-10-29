@@ -1,5 +1,4 @@
 use super::{docking::DockSpace, event::EventResponse};
-use crate::fitting::ResidualErrorMetric;
 #[cfg(feature = "fitting")]
 use crate::fitting::{
     FittedModel, FittingProblem, FittingProblemKind, FittingReport, MfdFittingData,
@@ -36,7 +35,7 @@ use base::{
     handle::Handle,
     io::{CompressionScheme, FileEncoding},
     units::Radians,
-    MeasurementKind,
+    MeasurementKind, ResidualErrorMetric,
 };
 #[cfg(feature = "fitting")]
 use bxdf::brdf::BxdfFamily;

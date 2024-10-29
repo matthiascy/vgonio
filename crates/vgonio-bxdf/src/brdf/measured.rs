@@ -1,10 +1,10 @@
-use base::{medium::Medium, units::Nanometres};
+use base::{medium::Medium, units::Nanometres, ResidualErrorMetric};
 use jabr::array::DyArr;
 use std::fmt::Debug;
 
 use base::units::Radians;
 #[cfg(feature = "fitting")]
-use base::{math, optics::ior::RefractiveIndexRegistry, ErrorMetric};
+use base::{optics::ior::RefractiveIndexRegistry, ErrorMetric};
 
 #[cfg(feature = "fitting")]
 macro_rules! impl_analytical_fit_trait {
@@ -130,30 +130,22 @@ pub trait AnalyticalFit {
     }
 
     /// Returns the distance between two BRDFs.
-    fn distance(&self, other: &Self, metric: ErrorMetric) -> f64
+    /// The final distance is calculated based on the given error metric.
+    /// The residual error metric is used to calculate the distance between
+    /// two single values.
+    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: ResidualErrorMetric) -> f64
     where
-        Self: Sized,
-    {
-        assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
-        if self.params() != other.params() {
-            panic!("Parameterization must be the same!");
-        }
-        let factor = match metric {
-            ErrorMetric::Mse => math::rcp_f64(self.samples().len() as f64),
-            ErrorMetric::Nllsq => 0.5,
-        };
-        self.samples()
-            .iter()
-            .zip(other.samples().iter())
-            .fold(0.0f64, |acc, (a, b)| {
-                let diff = *a as f64 - *b as f64;
-                acc + math::sqr(diff) * factor
-            })
-    }
+        Self: Sized;
 
     /// Returns the distance between two BRDFs with a filter applied to exclude
     /// certain polar angles.
-    fn filtered_distance(&self, other: &Self, metric: ErrorMetric, limit: Radians) -> f64
+    fn filtered_distance(
+        &self,
+        other: &Self,
+        metric: ErrorMetric,
+        rmetric: ResidualErrorMetric,
+        limit: Radians,
+    ) -> f64
     where
         Self: Sized;
 
