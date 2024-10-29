@@ -18,6 +18,7 @@ use base::{
     units::{Nanometres, Radians},
     ErrorMetric, ResidualErrorMetric,
 };
+use chrono::__BenchYearFlags;
 #[cfg(feature = "exr")]
 use chrono::{DateTime, Local};
 use jabr::array::DyArr;
@@ -315,16 +316,14 @@ impl AnalyticalFit for VgonioBrdf {
                     .zip(other.snapshots())
                     .fold(0.0f64, |acc, (xs, ys)| {
                         let cos_theta_i = xs.wi.theta.cos() as f64;
-                        let diff =
-                            xs.samples
-                                .iter()
-                                .zip(ys.samples.iter())
-                                .fold(0.0f64, |acc, (a, b)| {
-                                    let diff = (*a as f64 * cos_theta_i + 1.0).ln()
-                                        - (*b as f64 * cos_theta_i + 1.0).ln();
-                                    acc + math::sqr(diff) * factor
-                                });
-                        acc + diff
+                        acc + xs.samples.iter().zip(ys.samples.iter()).fold(
+                            0.0f64,
+                            |acc, (a, b)| {
+                                let diff = (*a as f64 * cos_theta_i + 1.0).ln()
+                                    - (*b as f64 * cos_theta_i + 1.0).ln();
+                                acc + math::sqr(diff) * factor
+                            },
+                        )
                     })
             },
         }
