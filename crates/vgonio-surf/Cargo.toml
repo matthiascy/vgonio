@@ -11,6 +11,7 @@ bench = []
 embree = ["dep:embree"]
 surf-gen = []
 surf-obj = ["dep:tobj", "dep:ahash"]
+exr = ["dep:exr"]
 pybind = ["dep:pyo3"]
 
 [lib]
@@ -22,6 +23,7 @@ ahash = { workspace = true, optional = true }
 byteorder.workspace = true
 chrono.workspace = true
 clap.workspace = true
+exr = { workspace = true, optional = true }
 flate2.workspace = true
 glam.workspace = true
 log.workspace = true

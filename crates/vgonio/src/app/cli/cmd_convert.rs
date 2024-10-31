@@ -7,7 +7,7 @@ use base::{
     math::Axis,
 };
 use std::path::PathBuf;
-use surf::MicroSurface;
+use surf::{HeightOffset, MicroSurface};
 
 #[derive(clap::Args, Debug)]
 #[clap(
@@ -44,21 +44,21 @@ pub struct ConvertOptions {
     )]
     pub compression: CompressionScheme,
 
-    #[clap(
-        short,
-        long,
-        required = true,
-        help = "Type of conversion to perform. If not specified, the\nconversion will be inferred \
-                from the file extension."
-    )]
-    pub kind: ConvertKind,
+    #[clap(short, long, required = true, help = "The kind of the source file.")]
+    pub src_kind: ConvertKind,
+
+    #[clap(short, long, required = true, help = "The kind of the output file.")]
+    pub dst_kind: ConvertKind,
+
+    #[clap(long, help = "The offset to apply to the height.")]
+    pub offset: Option<HeightOffset>,
 
     #[clap(
         long,
         value_name = "WIDTH HEIGHT",
         num_args(2),
         help = "Resize the micro-surface profile to the given resolution. The \n resolution \
-                should be samller than the original."
+                should be smaller than the original."
     )]
     pub resize: Option<Vec<u32>>,
 
@@ -79,12 +79,34 @@ pub struct ConvertOptions {
 pub enum ConvertKind {
     #[clap(
         name = "ms",
-        help = "Convert a micro-surface profile to .vgms file. Accepts files coming \
-                from\n\"Predicting Appearance from Measured Microgeometry of Metal \
-                Surfaces\",\nplain text data coming from µsurf confocal microscope system, \
-                and\n3D mesh files (*.obj) of the micro-surface."
+        help = "Any micro-surface profile file. Accepts files coming from \
+                VGonio(vgms),\"Predicting Appearance from Measured Microgeometry of Metal \
+                Surfaces\", plain text data coming from µsurf confocal microscope system, and 3D \
+                mesh files (*.obj) of the micro-surface."
     )]
-    MicroSurfaceProfile,
+    MicroSurface,
+
+    #[clap(
+        name = "ms-vgms",
+        help = "Micro-surface profile file in VGonio format."
+    )]
+    MicroSurfaceVgms,
+
+    #[clap(
+        name = "ms-obj",
+        help = "Micro-surface profile file in 3D mesh format."
+    )]
+    MicroSurfaceObj,
+
+    #[clap(
+        name = "ms-cms",
+        help = "Micro-surface profile file in plain text format coming from µsurf confocal \
+                microscope system."
+    )]
+    MicroSurfaceCms,
+
+    #[clap(name = "exr", help = "EXR image file.")]
+    Exr,
 }
 
 pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> {
@@ -134,111 +156,135 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
         } else {
             vec![resolved.clone()]
         };
-        match opts.kind {
-            ConvertKind::MicroSurfaceProfile => {
-                use rayon::prelude::*;
-                let errors = files
-                    .par_iter()
-                    .filter_map(|filepath| {
-                        log::info!("Converting {:?}", filepath);
-                        let result: Result<(MicroSurface, String), VgonioError> = {
-                            #[cfg(feature = "surf-obj")]
-                            let loaded = match filepath.extension() {
-                                None => MicroSurface::read_from_file(&filepath, None),
-                                Some(ext) => {
-                                    if ext == "obj" {
-                                        MicroSurface::read_from_wavefront(
-                                            &filepath,
-                                            opts.axis.unwrap_or(Axis::Z),
-                                            LengthUnit::UM,
-                                        )
-                                    } else {
-                                        MicroSurface::read_from_file(&filepath, None)
-                                    }
-                                },
-                            };
-                            #[cfg(not(feature = "surf-obj"))]
-                            let loaded = MicroSurface::read_from_file(filepath, None);
 
-                            if let Ok(loaded) = loaded {
-                                let (w, h) = if let Some(new_size) = opts.resize.as_ref() {
-                                    let (w, h) = (new_size[0] as usize, new_size[1] as usize);
-                                    println!(
-                                        "  {}>{} Resizing to {}x{}...",
-                                        ansi::BRIGHT_YELLOW,
-                                        ansi::RESET,
-                                        w,
-                                        h
-                                    );
-                                    (w, h)
-                                } else {
-                                    (loaded.cols, loaded.rows)
-                                };
-
-                                let (w, h) = if opts.squaring {
-                                    let s = w.min(h);
-                                    println!(
-                                        "  {}>{} Squaring to {}x{}...",
-                                        ansi::BRIGHT_YELLOW,
-                                        ansi::RESET,
-                                        s,
-                                        s
-                                    );
-                                    (s, s)
-                                } else {
-                                    (w, h)
-                                };
-
-                                let filename = format!(
-                                    "{}_converted.vgms",
-                                    loaded.file_stem().unwrap().to_ascii_lowercase().as_str()
-                                );
-                                Ok((loaded.resize(h, w), filename))
+        use rayon::prelude::*;
+        let errors = files
+            .par_iter()
+            .filter_map(|filepath| {
+                log::info!("Converting {:?}", filepath);
+                let result: Result<(MicroSurface, String), VgonioError> = {
+                    #[cfg(feature = "surf-obj")]
+                    let loaded = match filepath.extension() {
+                        None => MicroSurface::read_from_file(&filepath, None),
+                        Some(ext) => {
+                            if ext == "obj" {
+                                MicroSurface::read_from_wavefront(
+                                    &filepath,
+                                    opts.axis.unwrap_or(Axis::Z),
+                                    LengthUnit::UM,
+                                )
                             } else {
-                                Err(loaded.err().unwrap())
+                                MicroSurface::read_from_file(&filepath, None)
                             }
-                        };
+                        },
+                    };
+                    #[cfg(not(feature = "surf-obj"))]
+                    let loaded = MicroSurface::read_from_file(filepath, None);
 
-                        if let Ok((ref profile, ref filename)) = result {
+                    if let Ok(loaded) = loaded {
+                        let (w, h) = if let Some(new_size) = opts.resize.as_ref() {
+                            let (w, h) = (new_size[0] as usize, new_size[1] as usize);
                             println!(
-                                "{}>{} Converting {:?} to {:?}...",
+                                "  {}>{} Resizing to {}x{}...",
                                 ansi::BRIGHT_YELLOW,
                                 ansi::RESET,
-                                filepath,
-                                output_dir
+                                w,
+                                h
                             );
+                            (w, h)
+                        } else {
+                            (loaded.cols, loaded.rows)
+                        };
 
-                            profile
-                                .write_to_file(
-                                    &output_dir.join(filename),
-                                    opts.encoding,
-                                    opts.compression,
+                        let (w, h) = if opts.squaring {
+                            let s = w.min(h);
+                            println!(
+                                "  {}>{} Squaring to {}x{}...",
+                                ansi::BRIGHT_YELLOW,
+                                ansi::RESET,
+                                s,
+                                s
+                            );
+                            (s, s)
+                        } else {
+                            (w, h)
+                        };
+
+                        let filename = match opts.dst_kind {
+                            ConvertKind::Exr => {
+                                format!(
+                                    "{}_converted.exr",
+                                    loaded.file_stem().unwrap().to_ascii_lowercase().as_str()
                                 )
-                                .unwrap_or_else(|err| {
-                                    eprintln!(
-                                        "  {}!{} Failed to save to \"{}\": {}",
-                                        ansi::BRIGHT_RED,
-                                        ansi::RESET,
-                                        resolved.display(),
-                                        err
-                                    );
-                                });
-                        }
-                        result.err()
-                    })
-                    .collect::<Vec<_>>();
-                for err in errors {
-                    eprintln!(
-                        "  {}!{} Failed to convert \"{}\": {}",
-                        ansi::BRIGHT_RED,
+                            },
+                            _ => {
+                                format!(
+                                    "{}_converted.vgms",
+                                    loaded.file_stem().unwrap().to_ascii_lowercase().as_str()
+                                )
+                            },
+                        };
+                        Ok((loaded.resize(h, w), filename))
+                    } else {
+                        Err(loaded.err().unwrap())
+                    }
+                };
+
+                if let Ok((ref profile, ref filename)) = result {
+                    println!(
+                        "{}>{} Converting {:?} to {:?}...",
+                        ansi::BRIGHT_YELLOW,
                         ansi::RESET,
-                        resolved.display(),
-                        err
-                    )
+                        filepath,
+                        output_dir
+                    );
+
+                    if opts.dst_kind == ConvertKind::Exr {
+                        profile
+                            .write_to_exr(
+                                &output_dir.join(filename),
+                                opts.offset.unwrap_or(HeightOffset::None),
+                            )
+                            .unwrap_or_else(|err| {
+                                eprintln!(
+                                    "  {}!{} Failed to save to \"{}\": {}",
+                                    ansi::BRIGHT_RED,
+                                    ansi::RESET,
+                                    resolved.display(),
+                                    err
+                                );
+                            });
+                    } else {
+                        profile
+                            .write_to_file(
+                                &output_dir.join(filename),
+                                opts.encoding,
+                                opts.compression,
+                            )
+                            .unwrap_or_else(|err| {
+                                eprintln!(
+                                    "  {}!{} Failed to save to \"{}\": {}",
+                                    ansi::BRIGHT_RED,
+                                    ansi::RESET,
+                                    resolved.display(),
+                                    err
+                                );
+                            });
+                    }
                 }
-                println!("{}✓{} Done!", ansi::BRIGHT_CYAN, ansi::RESET);
-            },
+                result.err()
+            })
+            .collect::<Vec<_>>();
+        for err in errors {
+            eprintln!(
+                "  {}!{} Failed to convert \"{}\": {}",
+                ansi::BRIGHT_RED,
+                ansi::RESET,
+                resolved.display(),
+                err
+            )
         }
+        println!("{}✓{} Done!", ansi::BRIGHT_CYAN, ansi::RESET);
     }
     Ok(())
 }

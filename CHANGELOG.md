@@ -13,6 +13,7 @@
 - Enable excluding data points during BRDF fitting
 - Enable logarithmic scale for the residual calculation (non filtered) from the paper: BRDF Models for Accurate and
   Efficient Rendering of Glossy Surfaces
+- Support for saving height field files in EXR image format: single channel 32-bit float with extra surface information
 
 ## 0.3.2 - 2024-08-16
 

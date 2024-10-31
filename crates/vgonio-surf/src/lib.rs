@@ -30,6 +30,8 @@ use base::{
     units::LengthUnit,
     Asset, Version,
 };
+use clap::builder::PossibleValue;
+use exr::prelude::WritableImage;
 use glam::Vec2;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -38,6 +40,7 @@ use std::{
     fs::File,
     io::{BufReader, BufWriter, Read, Seek, Write},
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 /// Static variable used to generate height field name.
@@ -53,13 +56,16 @@ fn gen_micro_surface_name() -> String {
 }
 
 /// Offset used when generating [`MicroSurfaceMesh`].
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, clap::ValueEnum)]
 pub enum HeightOffset {
     /// Offset the height field by an arbitrary value.
+    #[value(skip)]
     Arbitrary(f32),
     /// Offset the height field so that its minimum height is zero.
     Grounded,
     /// Offset the height field so that its median height is zero.
     Centered,
+    #[value(skip)]
     /// Do not offset the height field.
     None,
 }
@@ -1284,6 +1290,7 @@ pub enum MicroSurfaceOrigin {
 }
 
 impl MicroSurface {
+    // TODO: read from exr file.
     #[rustfmt::skip]
     /// Creates micro-geometry height field by reading the samples stored in
     /// different file format. Supported formats are
@@ -1386,7 +1393,13 @@ impl MicroSurface {
         io::read_wavefront(&mut reader, filepath, axis, unit)
     }
 
-    /// Save the micro-surface height field to a file.
+    /// Save the micro-surface height field to a file in VGMS format.
+    ///
+    /// # Arguments
+    ///
+    /// * `filepath` - Path to the file to save including the filename.
+    /// * `encoding` - Encoding scheme for the file.
+    /// * `compression` - Compression scheme for the file.
     pub fn write_to_file(
         &self,
         filepath: &Path,
@@ -1443,6 +1456,97 @@ impl MicroSurface {
                     kind: WriteFileErrorKind::Write(err),
                 },
                 "Failed to flush VGMS file.",
+            )
+        })
+    }
+
+    #[cfg(feature = "exr")]
+    /// Save the micro-surface profile to an OpenEXR file.
+    ///
+    /// The micro-surface profile is saved as a single channel image with the
+    /// height values.
+    ///
+    /// # Arguments
+    ///
+    /// * `filepath` - Path to the file to save including the filename.
+    /// * `offset` - Height offset to apply to the height values.
+    pub fn write_to_exr(&self, filepath: &Path, offset: HeightOffset) -> Result<(), VgonioError> {
+        use exr::prelude::*;
+        let dimensions = (self.cols, self.rows);
+        let (min, max, median, samples) = match offset {
+            HeightOffset::Arbitrary(offset) => (
+                self.min + offset,
+                self.max + offset,
+                self.median + offset,
+                FlatSamples::F32(Cow::Owned(
+                    self.samples.iter().map(|x| x + offset).collect::<Vec<_>>(),
+                )),
+            ),
+            HeightOffset::Grounded => (
+                0.0,
+                self.max - self.min,
+                self.median - self.min,
+                FlatSamples::F32(Cow::Owned(
+                    self.samples
+                        .iter()
+                        .map(|x| x - self.min)
+                        .collect::<Vec<_>>(),
+                )),
+            ),
+            HeightOffset::Centered => (
+                self.min - self.median,
+                self.max - self.median,
+                0.0,
+                FlatSamples::F32(Cow::Owned(
+                    self.samples
+                        .iter()
+                        .map(|x| x - self.median)
+                        .collect::<Vec<_>>(),
+                )),
+            ),
+            HeightOffset::None => (
+                self.min,
+                self.max,
+                self.median,
+                FlatSamples::F32(Cow::Borrowed(&self.samples)),
+            ),
+        };
+        let mut exr_file = Image::from_channels(
+            dimensions,
+            AnyChannels::single_channel(AnyChannel::new("R", samples)),
+        );
+        // Add extra information about the micro-surface.
+        exr_file.attributes.other.insert(
+            "surface.unit".into(),
+            AttributeValue::Text(Text::from(self.unit.to_string().as_str())),
+        );
+        exr_file
+            .attributes
+            .other
+            .insert("surface.du".into(), AttributeValue::F32(self.du));
+        exr_file
+            .attributes
+            .other
+            .insert("surface.dv".into(), AttributeValue::F32(self.dv));
+        exr_file
+            .attributes
+            .other
+            .insert("surface.min".into(), AttributeValue::F32(min));
+        exr_file
+            .attributes
+            .other
+            .insert("surface.max".into(), AttributeValue::F32(max));
+        exr_file
+            .attributes
+            .other
+            .insert("surface.median".into(), AttributeValue::F32(median));
+        exr_file.write().to_file(filepath).map_err(|err| {
+            VgonioError::new(
+                format!(
+                    "Failed to write micro-surface to EXR file: {}",
+                    filepath.display()
+                ),
+                Some(Box::new(err)),
             )
         })
     }

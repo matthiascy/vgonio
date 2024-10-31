@@ -18,7 +18,6 @@ use base::{
     units::{Nanometres, Radians},
     ErrorMetric, ResidualErrorMetric,
 };
-use chrono::__BenchYearFlags;
 #[cfg(feature = "exr")]
 use chrono::{DateTime, Local};
 use jabr::array::DyArr;
