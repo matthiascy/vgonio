@@ -30,8 +30,6 @@ use base::{
     units::LengthUnit,
     Asset, Version,
 };
-use clap::builder::PossibleValue;
-use exr::prelude::WritableImage;
 use glam::Vec2;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -40,7 +38,6 @@ use std::{
     fs::File,
     io::{BufReader, BufWriter, Read, Seek, Write},
     path::{Path, PathBuf},
-    str::FromStr,
 };
 
 /// Static variable used to generate height field name.

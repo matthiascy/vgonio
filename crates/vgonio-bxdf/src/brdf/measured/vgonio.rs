@@ -2,24 +2,27 @@
 use crate::brdf::measured::{
     BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind,
 };
+
 #[cfg(feature = "fitting")]
-use crate::brdf::{measured::AnalyticalFit, Bxdf};
+use crate::{
+    brdf::{measured::AnalyticalFit, Bxdf},
+    Scattering,
+};
 #[cfg(feature = "fitting")]
-use crate::Scattering;
-#[cfg(feature = "fitting")]
-use base::optics::ior::RefractiveIndexRegistry;
+use base::{
+    math, optics::ior::RefractiveIndexRegistry, units::Radians, ErrorMetric, ResidualErrorMetric,
+};
 
 use base::{
     error::VgonioError,
-    math,
     math::{Sph2, Vec3},
     medium::Medium,
     partition::SphericalPartition,
-    units::{Nanometres, Radians},
-    ErrorMetric, ResidualErrorMetric,
+    units::Nanometres,
 };
 #[cfg(feature = "exr")]
 use chrono::{DateTime, Local};
+
 use jabr::array::DyArr;
 use std::{borrow::Cow, collections::HashMap, ops::Index, path::Path};
 

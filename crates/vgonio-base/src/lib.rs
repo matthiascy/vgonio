@@ -173,6 +173,7 @@ pub enum ErrorMetric {
     Nllsq,
 }
 
+// TODO: rename to loss function
 /// Loss function to use for the least-squares fitting.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -232,6 +233,7 @@ macro_rules! impl_measured_data_trait {
         impl MeasuredData for $t {
             fn kind(&self) -> MeasurementKind { MeasurementKind::$kind }
 
+            // TODO: consider removing this method
             fn is_clausen(&self) -> bool { $is_clausen }
 
             fn as_any(&self) -> &dyn std::any::Any { self }

@@ -44,6 +44,7 @@ pub mod clausen;
 pub mod merl;
 pub mod utia;
 pub mod vgonio;
+pub mod yan;
 
 /// The origin of the measured BRDF.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -80,12 +81,20 @@ pub use utia::*;
 pub use vgonio::*;
 
 /// The kind of the measured BRDF.
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MeasuredBrdfKind {
+    #[cfg_attr(feature = "cli", clap(name = "clausen"))]
     Clausen,
+    #[cfg_attr(feature = "cli", clap(name = "merl"))]
     Merl,
+    #[cfg_attr(feature = "cli", clap(name = "utia"))]
     Utia,
+    #[cfg_attr(feature = "cli", clap(name = "vgonio"))]
     Vgonio,
+    #[cfg_attr(feature = "cli", clap(name = "yan2018"))]
+    Yan2018,
+    #[cfg_attr(feature = "cli", clap(name = "unknown"))]
     Unknown,
 }
 

@@ -22,11 +22,12 @@ use base::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
     },
     math::{self, Mat3, Sph2, Sph3, Vec3},
+    medium::Medium,
     partition::{SphericalDomain, SphericalPartition},
     units::{rad, Radians},
     Asset, MeasuredData, MeasurementKind, Version,
 };
-use bxdf::brdf::measured::{ClausenBrdf, VgonioBrdf};
+use bxdf::brdf::measured::{yan::Yan2018Brdf, ClausenBrdf, VgonioBrdf};
 use chrono::{DateTime, Local};
 use rand::{
     distributions::{Distribution, Uniform},
@@ -192,18 +193,32 @@ impl Measurement {
         })?;
         let mut reader = BufReader::new(file);
 
-        if let Some(extension) = filepath.extension()
-            && extension == OsStr::new("json")
-        {
-            return ClausenBrdf::load_from_reader(reader).map(|brdf| Measurement {
-                name: format!(
-                    "clausen_{}",
-                    filepath.file_name().unwrap().to_str().unwrap()
-                ),
-                source: MeasurementSource::Loaded(filepath.to_path_buf()),
-                timestamp: Local::now(),
-                measured: Box::new(brdf),
-            });
+        if let Some(extension) = filepath.extension() {
+            if extension == OsStr::new("json") {
+                return ClausenBrdf::load_from_reader(reader).map(|brdf| Measurement {
+                    name: format!(
+                        "clausen_{}",
+                        filepath.file_name().unwrap().to_str().unwrap()
+                    ),
+                    source: MeasurementSource::Loaded(filepath.to_path_buf()),
+                    timestamp: Local::now(),
+                    measured: Box::new(brdf),
+                });
+            }
+
+            if extension == OsStr::new("exr") {
+                return Yan2018Brdf::load_from_exr(&filepath, Medium::Air, Medium::Aluminium).map(
+                    |brdf| Measurement {
+                        name: format!(
+                            "yan2018_{}",
+                            filepath.file_name().unwrap().to_str().unwrap()
+                        ),
+                        source: MeasurementSource::Loaded(filepath.to_path_buf()),
+                        timestamp: Local::now(),
+                        measured: Box::new(brdf),
+                    },
+                );
+            }
         }
 
         let header = Header::<VgmoHeaderExt>::read(&mut reader).map_err(|err| {
