@@ -1,10 +1,13 @@
-use base::{medium::Medium, units::Nanometres, ResidualErrorMetric};
-use jabr::array::DyArr;
-use std::fmt::Debug;
-
-use base::units::Radians;
+use base::{
+    math::Sph2,
+    medium::Medium,
+    units::{Nanometres, Radians},
+    ResidualErrorMetric,
+};
 #[cfg(feature = "fitting")]
 use base::{optics::ior::RefractiveIndexRegistry, ErrorMetric};
+use jabr::array::DyArr;
+use std::{fmt::Debug, ops::Index};
 
 #[cfg(feature = "fitting")]
 macro_rules! impl_analytical_fit_trait {
@@ -79,6 +82,7 @@ pub use clausen::*;
 pub use merl::*;
 pub use utia::*;
 pub use vgonio::*;
+pub use yan::*;
 
 /// The kind of the measured BRDF.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
@@ -223,4 +227,53 @@ where
             && self.spectrum == other.spectrum
             && self.samples == other.samples
     }
+}
+
+/// An iterator over the snapshots of a measured BRDF.
+pub struct BrdfSnapshotIterator<'a, P, const N: usize>
+where
+    P: Clone + Send + Sync + BrdfParameterisation + PartialEq + 'static,
+{
+    /// The measured BRDF.
+    brdf: &'a MeasuredBrdf<P, N>,
+    /// Number of wavelengths of the measured BRDF.
+    n_spectrum: usize,
+    /// Number of incident directions of the measured BRDF.
+    n_incoming: usize,
+    /// Number of outgoing directions of the measured BRDF.
+    n_outgoing: usize,
+    /// The current index (snapshot) of the iterator.
+    index: usize,
+}
+
+/// Snapshot of a measured BRDF at a specific incident direction.
+pub struct BrdfSnapshot<'a, S> {
+    /// The incident direction of the snapshot.
+    pub wi: Sph2,
+    // TODO: use NdArray subslice which carries the shape information.
+    /// Number of wavelengths of the measured BRDF.
+    pub n_spectrum: usize,
+    // TODO: use NdArray subslice which carries the shape information.
+    /// Samples of the snapshot stored in a flat row-major array with
+    /// dimensions ωο, λ.
+    pub samples: &'a [S],
+}
+
+// TODO: once the NdArray subslice is implemented, no need to implement Index
+impl<'a, S: 'static> Index<[usize; 2]> for BrdfSnapshot<'a, S> {
+    type Output = S;
+
+    fn index(&self, index: [usize; 2]) -> &Self::Output {
+        // The first index is the outgoing direction and the second index is the
+        // wavelength.
+        &self.samples[index[0] * self.n_spectrum + index[1]]
+    }
+}
+
+impl<'a, P, S: 'static, const N: usize> ExactSizeIterator for BrdfSnapshotIterator<'a, P, N>
+where
+    BrdfSnapshotIterator<'a, P, N>: Iterator<Item = BrdfSnapshot<'a, S>>,
+    P: Clone + Send + Sync + BrdfParameterisation + PartialEq + 'static,
+{
+    fn len(&self) -> usize { self.n_incoming - self.index }
 }

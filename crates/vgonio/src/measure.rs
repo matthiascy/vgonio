@@ -27,7 +27,7 @@ use base::{
     units::{rad, Radians},
     Asset, MeasuredData, MeasurementKind, Version,
 };
-use bxdf::brdf::measured::{yan::Yan2018Brdf, ClausenBrdf, VgonioBrdf};
+use bxdf::brdf::measured::{ClausenBrdf, VgonioBrdf, Yan2018Brdf};
 use chrono::{DateTime, Local};
 use rand::{
     distributions::{Distribution, Uniform},

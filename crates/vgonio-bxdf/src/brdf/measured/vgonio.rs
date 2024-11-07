@@ -1,6 +1,7 @@
 //! BRDF from the VGonio simulator.
 use crate::brdf::measured::{
-    BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind,
+    BrdfParameterisation, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, MeasuredBrdfKind,
+    Origin, ParametrisationKind,
 };
 
 #[cfg(feature = "fitting")]
@@ -136,13 +137,13 @@ impl VgonioBrdf {
     }
 
     /// Returns an iterator over the snapshots of the BRDF.
-    pub fn snapshots(&self) -> BrdfSnapshotIterator {
+    pub fn snapshots(&self) -> BrdfSnapshotIterator<'_, VgonioBrdfParameterisation, 3> {
         BrdfSnapshotIterator {
             brdf: self,
             n_spectrum: self.spectrum.len(),
-            n_wi: self.params.incoming.len(),
-            n_wo: self.params.outgoing.patches.len(),
-            idx: 0,
+            n_incoming: self.params.incoming.len(),
+            n_outgoing: self.params.outgoing.patches.len(),
+            index: 0,
         }
     }
 
@@ -384,63 +385,21 @@ impl AnalyticalFit for VgonioBrdf {
     }
 }
 
-/// BRDF snapshot at a specific incident direction.
-pub struct BrdfSnapshot<'a> {
-    /// The incident direction of the snapshot.
-    pub wi: Sph2,
-    // TODO: use NdArray subslice which carries the shape information.
-    /// Number of wavelengths.
-    pub n_spectrum: usize,
-    // TODO: use NdArray subslice which carries the shape information.
-    /// The samples of the snapshot stored in a flat row-major array with
-    /// dimension: ωo, λ.
-    pub samples: &'a [f32],
-}
-
-// TODO: once the NdArray subslice is implemented, no need to implement Index
-impl Index<[usize; 2]> for BrdfSnapshot<'_> {
-    type Output = f32;
-
-    fn index(&self, index: [usize; 2]) -> &Self::Output {
-        // The first index is the outgoing direction index, and the second index is the
-        // wavelength index.
-        &self.samples[index[0] * self.n_spectrum + index[1]]
-    }
-}
-
-/// An iterator over the snapshots of the BRDF.
-pub struct BrdfSnapshotIterator<'a> {
-    /// The Vgonio BRDF.
-    brdf: &'a VgonioBrdf,
-    /// Number of wavelengths.
-    n_spectrum: usize,
-    /// Number of incident directions.
-    n_wi: usize,
-    /// Number of outgoing directions.
-    n_wo: usize,
-    /// The current index of the snapshot.
-    idx: usize,
-}
-
-impl<'a> Iterator for BrdfSnapshotIterator<'a> {
-    type Item = BrdfSnapshot<'a>;
+impl<'a> Iterator for BrdfSnapshotIterator<'a, VgonioBrdfParameterisation, 3> {
+    type Item = BrdfSnapshot<'a, f32>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.idx >= self.n_wi {
+        if self.index >= self.n_incoming {
             return None;
         }
-        let snapshot_range =
-            self.idx * self.n_wo * self.n_spectrum..(self.idx + 1) * self.n_wo * self.n_spectrum;
+        let snapshot_range = self.index * self.n_outgoing * self.n_spectrum
+            ..(self.index + 1) * self.n_outgoing * self.n_spectrum;
         let snapshot = BrdfSnapshot {
-            wi: self.brdf.params.incoming[self.idx],
+            wi: self.brdf.params.incoming[self.index],
             n_spectrum: self.n_spectrum,
             samples: &self.brdf.samples.as_slice()[snapshot_range],
         };
-        self.idx += 1;
+        self.index += 1;
         Some(snapshot)
     }
-}
-
-impl<'a> ExactSizeIterator for BrdfSnapshotIterator<'a> {
-    fn len(&self) -> usize { self.n_wi - self.idx }
 }

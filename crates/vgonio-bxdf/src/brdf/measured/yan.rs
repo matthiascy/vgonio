@@ -1,5 +1,6 @@
 use crate::brdf::measured::{
-    BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind,
+    BrdfParameterisation, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, MeasuredBrdfKind,
+    Origin, ParametrisationKind,
 };
 #[cfg(feature = "fitting")]
 use crate::{
@@ -108,13 +109,13 @@ impl Yan2018Brdf {
         }
     }
 
-    pub fn snapshots(&self) -> BrdfSnapshotIterator {
+    pub fn snapshots(&self) -> BrdfSnapshotIterator<'_, Yan2018BrdfParameterisation, 3> {
         BrdfSnapshotIterator {
             brdf: self,
             n_spectrum: self.spectrum.len(),
-            n_wi: self.params.n_wi(),
-            n_wo: self.params.n_wo(),
-            idx: 0,
+            n_incoming: self.params.n_wi(),
+            n_outgoing: self.params.n_wo(),
+            index: 0,
         }
     }
 
@@ -446,60 +447,21 @@ impl AnalyticalFit for Yan2018Brdf {
     }
 }
 
-/// Snapshot of the BRDF at a specific incident direction.
-pub struct BrdfSnapshot<'a> {
-    /// The incident direction of the snapshot.
-    pub wi: Sph2,
-    /// Number of wavelengths in the spectrum.
-    pub n_spectrum: usize,
-    /// Samples of the snapshot stored in a flat row-major array with
-    /// dimensions ωο, λ.
-    pub samples: &'a [f32],
-}
-
-impl<'a> Index<[usize; 2]> for BrdfSnapshot<'a> {
-    type Output = f32;
-
-    fn index(&self, index: [usize; 2]) -> &Self::Output {
-        // The first index is the outgoing direction and the second index is the
-        // wavelength.
-        &self.samples[index[0] * self.n_spectrum + index[1]]
-    }
-}
-
-/// Iterator over the BRDF values at each incident direction.
-pub struct BrdfSnapshotIterator<'a> {
-    /// The BRDF to iterate over.
-    brdf: &'a Yan2018Brdf,
-    /// Number of wavelengths in the spectrum.
-    n_spectrum: usize,
-    /// Number of incident directions.
-    n_wi: usize,
-    /// Number of outgoing directions.
-    n_wo: usize,
-    /// Current (snapshot) incident direction index.
-    idx: usize,
-}
-
-impl<'a> Iterator for BrdfSnapshotIterator<'a> {
-    type Item = BrdfSnapshot<'a>;
+impl<'a> Iterator for BrdfSnapshotIterator<'a, Yan2018BrdfParameterisation, 3> {
+    type Item = BrdfSnapshot<'a, f32>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.idx >= self.n_wi {
+        if self.index >= self.n_incoming {
             return None;
         }
 
         let snapshot = BrdfSnapshot {
-            wi: self.brdf.params.incoming[self.idx],
+            wi: self.brdf.params.incoming[self.index],
             n_spectrum: self.n_spectrum,
-            samples: &self.brdf.samples.as_slice()[self.idx * self.n_wo * self.n_spectrum
-                ..(self.idx + 1) * self.n_wo * self.n_spectrum],
+            samples: &self.brdf.samples.as_slice()[self.index * self.n_outgoing * self.n_spectrum
+                ..(self.index + 1) * self.n_outgoing * self.n_spectrum],
         };
-        self.idx += 1;
+        self.index += 1;
         Some(snapshot)
     }
-}
-
-impl<'a> ExactSizeIterator for BrdfSnapshotIterator<'a> {
-    fn len(&self) -> usize { self.n_wi - self.idx }
 }
