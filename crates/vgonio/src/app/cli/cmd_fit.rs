@@ -31,10 +31,11 @@ use std::path::PathBuf;
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     println!(
-        "  {}>{} Fitting to model: {:?}",
+        "  {}>{} Fitting to model: {:?}@{:?}",
         ansi::BRIGHT_YELLOW,
         ansi::RESET,
         opts.family,
+        opts.distro
     );
     let theta_limit = opts
         .theta_limit
@@ -238,15 +239,14 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                 .measured
                                 .downcast_ref::<Yan2018Brdf>()
                             {
-                                println!("Fitting Yan2018's data to model: {:?}", opts.family);
-                                // measured_brdf_fitting(
-                                //     &opts,
-                                //     &input,
-                                //     brdf,
-                                //     alpha,
-                                //     &cache.iors,
-                                //     theta_limit,
-                                // );
+                                measured_brdf_fitting(
+                                    &opts,
+                                    &input,
+                                    brdf,
+                                    alpha,
+                                    &cache.iors,
+                                    theta_limit,
+                                );
                             }
                         }
                     },
@@ -315,16 +315,16 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
 ) {
     let limit = theta_limit.unwrap_or(Radians::HALF_PI);
     println!(
-        "    {}>{} Fitting ({:?}) to model: {:?} [{:?}], distro: {:?}, isotropy: {}, method: \
-         {:?}, theta limit: {}",
+        "    {}>{} Fitting ({:?}) to model: {:?}, distro: {:?}, isotropy: {}, method: {:?}, \
+         residual error metric: {:?}, θ < {}",
         ansi::BRIGHT_YELLOW,
         ansi::RESET,
         brdf.kind(),
         opts.family,
-        opts.residual_error_metric,
         opts.distro,
         opts.isotropy,
         opts.method,
+        opts.residual_error_metric,
         limit.prettified()
     );
     if brdf.kind() == MeasuredBrdfKind::Clausen {

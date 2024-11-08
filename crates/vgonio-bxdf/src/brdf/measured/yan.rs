@@ -17,13 +17,7 @@ use base::{
     ErrorMetric, MeasuredData, MeasurementKind, ResidualErrorMetric,
 };
 use jabr::array::DyArr;
-use std::{
-    cmp::Ordering,
-    fmt::{Debug, Display},
-    ops::Index,
-    path::Path,
-    str::FromStr,
-};
+use std::{cmp::Ordering, fmt::Debug, path::Path, str::FromStr};
 
 /// Parameterisation of the BRDF simulated from the paper "Rendering Specular
 /// Microgeometry with Wave Optics" by Yan et al. 2018.

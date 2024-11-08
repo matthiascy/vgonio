@@ -25,7 +25,7 @@ use base::{
 use chrono::{DateTime, Local};
 
 use jabr::array::DyArr;
-use std::{borrow::Cow, collections::HashMap, ops::Index, path::Path};
+use std::{borrow::Cow, collections::HashMap, path::Path};
 
 /// Parameterisation of the VGonio BRDF.
 #[derive(Clone, PartialEq, Debug)]

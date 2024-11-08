@@ -44,7 +44,7 @@ use uxtk::theme::{DarkTheme, LightTheme, Theme, ThemeKind};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyEvent, WindowEvent},
-    event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopBuilder},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::PhysicalKey,
     window::{Window, WindowAttributes},
 };
