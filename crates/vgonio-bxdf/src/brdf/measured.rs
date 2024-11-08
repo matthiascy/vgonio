@@ -1,11 +1,8 @@
-use base::{
-    math::Sph2,
-    medium::Medium,
-    units::{Nanometres, Radians},
-    ResidualErrorMetric,
-};
+use base::{math::Sph2, medium::Medium, units::Nanometres};
 #[cfg(feature = "fitting")]
-use base::{optics::ior::RefractiveIndexRegistry, ErrorMetric};
+use base::{
+    optics::ior::RefractiveIndexRegistry, units::Radians, ErrorMetric, ResidualErrorMetric,
+};
 use jabr::array::DyArr;
 use std::{fmt::Debug, ops::Index};
 
@@ -260,7 +257,7 @@ pub struct BrdfSnapshot<'a, S> {
 }
 
 // TODO: once the NdArray subslice is implemented, no need to implement Index
-impl<'a, S: 'static> Index<[usize; 2]> for BrdfSnapshot<'a, S> {
+impl<S: 'static> Index<[usize; 2]> for BrdfSnapshot<'_, S> {
     type Output = S;
 
     fn index(&self, index: [usize; 2]) -> &Self::Output {

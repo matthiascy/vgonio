@@ -1,8 +1,11 @@
 use crate::distro::{MicrofacetDistribution, MicrofacetDistroKind};
+#[cfg(feature = "fitting")]
+use base::math::{cbr, sin_phi, tan_theta2};
 use base::{
-    math::{cbr, cos_phi, rcp_f64, sin_phi, sqr, tan_theta, tan_theta2, Vec3},
+    math::{cos_phi, rcp_f64, sqr, tan_theta, Vec3},
     Isotropy,
 };
+#[cfg(feature = "fitting")]
 use libm::{erf, sqrt};
 
 /// Beckmann microfacet distribution function.

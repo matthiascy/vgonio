@@ -5,16 +5,16 @@ use crate::brdf::measured::{
 };
 #[cfg(feature = "fitting")]
 use crate::{brdf::measured::AnalyticalFit, Bxdf, Scattering};
-#[cfg(feature = "fitting")]
-use base::optics::ior::RefractiveIndexRegistry;
 use base::{
     error::VgonioError,
-    impl_measured_data_trait, math,
+    impl_measured_data_trait,
     math::Sph2,
     medium::Medium,
     units::{nm, Nanometres, Radians},
-    ErrorMetric, MeasuredData, MeasurementKind, ResidualErrorMetric,
+    MeasuredData, MeasurementKind,
 };
+#[cfg(feature = "fitting")]
+use base::{math, optics::ior::RefractiveIndexRegistry, ErrorMetric, ResidualErrorMetric};
 use jabr::array::DyArr;
 use std::{
     fs::File,

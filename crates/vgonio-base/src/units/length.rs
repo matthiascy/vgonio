@@ -394,7 +394,7 @@ impl<'de, A: LengthMeasurement> serde::Deserialize<'de> for Length<A> {
     {
         struct LengthVisitor<T>(core::marker::PhantomData<T>);
 
-        impl<'de, T: LengthMeasurement> serde::de::Visitor<'de> for LengthVisitor<T> {
+        impl<T: LengthMeasurement> serde::de::Visitor<'_> for LengthVisitor<T> {
             type Value = Length<T>;
 
             fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {

@@ -1,8 +1,11 @@
+use base::math::{cart_to_sph, cos_theta, Vec3};
+use std::fmt::Debug;
+
+#[cfg(feature = "fitting")]
 use base::{
-    math::{cart_to_sph, cos_theta, rcp_f64, sqr, Vec3},
+    math::{rcp_f64, sqr},
     optics::{fresnel, ior::Ior},
 };
-use std::fmt::Debug;
 
 use crate::{
     brdf::{analytical::microfacet::MicrofacetBrdf, Bxdf, BxdfFamily},

@@ -9,7 +9,7 @@ impl<'a> ToggleSwitch<'a> {
     pub fn new(value: &'a mut bool) -> Self { Self { value } }
 }
 
-impl<'a> Widget for ToggleSwitch<'a> {
+impl Widget for ToggleSwitch<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         // Widget code can be broken up in four steps:
         //  1. Decide a size for the widget

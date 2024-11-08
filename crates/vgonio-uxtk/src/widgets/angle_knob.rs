@@ -156,7 +156,7 @@ impl<'a> AngleKnob<'a> {
     }
 }
 
-impl<'a> Widget for AngleKnob<'a> {
+impl Widget for AngleKnob<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let desired_size = Vec2::splat(self.diameter);
         let (rect, mut response) = ui.allocate_exact_size(

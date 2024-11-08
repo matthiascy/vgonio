@@ -25,7 +25,7 @@ use bxdf::{
 use jabr::array::DyArr;
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
-use std::{any::Any, convert::identity, fmt::Display};
+use std::{any::Any, fmt::Display};
 
 /// The fitting problem for the microfacet based BSDF model.
 ///

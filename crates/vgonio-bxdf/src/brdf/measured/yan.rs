@@ -1,20 +1,26 @@
 use crate::brdf::measured::{
-    BrdfParameterisation, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, MeasuredBrdfKind,
-    Origin, ParametrisationKind,
+    BrdfParameterisation, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
+    ParametrisationKind,
 };
 #[cfg(feature = "fitting")]
 use crate::{
-    brdf::{measured::AnalyticalFit, Bxdf},
+    brdf::{
+        measured::{AnalyticalFit, MeasuredBrdfKind},
+        Bxdf,
+    },
     Scattering,
 };
 use base::{
     error::VgonioError,
-    impl_measured_data_trait, math,
+    impl_measured_data_trait,
     math::{Sph2, Vec2, Vec3},
     medium::Medium,
-    optics::ior::RefractiveIndexRegistry,
-    units::{deg, rad, Nanometres, Radians},
-    ErrorMetric, MeasuredData, MeasurementKind, ResidualErrorMetric,
+    units::{deg, rad, Nanometres},
+    MeasuredData, MeasurementKind,
+};
+#[cfg(feature = "fitting")]
+use base::{
+    math, optics::ior::RefractiveIndexRegistry, units::Radians, ErrorMetric, ResidualErrorMetric,
 };
 use jabr::array::DyArr;
 use std::{cmp::Ordering, fmt::Debug, path::Path, str::FromStr};
@@ -254,7 +260,7 @@ impl Yan2018Brdf {
             [-1],
             data.layer_data.iter().map(|layer| {
                 let name_text = layer.attributes.layer_name.clone().unwrap();
-                let mut name = String::from_utf8_lossy(name_text.bytes()).into_owned();
+                let name = String::from_utf8_lossy(name_text.bytes()).into_owned();
                 // Original text: θ29_00.φ0.00
                 let mut split = name.split('.');
                 let theta = split

@@ -205,7 +205,7 @@ unsafe impl<T> Data for DynSized<T> {
 
     fn as_mut_ptr(&mut self) -> *mut Self::Elem { self.ptr.as_ptr() }
 
-    fn as_slice(&self) -> &[Self::Elem] { &self.as_slice() }
+    fn as_slice(&self) -> &[Self::Elem] { self.as_slice() }
 
     fn as_mut_slice(&mut self) -> &mut [Self::Elem] { self.as_mut_slice() }
 

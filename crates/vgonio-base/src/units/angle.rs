@@ -259,7 +259,7 @@ impl<'de, A: AngleUnit> serde::Deserialize<'de> for Angle<A> {
     {
         struct AngleVisitor<T>(core::marker::PhantomData<T>);
 
-        impl<'de, T: AngleUnit> serde::de::Visitor<'de> for AngleVisitor<T> {
+        impl<T: AngleUnit> serde::de::Visitor<'_> for AngleVisitor<T> {
             type Value = Angle<T>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
