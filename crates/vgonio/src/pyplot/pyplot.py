@@ -283,6 +283,11 @@ def plot_brdf_comparison(
 
 def new_polar_brdf_plot():
     fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 8))
+    configure_polar_brdf_plot(ax)
+    return fig, ax
+
+
+def configure_polar_brdf_plot(ax):
     ax.set_theta_zero_location("N")
     ax.set_theta_direction(-1)
     ax.set_thetamin(-90)
@@ -294,7 +299,6 @@ def new_polar_brdf_plot():
     ax.yaxis.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
     # Hide spines
     ax.spines['polar'].set_visible(False)
-    return fig, ax
 
 
 def custom_polar_brdf_plot_radial_ticks(ax, ymax):
@@ -696,3 +700,96 @@ def plot_surfaces(surfaces, cmap, ds_factor=4):
         plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0, wspace=0.0, hspace=0.0)
         fig.savefig(f'{name}_plot.png', format='png', bbox_inches='tight', dpi=100)
         # plt.show()
+
+
+def plot_brdf_fitting(samples: np.ndarray, theta_i: np.ndarray, phi_i: np.ndarray, theta_o: np.ndarray,
+                      wavelengths: np.ndarray, fitted_bk: np.ndarray, fitted_tr: np.ndarray):
+    from matplotlib.widgets import Slider, CheckButtons
+
+    # Two subplots, left is the 3D BRDF, right is the 2D BRDF slice
+    fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+    plt.subplots_adjust(bottom=0.3, top=0.85, right=0.8)
+
+    # the dimension of the samples is (n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_wavelengths)
+    (n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_wavelengths) = samples.shape
+    n_slice = n_phi_o // 2
+    xs = np.append(np.flip(-np.degrees(theta_o)), np.degrees(theta_o))
+
+    # initial values (index) for theta_i, phi_i, phi_o
+    init_theta_i = 0
+    init_phi_i = 0
+    init_wavelength = 0
+    is_polar = False
+
+    # Add sliders for theta_i, phi_i, and wavelength
+    ax_theta_i = plt.axes([0.2, 0.2, 0.6, 0.03], facecolor='lightgoldenrodyellow')
+    ax_phi_i = plt.axes([0.2, 0.15, 0.6, 0.03], facecolor='lightgoldenrodyellow')
+    ax_wavelength = plt.axes([0.2, 0.1, 0.6, 0.03], facecolor='lightgoldenrodyellow')
+
+    # Use index-based sliders but map them to actual theta_i and phi_i values
+    theta_i_slider = Slider(ax_theta_i, 'θi', 0, n_theta_i - 1, valinit=init_theta_i, valstep=1)
+    phi_i_slider = Slider(ax_phi_i, 'φi', 0, n_phi_i - 1, valinit=init_phi_i, valstep=1)
+    wavelength_slider = Slider(ax_wavelength, 'λ', 0, n_wavelengths - 1, valinit=init_wavelength, valstep=1)
+
+    wi_text = fig.text(0.5, 0.92,
+                       f"θi: {np.degrees(theta_i[init_theta_i]):.2f}°, φi: {np.degrees(phi_i[init_phi_i]):.2f}°, λ: {wavelengths[init_wavelength]:.0f} nm",
+                       ha='center', va='center', fontsize=14, fontweight='bold')
+
+    def toggle_polar(label):
+        nonlocal is_polar
+        is_polar = not is_polar
+        update(0)
+
+    # update the plot based on selected values
+    def update(val):
+        ax[1].cla()
+
+        ti = int(theta_i_slider.val)
+        pi = int(phi_i_slider.val)
+        l = int(wavelength_slider.val)
+
+        theta_i_val = np.degrees(theta_i[ti])
+        phi_i_val = np.degrees(phi_i[pi])
+        lambda_val = wavelengths[l]
+
+        theta_i_slider.valtext.set_text(f"{theta_i_val:.2f}°")
+        phi_i_slider.valtext.set_text(f"{phi_i_val:.2f}°")
+        wavelength_slider.valtext.set_text(f"{lambda_val:.0f} nm")
+        wi_text.set_text(f"θi: {theta_i_val:.2f}°, φi: {phi_i_val:.2f}°, λ: {lambda_val:.0f} nm")
+
+        for s in range(n_slice):
+            s_opp = (s + n_slice) % n_phi_o
+            samples_phi = samples[ti, pi, s, :, l]
+            samples_phi_opp = samples[ti, pi, s_opp, :, l]
+            samples_phi_bk = fitted_bk[ti, pi, s, :, l]
+            samples_phi_bk_opp = fitted_bk[ti, pi, s_opp, :, l]
+            samples_phi_tr = fitted_tr[ti, pi, s, :, l]
+            samples_phi_tr_opp = fitted_tr[ti, pi, s_opp, :, l]
+            ys = np.append(np.flip(samples_phi_opp), samples_phi)
+            ys_bk = np.append(np.flip(samples_phi_bk_opp), samples_phi_bk)
+            ys_tr = np.append(np.flip(samples_phi_tr_opp), samples_phi_tr)
+            ax[1].plot(xs, ys, label=f"φo={s}'{s_opp}")
+            ax[1].plot(xs, ys_bk, label=f"bk φo={s}'{s_opp}")
+            ax[1].plot(xs, ys_tr, label=f"tr φo={s}'{s_opp}")
+
+        ax[1].legend(loc="upper right")
+        fig.canvas.draw_idle()
+
+    # Update plot on slider change
+    theta_i_slider.on_changed(update)
+    phi_i_slider.on_changed(update)
+    wavelength_slider.on_changed(update)
+
+    update(0)
+    plt.show()
+
+    # for ti in range(n_theta_i):
+    #     for pi in range(n_phi_i):
+    #         for s in range(n_slice):
+    #             s_opp = (s + n_slice) % n_phi_o
+    #             # for l in range(n_wavelengths):
+    #             l = 0
+    #             samples_phi = samples[ti, pi, s, :, l]
+    #             samples_phi_opp = samples[ti, pi, s_opp, :, l]
+    #             ys = np.append(np.flip(samples_phi_opp), samples_phi)
+    #             ax[1].plot(xs, ys, label=f"θi={ti}, φi={pi}, φo={s}'{s_opp}, λ={l}")

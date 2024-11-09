@@ -188,6 +188,24 @@ pub enum ResidualErrorMetric {
     JLow,
 }
 
+/// The kind of the measured BRDF.
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MeasuredBrdfKind {
+    #[cfg_attr(feature = "cli", clap(name = "clausen"))]
+    Clausen,
+    #[cfg_attr(feature = "cli", clap(name = "merl"))]
+    Merl,
+    #[cfg_attr(feature = "cli", clap(name = "utia"))]
+    Utia,
+    #[cfg_attr(feature = "cli", clap(name = "vgonio"))]
+    Vgonio,
+    #[cfg_attr(feature = "cli", clap(name = "yan2018"))]
+    Yan2018,
+    #[cfg_attr(feature = "cli", clap(name = "unknown"))]
+    Unknown,
+}
+
 /// Trait for the different kinds of measurement data.
 ///
 /// Measurement data can be of different kinds, such as
@@ -199,7 +217,7 @@ pub trait MeasuredData: Debug {
     /// Returns the kind of the measurement.
     fn kind(&self) -> MeasurementKind;
     /// Returns whether the measurement data is a Clausen representation.
-    fn is_clausen(&self) -> bool { false }
+    fn brdf_kind(&self) -> Option<MeasuredBrdfKind> { None }
     /// Casts the measurement data to a trait object for downcasting to the
     /// concrete type.
     fn as_any(&self) -> &dyn std::any::Any;
@@ -229,12 +247,17 @@ impl dyn MeasuredData {
 #[macro_export]
 /// Boilerplate macro for implementing the `MeasuredData` trait for a type.
 macro_rules! impl_measured_data_trait {
-    ($t:ty, $kind:ident, $is_clausen:expr) => {
+    ($t:ty, $kind:ident, $brdf_kind:expr) => {
         impl MeasuredData for $t {
             fn kind(&self) -> MeasurementKind { MeasurementKind::$kind }
 
-            // TODO: consider removing this method
-            fn is_clausen(&self) -> bool { $is_clausen }
+            fn brdf_kind(&self) -> Option<MeasuredBrdfKind> {
+                if $brdf_kind.is_some() {
+                    $brdf_kind
+                } else {
+                    None
+                }
+            }
 
             fn as_any(&self) -> &dyn std::any::Any { self }
 

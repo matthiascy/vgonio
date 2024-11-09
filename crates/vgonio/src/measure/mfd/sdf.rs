@@ -9,7 +9,7 @@ use base::{
     math::{IVec2, Vec2},
     range::RangeByStepSizeInclusive,
     units::{rad, Radians},
-    MeasurementKind,
+    MeasuredBrdfKind, MeasurementKind,
 };
 use std::{borrow::Cow, path::Path};
 use surf::MicroSurface;
@@ -27,7 +27,7 @@ pub struct MeasuredSdfData {
     pub slopes: Box<[Slope2]>,
 }
 
-impl_measured_data_trait!(MeasuredSdfData, Sdf, false);
+impl_measured_data_trait!(MeasuredSdfData, Sdf, None::<MeasuredBrdfKind>);
 
 /// Data of the slope distribution function (SDF) of a microsurface.
 pub struct SdfPmf {

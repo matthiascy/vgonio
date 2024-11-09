@@ -12,14 +12,13 @@ use base::{
     partition::{PartitionScheme, SphericalDomain},
     range::RangeByStepSizeInclusive,
     units::{nm, Radians, Rads},
-    ErrorMetric, Isotropy, ResidualErrorMetric,
+    ErrorMetric, Isotropy, MeasuredBrdfKind, ResidualErrorMetric,
 };
 use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
         measured::{
-            yan::Yan2018Brdf, AnalyticalFit, ClausenBrdf, MeasuredBrdfKind, VgonioBrdf,
-            VgonioBrdfParameterisation,
+            yan::Yan2018Brdf, AnalyticalFit, ClausenBrdf, VgonioBrdf, VgonioBrdfParameterisation,
         },
         Bxdf, BxdfFamily,
     },
@@ -149,8 +148,12 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             .iter()
                             .map(|h| &cache.get_measurement(*h).unwrap().measured)
                             .collect::<Vec<_>>();
-                        if loaded.iter().all(|m| m.is_clausen())
-                            || loaded.iter().all(|m| !m.is_clausen())
+                        if loaded
+                            .iter()
+                            .all(|m| m.brdf_kind() == Some(MeasuredBrdfKind::Clausen))
+                            || loaded
+                                .iter()
+                                .all(|m| m.brdf_kind() != Some(MeasuredBrdfKind::Clausen))
                         {
                             return Err(VgonioError::new(
                                 "The input files should be in pairs of measured data and \
@@ -158,7 +161,12 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                 None,
                             ));
                         }
-                        let simulated_brdf_index = if loaded[0].is_clausen() { 1 } else { 0 };
+                        let simulated_brdf_index =
+                            if loaded[0].brdf_kind() == Some(MeasuredBrdfKind::Clausen) {
+                                1
+                            } else {
+                                0
+                            };
                         let clausen_brdf_index = simulated_brdf_index ^ 1;
                         let simulated_brdf = loaded[simulated_brdf_index]
                             .downcast_ref::<MeasuredBsdfData>()

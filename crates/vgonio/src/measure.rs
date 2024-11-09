@@ -723,7 +723,12 @@ impl<'a> DataCarriedOnHemisphereSampler<'a, VgonioBrdf> {
     /// # Arguments
     ///
     /// * `wi` - The incident direction; it must exist in the BSDF snapshots.
-    /// * `phi` - The azimuthal angle in radians.
+    /// * `phi` - The azimuthal angle in radians of the outgoing direction.
+    ///
+    /// # Returns
+    ///
+    /// The BSDF values for each polar angle and each wavelength at the given
+    /// azimuthal angle.
     pub fn sample_slice_at(&self, wi: Sph2, phi: Radians) -> Option<Box<[f32]>> {
         let n_theta = self.data.params.outgoing.n_rings();
         let n_spectrum = self.data.n_spectrum();

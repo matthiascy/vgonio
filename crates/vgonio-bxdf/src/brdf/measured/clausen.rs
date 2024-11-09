@@ -1,8 +1,6 @@
 //! BRDF measured in the paper "Investigation and Simulation of Diffraction on
 //! Rough Surfaces" by O. Clausen, Y. Chen, A. Fuhrmann and R. Marroquim.
-use crate::brdf::measured::{
-    BrdfParameterisation, MeasuredBrdf, MeasuredBrdfKind, Origin, ParametrisationKind,
-};
+use crate::brdf::measured::{BrdfParameterisation, MeasuredBrdf, Origin, ParametrisationKind};
 #[cfg(feature = "fitting")]
 use crate::{brdf::measured::AnalyticalFit, Bxdf, Scattering};
 use base::{
@@ -11,7 +9,7 @@ use base::{
     math::Sph2,
     medium::Medium,
     units::{nm, Nanometres, Radians},
-    MeasuredData, MeasurementKind,
+    MeasuredBrdfKind, MeasuredData, MeasurementKind,
 };
 #[cfg(feature = "fitting")]
 use base::{math, optics::ior::RefractiveIndexRegistry, ErrorMetric, ResidualErrorMetric};
@@ -85,7 +83,7 @@ pub type ClausenBrdf = MeasuredBrdf<ClausenBrdfParameterisation, 3>;
 unsafe impl Send for ClausenBrdf {}
 unsafe impl Sync for ClausenBrdf {}
 
-impl_measured_data_trait!(ClausenBrdf, Bsdf, true);
+impl_measured_data_trait!(ClausenBrdf, Bsdf, Some(MeasuredBrdfKind::Clausen));
 
 impl ClausenBrdf {
     /// Creates a new Clausen BRDF. The BRDF is parameterised in the incident

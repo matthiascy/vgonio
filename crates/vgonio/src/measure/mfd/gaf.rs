@@ -9,7 +9,7 @@ use base::{
     math::{Mat4, Vec3},
     range::RangeByStepSizeInclusive,
     units::Radians,
-    MeasurementKind,
+    MeasuredBrdfKind, MeasurementKind,
 };
 use bytemuck::{Pod, Zeroable};
 use gxtk::{
@@ -1404,7 +1404,7 @@ pub struct MeasuredGafData {
     pub samples: Box<[f32]>,
 }
 
-impl_measured_data_trait!(MeasuredGafData, Gaf, false);
+impl_measured_data_trait!(MeasuredGafData, Gaf, None::<MeasuredBrdfKind>);
 
 impl MeasuredGafData {
     // TODO: review the necessity of this method.

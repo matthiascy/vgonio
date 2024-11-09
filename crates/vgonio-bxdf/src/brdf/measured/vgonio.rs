@@ -1,7 +1,7 @@
 //! BRDF from the VGonio simulator.
 use crate::brdf::measured::{
-    BrdfParameterisation, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, MeasuredBrdfKind,
-    Origin, ParametrisationKind,
+    BrdfParameterisation, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
+    ParametrisationKind,
 };
 
 #[cfg(feature = "fitting")]
@@ -20,6 +20,7 @@ use base::{
     medium::Medium,
     partition::SphericalPartition,
     units::Nanometres,
+    MeasuredBrdfKind,
 };
 #[cfg(feature = "exr")]
 use chrono::{DateTime, Local};

@@ -6,7 +6,7 @@ use crate::{
         params::SurfacePath,
     },
     pyplot::{
-        plot_brdf_3d, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
+        plot_brdf_3d, plot_brdf_fitting, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
         plot_brdf_vgonio_clausen, plot_gaf, plot_ndf, plot_surfaces,
     },
 };
@@ -14,6 +14,7 @@ use base::{
     error::VgonioError,
     math::Sph2,
     units::{Degs, Nanometres, Radians, Rads},
+    MeasurementKind,
 };
 use bxdf::brdf::measured::ClausenBrdf;
 use std::path::PathBuf;
@@ -26,7 +27,7 @@ use surf::{
 // Same BRDF but different incident angles
 // vgonio plot -i file -k slice-in-plane --ti 0.0 --pi 0.0 --po 0.0
 
-// Mutiple BRDF
+// Multiple BRDF
 // vgonio plot -i f0 f1 f2 -k slice --ti 0.0 --pi 0.0 --po 0.0 --labels f0 f1 f2
 
 // vgonio plot -i a b c d --ti 30.0 --po 120.0 --labels '$0.5^{\circ}$' '$1^{\circ}$' '$2^{\circ}$' '$5^{\circ}$' --kind brdf-slice --legend --cmap Paired --pi 120
@@ -38,7 +39,7 @@ use surf::{
 // Plot BRDF map
 // vgonio plot -i f.exr -k brdf-map --ti 0 --pi 0 --lambda 400 --cmap BuPu
 
-// python tone_mapping.py --input a.exr  b.exr --channel '400 nm' --cbar --cmap plasma --diff --fc w --coord
+// python tone_mapping.py --input a.exr b.exr --channel '400 nm' --cbar --cmap plasma --diff --fc w --coord
 
 /// Kind of plot to generate.
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,6 +83,17 @@ pub struct PlotOptions {
 
     #[clap(short, long, help = "The kind of plot to generate.")]
     pub kind: PlotKind,
+
+    #[arg(
+        short,
+        long,
+        value_delimiter = ' ',
+        num_args = 1..=2,
+        help = "The roughness parameter along the x-axis and y-axis. If only one value is \
+                provided, it is used for both axes.",
+        required_if_eq("kind", "brdf-fitting"),
+    )]
+    pub alpha: Vec<f64>,
 
     #[clap(
         long = "subdiv_kind",
@@ -516,7 +528,27 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 Ok(())
             },
             PlotKind::BrdfFitting => {
-                todo!("Implement BRDF fitting.")
+                if opts.inputs.len() != 1 {
+                    return Err(VgonioError::new(
+                        "Only one input file is allowed for plotting the BRDF fitting.",
+                        None,
+                    ));
+                }
+                let hdl = cache.load_micro_surface_measurement(&config, &opts.inputs[0])?;
+                let measured = &cache.get_measurement(hdl).unwrap().measured;
+                if measured.kind() != MeasurementKind::Bsdf {
+                    return Err(VgonioError::new(
+                        "The input file is not a BSDF measurement.",
+                        None,
+                    ));
+                }
+                let roughness = if opts.alpha.len() == 1 {
+                    (opts.alpha[0], opts.alpha[0])
+                } else {
+                    (opts.alpha[0], opts.alpha[1])
+                };
+                plot_brdf_fitting(&measured, roughness, &cache.iors).unwrap();
+                Ok(())
             },
         }
     })

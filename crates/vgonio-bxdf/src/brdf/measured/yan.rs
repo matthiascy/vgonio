@@ -4,10 +4,7 @@ use crate::brdf::measured::{
 };
 #[cfg(feature = "fitting")]
 use crate::{
-    brdf::{
-        measured::{AnalyticalFit, MeasuredBrdfKind},
-        Bxdf,
-    },
+    brdf::{measured::AnalyticalFit, Bxdf},
     Scattering,
 };
 use base::{
@@ -16,7 +13,7 @@ use base::{
     math::{Sph2, Vec2, Vec3},
     medium::Medium,
     units::{deg, rad, Nanometres},
-    MeasuredData, MeasurementKind,
+    MeasuredBrdfKind, MeasuredData, MeasurementKind,
 };
 #[cfg(feature = "fitting")]
 use base::{
@@ -88,7 +85,7 @@ pub type Yan2018Brdf = MeasuredBrdf<Yan2018BrdfParameterisation, 3>;
 unsafe impl Send for Yan2018Brdf {}
 unsafe impl Sync for Yan2018Brdf {}
 
-impl_measured_data_trait!(Yan2018Brdf, Bsdf, false);
+impl_measured_data_trait!(Yan2018Brdf, Bsdf, Some(MeasuredBrdfKind::Yan2018));
 
 impl Yan2018Brdf {
     /// Creates a new BRDF from the given measured data.

@@ -26,7 +26,7 @@ use base::{
     medium::Medium,
     partition::SphericalPartition,
     units::{Degs, Nanometres, Radians, Rads},
-    MeasurementKind,
+    MeasuredBrdfKind, MeasurementKind,
 };
 use bxdf::brdf::measured::{
     ClausenBrdf, ClausenBrdfParameterisation, Origin, VgonioBrdf, VgonioBrdfParameterisation,
@@ -418,7 +418,7 @@ pub struct MeasuredBsdfData {
     pub bsdfs: HashMap<MeasuredBrdfLevel, VgonioBrdf>,
 }
 
-impl_measured_data_trait!(MeasuredBsdfData, Bsdf, false);
+impl_measured_data_trait!(MeasuredBsdfData, Bsdf, Some(MeasuredBrdfKind::Vgonio));
 
 impl MeasuredBsdfData {
     /// Returns the number of wavelengths.

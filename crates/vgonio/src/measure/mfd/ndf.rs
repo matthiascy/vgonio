@@ -14,7 +14,7 @@ use base::{
     range::RangeByStepSizeInclusive,
     units,
     units::{rad, Radians},
-    MeasurementKind,
+    MeasuredBrdfKind, MeasurementKind,
 };
 use std::path::Path;
 use surf::{MicroSurface, MicroSurfaceMesh};
@@ -41,7 +41,7 @@ pub struct MeasuredNdfData {
     pub samples: Box<[f32]>,
 }
 
-impl_measured_data_trait!(MeasuredNdfData, Ndf, false);
+impl_measured_data_trait!(MeasuredNdfData, Ndf, None::<MeasuredBrdfKind>);
 
 impl MeasuredNdfData {
     /// Returns the Area Distribution Function data slice for the given

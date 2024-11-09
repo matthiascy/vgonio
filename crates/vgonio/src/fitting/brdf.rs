@@ -7,15 +7,14 @@ use base::{
     optics::ior::{Ior, RefractiveIndexRegistry},
     range::RangeByStepSizeInclusive,
     units::Radians,
-    ErrorMetric, Isotropy,
+    ErrorMetric, Isotropy, MeasuredBrdfKind,
 };
 use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
         measured::{
             AnalyticalFit, BrdfParameterisation, ClausenBrdf, ClausenBrdfParameterisation,
-            MeasuredBrdfKind, VgonioBrdf, VgonioBrdfParameterisation, Yan2018Brdf,
-            Yan2018BrdfParameterisation,
+            VgonioBrdf, VgonioBrdfParameterisation, Yan2018Brdf, Yan2018BrdfParameterisation,
         },
         Bxdf,
     },

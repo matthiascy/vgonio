@@ -1,4 +1,4 @@
-use base::{math::Sph2, medium::Medium, units::Nanometres};
+use base::{math::Sph2, medium::Medium, units::Nanometres, MeasuredBrdfKind};
 #[cfg(feature = "fitting")]
 use base::{
     optics::ior::RefractiveIndexRegistry, units::Radians, ErrorMetric, ResidualErrorMetric,
@@ -80,24 +80,6 @@ pub use merl::*;
 pub use utia::*;
 pub use vgonio::*;
 pub use yan::*;
-
-/// The kind of the measured BRDF.
-#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MeasuredBrdfKind {
-    #[cfg_attr(feature = "cli", clap(name = "clausen"))]
-    Clausen,
-    #[cfg_attr(feature = "cli", clap(name = "merl"))]
-    Merl,
-    #[cfg_attr(feature = "cli", clap(name = "utia"))]
-    Utia,
-    #[cfg_attr(feature = "cli", clap(name = "vgonio"))]
-    Vgonio,
-    #[cfg_attr(feature = "cli", clap(name = "yan2018"))]
-    Yan2018,
-    #[cfg_attr(feature = "cli", clap(name = "unknown"))]
-    Unknown,
-}
 
 #[cfg(feature = "fitting")]
 /// A BRDF that can be fitted analytically.
