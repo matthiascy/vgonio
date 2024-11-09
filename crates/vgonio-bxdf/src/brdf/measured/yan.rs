@@ -417,13 +417,13 @@ impl AnalyticalFit for Yan2018Brdf {
             .incoming
             .iter()
             .position(|sph| sph.theta >= limit)
-            .unwrap();
+            .unwrap_or(self.params.n_wi());
         let n_wo_filtered = self
             .params
             .outgoing
             .iter()
             .position(|sph| sph.theta >= limit)
-            .unwrap();
+            .unwrap_or(n_wo);
         let n_spectrum = self.spectrum.len();
         let n_samples = n_wi_filtered * n_wo_filtered * n_spectrum;
 
