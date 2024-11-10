@@ -14,7 +14,7 @@ use base::{
     error::VgonioError,
     math::Sph2,
     units::{Degs, Nanometres, Radians, Rads},
-    MeasurementKind,
+    Isotropy, MeasurementKind,
 };
 use bxdf::brdf::measured::ClausenBrdf;
 use std::path::PathBuf;
@@ -88,12 +88,19 @@ pub struct PlotOptions {
         short,
         long,
         value_delimiter = ' ',
-        num_args = 1..=2,
-        help = "The roughness parameter along the x-axis and y-axis. If only one value is \
-                provided, it is used for both axes.",
+        num_args = 1..,
+        help = "The roughness parameter along the x-axis and y-axis. Can be multiple values.",
         required_if_eq("kind", "brdf-fitting"),
     )]
     pub alpha: Vec<f64>,
+
+    #[clap(
+        long,
+        help = "The isotropy of the model which decides how the roughness parameters been \
+                interpreted",
+        default_value = "iso"
+    )]
+    pub isotropy: Isotropy,
 
     #[clap(
         long = "subdiv_kind",
@@ -542,12 +549,26 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         None,
                     ));
                 }
-                let roughness = if opts.alpha.len() == 1 {
-                    (opts.alpha[0], opts.alpha[0])
+                let mut alphas = if opts.isotropy == Isotropy::Isotropic {
+                    opts.alpha.iter().map(|&a| (a, a)).collect::<Box<_>>()
                 } else {
-                    (opts.alpha[0], opts.alpha[1])
+                    if opts.alpha.len() % 2 != 0 {
+                        return Err(VgonioError::new(
+                            "Two roughness parameters are needed for anisotropic fitting. If you \
+                             wish to provide multiple roughness parameters, please supply them in \
+                             pairs.",
+                            None,
+                        ));
+                    }
+                    opts.alpha
+                        .iter()
+                        .map_windows(|alpha: &[_; 2]| (*alpha[0], *alpha[1]))
+                        .collect::<Box<_>>()
                 };
-                plot_brdf_fitting(&measured, roughness, &cache.iors).unwrap();
+                alphas.sort_by(|(a1, a2), (b1, b2)|
+                    // Sort first by the first element, then by the second element
+                    a1.partial_cmp(b1).unwrap().then_with(|| a2.partial_cmp(b2).unwrap()));
+                plot_brdf_fitting(&measured, &alphas, &cache.iors).unwrap();
                 Ok(())
             },
         }

@@ -6,6 +6,8 @@ from matplotlib.tri import Triangulation
 from matplotlib.widgets import Button, TextBox
 import numpy as np
 import seaborn as sns
+from pandas.core.common import is_full_slice
+from scipy.stats import alpha
 
 # Use this to avoid GUI
 # mpl.use('Agg')
@@ -702,75 +704,143 @@ def plot_surfaces(surfaces, cmap, ds_factor=4):
         # plt.show()
 
 
-def plot_brdf_fitting(samples: np.ndarray, theta_i: np.ndarray, phi_i: np.ndarray, theta_o: np.ndarray,
-                      wavelengths: np.ndarray, fitted_bk: np.ndarray, fitted_tr: np.ndarray):
+def plot_brdf_fitting(samples: np.ndarray, incoming: Tuple[np.ndarray, np.ndarray],
+                      outgoing: Tuple[np.ndarray, np.ndarray], wavelengths: np.ndarray,
+                      fitted: Tuple[np.ndarray, np.ndarray], alphas: np.ndarray):
     from matplotlib.widgets import Slider, CheckButtons
+    import matplotlib as mpl
+
+    (theta_i, phi_i) = incoming
+    (theta_o, phi_o) = outgoing
+    (fitted_bk, fitted_tr) = fitted
+    n_models = alphas.shape[0]
 
     # Two subplots, left is the 3D BRDF, right is the 2D BRDF slice
     fig, ax = plt.subplots(1, 2, figsize=(16, 8))
-    plt.subplots_adjust(bottom=0.3, top=0.85, right=0.8)
+    plt.subplots_adjust(bottom=0.4, top=0.85, right=0.8)
+
+    fig.delaxes(ax[0])
+    ax[0] = fig.add_subplot(121, projection='3d')
+    ax[0].view_init(elev=25, azim=25)
+    ax[0].dist = 20
 
     # the dimension of the samples is (n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_wavelengths)
     (n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_wavelengths) = samples.shape
     n_slice = n_phi_o // 2
     xs = np.append(np.flip(-np.degrees(theta_o)), np.degrees(theta_o))
 
-    # initial values (index) for theta_i, phi_i, phi_o
-    init_theta_i = 0
-    init_phi_i = 0
-    init_wavelength = 0
-    is_polar = False
+    tr_colors = mpl.colormaps['YlOrBr'](np.linspace(0.5, 1, n_models))
+    bk_colors = mpl.colormaps['GnBu'](np.linspace(0.5, 1, n_models))
+    curves_colors = mpl.colormaps['twilight_shifted'](np.linspace(0, 1, n_phi_o))
+
+    displaying_single_phi_o = False
+    displaying_single_alpha = True
 
     # Add sliders for theta_i, phi_i, and wavelength
-    ax_theta_i = plt.axes([0.2, 0.2, 0.6, 0.03], facecolor='lightgoldenrodyellow')
-    ax_phi_i = plt.axes([0.2, 0.15, 0.6, 0.03], facecolor='lightgoldenrodyellow')
-    ax_wavelength = plt.axes([0.2, 0.1, 0.6, 0.03], facecolor='lightgoldenrodyellow')
+    ax_theta_i = plt.axes([0.2, 0.3, 0.5, 0.03], facecolor='lightgoldenrodyellow')
+    ax_phi_i = plt.axes([0.2, 0.25, 0.5, 0.03], facecolor='lightgoldenrodyellow')
+    ax_wavelength = plt.axes([0.2, 0.20, 0.5, 0.03], facecolor='lightgoldenrodyellow')
+    ax_phi_o = plt.axes([0.2, 0.15, 0.5, 0.03], facecolor='lightgoldenrodyellow')
+    ax_alphas = plt.axes([0.2, 0.1, 0.5, 0.03], facecolor='lightgoldenrodyellow')
+    ax_checkboxes = plt.axes([0.2, 0.0, 0.1, 0.1])
+    ax_checkboxes.set_frame_on(False)
 
     # Use index-based sliders but map them to actual theta_i and phi_i values
-    theta_i_slider = Slider(ax_theta_i, 'θi', 0, n_theta_i - 1, valinit=init_theta_i, valstep=1)
-    phi_i_slider = Slider(ax_phi_i, 'φi', 0, n_phi_i - 1, valinit=init_phi_i, valstep=1)
-    wavelength_slider = Slider(ax_wavelength, 'λ', 0, n_wavelengths - 1, valinit=init_wavelength, valstep=1)
-
+    theta_i_slider = Slider(ax_theta_i, 'θi', 0, n_theta_i - 1, valinit=0, valstep=1)
+    phi_i_slider = Slider(ax_phi_i, 'φi', 0, n_phi_i - 1, valinit=0, valstep=1)
+    wavelength_slider = Slider(ax_wavelength, 'λ', 0, n_wavelengths - 1, valinit=0, valstep=1)
+    phi_o_slider = Slider(ax_phi_o, 'φo', 0, n_phi_o - 1, valinit=0, valstep=1)
+    alpha_slider = Slider(ax_alphas, 'α', 0, n_models - 1, valinit=0, valstep=1)
     wi_text = fig.text(0.5, 0.92,
-                       f"θi: {np.degrees(theta_i[init_theta_i]):.2f}°, φi: {np.degrees(phi_i[init_phi_i]):.2f}°, λ: {wavelengths[init_wavelength]:.0f} nm",
+                       f"θi: {np.degrees(theta_i[0]):.2f}°, φi: {np.degrees(phi_i[0]):.2f}°, λ: {wavelengths[0]:.0f} nm",
                        ha='center', va='center', fontsize=14, fontweight='bold')
+    check = CheckButtons(ax_checkboxes, ['single φo', 'single α'], [False, True])
 
-    def toggle_polar(label):
-        nonlocal is_polar
-        is_polar = not is_polar
+    def plot_fitted_model(ai, ti, pi, s, s_opp, l):
+        samples_phi_bk = fitted_bk[ai, ti, pi, s, :, l]
+        samples_phi_bk_opp = fitted_bk[ai, ti, pi, s_opp, :, l]
+        samples_phi_tr = fitted_tr[ai, ti, pi, s, :, l]
+        samples_phi_tr_opp = fitted_tr[ai, ti, pi, s_opp, :, l]
+        ys_bk = np.append(np.flip(samples_phi_bk_opp), samples_phi_bk)
+        ys_tr = np.append(np.flip(samples_phi_tr_opp), samples_phi_tr)
+        ax[1].plot(xs, ys_bk, label=f"BK-α={alphas[ai]}", linestyle='dashed', color=bk_colors[ai], alpha=0.6)
+        ax[1].plot(xs, ys_tr, label=f"TR-α={alphas[ai]}", linestyle='dashdot', color=tr_colors[ai],
+                   alpha=0.6)
+
+    def plot_raw_samples(ti, pi, po, s, s_opp, l, is_single_phi_o=False):
+        phi_o_angle = np.degrees(phi_o[po])
+        phi_o_angle_opp = np.degrees(phi_o[s_opp])
+        samples_phi = samples[ti, pi, s, :, l]
+        samples_phi_opp = samples[ti, pi, s_opp, :, l]
+        ys = np.append(np.flip(samples_phi_opp), samples_phi)
+        ax[1].plot(xs, ys, label=f"   φo={phi_o_angle_opp:.2f}° -- {phi_o_angle:.2f}°",
+                   color=curves_colors[0 if is_single_phi_o else s],
+                   alpha=0.8)
+
+    def checkboxes_on_clicked(label):
+        if label == 'single φo':
+            nonlocal displaying_single_phi_o
+            displaying_single_phi_o = not displaying_single_phi_o
+            if displaying_single_phi_o:
+                phi_o_slider.set_active(True)
+            else:
+                phi_o_slider.set_active(False)
+        elif label == 'single α':
+            nonlocal displaying_single_alpha
+            displaying_single_alpha = not displaying_single_alpha
         update(0)
 
     # update the plot based on selected values
     def update(val):
+        ax[0].cla()
         ax[1].cla()
 
         ti = int(theta_i_slider.val)
         pi = int(phi_i_slider.val)
         l = int(wavelength_slider.val)
+        po = int(phi_o_slider.val)
+        ai = int(alpha_slider.val)
 
         theta_i_val = np.degrees(theta_i[ti])
         phi_i_val = np.degrees(phi_i[pi])
+        phi_o_val = np.degrees(phi_o[po])
+        (alpha_x, alpha_y) = alphas[ai]
         lambda_val = wavelengths[l]
 
         theta_i_slider.valtext.set_text(f"{theta_i_val:.2f}°")
         phi_i_slider.valtext.set_text(f"{phi_i_val:.2f}°")
+        phi_o_slider.valtext.set_text(f"{phi_o_val:.2f}°")
         wavelength_slider.valtext.set_text(f"{lambda_val:.0f} nm")
+        alpha_slider.valtext.set_text(f"{alpha_x:.6f} - {alpha_y:.6f}")
         wi_text.set_text(f"θi: {theta_i_val:.2f}°, φi: {phi_i_val:.2f}°, λ: {lambda_val:.0f} nm")
 
-        for s in range(n_slice):
+        xs_3d, ys_3d, zs_3d = calculate_brdf_surface(theta_o, phi_o, samples[ti, pi, :, :, l].transpose())
+        plot_brdf_polar_grid(ax[0])
+        ax[0].plot_surface(xs_3d, ys_3d, zs_3d, rstride=1, cstride=1, cmap='viridis', alpha=0.8, linewidth=0.2,
+                           edgecolor='none')
+
+        if not displaying_single_phi_o:
+            for s in range(n_slice):
+                s_opp = (s + n_slice) % n_phi_o
+                plot_raw_samples(ti, pi, po, s, s_opp, l, False)
+                if displaying_single_alpha:
+                    plot_fitted_model(ai, ti, pi, s, s_opp, l)
+                else:
+                    for ai in range(n_models):
+                        plot_fitted_model(ai, ti, pi, s, s_opp, l)
+        else:
+            s = po % n_phi_o
             s_opp = (s + n_slice) % n_phi_o
-            samples_phi = samples[ti, pi, s, :, l]
-            samples_phi_opp = samples[ti, pi, s_opp, :, l]
-            samples_phi_bk = fitted_bk[ti, pi, s, :, l]
-            samples_phi_bk_opp = fitted_bk[ti, pi, s_opp, :, l]
-            samples_phi_tr = fitted_tr[ti, pi, s, :, l]
-            samples_phi_tr_opp = fitted_tr[ti, pi, s_opp, :, l]
-            ys = np.append(np.flip(samples_phi_opp), samples_phi)
-            ys_bk = np.append(np.flip(samples_phi_bk_opp), samples_phi_bk)
-            ys_tr = np.append(np.flip(samples_phi_tr_opp), samples_phi_tr)
-            ax[1].plot(xs, ys, label=f"φo={s}'{s_opp}")
-            ax[1].plot(xs, ys_bk, label=f"bk φo={s}'{s_opp}")
-            ax[1].plot(xs, ys_tr, label=f"tr φo={s}'{s_opp}")
+            plot_raw_samples(ti, pi, po, s, s_opp, l, True)
+            if displaying_single_alpha:
+                plot_fitted_model(ai, ti, pi, s, s_opp, l)
+            else:
+                for ai in range(n_models):
+                    plot_fitted_model(ai, ti, pi, s, s_opp, l)
+
+        # Highlight the x-axis at ±theta_i
+        ax[1].axvline(theta_i_val, color='red', linestyle='--', linewidth=1.5, alpha=0.4)
+        ax[1].axvline(-theta_i_val, color='red', linestyle='--', linewidth=1.5, alpha=0.4)
 
         ax[1].legend(loc="upper right")
         fig.canvas.draw_idle()
@@ -779,6 +849,9 @@ def plot_brdf_fitting(samples: np.ndarray, theta_i: np.ndarray, phi_i: np.ndarra
     theta_i_slider.on_changed(update)
     phi_i_slider.on_changed(update)
     wavelength_slider.on_changed(update)
+    phi_o_slider.on_changed(update)
+    alpha_slider.on_changed(update)
+    check.on_clicked(checkboxes_on_clicked)
 
     update(0)
     plt.show()

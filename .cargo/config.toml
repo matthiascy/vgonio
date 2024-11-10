@@ -11,4 +11,4 @@ vis = "build --features visu-dbg"
 [build]
 rustc-wrapper = "sccache"
 rustdocflags = ["--html-in-header", "./misc/docs-header.html"]
-rustflags = ["-Clink-arg=-fuse-ld=lld"]
+rustflags = ["-Clink-arg=-fuse-ld=mold"]
