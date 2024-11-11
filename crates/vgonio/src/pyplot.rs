@@ -792,25 +792,19 @@ pub fn plot_brdf_fitting(
                         py,
                         brdf.spectrum.iter().map(|x| x.as_f32()).collect::<Vec<_>>(),
                     );
-                    let n_wo_new = brdf.n_wo() + 2;
-                    let n_wi_new = brdf.n_wi() + 1;
                     let n_spectrum = brdf.n_spectrum();
-                    // n_theta_i x n_phi_i x n_theta_o x n_phi_o x n_spectrum
-                    let mut raw_samples: DyArr<f32, 3> =
-                        DyArr::splat(f32::NAN, [n_wi_new, n_wo_new, n_spectrum]);
                     let mut theta_i = vec![];
                     let mut phi_i = vec![];
                     let mut theta_o = vec![];
                     let mut phi_o = vec![];
                     brdf.params.wi_wos_iter().for_each(|(i, (wi, wos))| {
-                        log::debug!("i: {}, wi: {}, wo: \n{:?}", i, wi, wos);
                         if !theta_i.contains(&wi.theta.as_f32()) {
                             theta_i.push(wi.theta.as_f32());
                         }
                         if !phi_i.contains(&wi.phi.as_f32()) {
                             phi_i.push(wi.phi.as_f32());
                         }
-                        let i_target = if i > 0 { i + 1 } else { i };
+                        log::debug!("wi: {}\n---- {:?}", wi, wos);
                         wos.iter().enumerate().for_each(|(j, wo)| {
                             if !theta_o.contains(&wo.theta.as_f32()) {
                                 theta_o.push(wo.theta.as_f32());
@@ -821,30 +815,6 @@ pub fn plot_brdf_fitting(
                             if !phi_o.contains(&wo.phi.as_f32()) {
                                 phi_o.push(wo.phi.as_f32());
                             }
-                            let original_offset = i * brdf.n_wo() * n_spectrum + j * n_spectrum;
-                            let target_offset = if (wi.theta - wo.theta).as_f32().is_sign_negative()
-                            {
-                                i_target * n_wo_new * n_spectrum + (j + 1) * n_spectrum
-                            } else {
-                                i_target * n_wo_new * n_spectrum + j * n_spectrum
-                            };
-                            raw_samples.as_mut_slice()[target_offset..target_offset + n_spectrum]
-                                .copy_from_slice(
-                                    &brdf.samples.as_slice()
-                                        [original_offset..original_offset + n_spectrum],
-                                );
-                            // Copy the data when theta_i == 0 for every
-                            // phi_i
-                            if i == 0 {
-                                let target_offset =
-                                    (i_target + 1) * n_wo_new * n_spectrum + (j + 1) * n_spectrum;
-                                raw_samples.as_mut_slice()
-                                    [target_offset..target_offset + n_spectrum]
-                                    .copy_from_slice(
-                                        &brdf.samples.as_slice()
-                                            [original_offset..original_offset + n_spectrum],
-                                    );
-                            }
                         });
                     });
 
@@ -852,49 +822,88 @@ pub fn plot_brdf_fitting(
                     let n_phi_i = phi_i.len();
                     let n_theta_o = theta_o.len();
                     let n_phi_o = phi_o.len();
-                    // Swap the order of theta_o and phi_o back in the raw_samples
-                    // to n_theta_i x n_phi_i x n_phi_o x n_theta_o x n_spectrum
-                    // in the samples
-                    let mut samples = vec![0.0; n_wi_new * n_wo_new * n_spectrum];
-                    for (i, t_i) in theta_i.iter().enumerate() {
-                        for (j, p_i) in phi_i.iter().enumerate() {
-                            for (k, t_o) in theta_o.iter().enumerate() {
-                                for (l, p_o) in phi_o.iter().enumerate() {
-                                    let original_offset = i * n_phi_i * n_wo_new * n_spectrum
-                                        + j * n_wo_new * n_spectrum
-                                        + k * n_phi_o * n_spectrum
-                                        + l * n_spectrum;
-                                    let target_offset = i * n_phi_i * n_wo_new * n_spectrum
-                                        + j * n_wo_new * n_spectrum
-                                        + l * n_theta_o * n_spectrum
-                                        + k * n_spectrum;
-                                    samples[target_offset..target_offset + n_spectrum]
-                                        .copy_from_slice(
-                                            &raw_samples.as_slice()
-                                                [original_offset..original_offset + n_spectrum],
-                                        );
-                                }
-                            }
-                        }
-                    }
-
                     theta_i.sort_by(|a, b| a.partial_cmp(b).unwrap());
                     phi_i.sort_by(|a, b| a.partial_cmp(b).unwrap());
                     theta_o.sort_by(|a, b| a.partial_cmp(b).unwrap());
                     phi_o.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                    log::debug!("theta_i: {:?}", theta_i);
-                    log::debug!("phi_i: {:?}", phi_i);
-                    log::debug!("theta_o: {:?}", theta_o);
-                    log::debug!("phi_o: {:?}", phi_o);
+
+                    // n_theta_i x n_phi_i x n_theta_o x n_phi_o x n_spectrum
+                    let mut samples: DyArr<f32, 5> = DyArr::splat(
+                        f32::NAN,
+                        [n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_spectrum],
+                    );
+
+                    brdf.params.wi_wos_iter().for_each(|(i, (wi, wos))| {
+                        wos.iter().enumerate().for_each(|(j, wo)| {
+                            let target_ti = theta_i
+                                .iter()
+                                .position(|x| (*x - wi.theta.as_f32()).abs() < 1e-6)
+                                .unwrap();
+                            let target_pi = phi_i
+                                .iter()
+                                .position(|x| (*x - wi.phi.as_f32()).abs() < 1e-6)
+                                .unwrap();
+                            let target_to = theta_o
+                                .iter()
+                                .position(|x| (*x - wo.theta.as_f32()).abs() < 1e-6)
+                                .unwrap();
+                            let target_po = phi_o
+                                .iter()
+                                .position(|x| (*x - wo.phi.as_f32()).abs() < 1e-6)
+                                .unwrap();
+
+                            if target_ti == target_to && target_pi == target_po {
+                                return;
+                            }
+
+                            let target_offset =
+                                target_ti * n_phi_i * n_phi_o * n_theta_o * n_spectrum
+                                    + target_pi * n_phi_o * n_theta_o * n_spectrum
+                                    + target_po * n_theta_o * n_spectrum
+                                    + target_to * n_spectrum;
+                            let offset = i * brdf.n_wo() * n_spectrum + j * n_spectrum;
+                            samples.as_mut_slice()[target_offset..target_offset + n_spectrum]
+                                .copy_from_slice(
+                                    &brdf.samples.as_slice()[offset..offset + n_spectrum],
+                                );
+
+                            if target_to == 0 {
+                                let target_offset =
+                                    target_ti * n_phi_i * n_phi_o * n_theta_o * n_spectrum
+                                        + target_pi * n_phi_o * n_theta_o * n_spectrum
+                                        + (target_po + 1) * n_theta_o * n_spectrum
+                                        + target_to * n_spectrum;
+                                samples.as_mut_slice()[target_offset..target_offset + n_spectrum]
+                                    .copy_from_slice(
+                                        &brdf.samples.as_slice()[offset..offset + n_spectrum],
+                                    );
+                            }
+
+                            // When wi == (0, 0), Olaf doesn't have the data for
+                            // phi == 180, so we populate the data with the
+                            // opposite direction.
+                            if i == 0 {
+                                let target_offset =
+                                    target_ti * n_phi_i * n_phi_o * n_theta_o * n_spectrum
+                                        + (target_pi + 1) * n_phi_o * n_theta_o * n_spectrum
+                                        + target_po * n_theta_o * n_spectrum
+                                        + target_to * n_spectrum;
+                                samples.as_mut_slice()[target_offset..target_offset + n_spectrum]
+                                    .copy_from_slice(
+                                        &brdf.samples.as_slice()[offset..offset + n_spectrum],
+                                    );
+                            }
+                        });
+                    });
 
                     let fitted_bk = PyArray1::zeros_bound(
                         py,
-                        [n_models * n_wi_new * n_wo_new * n_spectrum],
+                        [n_models * n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
                     );
                     let fitted_tr = PyArray1::zeros_bound(
                         py,
-                        [n_models * n_wi_new * n_wo_new * n_spectrum],
+                        [n_models * n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
                     );
 
@@ -947,7 +956,7 @@ pub fn plot_brdf_fitting(
                             }
                         }
                     }
-                    let samples = PyArray1::from_vec_bound(py, samples);
+                    let samples = PyArray1::from_vec_bound(py, samples.into_vec());
                     let theta_i = PyArray1::from_vec_bound(py, theta_i.into_iter().collect());
                     let phi_i = PyArray1::from_vec_bound(py, phi_i.into_iter().collect());
                     let theta_o = PyArray1::from_vec_bound(py, theta_o.into_iter().collect());
