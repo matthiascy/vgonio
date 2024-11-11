@@ -382,7 +382,6 @@ def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices):
 def calculate_brdf_surface(theta, phi, vals):
     n_theta = len(theta)
     n_phi = len(phi)
-    print(f"n_theta: {n_theta}, n_phi: {n_phi}")
 
     t, p = np.meshgrid(theta, phi)
     x = np.zeros((n_theta, n_phi))
