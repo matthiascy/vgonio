@@ -10,7 +10,7 @@ use crate::{
 use base::{
     error::VgonioError,
     impl_measured_data_trait,
-    math::{Sph2, Vec2, Vec3},
+    math::{compute_bicubic_spline_coefficients, Sph2, Vec2, Vec3},
     medium::Medium,
     units::{deg, rad, Nanometres},
     MeasuredBrdfKind, MeasuredData, MeasurementKind,
@@ -38,6 +38,17 @@ pub struct Yan2018BrdfParameterisation {
     /// The outgoing directions of the BRDF. The directions are stored in
     /// spherical coordinates (theta, phi).
     pub outgoing: DyArr<Sph2>,
+    /// The mapping from the pixel index to the outgoing direction index.
+    /// The pixel index is the index of the pixel in the EXR file, and the
+    /// outgoing direction index is the index of the outgoing direction in
+    /// the BRDF. The mapping is a 2D array with the first dimension is the
+    /// row index of the pixel, and the second dimension is the column index
+    /// of the pixel.
+    pub mapping: DyArr<u32, 2>,
+    /// The width of the original EXR image.
+    pub width: u32,
+    /// The height of the original EXR image.
+    pub height: u32,
 }
 
 impl BrdfParameterisation for Yan2018BrdfParameterisation {
@@ -114,6 +125,94 @@ impl Yan2018Brdf {
             n_outgoing: self.params.n_wo(),
             index: 0,
         }
+    }
+
+    /// Returns the sample values (per wavelength) of the BRDF at the given
+    /// incident and outgoing directions.
+    ///
+    /// The exact incident direction must be provided; meanwhile, the sample
+    /// values of the outgoing direction are interpolated from the recorded
+    /// data using bicubic interpolation.
+    pub fn sample_at(&self, wi: Sph2, wo: Sph2) -> Box<[f32]> {
+        let i = self
+            .params
+            .incoming
+            .iter()
+            .position(|sph| sph == &wi)
+            .unwrap_or_else(|| panic!("The incident direction {:?} is not found in the BRDF.", wi));
+        let uv = Self::spherical_coord_to_uv(wo);
+        self.bicubic_interpolate(i, uv)
+    }
+
+    /// Returns the sample values (per wavelength) of the BRDF with the given
+    /// incident direction index and the pixel coordinates of the outgoing
+    /// direction.
+    pub fn sample_at_pixel_coord(&self, wi_idx: usize, r: usize, c: usize) -> Box<[f32]> {
+        let n_spectrum = self.spectrum.len();
+        let mut out = vec![0.0; n_spectrum];
+        let n_wo = self.params.n_wo();
+        let wo_idx = self.params.mapping[[r, c]];
+        if wo_idx != u32::MAX {
+            let offset = wi_idx * n_wo * n_spectrum + wo_idx as usize * n_spectrum;
+            out.copy_from_slice(&self.samples.as_slice()[offset..offset + n_spectrum]);
+        }
+        out.into_boxed_slice()
+    }
+
+    /// Returns derivative of the sample values (per wavelength) respective to
+    /// the vertical direction of the BRDF with the given incident direction
+    /// index and the pixel coordinates of the outgoing direction.
+    pub fn sample_dy_at(&self, wi_idx: usize, r: usize, c: usize) -> Box<[f32]> {
+        let samples_prev = self.sample_at_pixel_coord(wi_idx, r.saturating_sub(1), c);
+        let samples_next =
+            self.sample_at_pixel_coord(wi_idx, (r + 1) % self.params.height as usize, c);
+        let mut derivative = vec![0.0; self.spectrum.len()];
+        for (i, (prev, next)) in samples_prev.iter().zip(samples_next.iter()).enumerate() {
+            derivative[i] = (next - prev) / 2.0;
+        }
+        derivative.into_boxed_slice()
+    }
+
+    /// Returns derivative of the sample values (per wavelength) respective to
+    /// the horizontal direction of the BRDF with the given incident
+    /// direction index and the pixel coordinates of the outgoing direction.
+    /// Note: x is the row index and y is the column index.
+    pub fn sample_dx_at(&self, wi_idx: usize, r: usize, c: usize) -> Box<[f32]> {
+        let samples_prev = self.sample_at_pixel_coord(wi_idx, r, c.saturating_sub(1));
+        let samples_next =
+            self.sample_at_pixel_coord(wi_idx, r, (c + 1) % self.params.width as usize);
+        let mut derivative = vec![0.0; self.spectrum.len()];
+        for (i, (prev, next)) in samples_prev.iter().zip(samples_next.iter()).enumerate() {
+            derivative[i] = (next - prev) / 2.0;
+        }
+        derivative.into_boxed_slice()
+    }
+
+    /// Returns the derivative of the sample values (per wavelength) respective
+    /// to both the vertical and horizontal directions of the BRDF with the
+    /// given incident direction index and the pixel coordinates of the
+    /// outgoing direction.
+    pub fn sample_dxy_at(&self, wi_idx: usize, r: usize, c: usize) -> Box<[f32]> {
+        let rnext = (r + 1) % self.params.height as usize;
+        let cnext = (c + 1) % self.params.width as usize;
+        let samples_rnext_cnext = self.sample_at_pixel_coord(wi_idx, rnext, cnext);
+        let samples_rnext_c = self.sample_at_pixel_coord(wi_idx, rnext, c);
+        let samples_r_cnext = self.sample_at_pixel_coord(wi_idx, r, cnext);
+        let samples_r_c = self.sample_at_pixel_coord(wi_idx, r, c);
+        let samples_rprev_cprev =
+            self.sample_at_pixel_coord(wi_idx, r.saturating_sub(1), c.saturating_sub(1));
+        let samples_rprev_c = self.sample_at_pixel_coord(wi_idx, r.saturating_sub(1), c);
+        let samples_r_cprev = self.sample_at_pixel_coord(wi_idx, r, c.saturating_sub(1));
+        let mut derivative = vec![0.0; self.spectrum.len()];
+        for i in 0..self.spectrum.len() {
+            derivative[i] = (samples_rnext_cnext[i] - samples_rnext_c[i] - samples_r_cnext[i]
+                + 2.0 * samples_r_c[i]
+                - samples_rprev_c[i]
+                - samples_r_cprev[i]
+                + samples_rprev_cprev[i])
+                * 0.5;
+        }
+        derivative.into_boxed_slice()
     }
 
     /// Loads the BRDF from an EXR file.
@@ -221,12 +320,12 @@ impl Yan2018Brdf {
 
         // Extract the outgoing directions and the mapping from the pixel index
         // to the outgoing direction index.
-        let mut mapping = vec![usize::MAX; w * h];
+        let mut mapping = vec![u32::MAX; h * w];
         pixel_outgoing
             .iter()
             .enumerate()
             .for_each(|(i, (idx, sph))| {
-                mapping[*idx] = i;
+                mapping[*idx] = i as u32;
             });
         let outgoing: DyArr<Sph2> =
             DyArr::from_iterator([-1], pixel_outgoing.iter().map(|(_, sph)| *sph));
@@ -245,14 +344,15 @@ impl Yan2018Brdf {
                     .enumerate()
                     .for_each(|(pixel, value)| {
                         let j = mapping[pixel];
-                        if j == usize::MAX {
+                        if j == u32::MAX {
                             return;
                         }
-                        samples[[i, j, k]] = value;
+                        samples[[i, j as usize, k]] = value;
                     });
             }
         });
 
+        // Extract the incident directions from the layer names.
         let incoming = DyArr::from_iterator(
             [-1],
             data.layer_data.iter().map(|layer| {
@@ -282,13 +382,121 @@ impl Yan2018Brdf {
             incident_medium,
             transmitted_medium,
             Yan2018BrdfParameterisation {
-                n_zenith_i: n_wi,
+                n_zenith_i: incoming
+                    .iter()
+                    .skip(1)
+                    .position(|sph| sph.theta == incoming[0].theta)
+                    .unwrap()
+                    + 1,
                 incoming,
                 outgoing,
+                mapping: DyArr::from_slice([h, w], &mapping),
+                width: w as u32,
+                height: h as u32,
             },
             spectrum,
             samples,
         ))
+    }
+
+    /// Converts the pixel coordinates to the outgoing direction in
+    /// spherical coordinates (theta, phi).
+    pub fn pixel_coord_to_spherical_coord(
+        px: usize,
+        py: usize,
+        w: usize,
+        h: usize,
+    ) -> Option<Sph2> {
+        let x = (px as f32 + 0.5) / w as f32 * 2.0 - 1.0;
+        let y = (py as f32 + 0.5) / h as f32 * 2.0 - 1.0;
+
+        if x * x + y * y > 1.0 {
+            return None;
+        }
+
+        let z = (1.0 - x * x - y * y).sqrt();
+        let phi = y.atan2(x);
+        let theta = z.acos();
+
+        if phi < 0.0 {
+            Some(Sph2::new(
+                rad!(theta),
+                rad!(phi + 2.0 * std::f32::consts::PI),
+            ))
+        } else {
+            Some(Sph2::new(rad!(theta), rad!(phi)))
+        }
+    }
+
+    /// Converts the spherical coordinates (theta, phi) to the pixel
+    /// coordinates.
+    ///
+    /// The returned value is not exactly the pixel coordinates
+    /// in integer values but the pixel coordinates in the range [0, 1].
+    /// To map back to the pixel coordinates, the returned value must be
+    /// multiplied by the width and height of the image.
+    pub fn spherical_coord_to_uv(sph: Sph2) -> [f32; 2] {
+        let x = sph.phi.sin() * sph.theta.sin();
+        let y = sph.phi.cos() * sph.theta.sin();
+        let u = (x / 2.0 + 0.5).clamp(0.0, 1.0);
+        let v = (y / 2.0 + 0.5).clamp(0.0, 1.0);
+        [u, v]
+    }
+
+    /// Bicubic interpolation of the BRDF at the given UV coordinates.
+    /// The UV coordinates are in the range [0, 1].
+    ///
+    /// Note: u is the horizontal coordinate and v is the vertical coordinate.
+    pub fn bicubic_interpolate(&self, wi_idx: usize, uv: [f32; 2]) -> Box<[f32]> {
+        let [u, v] = uv;
+        let n_spectrum = self.spectrum.len();
+        let x = u * self.params.width as f32;
+        let y = v * self.params.height as f32;
+        let x0 = x.floor() as usize;
+        let y0 = y.floor() as usize;
+        let x1 = (x0 + 1) % self.params.width as usize;
+        let y1 = (y0 + 1) % self.params.height as usize;
+        let dx = x - x0 as f32;
+        let dy = y - y0 as f32;
+        let x0y0 = self.sample_at_pixel_coord(wi_idx, y0, x0);
+        let x1y0 = self.sample_at_pixel_coord(wi_idx, y0, x1);
+        let x0y1 = self.sample_at_pixel_coord(wi_idx, y1, x0);
+        let x1y1 = self.sample_at_pixel_coord(wi_idx, y1, x1);
+        let dy_x0y0 = self.sample_dy_at(wi_idx, y0, x0);
+        let dy_x1y0 = self.sample_dy_at(wi_idx, y0, x1);
+        let dy_x0y1 = self.sample_dy_at(wi_idx, y1, x0);
+        let dy_x1y1 = self.sample_dy_at(wi_idx, y1, x1);
+        let dx_x0y0 = self.sample_dx_at(wi_idx, y0, x0);
+        let dx_x1y0 = self.sample_dx_at(wi_idx, y0, x1);
+        let dx_x0y1 = self.sample_dx_at(wi_idx, y1, x0);
+        let dx_x1y1 = self.sample_dx_at(wi_idx, y1, x1);
+        let dxy_x0y0 = self.sample_dxy_at(wi_idx, y0, x0);
+        let dxy_x1y0 = self.sample_dxy_at(wi_idx, y0, x1);
+        let dxy_x0y1 = self.sample_dxy_at(wi_idx, y1, x0);
+        let dxy_x1y1 = self.sample_dxy_at(wi_idx, y1, x1);
+        let mut samples = vec![0.0; n_spectrum];
+
+        for k in 0..n_spectrum {
+            // The unknown bicubic interpolation coefficients.
+            let mut alpha = [0.0; 16];
+            // The values and derivatives of the BRDF at the four corners of the
+            // interpolation region.
+            #[rustfmt::skip]
+            let x = [
+                x0y0[k], x1y0[k], x0y1[k], x1y1[k],
+                dx_x0y0[k], dx_x1y0[k], dx_x0y1[k], dx_x1y1[k],
+                dy_x0y0[k], dy_x1y0[k], dy_x0y1[k], dy_x1y1[k],
+                dxy_x0y0[k], dxy_x1y0[k], dxy_x0y1[k], dxy_x1y1[k],
+            ];
+            compute_bicubic_spline_coefficients(&mut alpha, &x);
+            for i in 0..4 {
+                for j in 0..4 {
+                    samples[k] += alpha[i * 4 + j] * (dy.powi(i as i32) * dx.powi(j as i32));
+                }
+            }
+        }
+
+        samples.into_boxed_slice()
     }
 }
 

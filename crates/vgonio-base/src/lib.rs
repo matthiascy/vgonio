@@ -179,12 +179,12 @@ pub enum ErrorMetric {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResidualErrorMetric {
     /// Nothing applied to the measured data and model values.
-    #[clap(name = "identity")]
+    #[cfg_attr(feature = "cli", clap(name = "identity"))]
     Identity,
     /// From paper "BRDF Models for Accurate and Efficient Rendering of Glossy
     /// Surfaces".
     /// ln(1 + cos_theta_i * d) where d is the measured data or model value.
-    #[clap(name = "jlow")]
+    #[cfg_attr(feature = "cli", clap(name = "jlow"))]
     JLow,
 }
 

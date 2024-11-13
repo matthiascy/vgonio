@@ -5,7 +5,7 @@ use cfg_if::cfg_if;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
-    ops::{Add, Mul},
+    ops::{Add, Mul, Rem},
 };
 
 mod aabb;
@@ -759,6 +759,151 @@ pub fn pairwise_sum<F: Float>(values: &[F]) -> F {
     pairwise_sum(left) + pairwise_sum(right)
 }
 
+#[rustfmt::skip]
+/// The inverse of the matrix used to compute the coefficients of the bicubic spline interpolation.
+pub const BICUBIC_SPLINE_BASIS_MATRIX_INV: [f32; 16 * 16] = [
+     1.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+     0.0,  0.0,  0.0,  0.0,  1.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+    -3.0,  3.0,  0.0,  0.0, -2.0, -1.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+     2.0, -2.0,  0.0,  0.0,  1.0,  1.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+     0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+     0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1.0,  0.0,  0.0,  0.0,
+     0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0, -3.0,  3.0,  0.0,  0.0, -2.0, -1.0,  0.0,  0.0,
+     0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  2.0, -2.0,  0.0,  0.0,  1.0,  1.0,  0.0,  0.0,
+    -3.0,  0.0,  3.0,  0.0,  0.0,  0.0,  0.0,  0.0, -2.0,  0.0, -1.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+     0.0,  0.0,  0.0,  0.0, -3.0,  0.0,  3.0,  0.0,  0.0,  0.0,  0.0,  0.0, -2.0,  0.0, -1.0,  0.0,
+     9.0, -9.0, -9.0,  9.0,  6.0,  3.0, -6.0, -3.0,  6.0, -6.0,  3.0, -3.0,  4.0,  2.0,  2.0,  1.0,
+    -6.0,  6.0,  6.0, -6.0, -3.0, -3.0,  3.0,  3.0, -4.0,  4.0, -2.0,  2.0, -2.0, -2.0, -1.0, -1.0,
+     2.0,  0.0, -2.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1.0,  0.0,  1.0,  0.0,  0.0,  0.0,  0.0,  0.0,
+     0.0,  0.0,  0.0,  0.0,  2.0,  0.0, -2.0,  0.0,  0.0,  0.0,  0.0,  0.0,  1.0,  0.0,  1.0,  0.0,
+    -6.0,  6.0,  6.0, -6.0, -4.0, -2.0,  4.0,  2.0, -3.0,  3.0, -3.0,  3.0, -2.0, -1.0, -2.0, -1.0,
+     4.0, -4.0, -4.0,  4.0,  2.0,  2.0, -2.0, -2.0,  2.0, -2.0,  2.0, -2.0,  1.0,  1.0,  1.0,  1.0
+];
+
+/// Computes the bicubic  coefficients by solving the linear system of
+/// equations.
+///
+/// A^-1 * x = α
+///
+/// where A^-1 is the inverse of the matrix used to compute the coefficients of
+/// the bicubic interpolation, α is the matrix of unknown coefficients and x is
+/// the matrix of values and derivatives (4x4).
+pub fn compute_bicubic_spline_coefficients(alpha: &mut [f32; 16], f: &[f32; 16]) {
+    for i in 0..16 {
+        alpha[i] = 0.0;
+        for j in 0..16 {
+            alpha[i] += BICUBIC_SPLINE_BASIS_MATRIX_INV[i * 16 + j] * f[j];
+        }
+    }
+}
+
+/// Transposes the matrix.
+pub fn transpose_matrix(mat: &[f32], out: &mut [f32], w: usize) {
+    assert_eq!(
+        mat.len() % w,
+        0,
+        "The number of values must be divisible by the width"
+    );
+    assert_eq!(
+        out.len(),
+        mat.len(),
+        "The output buffer must have the same length as the input buffer"
+    );
+    let h = mat.len() / w;
+    for i in 0..w {
+        for j in 0..h {
+            out[j * w + i] = mat[i * h + j];
+        }
+    }
+}
+
+/// Computes the positive modulo of the given value `a` with respect to `b`.
+pub fn pos_mod<T>(a: T, b: T) -> T
+where
+    T: Add<T, Output = T> + Rem<T, Output = T> + Copy,
+{
+    (a % b + b) % b
+}
+
+/// Computes the partial derivatives using central differences.
+/// The values are stored in a 1D array with the given width.
+/// Note that the values are assumed to be in row-major order, and x is the
+/// horizontal axis and y is the vertical axis.
+fn dx(vals: &[f32], w: usize, x: usize, y: usize) -> f32 {
+    assert_eq!(vals.len() % w, 0);
+    let l = pos_mod(x as isize - 1, w as isize) as usize;
+    let r = pos_mod(x + 1, w);
+    (vals[r + y * w] - vals[l + y * w]) * 0.5
+}
+
+/// Computes the partial derivatives using central differences.
+/// The values are stored in a 1D array with the given width.
+/// Note that the values are assumed to be in row-major order, and x is the
+/// horizontal axis and y is the vertical axis.
+fn dy(vals: &[f32], w: usize, x: usize, y: usize) -> f32 {
+    assert_eq!(vals.len() % w, 0);
+    let h = vals.len() / w;
+    let t = pos_mod(y as isize - 1, h as isize) as usize;
+    let b = pos_mod(y + 1, h);
+    (vals[x + b * w] - vals[x + t * w]) * 0.5
+}
+
+/// Computes the partial derivatives using central differences.
+/// The values are stored in a 1D array with the given width.
+/// Note that the values are assumed to be in row-major order, and x is the
+/// horizontal axis and y is the vertical axis.
+fn dxy(vals: &[f32], w: usize, x: usize, y: usize) -> f32 {
+    assert_eq!(vals.len() % w, 0);
+    let h = vals.len() / w;
+    let l = pos_mod(x as isize - 1, w as isize) as usize;
+    let r = pos_mod(x + 1, w);
+    let t = pos_mod(y as isize - 1, h as isize) as usize;
+    let b = pos_mod(y + 1, h);
+    (vals[r + b * w] - vals[r + y * w] - vals[x + b * w] + 2.0 * vals[x + y * w]
+        - vals[l + y * w]
+        - vals[x + t * w]
+        + vals[l + t * w])
+        * 0.5
+}
+
+/// Interpolates the given values using bicubic spline interpolation.
+pub fn bicubic_spline_interpolate(vals: &[f32], w: usize, h: usize, x: f32, y: f32) -> f32 {
+    assert_eq!(
+        vals.len(),
+        w * h,
+        "The number of values must match the width and height"
+    );
+    let x0 = x.floor() as usize;
+    let y0 = y.floor() as usize;
+    let x1 = (x0 + 1) % w;
+    let y1 = (y0 + 1) % h;
+
+    // The unknown coefficients of the bicubic interpolation
+    let mut alpha = [0.0; 16];
+
+    // The values and derivatives of the bicubic interpolation
+    #[rustfmt::skip]
+    let f = [
+        vals[x0 + y0 * w], vals[x1 + y0 * w], vals[x0 + y1 * w], vals[x1 + y1 * w],
+        dx(vals, w, x0, y0), dx(vals, w, x1, y0), dx(vals, w, x0, y1), dx(vals, w, x1, y1), // dx
+        dy(vals, w, x0, y0), dy(vals, w, x1, y0), dy(vals, w, x0, y1), dy(vals, w, x1, y1), // dy
+        dxy(vals, w, x0, y0), dxy(vals, w, x1, y0), dxy(vals, w, x0, y1), dxy(vals, w, x1, y1), // dxy
+    ];
+
+    compute_bicubic_spline_coefficients(&mut alpha, &f);
+
+    let dx = x - x0 as f32;
+    let dy = y - y0 as f32;
+    let mut val = 0.0;
+    for i in 0..4 {
+        for j in 0..4 {
+            val += alpha[i * 4 + j] * dx.powi(i as i32) * dy.powi(j as i32);
+        }
+    }
+
+    val
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -929,5 +1074,55 @@ mod tests {
         assert_eq!(nmadd(2.0, 4.0, 6.0), -2.0);
         assert_eq!(nmadd(3.0, 6.0, 9.0), -9.0);
         assert_eq!(nmadd(4.0, 8.0, 12.0), -20.0);
+    }
+
+    #[test]
+    fn test_bicubic() {
+        #[rustfmt::skip]
+        let vals = [
+            0.020577524857991025, 0.18971399931647925, 0.6472988117341697, 0.3171236682398719, 0.1938307779526578, 0.15215367940736424, 0.23141959695059544, 0.9887189154037084,
+            0.3064006276827881, 0.06026266761150301, 0.4693985197861811, 0.9622135275069208, 0.6898387687303223, 0.021282917135453272, 0.656337204422765, 0.7599000975190718,
+            0.5575454977963871, 0.6843410554023187, 0.3368161536871077, 0.2541328932074023, 0.3356154092091993, 0.9804840924717523, 0.039090702338055894, 0.8661465650138853,
+            0.6620856671765183, 0.43327668171205835, 0.0630401739386448, 0.027683230074951437, 0.11829544232644407, 0.14329264761505656, 0.04635921588005476, 0.6962808313884875,
+            0.5380940187171173, 0.9556046089324461, 0.4552143889526681, 0.03937711165092528, 0.8910555605252136, 0.5741136199613467, 0.8166575190453587, 0.3903847474239932,
+            0.7965726590777187, 0.8082015730611953, 0.9738100467284583, 0.8829451492717061, 0.0999618533994232, 0.19795728465535045, 0.7431403460818369, 0.6292710119682756,
+            0.4178727984758539, 0.6622263565626181, 0.8452963896439555, 0.0025040773371418634, 0.6661069434296458, 0.10410650030423663, 0.5789522116613512, 0.6114763247905116,
+            0.4648044810036589, 0.06609882622003171, 0.8938405411724243, 0.2905433287247273, 0.10752224342211236, 0.10597702085458727, 0.46671001130402756, 0.8020175639760303,
+        ];
+        let mut vals_t = [0.0; 64];
+        super::transpose_matrix(&vals, &mut vals_t, 8);
+        for i in 0..8 {
+            let v = super::bicubic_spline_interpolate(&vals, 8, 8, i as f32 * 0.5, i as f32 * 0.5);
+            let v1 = super::bicubic_spline_interpolate(
+                &vals,
+                8,
+                8,
+                i as f32 * 0.5,
+                i as f32 * 0.5 + 0.3,
+            );
+            println!("{} - {}: {}", i as f32 * 0.5, i as f32 * 0.5, v);
+            println!("{} - {}: {}", i as f32 * 0.5, i as f32 * 0.5 + 0.3, v1);
+        }
+
+        #[rustfmt::skip]
+        let vals1 = [
+            0., 1., 2., 3.,
+            4., 5., 6., 7.,
+            8., 9., 10., 11.,
+            12., 13., 14., 15.,
+        ];
+        for i in 0..4 {
+            let x = i as f32 * 1.1;
+            let y = i as f32 * 1.1;
+            let v = super::bicubic_spline_interpolate(&vals1, 4, 4, x, y);
+            println!("{x} - {y}: {v}");
+        }
+
+        for i in 0..4 {
+            let x = i as f32 * 1.1;
+            let y = i as f32 * 1.1 + 0.3;
+            let v = super::bicubic_spline_interpolate(&vals1, 4, 4, x, y);
+            println!("{x} - {y}: {v}");
+        }
     }
 }

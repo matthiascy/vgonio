@@ -3,13 +3,14 @@ use crate::{
     math::{Sph2, Vec3},
     range::RangeByStepSizeInclusive,
     units::{rad, Radians, Rads, SolidAngle},
-    utils,
 };
 use num_traits::Euclid;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
 use crate::error::VgonioError;
+#[cfg(feature = "io")]
+use crate::utils;
 #[cfg(feature = "io")]
 use exr::prelude::Text;
 #[cfg(feature = "io")]

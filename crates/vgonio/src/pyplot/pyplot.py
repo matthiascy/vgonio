@@ -855,13 +855,16 @@ def plot_brdf_fitting(samples: np.ndarray, incoming: Tuple[np.ndarray, np.ndarra
     update(0)
     plt.show()
 
-    # for ti in range(n_theta_i):
-    #     for pi in range(n_phi_i):
-    #         for s in range(n_slice):
-    #             s_opp = (s + n_slice) % n_phi_o
-    #             # for l in range(n_wavelengths):
-    #             l = 0
-    #             samples_phi = samples[ti, pi, s, :, l]
-    #             samples_phi_opp = samples[ti, pi, s_opp, :, l]
-    #             ys = np.append(np.flip(samples_phi_opp), samples_phi)
-    #             ax[1].plot(xs, ys, label=f"θi={ti}, φi={pi}, φo={s}'{s_opp}, λ={l}")
+
+def plot_brdf_coverage(points: np.ndarray):
+    fig = plt.figure(figsize=(8, 8))
+    ax = fig.add_subplot(111, projection='polar')
+    ax.set_xlabel(r'$\theta_o$')
+    ax.set_ylabel(r'$\phi_o$')
+    ax.set_title('BRDF Coverage')
+    ax.set_theta_zero_location("N")
+    ax.set_theta_direction(-1)
+    # First dimension is theta_o, second dimension is phi_o, in radians
+    ax.plot(points[:, 0], points[:, 1], 'o', markersize=1)
+
+    plt.show()
