@@ -10,3 +10,5 @@ debug_*/
 /**.png
 **/__pycache__
 **.so**
+**.lib
+**.exr
