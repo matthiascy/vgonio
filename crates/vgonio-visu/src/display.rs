@@ -4,7 +4,7 @@ use std::{borrow::Cow, sync::Arc};
 use wgpu::StoreOp;
 use winit::{
     event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::Window,
 };
 
@@ -42,12 +42,12 @@ pub struct Display {
 
 impl Display {
     pub async fn new(w: u32, h: u32, evlp: &EventLoop<()>) -> Display {
-        let window = Arc::new(
-            winit::window::WindowBuilder::new()
+        let win_attribs = winit::window::WindowAttributes::default().with_resizable(true)
                 .with_title("Vgonio-Visu")
-                .with_inner_size(winit::dpi::PhysicalSize::new(w, h))
-                .build(evlp)
-                .unwrap(),
+                .with_inner_size(winit::dpi::PhysicalSize::new(w, h));
+        let window = Arc::new(
+            evlp.create_window( win_attribs)
+                .expect("Failed to create window."),
         );
         let wgpu_config = WgpuConfig {
             present_mode: wgpu::PresentMode::AutoNoVsync,
