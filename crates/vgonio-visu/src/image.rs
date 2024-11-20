@@ -1,4 +1,4 @@
-use image::RgbaImage;
+use image::{buffer, RgbaImage};
 use rayon::{
     iter::{IndexedParallelIterator, ParallelIterator},
     slice::{ParallelSlice, ParallelSliceMut},
@@ -124,14 +124,25 @@ impl TiledImage {
     }
 
     pub fn write_to_flat_buffer(&self, buffer: &mut [u8]) {
-        for tile in self.tiles() {
+        #[derive(Debug, Clone, Copy)]
+        struct Buffer {
+            buffer: *mut u8,
+        }
+        unsafe impl Sync for Buffer {}
+        unsafe impl Send for Buffer {}
+
+        let buf = Buffer {
+            buffer: buffer.as_mut_ptr(),
+        };
+        self.par_tiles().for_each_with(buf, |buffer, tile| {
             let base = (tile.y * self.width + tile.x) as usize * 4;
+            let buffer = *buffer;
             // Copy tile pixels to buffer
             for i in 0..tile.h {
                 let row_offset = i as usize * self.width as usize * 4;
                 unsafe {
                     buffer
-                        .as_mut_ptr()
+                        .buffer
                         .add(base + row_offset)
                         .copy_from_nonoverlapping(
                             tile.pixels.as_ptr().add(i as usize * tile.w as usize) as *const u8,
@@ -139,7 +150,7 @@ impl TiledImage {
                         );
                 }
             }
-        }
+        });
     }
 
     pub fn put_pixel(&mut self, x: u32, y: u32, r: u8, g: u8, b: u8, a: u8) {

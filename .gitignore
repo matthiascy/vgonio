@@ -12,3 +12,4 @@ debug_*/
 **.so**
 **.lib
 **.exr
+rustc-ice-**.txt
