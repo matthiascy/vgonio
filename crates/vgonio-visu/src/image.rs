@@ -1,4 +1,4 @@
-use image::{buffer, RgbaImage};
+use image::RgbaImage;
 use rayon::{
     iter::{IndexedParallelIterator, ParallelIterator},
     slice::{ParallelSlice, ParallelSliceMut},
