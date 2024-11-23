@@ -13,7 +13,7 @@ pub fn samples_in_unit_square_2d(samples: &mut [Pnt3]) {
     }
 }
 
-/// Generate a random vector on the unit sphere.
+/// Generate a random vector on the hemisphere with normal `n` using rejection sampling.
 pub fn random_vec3_on_hemisphere(n: &Vec3) -> Vec3 {
     let mut rng = rand::thread_rng();
     let dist = Uniform::new(0.0, 1.0);

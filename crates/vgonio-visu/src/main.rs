@@ -8,7 +8,8 @@ use std::{
     thread,
 };
 use vgonio_visu::{
-    camera::{ray_color, Camera},
+    camera,
+    camera::Camera,
     hit::HittableList,
     image::{linear_to_srgb, rgba_to_u32, TiledImage},
     material::{Dielectric, Lambertian, Metal},
@@ -232,7 +233,7 @@ fn render_pixel(
     camera.generate_rays(x, y, rays);
     let mut pixel_color = Clr3::zeros();
     for ray in rays.iter_mut() {
-        pixel_color += ray_color(ray, world, 0, max_bounces) * rcp_spp;
+        pixel_color += camera::ray_color(ray, world, 0, max_bounces) * rcp_spp;
     }
     pixel_color.x = linear_to_srgb(pixel_color.x);
     pixel_color.y = linear_to_srgb(pixel_color.y);

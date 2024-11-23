@@ -228,6 +228,10 @@ pub fn refract_cos(wi: &Vec3, n: &Vec3, cos: f64, eta: f64) -> Refracted {
 /// * `eta_o` - The refractive index of the outside medium (where `n` is
 ///   pointing, primary medium or incident medium).
 /// * `eta_i` - The refractive index of the inside medium (transmitted medium).
+///
+/// # Returns
+///
+/// The result of refraction [`Refracted`].
 #[must_use]
 #[inline(always)]
 pub fn refract2(wi: &Vec3, n: &Vec3, eta_o: f64, eta_i: f64) -> Refracted {
@@ -267,6 +271,10 @@ pub fn refract2(wi: &Vec3, n: &Vec3, eta_o: f64, eta_i: f64) -> Refracted {
 /// * `cos_i` - The absolute value of the cosine of the incident angle.
 /// * `eta_i` - The refractive index of the incident medium.
 /// * `eta_t` - The refractive index of the transmitted medium.
+///
+/// # Returns
+///
+/// The reflectance value.
 pub fn reflectance_schlick(cos_i: f64, eta_i: f64, eta_t: f64) -> f64 {
     debug_assert!(
         (0.0..=1.0).contains(&cos_i),
