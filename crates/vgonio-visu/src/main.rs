@@ -69,6 +69,8 @@ fn main() {
         image_width,
         image_height,
         args.vfov_in_deg,
+        0.6,
+        10.0,
     );
     let mut world = HittableList::default();
 
