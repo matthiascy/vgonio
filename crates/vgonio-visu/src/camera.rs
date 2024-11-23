@@ -85,7 +85,7 @@ impl Camera {
         let pixel_center = self.pixel_tlc
             + (u as f64 + 0.5) * self.pixel_delta_u
             + (v as f64 + 0.5) * self.pixel_delta_v;
-        let mut samples = vec![Pnt3::new(0.0, 0.0, 0.0); n];
+        let mut samples = vec![Pnt3::new(0.0, 0.0, 0.0); n].into_boxed_slice();
 
         if n > 1 {
             crate::random::samples_in_unit_square_2d(&mut samples);
@@ -101,6 +101,18 @@ impl Camera {
     }
 }
 
+/// Recursivly computes the color of a ray after it hits the world.
+/// 
+/// # Arguments
+/// 
+/// * `ray` - The ray to compute the color for.
+/// * `world` - The world containing all objects.
+/// * `bounces` - The number of bounces the ray has made.
+/// * `max_bounces` - The maximum number of bounces a ray can make.
+/// 
+/// # Returns
+/// 
+/// The color in linear RGB of the ray after it hits the world.
 pub fn ray_color(ray: &Ray, world: &HittableList, bounces: u32, max_bounces: u32) -> Clr3 {
     if bounces >= max_bounces {
         return Clr3::zeros();
@@ -114,6 +126,7 @@ pub fn ray_color(ray: &Ray, world: &HittableList, bounces: u32, max_bounces: u32
         return Clr3::zeros();
     }
 
+    // Background color
     let unit_direction = ray.dir.normalize();
     let t = 0.5 * (unit_direction.z + 1.0);
     (1.0 - t) * Clr3::new(1.0, 1.0, 1.0) + t * Clr3::new(0.5, 0.7, 1.0)

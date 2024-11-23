@@ -14,7 +14,11 @@ pub struct Lambertian {
 impl Material for Lambertian {
     fn scatter(&self, wi: &Ray, hit: &Hit) -> Option<(Ray, Clr3)> {
         let n = if hit.is_outside(wi) { hit.n } else { -hit.n };
+        // The new direction is the normal plus a random point on a unit sphere centered
+        // at the hit point. This is equivalent to sampling a tangent sphere at
+        // the hit point.
         let mut scatter_dir = n + crate::random::random_vec3_on_unit_sphere();
+        // Deal with degenerate scatter direction.
         if scatter_dir.near_zero() {
             scatter_dir = n;
         }
