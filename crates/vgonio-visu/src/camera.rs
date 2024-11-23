@@ -19,12 +19,12 @@ pub struct Camera {
     pixel_delta_u: Vec3,
     /// Offset to the next pixel in the v direction. (vertical)
     pixel_delta_v: Vec3,
-    // /// Camera frame basis right vector.
-    // basis_right: Vec3,
-    // /// Camera frame basis up vector.
-    // basis_up: Vec3,
-    // /// Camera frame basis forward vector.
-    // basis_forward: Vec3,
+    /// Camera frame basis right vector - x/u axis.
+    basis_right: Vec3,
+    /// Camera frame basis forward vector - y/v axis.
+    basis_forward: Vec3,
+    /// Camera frame basis up vector - z/w axis.
+    basis_up: Vec3,
 }
 
 impl Camera {
@@ -32,19 +32,25 @@ impl Camera {
     ///
     /// # Arguments
     ///
+    /// * `origin` - Camera position.
+    /// * `lookat` - Camera lookat point.
+    /// * `up` - Camera up vector.
     /// * `img_w` - Image plane width in pixels.
     /// * `img_h` - Image plane height in pixels.
     /// * `vfov` - Vertical field of view in degrees.
-    pub fn new(img_w: u32, img_h: u32, vfov: f64) -> Self {
+    pub fn new(origin: Pnt3, lookat: Pnt3, up: Vec3, img_w: u32, img_h: u32, vfov: f64) -> Self {
         let ratio = img_w as f64 / img_h as f64;
         let vfov = vfov.to_radians();
         let h = (vfov * 0.5).tan();
         // The distance from the camera center to the image plane.
-        let focal_length = 1.0;
+        let focal_length = (lookat - origin).norm();
         let viewport_h = 2.0 * h * focal_length;
         let viewport_w = ratio * viewport_h;
 
-        let center = Pnt3::new(0.0, 0.0, 0.0);
+        // Construct the camera frame basis.
+        let forward = (lookat - origin).normalize();
+        let right = forward.cross(&up.normalize()).normalize();
+        let up = right.cross(&forward).normalize();
 
         // Camera/World coordinate system
         // Right-handed Z-up coordinate system
@@ -57,14 +63,14 @@ impl Camera {
         // ---> u
         // |
         // v
-        let viewport_u_axis = Vec3::new(viewport_w, 0.0, 0.0);
-        let viewport_v_axis = Vec3::new(0.0, 0.0, -viewport_h);
+        let viewport_u_axis = viewport_w * right;
+        let viewport_v_axis = -viewport_h * up;
         let pixel_delta_u = viewport_u_axis / img_w as f64;
         let pixel_delta_v = viewport_v_axis / img_h as f64;
 
         // Calculate viewport upper left corner in world/camera coordinates
-        let viewport_upper_left_corner = center - 0.5 * viewport_u_axis - 0.5 * viewport_v_axis
-            + Vec3::new(0.0, focal_length, 0.0);
+        let viewport_upper_left_corner =
+            origin - 0.5 * viewport_u_axis - 0.5 * viewport_v_axis + focal_length * forward;
         let pixel_tlc = viewport_upper_left_corner + 0.5 * pixel_delta_u + 0.5 * pixel_delta_v;
 
         Camera {
@@ -72,10 +78,13 @@ impl Camera {
             img_h,
             ratio,
             vfov,
-            origin: center,
+            origin,
             pixel_tlc,
             pixel_delta_u,
             pixel_delta_v,
+            basis_forward: forward,
+            basis_right: right,
+            basis_up: up,
         }
     }
 
@@ -102,16 +111,16 @@ impl Camera {
 }
 
 /// Recursivly computes the color of a ray after it hits the world.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `ray` - The ray to compute the color for.
 /// * `world` - The world containing all objects.
 /// * `bounces` - The number of bounces the ray has made.
 /// * `max_bounces` - The maximum number of bounces a ray can make.
-/// 
+///
 /// # Returns
-/// 
+///
 /// The color in linear RGB of the ray after it hits the world.
 pub fn ray_color(ray: &Ray, world: &HittableList, bounces: u32, max_bounces: u32) -> Clr3 {
     if bounces >= max_bounces {

@@ -1,5 +1,5 @@
 use clap::Parser;
-use jabr::{Clr3, Vec3};
+use jabr::{Clr3, Pnt3, Vec3};
 use std::{
     sync::{
         atomic::{AtomicU32, AtomicU64},
@@ -30,7 +30,6 @@ struct Args {
     width: u32,
     #[arg(short = 'h', help = "Image height in pixels.", default_value_t = 256)]
     height: u32,
-
     #[arg(
         short = 's',
         help = "Number of samples per pixel. The higher the value, the less noise in the image.",
@@ -63,7 +62,14 @@ fn main() {
         return;
     }
 
-    let camera = Camera::new(image_width, image_height, args.vfov_in_deg);
+    let camera = Camera::new(
+        Pnt3::new(-2.0, -1.0, 2.0),
+        Pnt3::new(0.0, 1.0, 0.0),
+        Vec3::new(0.0, 0.0, 1.0),
+        image_width,
+        image_height,
+        args.vfov_in_deg,
+    );
     let mut world = HittableList::default();
 
     let material_ground = Arc::new(Lambertian {
@@ -73,7 +79,7 @@ fn main() {
         albedo: Clr3::new(0.7, 0.3, 0.3),
     });
     let material_left = Arc::new(Dielectric { ior: 1.5 });
-    // let material_left = Arc::new(Metal::new(Clr3::new(0.8, 0.8, 0.8), 0.3));
+    let material_left_inner = Arc::new(Dielectric { ior: 1.0 / 1.5 });
     let material_right = Arc::new(Metal::new(Clr3::new(0.8, 0.6, 0.2), 1.0));
 
     world.add(Arc::new(Sphere::new(
@@ -92,6 +98,11 @@ fn main() {
         material_left,
     )));
     world.add(Arc::new(Sphere::new(
+        Vec3::new(-1.0, 1.0, 0.0),
+        0.4,
+        material_left_inner,
+    )));
+    world.add(Arc::new(Sphere::new(
         Vec3::new(1.0, 1.0, 0.0),
         0.5,
         material_right,
@@ -100,9 +111,10 @@ fn main() {
     let spp = args.spp.clamp(1, u32::MAX);
 
     let mut film = TiledImage::new(image_width, image_height, args.tile_size, args.tile_size);
-    let params = RenderParams {
+    let mut params = RenderParams {
         camera: &camera,
         world: &world,
+        film: &mut film,
         spp,
         max_bounces: args.max_bounces,
     };
@@ -114,9 +126,9 @@ fn main() {
             image_height,
             &event_loop,
         ));
-        vgonio_visu::display::run(event_loop, display, render_film, &params, &mut film);
+        vgonio_visu::display::run(event_loop, display, render_film, &mut params);
     } else {
-        render_film(&params, &mut film, false);
+        render_film(&mut params, false);
         let mut image = image::RgbaImage::new(image_width, image_height);
         // film.write_to_image(&mut image);
         film.write_to_flat_buffer(image.as_mut());
@@ -131,10 +143,10 @@ fn main() {
     }
 }
 
-fn render_film(params: &RenderParams, film: &mut TiledImage, silent: bool) {
+fn render_film(params: &mut RenderParams, silent: bool) {
     use rayon::iter::ParallelIterator;
-    fn render_film_inner(params: &RenderParams, film: &mut TiledImage) {
-        film.par_tiles_mut().for_each(|tile| {
+    fn render_film_inner(params: &mut RenderParams) {
+        params.film.par_tiles_mut().for_each(|tile| {
             tile.pixels.iter_mut().enumerate().for_each(|(i, pixel)| {
                 let x = tile.x + (i % tile.w as usize) as u32;
                 let y = tile.y + (i / tile.w as usize) as u32;
@@ -151,9 +163,9 @@ fn render_film(params: &RenderParams, film: &mut TiledImage, silent: bool) {
     }
 
     if silent {
-        render_film_inner(params, film);
+        render_film_inner(params);
     } else {
-        let num_tiles = film.tiles_per_image;
+        let num_tiles = params.film.tiles_per_image;
         let num_done = &AtomicU32::new(0);
         let total_time = &AtomicU64::new(0);
         let max_time = &AtomicU64::new(0);
@@ -161,7 +173,7 @@ fn render_film(params: &RenderParams, film: &mut TiledImage, silent: bool) {
 
         thread::scope(|s| {
             s.spawn(move || {
-                film.par_tiles_mut().for_each(|tile| {
+                params.film.par_tiles_mut().for_each(|tile| {
                     let start = std::time::Instant::now();
                     let mut rays = vec![Ray::empty(); params.spp as usize];
                     tile.pixels.iter_mut().enumerate().for_each(|(i, pixel)| {
