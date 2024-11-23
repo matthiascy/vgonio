@@ -15,6 +15,13 @@ pub type float = f64;
 #[allow(non_camel_case_types)]
 pub type float = f32;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Plane {
+    XY,
+    XZ,
+    YZ,
+}
+
 pub struct RenderParams<'a> {
     pub camera: &'a camera::Camera,
     pub world: &'a hit::HittableList,

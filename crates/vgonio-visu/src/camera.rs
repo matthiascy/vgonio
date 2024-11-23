@@ -1,12 +1,8 @@
 use jabr::{Clr3, Pnt3, Vec3};
 
-use crate::{hit::HittableList, ray::Ray};
+use crate::{hit::HittableList, random::random_point_in_unit_disk_xz, ray::Ray};
 
 pub struct Camera {
-    /// Image plane width in pixels.
-    pub img_w: u32,
-    /// Image plane height in pixels.
-    pub img_h: u32,
     /// Image plane width to height ratio.
     pub ratio: f64,
     /// Vertical field of view in radians.
@@ -25,6 +21,12 @@ pub struct Camera {
     basis_forward: Vec3,
     /// Camera frame basis up vector - z/w axis.
     basis_up: Vec3,
+    /// The defocus angle in radians.
+    defocus_angle: f64,
+    /// Basis vector for the defocus disk, in horizontal direction.
+    defocus_disk_u: Vec3,
+    /// Basis vector for the defocus disk, in vertical direction.
+    defocus_disk_v: Vec3,
 }
 
 impl Camera {
@@ -38,13 +40,27 @@ impl Camera {
     /// * `img_w` - Image plane width in pixels.
     /// * `img_h` - Image plane height in pixels.
     /// * `vfov` - Vertical field of view in degrees.
-    pub fn new(origin: Pnt3, lookat: Pnt3, up: Vec3, img_w: u32, img_h: u32, vfov: f64) -> Self {
+    /// * `defocus_angle` - Variation angle of rays through each pixel.
+    /// * `focus_distance` - Distance from camera origin to plane of perfect
+    ///   focus.
+    pub fn new(
+        origin: Pnt3,
+        lookat: Pnt3,
+        up: Vec3,
+        img_w: u32,
+        img_h: u32,
+        vfov: f64,
+        defocus_angle: f64,
+        focus_distance: f64,
+    ) -> Self {
         let ratio = img_w as f64 / img_h as f64;
         let vfov = vfov.to_radians();
         let h = (vfov * 0.5).tan();
+
+        // Determine viewport dimensions.
         // The distance from the camera center to the image plane.
-        let focal_length = (lookat - origin).norm();
-        let viewport_h = 2.0 * h * focal_length;
+        // let focal_length = (lookat - origin).norm();
+        let viewport_h = 2.0 * h * focus_distance;
         let viewport_w = ratio * viewport_h;
 
         // Construct the camera frame basis.
@@ -70,12 +86,17 @@ impl Camera {
 
         // Calculate viewport upper left corner in world/camera coordinates
         let viewport_upper_left_corner =
-            origin - 0.5 * viewport_u_axis - 0.5 * viewport_v_axis + focal_length * forward;
+            // origin - 0.5 * viewport_u_axis - 0.5 * viewport_v_axis + focal_length * forward;
+            origin - 0.5 * viewport_u_axis - 0.5 * viewport_v_axis + focus_distance * forward;
         let pixel_tlc = viewport_upper_left_corner + 0.5 * pixel_delta_u + 0.5 * pixel_delta_v;
 
+        // Calculate the camera defocus disk basis vectors.
+        let defocus_angle = defocus_angle.to_radians();
+        let defocus_radius = focus_distance * (defocus_angle * 0.5).tan();
+        let defocus_disk_u = right * defocus_radius;
+        let defocus_disk_v = up * defocus_radius;
+
         Camera {
-            img_w,
-            img_h,
             ratio,
             vfov,
             origin,
@@ -85,10 +106,13 @@ impl Camera {
             basis_forward: forward,
             basis_right: right,
             basis_up: up,
+            defocus_angle,
+            defocus_disk_u,
+            defocus_disk_v,
         }
     }
 
-    /// Generates `n` rays for the pixel at `(u, v)`.
+    /// Generates `n` rays around the pixel at `(u, v)`.
     pub fn generate_rays(&self, u: u32, v: u32, rays: &mut [Ray]) {
         let n = rays.len();
         let pixel_center = self.pixel_tlc
@@ -100,12 +124,19 @@ impl Camera {
             crate::random::samples_in_unit_square_2d(&mut samples);
         }
 
+        let ray_origin = if self.defocus_angle <= 0.0 {
+            self.origin
+        } else {
+            let pnt = random_point_in_unit_disk_xz();
+            self.origin + (pnt.x * self.defocus_disk_u) + (pnt.z * self.defocus_disk_v)
+        };
+
         for (ray, sample) in rays.iter_mut().zip(samples) {
             let pixel = pixel_center
                 + (sample.x - 0.5) * self.pixel_delta_u
                 + (sample.y - 0.5) * self.pixel_delta_v;
             let ray_dir = pixel - self.origin;
-            *ray = Ray::new(self.origin, ray_dir);
+            *ray = Ray::new(ray_origin, ray_dir);
         }
     }
 }
