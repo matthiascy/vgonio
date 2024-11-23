@@ -1,5 +1,8 @@
 use crate::{hit::Hit, ray::Ray};
-use jabr::{optics, optics::Refracted, Clr3};
+use jabr::{optics, optics::Refracted, Clr3, Vec3};
+
+/// Returns the hit point offset by a small amount along the normal.
+fn apply_hit_point_offset(p: Vec3, n: Vec3) -> Vec3 { p + n * 1e-6 }
 
 pub trait Material: Send + Sync {
     /// Produces a scattered ray and attenuation color.
@@ -22,7 +25,8 @@ impl Material for Lambertian {
         if scatter_dir.near_zero() {
             scatter_dir = n;
         }
-        let scattered = Ray::new(hit.p, scatter_dir);
+        let p = apply_hit_point_offset(hit.p, n);
+        let scattered = Ray::new(p, scatter_dir);
         // No attenuation
         Some((scattered, self.albedo))
     }
@@ -50,8 +54,9 @@ impl Material for Metal {
         // TODO: reflectance for metal
         let n = if hit.is_outside(wi) { hit.n } else { -hit.n };
         let reflected = optics::reflect(&wi.dir, &n);
+        let p = apply_hit_point_offset(hit.p, n);
         let scattered = Ray::new(
-            hit.p,
+            p,
             // Randomize the reflected ray direction by randomly sampling a
             // point on a unit sphere centered at the end of the reflected ray.
             reflected + self.gloss * crate::random::random_vec3_on_unit_sphere(),
@@ -80,13 +85,12 @@ impl Material for Dielectric {
         };
         let dir = wi.dir.normalize();
         let cos_i = dir.dot(&n).abs();
-        let reflectance = optics::reflectance_schlick(cos_i, eta_i, eta_t);
+        let p = apply_hit_point_offset(hit.p, n);
         match optics::refract_cos(&dir, &n, cos_i, eta) {
-            Refracted::Reflection(dir_r) => {
-                Some((Ray::new(hit.p, dir_r), attenuation * reflectance))
-            },
+            Refracted::Reflection(dir_r) => Some((Ray::new(p, dir_r), attenuation)),
             Refracted::Refraction { dir_t, .. } => {
-                Some((Ray::new(hit.p, dir_t), attenuation * (1.0 - reflectance)))
+                let reflectance = optics::reflectance_schlick(cos_i, eta_i, eta_t);
+                Some((Ray::new(p, dir_t), attenuation * (1.0 - reflectance)))
             },
         }
     }

@@ -42,11 +42,12 @@ pub struct Display {
 
 impl Display {
     pub async fn new(w: u32, h: u32, evlp: &EventLoop<()>) -> Display {
-        let win_attribs = winit::window::WindowAttributes::default().with_resizable(true)
-                .with_title("Vgonio-Visu")
-                .with_inner_size(winit::dpi::PhysicalSize::new(w, h));
+        let win_attribs = winit::window::WindowAttributes::default()
+            .with_resizable(true)
+            .with_title("Vgonio-Visu")
+            .with_inner_size(winit::dpi::PhysicalSize::new(w, h));
         let window = Arc::new(
-            evlp.create_window( win_attribs)
+            evlp.create_window(win_attribs)
                 .expect("Failed to create window."),
         );
         let wgpu_config = WgpuConfig {
@@ -243,14 +244,9 @@ impl Display {
     }
 }
 
-pub fn run<F>(
-    evlp: EventLoop<()>,
-    display: Display,
-    render: F,
-    params: &RenderParams,
-    film: &mut TiledImage,
-) where
-    F: Fn(&RenderParams, &mut TiledImage, bool),
+pub fn run<F>(evlp: EventLoop<()>, display: Display, render: F, params: &mut RenderParams)
+where
+    F: Fn(&mut RenderParams, bool),
 {
     let mut img_buf =
         vec![0u8; display.surface.width() as usize * display.surface.height() as usize * 4]
@@ -267,11 +263,11 @@ pub fn run<F>(
             },
             WindowEvent::RedrawRequested => {
                 print!("\rFPS: {:.2}", fps);
-                film.clear();
+                params.film.clear();
                 // Render the image
-                render(params, film, true);
+                render(params, true);
                 // Write the image to the buffer
-                film.write_to_flat_buffer(&mut img_buf);
+                params.film.write_to_flat_buffer(&mut img_buf);
                 // Blit the image to the screen
                 display.blit_to_screen(&img_buf);
 
