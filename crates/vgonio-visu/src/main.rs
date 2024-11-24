@@ -8,11 +8,10 @@ use std::{
     thread,
 };
 use vgonio_visu::{
-    camera,
-    camera::Camera,
+    camera::{self, Camera},
     hit::HittableList,
     image::{linear_to_srgb, rgba_to_u32, TiledImage},
-    material::{Dielectric, Lambertian, Metal},
+    material::{Dielectric, Lambertian, Material, Metal},
     ray::Ray,
     sphere::Sphere,
     RenderParams,
@@ -52,6 +51,73 @@ struct Args {
         default_value_t = false
     )]
     realtime: bool,
+}
+
+fn rtiow_scene() {
+    let mut world = HittableList::default();
+    let ground_material = Arc::new(Lambertian {
+        albedo: Clr3::new(0.5, 0.5, 0.5),
+    });
+    world.add(Arc::new(Sphere::new(
+        Vec3::new(0.0, 0.0, -1000.0),
+        1000.0,
+        ground_material,
+    )));
+
+    for a in -11..11 {
+        for b in -11..11 {
+            let choose_mat = rand::random::<f64>();
+            let center = Vec3::new(
+                a as f64 + 0.9 * rand::random::<f64>(),
+                b as f64 + 0.9 * rand::random::<f64>(),
+                0.2,
+            );
+
+            if (center - Vec3::new(4.0, 0.0, 0.2)).norm() > 0.9 {
+                let sphere_material: Arc<dyn Material> = if choose_mat < 0.8 {
+                    // diffuse
+                    let albedo = Clr3::random() * Clr3::random();
+                    Arc::new(Lambertian { albedo })
+                } else if choose_mat < 0.95 {
+                    // metal
+                    let albedo = Clr3::random_range(0.5, 1.0);
+                    let gloss = rand::random::<f64>().clamp(0.0, 0.5);
+                    Arc::new(Metal { albedo, gloss })
+                } else {
+                    // glass
+                    Arc::new(Dielectric { ior: 1.5 })
+                };
+
+                world.add(Arc::new(Sphere::new(center, 0.2, sphere_material)));
+            }
+        }
+    }
+
+    let material1 = Arc::new(Dielectric { ior: 1.5 });
+    world.add(Arc::new(Sphere::new(
+        Vec3::new(0.0, 0.0, 1.0),
+        1.0,
+        material1,
+    )));
+
+    let material2 = Arc::new(Lambertian {
+        albedo: Clr3::new(0.4, 0.2, 0.1),
+    });
+    world.add(Arc::new(Sphere::new(
+        Vec3::new(-4.0, 0.0, 1.0),
+        1.0,
+        material2,
+    )));
+
+    let material3 = Arc::new(Metal {
+        albedo: Clr3::new(0.7, 0.6, 0.5),
+        gloss: 0.0,
+    });
+    world.add(Arc::new(Sphere::new(
+        Vec3::new(4.0, 0.0, 1.0),
+        1.0,
+        material3,
+    )));
 }
 
 fn main() {
