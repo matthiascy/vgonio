@@ -2,6 +2,8 @@ use jabr::{Pnt3, Vec3};
 use rand::distributions::{Distribution, Uniform};
 use std::ops::Range;
 
+use crate::Plane;
+
 // TODO: improve this
 pub fn samples_in_unit_square_2d(samples: &mut [Pnt3]) {
     let mut rng = rand::thread_rng();
@@ -13,7 +15,45 @@ pub fn samples_in_unit_square_2d(samples: &mut [Pnt3]) {
     }
 }
 
-/// Generate a random vector on the unit sphere.
+pub fn random_point_in_unit_disk_xz() -> Pnt3 {
+    let mut rng = rand::thread_rng();
+    let dist = Uniform::<f64>::new(0.0, 1.0);
+    let r = dist.sample(&mut rng).sqrt();
+    let a = dist.sample(&mut rng) * std::f64::consts::TAU;
+    Pnt3::new(r * a.cos(), 0.0, r * a.sin())
+}
+
+/// Generates uniformly distributed samples on the unit disk
+pub fn uniform_samples_on_unit_disk(samples: &mut [Pnt3], plane: Plane) {
+    let mut rng = rand::thread_rng();
+    let dist = Uniform::<f64>::new(0.0, 1.0);
+    samples.iter_mut().for_each(|sample| {
+        let r = dist.sample(&mut rng).sqrt();
+        let a = dist.sample(&mut rng) * std::f64::consts::TAU;
+        let s = r * a.cos();
+        let t = r * a.sin();
+        match plane {
+            Plane::XY => {
+                sample.x = s;
+                sample.y = t;
+                sample.z = 0.0;
+            },
+            Plane::XZ => {
+                sample.x = s;
+                sample.y = 0.0;
+                sample.z = t;
+            },
+            Plane::YZ => {
+                sample.x = 0.0;
+                sample.y = s;
+                sample.z = t;
+            },
+        }
+    });
+}
+
+/// Generate a random vector on the hemisphere with normal `n` using rejection
+/// sampling.
 pub fn random_vec3_on_hemisphere(n: &Vec3) -> Vec3 {
     let mut rng = rand::thread_rng();
     let dist = Uniform::new(0.0, 1.0);
