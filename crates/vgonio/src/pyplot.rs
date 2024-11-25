@@ -15,7 +15,7 @@ use base::{
 use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
-        measured::{AnalyticalFit, ClausenBrdf, VgonioBrdf, Yan2018Brdf},
+        measured::{ClausenBrdf, VgonioBrdf, Yan2018Brdf},
     },
     Scattering,
 };
@@ -642,10 +642,10 @@ pub fn plot_brdf_fitting(
                     let measured = brdf.downcast_ref::<MeasuredBsdfData>().unwrap();
                     let brdf = measured.brdf_at(MeasuredBrdfLevel::L0).unwrap();
                     let iors_i = iors
-                        .ior_of_spectrum(brdf.incident_medium, brdf.spectrum())
+                        .ior_of_spectrum(brdf.incident_medium, brdf.spectrum.as_ref())
                         .unwrap();
                     let iors_t = iors
-                        .ior_of_spectrum(brdf.transmitted_medium, brdf.spectrum())
+                        .ior_of_spectrum(brdf.transmitted_medium, brdf.spectrum.as_ref())
                         .unwrap();
                     let n_spectrum = brdf.spectrum.len();
                     let sampler = DataCarriedOnHemisphereSampler::new(brdf).unwrap();
@@ -781,10 +781,10 @@ pub fn plot_brdf_fitting(
                 MeasuredBrdfKind::Yan2018 => {
                     let brdf = brdf.downcast_ref::<Yan2018Brdf>().unwrap();
                     let iors_i = iors
-                        .ior_of_spectrum(brdf.incident_medium, brdf.spectrum())
+                        .ior_of_spectrum(brdf.incident_medium, brdf.spectrum.as_ref())
                         .unwrap();
                     let iors_t = iors
-                        .ior_of_spectrum(brdf.transmitted_medium, brdf.spectrum())
+                        .ior_of_spectrum(brdf.transmitted_medium, brdf.spectrum.as_ref())
                         .unwrap();
                     let n_spectrum = brdf.n_spectrum();
                     let theta_i = brdf
@@ -917,10 +917,10 @@ pub fn plot_brdf_fitting(
                 MeasuredBrdfKind::Clausen => {
                     let brdf = brdf.downcast_ref::<ClausenBrdf>().unwrap();
                     let iors_i = iors
-                        .ior_of_spectrum(brdf.incident_medium, brdf.spectrum())
+                        .ior_of_spectrum(brdf.incident_medium, brdf.spectrum.as_ref())
                         .unwrap();
                     let iors_t = iors
-                        .ior_of_spectrum(brdf.transmitted_medium, brdf.spectrum())
+                        .ior_of_spectrum(brdf.transmitted_medium, brdf.spectrum.as_ref())
                         .unwrap();
                     let wavelength = PyArray1::from_vec_bound(
                         py,
