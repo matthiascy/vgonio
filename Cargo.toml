@@ -8,7 +8,8 @@ members = [
     "crates/vgonio-surf",
     "crates/vgonio-visu",
     "crates/vgonio-gxtk",
-    "crates/vgonio-uxtk"
+    "crates/vgonio-uxtk",
+    "crates/vgonio-view",
 ]
 
 [workspace.package]
@@ -37,6 +38,10 @@ debug = "full"
 opt-level = 3
 codegen-units = 16
 
+# Optimize all dependencies in debug builds
+[profile.dev.package."*"]
+opt-level = 2
+
 [workspace.dependencies]
 ahash = "0.8"
 approx = "0.5"
@@ -49,6 +54,7 @@ clap = { version = "~4", features = ["derive", "wrap_help"] }
 csv = "1"
 dirs = "5.0"
 egui = { version = "~0.29", features = ["bytemuck", "rayon", "puffin", "log", "callstack"] }
+eframe = { version = "~0.29", default-features = false, features = ["accesskit", "default_fonts", "wgpu", "persistence"] }
 egui_dock = { version = "~0.14" }
 egui_extras = { version = "~0.29", features = ["all_loaders"] }
 egui-winit = { version = "~0.29" }
