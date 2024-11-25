@@ -33,18 +33,18 @@ def format_angle_pair(t):
 
 
 def plot_brdf_comparison(
-        n_wi,
-        dense,
-        n_wo_itrp,
-        wi_wo_pairs_itrp,
-        n_wo_olaf,
-        wi_wo_pairs_olaf,
-        brdf_itrp,
-        wavelengths_itrp,
-        brdf_max_itrp,
-        brdf_olaf,
-        wavelengths_olaf,
-        brdf_max_olaf,
+    n_wi,
+    dense,
+    n_wo_itrp,
+    wi_wo_pairs_itrp,
+    n_wo_olaf,
+    wi_wo_pairs_olaf,
+    brdf_itrp,
+    wavelengths_itrp,
+    brdf_max_itrp,
+    brdf_olaf,
+    wavelengths_olaf,
+    brdf_max_olaf,
 ):
     n_wavelengths_itrp = len(wavelengths_itrp)
     n_wavelengths_olaf = len(wavelengths_olaf)
@@ -94,7 +94,7 @@ def plot_brdf_comparison(
             for k in np.arange(0, n_wavelengths_olaf):
                 olaf_arranged[k, wi_idx, wo_idx] = brdf_olaf[
                     k * n_wi * n_wo_olaf + wi_idx * n_wo_olaf + wo_idx_org
-                    ]
+                ]
 
     for wi_idx, ((wi_theta, wi_phi), wos) in enumerate(wi_wo_pairs_itrp):
         # print(f"wi idx: {wi_idx}, θi: {np.degrees(wi_theta):>6.2f}, φi: {np.degrees(wi_phi):>6.2f}")
@@ -108,7 +108,7 @@ def plot_brdf_comparison(
             for k in range(n_wavelengths_itrp):
                 itrp_arranged[k, wi_idx, wo_idx] = brdf_itrp[
                     k * n_wi * n_wo_itrp + wi_idx * n_wo_itrp + wo_idx_org
-                    ]
+                ]
 
     cur_wi_idx = 0
     olaf_cur_lambda_idx = 0
@@ -214,18 +214,18 @@ def plot_brdf_comparison(
         fig.canvas.draw_idle()
 
     def update_comp(
-            olaf_lambda_idx, olaf_wi_idx, itrp_lambda_idx, itrp_wi_idx, normalize=False
+        olaf_lambda_idx, olaf_wi_idx, itrp_lambda_idx, itrp_wi_idx, normalize=False
     ):
         if normalize:
             max_measured = brdf_max_olaf[
                 olaf_wi_idx * n_wavelengths_olaf + olaf_lambda_idx
-                ]
+            ]
             olaf_curve_comp[0].set_ydata(
                 olaf_arranged[olaf_lambda_idx, olaf_wi_idx, :] / max_measured
             )
             max_interpolated = brdf_max_itrp[
                 itrp_wi_idx * n_wavelengths_itrp + itrp_lambda_idx
-                ]
+            ]
             itrp_curve_comp[0].set_ydata(
                 itrp_arranged[itrp_lambda_idx, itrp_wi_idx, :] / max_interpolated
             )
@@ -284,7 +284,7 @@ def plot_brdf_comparison(
 
 
 def new_polar_brdf_plot():
-    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(8, 8))
+    fig, ax = plt.subplots(subplot_kw={"projection": "polar"}, figsize=(8, 8))
     configure_polar_brdf_plot(ax)
     return fig, ax
 
@@ -296,11 +296,11 @@ def configure_polar_brdf_plot(ax):
     ax.set_thetamax(90)
     ax.set_thetagrids(range(-90, 91, 15))
     # Custom grid
-    ax.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
-    ax.xaxis.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
-    ax.yaxis.grid(True, linestyle='--', linewidth=0.5, color='gray', alpha=0.5)
+    ax.grid(True, linestyle="--", linewidth=0.5, color="gray", alpha=0.5)
+    ax.xaxis.grid(True, linestyle="--", linewidth=0.5, color="gray", alpha=0.5)
+    ax.yaxis.grid(True, linestyle="--", linewidth=0.5, color="gray", alpha=0.5)
     # Hide spines
-    ax.spines['polar'].set_visible(False)
+    ax.spines["polar"].set_visible(False)
 
 
 def custom_polar_brdf_plot_radial_ticks(ax, ymax):
@@ -312,16 +312,33 @@ def custom_polar_brdf_plot_radial_ticks(ax, ymax):
 
 
 def add_polar_brdf_plot_phi_o_text(ax, ymax, phi_o_deg, phi_o_deg_opp):
-    ax.text(np.radians(-85), ymax * 0.95, fr'$\phi_o={int(round(phi_o_deg_opp))}\degree$',
-            horizontalalignment='center',
-            verticalalignment='center', fontsize=14)
-    ax.text(np.radians(85), ymax, fr'$\phi_o={int(round(phi_o_deg))}\degree$',
-            horizontalalignment='center',
-            verticalalignment='center', fontsize=14)
+    ax.text(
+        np.radians(-85),
+        ymax * 0.95,
+        rf"$\phi_o={int(round(phi_o_deg_opp))}\degree$",
+        horizontalalignment="center",
+        verticalalignment="center",
+        fontsize=14,
+    )
+    ax.text(
+        np.radians(85),
+        ymax,
+        rf"$\phi_o={int(round(phi_o_deg))}\degree$",
+        horizontalalignment="center",
+        verticalalignment="center",
+        fontsize=14,
+    )
 
 
-def plot_brdf_slice(phi_o_deg, phi_o_deg_opp, brdf_slices: list[tuple[np.ndarray, np.ndarray, np.ndarray, str]],
-                    legend=False, cmap='tab10', scale=1.0, use_log=False):
+def plot_brdf_slice(
+    phi_o_deg,
+    phi_o_deg_opp,
+    brdf_slices: list[tuple[np.ndarray, np.ndarray, np.ndarray, str]],
+    legend=False,
+    cmap="tab10",
+    scale=1.0,
+    use_log=False,
+):
     sns.set_theme(style="whitegrid", color_codes=True)
 
     fig_polar, ax_polar = new_polar_brdf_plot()
@@ -329,17 +346,23 @@ def plot_brdf_slice(phi_o_deg, phi_o_deg_opp, brdf_slices: list[tuple[np.ndarray
     cm = plt.get_cmap(cmap)
 
     ymax = 0
-    for i, (slice_phi_o, slice_phi_o_opp, theta, wavelengths, label) in enumerate(brdf_slices):
+    for i, (slice_phi_o, slice_phi_o_opp, theta, wavelengths, label) in enumerate(
+        brdf_slices
+    ):
         xs = np.append(np.flip(-np.radians(theta)), np.radians(theta))
         if use_log:
             for l in range(1):
-                ys = np.log10(np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l]) * scale)
+                ys = np.log10(
+                    np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l]) * scale
+                )
                 ax_polar.plot(xs, ys, label=f"{label}", linewidth=1.8, color=cm(i))
                 # λ = {wavelengths[l]:.0f} nm
                 ymax = max(ymax, np.max(ys))
         else:
             for l in range(1):
-                ys = np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l]) * scale
+                ys = (
+                    np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l]) * scale
+                )
                 ax_polar.plot(xs, ys, label=f"{label}", linewidth=1.8, color=cm(i))
                 # λ = {wavelengths[l]:.0f} nm
                 ymax = max(ymax, np.max(ys))
@@ -348,10 +371,10 @@ def plot_brdf_slice(phi_o_deg, phi_o_deg_opp, brdf_slices: list[tuple[np.ndarray
     custom_polar_brdf_plot_radial_ticks(ax_polar, ymax)
 
     if legend:
-        ax_polar.legend(loc='upper right', fontsize=12)
+        ax_polar.legend(loc="upper right", fontsize=12)
 
     plt.tight_layout()
-    plt.savefig('./brdf_slice.pdf', format='pdf', bbox_inches='tight')
+    plt.savefig("./brdf_slice.pdf", format="pdf", bbox_inches="tight")
     plt.show()
 
 
@@ -362,20 +385,24 @@ def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices):
     ymax = 0
     for slices_phi, slices_phi_opp, theta_i, theta_o, wavelengths in slices:
         n_spectrum = len(wavelengths)
-        xs = np.append(np.flip(-np.radians(np.array(theta_o))), np.radians(np.array(theta_o)))
-        for i, (slice_phi, slice_phi_opp, ti) in enumerate(zip(slices_phi, slices_phi_opp, theta_i)):
+        xs = np.append(
+            np.flip(-np.radians(np.array(theta_o))), np.radians(np.array(theta_o))
+        )
+        for i, (slice_phi, slice_phi_opp, ti) in enumerate(
+            zip(slices_phi, slices_phi_opp, theta_i)
+        ):
             if i % 3 == 0:
                 slice_phi_o = np.array(slice_phi).reshape((-1, n_spectrum))
                 slice_phi_o_opp = np.array(slice_phi_opp).reshape((-1, n_spectrum))
                 for l in range(1):
                     ys = np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l])
-                    ax_polar.plot(xs, ys, label=fr"$θ_i = {ti:>3.0f}\;\degree$")
+                    ax_polar.plot(xs, ys, label=rf"$θ_i = {ti:>3.0f}\;\degree$")
                     # , λ = {wavelengths[l]:>3.0f}\;nm
                     ymax = max(ymax, np.max(ys))
 
     add_polar_brdf_plot_phi_o_text(ax_polar, ymax, phi_deg, phi_opp_deg)
     custom_polar_brdf_plot_radial_ticks(ax_polar, ymax)
-    ax_polar.legend(loc='upper right', bbox_to_anchor=(1.1, 1.1))
+    ax_polar.legend(loc="upper right", bbox_to_anchor=(1.1, 1.1))
     plt.show()
 
 
@@ -401,12 +428,21 @@ def calculate_brdf_surface(theta, phi, vals):
 def plot_brdf_polar_grid(ax):
     from matplotlib.patches import Circle
     from mpl_toolkits.mplot3d import art3d
+
     r = 0.5
     # Add polar grid on the ground plane (z=0)
     angles = np.linspace(0, 2 * np.pi, 12, endpoint=False)  # Angles for lines
 
     # Plot concentric circles using Circle class
-    circle = Circle((0, 0), r, color='gray', linestyle='dashed', linewidth=0.5, alpha=0.5, fill=False)
+    circle = Circle(
+        (0, 0),
+        r,
+        color="gray",
+        linestyle="dashed",
+        linewidth=0.5,
+        alpha=0.5,
+        fill=False,
+    )
     ax.add_patch(circle)
     art3d.pathpatch_2d_to_3d(circle, z=0)
 
@@ -415,26 +451,50 @@ def plot_brdf_polar_grid(ax):
         x_line = [0, np.cos(angle) * r]
         y_line = [0, np.sin(angle) * r]
         z_line = [0, 0]
-        ax.plot(x_line, y_line, z_line, color='gray', linestyle='dashed', linewidth=0.5, alpha=0.5)
+        ax.plot(
+            x_line,
+            y_line,
+            z_line,
+            color="gray",
+            linestyle="dashed",
+            linewidth=0.5,
+            alpha=0.5,
+        )
         x_text = r * 1.1 * np.cos(angle)
         y_text = r * 1.1 * np.sin(angle)
-        ax.text(x_text, y_text, 0, f'{np.degrees(angle):.0f}°', color='black', fontsize=14, ha='center', va='center',
-                alpha=0.5)
+        ax.text(
+            x_text,
+            y_text,
+            0,
+            f"{np.degrees(angle):.0f}°",
+            color="black",
+            fontsize=14,
+            ha="center",
+            va="center",
+            alpha=0.5,
+        )
 
 
-def plot_brdf_3d(theta_i, phi_i, theta, phi, vals, cmap='viridis', scale=1.0):
+def plot_brdf_3d(theta_i, phi_i, theta, phi, vals, cmap="viridis", scale=1.0):
     vals = vals * scale
     x, y, z = calculate_brdf_surface(theta, phi, vals)
 
     fig = plt.figure(figsize=(8, 8))
-    ax = fig.add_subplot(111, projection='3d')
+    ax = fig.add_subplot(111, projection="3d")
 
     plot_brdf_polar_grid(ax)
 
-    ax.plot_surface(x, y, z, rstride=1, cstride=1,
-                    cmap=cmap, alpha=0.8,
-                    linewidth=0.2,
-                    edgecolor='none')
+    ax.plot_surface(
+        x,
+        y,
+        z,
+        rstride=1,
+        cstride=1,
+        cmap=cmap,
+        alpha=0.8,
+        linewidth=0.2,
+        edgecolor="none",
+    )
 
     theta_i_deg = round(np.degrees(theta_i), 0)
     phi_i_deg = round(np.degrees(phi_i), 0)
@@ -483,14 +543,18 @@ def plot_brdf_3d(theta_i, phi_i, theta, phi, vals, cmap='viridis', scale=1.0):
     # plt.colorbar(mappable, ax=ax, shrink=0.2, aspect=10)
 
     plt.tight_layout()
-    fig.savefig(f'./brdf_3d_θ{theta_i_deg}φ{phi_i_deg}.pdf', format='pdf', bbox_inches='tight')
+    fig.savefig(
+        f"./brdf_3d_θ{theta_i_deg}φ{phi_i_deg}.pdf", format="pdf", bbox_inches="tight"
+    )
     plt.show()
 
 
-linestyles = ['solid', 'dashed', 'dashdot', 'dotted']
+linestyles = ["solid", "dashed", "dashdot", "dotted"]
 
 
-def plot_ndf_slice(phi, phi_opp, ndf_slices: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]], ylim):
+def plot_ndf_slice(
+    phi, phi_opp, ndf_slices: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]], ylim
+):
     # Angles are in radians
     print(f"Plotting NDF slice with wm = ({np.degrees(phi)}, {np.degrees(phi_opp)})")
     deg_ticks = np.arange(-90, 91, 30)
@@ -502,14 +566,14 @@ def plot_ndf_slice(phi, phi_opp, ndf_slices: list[tuple[str, np.ndarray, np.ndar
 
     fig, ax = plt.subplots(figsize=figsize)
 
-    ax.set_aspect('auto')
+    ax.set_aspect("auto")
     ax.set_xlabel(r"$θ_m$", fontsize=18)
     ax.set_ylabel(r"$NDF\;[sr^{-1}]$", fontsize=18)
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.spines['bottom'].set_visible(False)
-    ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.grid(True, which="both", linestyle="--", linewidth=0.5)
     ax.set_xticks(rad_ticks)
     ax.set_xticklabels([f"{int(deg)}°" for deg in deg_ticks])
 
@@ -520,18 +584,32 @@ def plot_ndf_slice(phi, phi_opp, ndf_slices: list[tuple[str, np.ndarray, np.ndar
         if len(ndf_slices) > 1:
             ax.plot(xs, ys, linestyle=linestyles[i], linewidth=2, label=label)
         else:
-            ax.plot(xs, ys, color='b', linestyle='-', linewidth=2)
+            ax.plot(xs, ys, color="b", linestyle="-", linewidth=2)
 
         if i == 0:
             # Annotation
-            ax.annotate(fr'$\phi_m={np.degrees(phi_opp):.0f}\degree$', xy=(xs[0], ys[0]), xycoords='data',
-                        xytext=(-10, 20), textcoords='offset points',
-                        arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.5"),
-                        fontsize=14, color='k', fontweight='bold')
-            ax.annotate(fr'$\phi_m={np.degrees(phi):.0f}\degree$', xy=(xs[-1], ys[-1]), xycoords='data',
-                        xytext=(-40, 20), textcoords='offset points',
-                        arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=-.5"),
-                        fontsize=14, color='k', fontweight='bold')
+            ax.annotate(
+                rf"$\phi_m={np.degrees(phi_opp):.0f}\degree$",
+                xy=(xs[0], ys[0]),
+                xycoords="data",
+                xytext=(-10, 20),
+                textcoords="offset points",
+                arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.5"),
+                fontsize=14,
+                color="k",
+                fontweight="bold",
+            )
+            ax.annotate(
+                rf"$\phi_m={np.degrees(phi):.0f}\degree$",
+                xy=(xs[-1], ys[-1]),
+                xycoords="data",
+                xytext=(-40, 20),
+                textcoords="offset points",
+                arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=-.5"),
+                fontsize=14,
+                color="k",
+                fontweight="bold",
+            )
 
     if ylim is not None:
         ax.set_ylim(0, ylim)
@@ -541,12 +619,21 @@ def plot_ndf_slice(phi, phi_opp, ndf_slices: list[tuple[str, np.ndarray, np.ndar
 
     plt.tight_layout()
     # save as pdf
-    plt.savefig('./ndf_slice.pdf', format='pdf', bbox_inches='tight')
+    plt.savefig("./ndf_slice.pdf", format="pdf", bbox_inches="tight")
     plt.show()
 
 
-def plot_gaf_slice(tm, pm, pv, pv_opp, gaf_slices: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]], save=None):
-    print(f"Plotting GAF slice with wm = ({np.degrees(tm)}, {np.degrees(pm)}) at pv = {np.degrees(pv)}")
+def plot_gaf_slice(
+    tm,
+    pm,
+    pv,
+    pv_opp,
+    gaf_slices: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]],
+    save=None,
+):
+    print(
+        f"Plotting GAF slice with wm = ({np.degrees(tm)}, {np.degrees(pm)}) at pv = {np.degrees(pv)}"
+    )
     deg_ticks = np.arange(-90, 91, 30)
     rad_ticks = np.radians(deg_ticks)
 
@@ -555,14 +642,14 @@ def plot_gaf_slice(tm, pm, pv, pv_opp, gaf_slices: list[tuple[str, np.ndarray, n
     figsize = (8, 8) if multi else (8, 6)
     fig, ax = plt.subplots(figsize=figsize)
 
-    ax.set_aspect('auto')
+    ax.set_aspect("auto")
     ax.set_xlabel(r"$θ_v$", fontsize=18)
     ax.set_ylabel(r"$GAF$", fontsize=18)
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.spines['bottom'].set_visible(False)
-    ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.grid(True, which="both", linestyle="--", linewidth=0.5)
     ax.set_xticks(rad_ticks)
     ax.set_xticklabels([f"{int(deg)}°" for deg in deg_ticks])
 
@@ -574,28 +661,51 @@ def plot_gaf_slice(tm, pm, pv, pv_opp, gaf_slices: list[tuple[str, np.ndarray, n
         if multi:
             ax.plot(xs, ys, linestyle=linestyles[i], linewidth=1.6, label=label)
         else:
-            ax.plot(xs, ys, color='b', linestyle='-', linewidth=2)
+            ax.plot(xs, ys, color="b", linestyle="-", linewidth=2)
 
         if i == 0:
             # Annotation
-            ax.text(-1.5, 0.05, fr'$\phi_v={np.degrees(pv_opp):.0f}\degree$', fontsize=20, color='k', fontweight='bold')
-            ax.text(1.0, 0.05, fr'$\phi_v={np.degrees(pv):.0f}\degree$', fontsize=20, color='k', fontweight='bold')
+            ax.text(
+                -1.5,
+                0.05,
+                rf"$\phi_v={np.degrees(pv_opp):.0f}\degree$",
+                fontsize=20,
+                color="k",
+                fontweight="bold",
+            )
+            ax.text(
+                1.0,
+                0.05,
+                rf"$\phi_v={np.degrees(pv):.0f}\degree$",
+                fontsize=20,
+                color="k",
+                fontweight="bold",
+            )
 
     if multi:
         ax.legend()
 
     plt.tight_layout()
     if save is not None:
-        if save.endswith('.pdf'):
-            plt.savefig(save, format='pdf', bbox_inches='tight')
-        elif save.endswith('.png'):
-            plt.savefig(save, format='png', bbox_inches='tight', dpi=100)
+        if save.endswith(".pdf"):
+            plt.savefig(save, format="pdf", bbox_inches="tight")
+        elif save.endswith(".png"):
+            plt.savefig(save, format="png", bbox_inches="tight", dpi=100)
     else:
         plt.show()
 
 
-def plot_brdf_map(images: list[str, Tuple[int, int], np.ndarray], cmap='BuPu', cbar=False, coord=False, diff=False,
-                  fc='black', pstep=45, tstep=30, save=None):
+def plot_brdf_map(
+    images: list[str, Tuple[int, int], np.ndarray],
+    cmap="BuPu",
+    cbar=False,
+    coord=False,
+    diff=False,
+    fc="black",
+    pstep=45,
+    tstep=30,
+    save=None,
+):
     print("params: ", cmap, cbar, coord, diff, fc, pstep, tstep)
     from tone_mapping import tone_mapping
 
@@ -605,25 +715,62 @@ def plot_brdf_map(images: list[str, Tuple[int, int], np.ndarray], cmap='BuPu', c
             (name2, size2, pixels2) = images[i + 1]
             diff_pixels = np.abs(pixels1 - pixels2)
             mse = np.mean(np.square(diff_pixels))
-            fig, ax = tone_mapping(diff_pixels, size1, cmap=cmap, cbar=cbar, coord=coord, cbar_label='Difference',
-                                   color=fc, pstep=pstep, tstep=tstep, ac='o')
-            ax.text(-size1[0] / 2 + 50, size1[1] / 2 - 10, f'MSE: {mse:.4f}', color=fc, fontsize=14, ha='center',
-                    va='center', alpha=0.8)
+            fig, ax = tone_mapping(
+                diff_pixels,
+                size1,
+                cmap=cmap,
+                cbar=cbar,
+                coord=coord,
+                cbar_label="Difference",
+                color=fc,
+                pstep=pstep,
+                tstep=tstep,
+                ac="o",
+            )
+            ax.text(
+                -size1[0] / 2 + 50,
+                size1[1] / 2 - 10,
+                f"MSE: {mse:.4f}",
+                color=fc,
+                fontsize=14,
+                ha="center",
+                va="center",
+                alpha=0.8,
+            )
             if save is not None:
-                if save.endswith('.pdf'):
-                    fig.savefig(f'{name1}_{name2}_diff.pdf', format='pdf', bbox_inches='tight')
-                elif save.endswith('.png'):
-                    fig.savefig(f'{name1}_{name2}_diff.png', format='png', bbox_inches='tight', dpi=100)
+                if save.endswith(".pdf"):
+                    fig.savefig(
+                        f"{name1}_{name2}_diff.pdf", format="pdf", bbox_inches="tight"
+                    )
+                elif save.endswith(".png"):
+                    fig.savefig(
+                        f"{name1}_{name2}_diff.png",
+                        format="png",
+                        bbox_inches="tight",
+                        dpi=100,
+                    )
             plt.show()
     else:
         for i, (name, size, pixels) in enumerate(images):
-            fig, ax = tone_mapping(pixels, size, cmap=cmap, cbar=cbar, coord=coord,
-                                   cbar_label=r'BRDF [$\mathrm{sr^{-1}}$]', color=fc, pstep=pstep, tstep=tstep, ac='o')
+            fig, ax = tone_mapping(
+                pixels,
+                size,
+                cmap=cmap,
+                cbar=cbar,
+                coord=coord,
+                cbar_label=r"BRDF [$\mathrm{sr^{-1}}$]",
+                color=fc,
+                pstep=pstep,
+                tstep=tstep,
+                ac="o",
+            )
             if save is not None:
-                if save.endswith('.pdf'):
-                    fig.savefig(f'{name}.pdf', format='pdf', bbox_inches='tight')
-                elif save.endswith('.png'):
-                    fig.savefig(f'{name}.png', format='png', bbox_inches='tight', dpi=100)
+                if save.endswith(".pdf"):
+                    fig.savefig(f"{name}.pdf", format="pdf", bbox_inches="tight")
+                elif save.endswith(".png"):
+                    fig.savefig(
+                        f"{name}.png", format="png", bbox_inches="tight", dpi=100
+                    )
             plt.show()
 
 
@@ -670,7 +817,7 @@ def plot_surfaces(surfaces, cmap, ds_factor=4):
         tris = Triangulation(x_flat, y_flat)
 
         fig = plt.figure(figsize=(8, 8))
-        ax = fig.add_subplot(111, projection='3d')
+        ax = fig.add_subplot(111, projection="3d")
         print("z max: ", np.max(z_downsampled))
         max_z = np.max(z_downsampled)
         zlim = 0.01 if max_z == 0.0 else max_z * 10.0
@@ -680,7 +827,15 @@ def plot_surfaces(surfaces, cmap, ds_factor=4):
         # ax.plot_trisurf(x_flat, y_flat, z_flat, triangles=tris.triangles, cmap=cmap, edgecolor='none', linewidth=0,
         #                 alpha=0.8)
 
-        ax.plot_surface(xx, yy, z_downsampled, color='gray', alpha=0.8, edgecolor='none', linewidth=0)
+        ax.plot_surface(
+            xx,
+            yy,
+            z_downsampled,
+            color="gray",
+            alpha=0.8,
+            edgecolor="none",
+            linewidth=0,
+        )
 
         # hide gridlines
         ax.grid(False)
@@ -698,14 +853,21 @@ def plot_surfaces(surfaces, cmap, ds_factor=4):
         ax.set_zticks([])
         ax.view_init(elev=50)
 
-        plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0, wspace=0.0, hspace=0.0)
-        fig.savefig(f'{name}_plot.png', format='png', bbox_inches='tight', dpi=100)
+        plt.subplots_adjust(
+            left=0.0, right=1.0, top=1.0, bottom=0.0, wspace=0.0, hspace=0.0
+        )
+        fig.savefig(f"{name}_plot.png", format="png", bbox_inches="tight", dpi=100)
         # plt.show()
 
 
-def plot_brdf_fitting(samples: np.ndarray, incoming: Tuple[np.ndarray, np.ndarray],
-                      outgoing: Tuple[np.ndarray, np.ndarray], wavelengths: np.ndarray,
-                      fitted: Tuple[np.ndarray, np.ndarray], alphas: np.ndarray):
+def plot_brdf_fitting(
+    samples: np.ndarray,
+    incoming: Tuple[np.ndarray, np.ndarray],
+    outgoing: Tuple[np.ndarray, np.ndarray],
+    wavelengths: np.ndarray,
+    fitted: Tuple[np.ndarray, np.ndarray],
+    alphas: np.ndarray,
+):
     from matplotlib.widgets import Slider, CheckButtons
     import matplotlib as mpl
 
@@ -719,7 +881,7 @@ def plot_brdf_fitting(samples: np.ndarray, incoming: Tuple[np.ndarray, np.ndarra
     plt.subplots_adjust(bottom=0.4, top=0.85, right=0.8)
 
     fig.delaxes(ax[0])
-    ax[0] = fig.add_subplot(121, projection='3d')
+    ax[0] = fig.add_subplot(121, projection="3d")
     ax[0].view_init(elev=25, azim=25)
     ax[0].dist = 20
 
@@ -728,43 +890,70 @@ def plot_brdf_fitting(samples: np.ndarray, incoming: Tuple[np.ndarray, np.ndarra
     n_slice = n_phi_o // 2
     xs = np.append(np.flip(-np.degrees(theta_o)), np.degrees(theta_o))
 
-    tr_colors = mpl.colormaps['YlOrBr'](np.linspace(0.5, 1, n_models))
-    bk_colors = mpl.colormaps['GnBu'](np.linspace(0.5, 1, n_models))
-    curves_colors = mpl.colormaps['twilight_shifted'](np.linspace(0, 1, n_phi_o))
+    tr_colors = mpl.colormaps["YlOrBr"](np.linspace(0.5, 1, n_models))
+    bk_colors = mpl.colormaps["GnBu"](np.linspace(0.5, 1, n_models))
+    curves_colors = mpl.colormaps["twilight_shifted"](np.linspace(0, 1, n_phi_o))
 
     displaying_single_phi_o = False
     displaying_single_alpha = True
 
     # Add sliders for theta_i, phi_i, and wavelength
-    ax_theta_i = plt.axes([0.2, 0.3, 0.5, 0.03], facecolor='lightgoldenrodyellow')
-    ax_phi_i = plt.axes([0.2, 0.25, 0.5, 0.03], facecolor='lightgoldenrodyellow')
-    ax_wavelength = plt.axes([0.2, 0.20, 0.5, 0.03], facecolor='lightgoldenrodyellow')
-    ax_phi_o = plt.axes([0.2, 0.15, 0.5, 0.03], facecolor='lightgoldenrodyellow')
-    ax_alphas = plt.axes([0.2, 0.1, 0.5, 0.03], facecolor='lightgoldenrodyellow')
+    ax_theta_i = plt.axes([0.2, 0.3, 0.5, 0.03], facecolor="lightgoldenrodyellow")
+    ax_phi_i = plt.axes([0.2, 0.25, 0.5, 0.03], facecolor="lightgoldenrodyellow")
+    ax_wavelength = plt.axes([0.2, 0.20, 0.5, 0.03], facecolor="lightgoldenrodyellow")
+    ax_phi_o = plt.axes([0.2, 0.15, 0.5, 0.03], facecolor="lightgoldenrodyellow")
+    ax_alphas_bk = plt.axes([0.2, 0.1, 0.2, 0.03], facecolor="lightgoldenrodyellow")
+    ax_alphas_tr = plt.axes([0.5, 0.1, 0.2, 0.03], facecolor="lightgoldenrodyellow")
     ax_checkboxes = plt.axes([0.2, 0.0, 0.1, 0.1])
     ax_checkboxes.set_frame_on(False)
 
     # Use index-based sliders but map them to actual theta_i and phi_i values
-    theta_i_slider = Slider(ax_theta_i, 'θi', 0, n_theta_i - 1, valinit=0, valstep=1)
-    phi_i_slider = Slider(ax_phi_i, 'φi', 0, n_phi_i - 1, valinit=0, valstep=1)
-    wavelength_slider = Slider(ax_wavelength, 'λ', 0, n_wavelengths - 1, valinit=0, valstep=1)
-    phi_o_slider = Slider(ax_phi_o, 'φo', 0, n_phi_o - 1, valinit=0, valstep=1)
-    alpha_slider = Slider(ax_alphas, 'α', 0, n_models - 1, valinit=0, valstep=1)
-    wi_text = fig.text(0.5, 0.92,
-                       f"θi: {np.degrees(theta_i[0]):.2f}°, φi: {np.degrees(phi_i[0]):.2f}°, λ: {wavelengths[0]:.0f} nm",
-                       ha='center', va='center', fontsize=14, fontweight='bold')
-    check = CheckButtons(ax_checkboxes, ['single φo', 'single α'], [False, True])
+    theta_i_slider = Slider(ax_theta_i, "θi", 0, n_theta_i - 1, valinit=0, valstep=1)
+    phi_i_slider = Slider(ax_phi_i, "φi", 0, n_phi_i - 1, valinit=0, valstep=1)
+    wavelength_slider = Slider(
+        ax_wavelength, "λ", 0, n_wavelengths - 1, valinit=0, valstep=1
+    )
+    phi_o_slider = Slider(ax_phi_o, "φo", 0, n_phi_o - 1, valinit=0, valstep=1)
+    alpha_slider_bk = Slider(
+        ax_alphas_bk, r"$\alpha_{BK}$", 0, n_models - 1, valinit=0, valstep=1
+    )
+    alpha_slider_tr = Slider(
+        ax_alphas_tr, r"$\alpha_{TR}$", 0, n_models - 1, valinit=0, valstep=1
+    )
+    wi_text = fig.text(
+        0.5,
+        0.92,
+        f"θi: {np.degrees(theta_i[0]):.2f}°, φi: {np.degrees(phi_i[0]):.2f}°, λ: {wavelengths[0]:.0f} nm",
+        ha="center",
+        va="center",
+        fontsize=14,
+        fontweight="bold",
+    )
+    check = CheckButtons(ax_checkboxes, ["single φo", "single α"], [False, True])
 
-    def plot_fitted_model(ai, ti, pi, s, s_opp, l):
-        samples_phi_bk = fitted_bk[ai, ti, pi, s, :, l]
-        samples_phi_bk_opp = fitted_bk[ai, ti, pi, s_opp, :, l]
-        samples_phi_tr = fitted_tr[ai, ti, pi, s, :, l]
-        samples_phi_tr_opp = fitted_tr[ai, ti, pi, s_opp, :, l]
+    def plot_fitted_model(ai_bk, ai_tr, ti, pi, s, s_opp, l):
+        samples_phi_bk = fitted_bk[ai_bk, ti, pi, s, :, l]
+        samples_phi_bk_opp = fitted_bk[ai_bk, ti, pi, s_opp, :, l]
+        samples_phi_tr = fitted_tr[ai_tr, ti, pi, s, :, l]
+        samples_phi_tr_opp = fitted_tr[ai_tr, ti, pi, s_opp, :, l]
         ys_bk = np.append(np.flip(samples_phi_bk_opp), samples_phi_bk)
         ys_tr = np.append(np.flip(samples_phi_tr_opp), samples_phi_tr)
-        ax[1].plot(xs, ys_bk, label=f"BK-α={alphas[ai]}", linestyle='dashed', color=bk_colors[ai], alpha=0.6)
-        ax[1].plot(xs, ys_tr, label=f"TR-α={alphas[ai]}", linestyle='dashdot', color=tr_colors[ai],
-                   alpha=0.6)
+        ax[1].plot(
+            xs,
+            ys_bk,
+            label=f"BK-α={alphas[ai_bk]}",
+            linestyle="dashed",
+            color=bk_colors[ai_bk],
+            alpha=0.6,
+        )
+        ax[1].plot(
+            xs,
+            ys_tr,
+            label=f"TR-α={alphas[ai_tr]}",
+            linestyle="dashdot",
+            color=tr_colors[ai_tr],
+            alpha=0.6,
+        )
 
     def plot_raw_samples(ti, pi, po, s, s_opp, l, is_single_phi_o=False):
         phi_o_angle = np.degrees(phi_o[po])
@@ -772,19 +961,23 @@ def plot_brdf_fitting(samples: np.ndarray, incoming: Tuple[np.ndarray, np.ndarra
         samples_phi = samples[ti, pi, s, :, l]
         samples_phi_opp = samples[ti, pi, s_opp, :, l]
         ys = np.append(np.flip(samples_phi_opp), samples_phi)
-        ax[1].plot(xs, ys, label=f"   φo={phi_o_angle_opp:.2f}° -- {phi_o_angle:.2f}°",
-                   color=curves_colors[0 if is_single_phi_o else s],
-                   alpha=0.8)
+        ax[1].plot(
+            xs,
+            ys,
+            label=f"   φo={phi_o_angle_opp:.2f}° -- {phi_o_angle:.2f}°",
+            color=curves_colors[0 if is_single_phi_o else s],
+            alpha=0.8,
+        )
 
     def checkboxes_on_clicked(label):
-        if label == 'single φo':
+        if label == "single φo":
             nonlocal displaying_single_phi_o
             displaying_single_phi_o = not displaying_single_phi_o
             if displaying_single_phi_o:
                 phi_o_slider.set_active(True)
             else:
                 phi_o_slider.set_active(False)
-        elif label == 'single α':
+        elif label == "single α":
             nonlocal displaying_single_alpha
             displaying_single_alpha = not displaying_single_alpha
         update(0)
@@ -798,48 +991,68 @@ def plot_brdf_fitting(samples: np.ndarray, incoming: Tuple[np.ndarray, np.ndarra
         pi = int(phi_i_slider.val)
         l = int(wavelength_slider.val)
         po = int(phi_o_slider.val)
-        ai = int(alpha_slider.val)
+        ai_bk = int(alpha_slider_bk.val)
+        ai_tr = int(alpha_slider_tr.val)
 
         theta_i_val = np.degrees(theta_i[ti])
         phi_i_val = np.degrees(phi_i[pi])
         phi_o_val = np.degrees(phi_o[po])
-        (alpha_x, alpha_y) = alphas[ai]
+        (alpha_x_bk, alpha_y_bk) = alphas[ai_bk]
+        (alpha_x_tr, alpha_y_tr) = alphas[ai_tr]
         lambda_val = wavelengths[l]
 
         theta_i_slider.valtext.set_text(f"{theta_i_val:.2f}°")
         phi_i_slider.valtext.set_text(f"{phi_i_val:.2f}°")
         phi_o_slider.valtext.set_text(f"{phi_o_val:.2f}°")
         wavelength_slider.valtext.set_text(f"{lambda_val:.0f} nm")
-        alpha_slider.valtext.set_text(f"{alpha_x:.6f} - {alpha_y:.6f}")
-        wi_text.set_text(f"θi: {theta_i_val:.2f}°, φi: {phi_i_val:.2f}°, λ: {lambda_val:.0f} nm")
+        alpha_slider_bk.valtext.set_text(f"{alpha_x_bk:.5f}-{alpha_y_bk:.5f}")
+        alpha_slider_tr.valtext.set_text(f"{alpha_x_tr:.5f}-{alpha_y_tr:.5f}")
+        wi_text.set_text(
+            f"θi: {theta_i_val:.2f}°, φi: {phi_i_val:.2f}°, λ: {lambda_val:.0f} nm"
+        )
 
-        xs_3d, ys_3d, zs_3d = calculate_brdf_surface(theta_o, phi_o, samples[ti, pi, :, :, l].transpose())
+        xs_3d, ys_3d, zs_3d = calculate_brdf_surface(
+            theta_o, phi_o, samples[ti, pi, :, :, l].transpose()
+        )
         plot_brdf_polar_grid(ax[0])
-        ax[0].plot_surface(xs_3d, ys_3d, zs_3d, rstride=1, cstride=1, cmap='viridis', alpha=0.8, linewidth=0.2,
-                           edgecolor='none')
+        ax[0].plot_surface(
+            xs_3d,
+            ys_3d,
+            zs_3d,
+            rstride=1,
+            cstride=1,
+            cmap="viridis",
+            alpha=0.8,
+            linewidth=0.2,
+            edgecolor="none",
+        )
 
         if not displaying_single_phi_o:
             for s in range(n_slice):
                 s_opp = (s + n_slice) % n_phi_o
                 plot_raw_samples(ti, pi, po, s, s_opp, l, False)
                 if displaying_single_alpha:
-                    plot_fitted_model(ai, ti, pi, s, s_opp, l)
+                    plot_fitted_model(ai_bk, ai_tr, ti, pi, s, s_opp, l)
                 else:
                     for ai in range(n_models):
-                        plot_fitted_model(ai, ti, pi, s, s_opp, l)
+                        plot_fitted_model(ai, ai, ti, pi, s, s_opp, l)
         else:
             s = po % n_phi_o
             s_opp = (s + n_slice) % n_phi_o
             plot_raw_samples(ti, pi, po, s, s_opp, l, True)
             if displaying_single_alpha:
-                plot_fitted_model(ai, ti, pi, s, s_opp, l)
+                plot_fitted_model(ai_bk, ai_tr, ti, pi, s, s_opp, l)
             else:
                 for ai in range(n_models):
-                    plot_fitted_model(ai, ti, pi, s, s_opp, l)
+                    plot_fitted_model(ai, ai, ti, pi, s, s_opp, l)
 
         # Highlight the x-axis at ±theta_i
-        ax[1].axvline(theta_i_val, color='red', linestyle='--', linewidth=1.5, alpha=0.4)
-        ax[1].axvline(-theta_i_val, color='red', linestyle='--', linewidth=1.5, alpha=0.4)
+        ax[1].axvline(
+            theta_i_val, color="red", linestyle="--", linewidth=1.5, alpha=0.4
+        )
+        ax[1].axvline(
+            -theta_i_val, color="red", linestyle="--", linewidth=1.5, alpha=0.4
+        )
 
         ax[1].legend(loc="upper right")
         fig.canvas.draw_idle()
@@ -849,7 +1062,8 @@ def plot_brdf_fitting(samples: np.ndarray, incoming: Tuple[np.ndarray, np.ndarra
     phi_i_slider.on_changed(update)
     wavelength_slider.on_changed(update)
     phi_o_slider.on_changed(update)
-    alpha_slider.on_changed(update)
+    alpha_slider_bk.on_changed(update)
+    alpha_slider_tr.on_changed(update)
     check.on_clicked(checkboxes_on_clicked)
 
     update(0)
@@ -858,13 +1072,13 @@ def plot_brdf_fitting(samples: np.ndarray, incoming: Tuple[np.ndarray, np.ndarra
 
 def plot_brdf_coverage(points: np.ndarray):
     fig = plt.figure(figsize=(8, 8))
-    ax = fig.add_subplot(111, projection='polar')
-    ax.set_xlabel(r'$\theta_o$')
-    ax.set_ylabel(r'$\phi_o$')
-    ax.set_title('BRDF Coverage')
+    ax = fig.add_subplot(111, projection="polar")
+    ax.set_xlabel(r"$\theta_o$")
+    ax.set_ylabel(r"$\phi_o$")
+    ax.set_title("BRDF Coverage")
     ax.set_theta_zero_location("N")
     ax.set_theta_direction(-1)
     # First dimension is theta_o, second dimension is phi_o, in radians
-    ax.plot(points[:, 0], points[:, 1], 'o', markersize=1)
+    ax.plot(points[:, 0], points[:, 1], "o", markersize=1)
 
     plt.show()
