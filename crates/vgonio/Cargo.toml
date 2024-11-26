@@ -21,5 +21,6 @@ viewer_native = []
 viewer_web = ["dep:view"]
 
 [dependencies]
+clap.workspace = true
 view = { package = "vgonio-view", path = "../vgonio-view", optional = true }
 comp = { package = "vgonio-comp", path = "../vgonio-comp", optional = true }
