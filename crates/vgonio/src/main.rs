@@ -1,39 +1,53 @@
 #![warn(clippy::all, rust_2021_compatibility)]
-// Hide the console window on Windows when in release mode.
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use clap::Parser;
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "viewer_native"))]
-fn main() { view::run_vgonio_viewer_native() }
-
-#[cfg(all(target_arch = "wasm32", feature = "viewer_web"))]
-fn main() { view::run_vgonio_viewer_web() }
-
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-    #[cfg(not(any(
-        all(not(target_arch = "wasm32"), feature = "viewer_native"),
-        all(not(target_arch = "wasm32"), feature = "compute"),
-        all(target_arch = "wasm32", feature = "viewer_web"),
-    )))]
-    {
-        eprintln!(
-            "No feature enabled. Please enable one of the following features: viewer_native, \
-             compute, viewer_web"
-        );
-        std::process::exit(1);
+    match vgonio::Args::try_parse() {
+        Ok(args) => match args.subcmd {
+            vgonio::Command::Builtin(vgonio::Builtin { a, b }) => {
+                println!("VGonio v{}", env!("CARGO_PKG_VERSION"));
+                println!("  by {}", env!("CARGO_PKG_AUTHORS"));
+                println!();
+                println!("  Running with the following arguments:");
+                println!("    {:?}", args);
+            },
+        },
+        Err(_) => {
+            let args: Box<[String]> = std::env::args().collect();
+
+            if args.len() < 2 {
+                vgonio::Args::parse_from(&["vgonio", "--help"]);
+                std::process::exit(1);
+            }
+
+            let subcmd = &args[1];
+            let subcmd_binary = format!("vgonio-{}", subcmd);
+            let exe_path = std::env::current_exe()
+                .expect("Failed to get current executable path");
+            let exe_dir = exe_path
+                .parent()
+                .expect("Failed to get parent directory of executable");
+            let new_path = format!(
+                "{}:{}",
+                exe_path.to_str().unwrap(),
+                std::env::var("PATH").unwrap_or_default()
+            );
+            std::env::set_var("PATH", new_path);
+
+            if let Ok(full_path) = which::which(&subcmd_binary) {
+                let mut cmd = std::process::Command::new(full_path);
+                cmd.args(&args[2..]);
+
+                let status = cmd.status().expect("Failed to execute subcommand");
+
+                std::process::exit(status.code().unwrap_or(1));
+            } else {
+                eprintln!("Unknown subcommand: {}", subcmd);
+                std::process::exit(1);
+            }
+        },
     }
-
-    let args = vgonio::Args::parse();
-
-    println!("VGonio v{}", env!("CARGO_PKG_VERSION"));
-    println!("  by {}", env!("CARGO_PKG_AUTHORS"));
-    println!();
-    println!("  Running with the following arguments:");
-    println!("    {:?}", args);
-
-    #[cfg(all(not(target_arch = "wasm32"), feature = "compute"))]
-    comp::run_vgonio_compute();
 
     Ok(())
 }
