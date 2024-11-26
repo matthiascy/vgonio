@@ -1,4 +1,4 @@
-var cacheName = 'egui-template-pwa';
+var cacheName = 'vgonio-web-viewer-pwa';
 var filesToCache = [
   './',
   './index.html',

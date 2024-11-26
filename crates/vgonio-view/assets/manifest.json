@@ -1,6 +1,6 @@
 {
-  "name": "egui Template PWA",
-  "short_name": "egui-template-pwa",
+  "name": "Vgonio Web Viewer PWA",
+  "short_name": "vgonio-web-viewer",
   "icons": [
     {
       "src": "./icon-256.png",

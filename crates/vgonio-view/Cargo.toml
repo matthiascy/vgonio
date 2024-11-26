@@ -8,6 +8,9 @@ edition.workspace = true
 all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 egui.workspace = true
 eframe.workspace = true
@@ -18,5 +21,6 @@ serde.workspace = true
 env_logger.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen-futures = "0.4"
-web-sys = "0.3.70"
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+web-sys.workspace = true
