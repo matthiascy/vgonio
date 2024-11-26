@@ -93,7 +93,7 @@ impl ShadowPass {
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("shadow_pass_shader_module"),
                 source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../../vgonio/src/app/gui/assets/shaders/wgsl/shadow_pass.wgsl")
+                    include_str!("../../vgonio-comp/src/app/gui/assets/shaders/wgsl/shadow_pass.wgsl")
                         .into(),
                 ),
             });

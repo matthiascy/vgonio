@@ -6,58 +6,20 @@ edition.workspace = true
 description = "Microscopic level light transport simulation."
 publish = false
 
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+
 [features]
-default = ["embree"]
-embree = ["dep:embree", "surf/embree"]
-optix = []
-bench = ["surf/bench"]
-fitting = ["bxdf/fitting"]
-surf-obj = ["surf/surf-obj"]
-surf-gen = ["surf/surf-gen"]
-vdbg = []
-vvdbg = []
+default = []
+compute = ["dep:comp"]
+viewer = ["viewer_native", "viewer_web"]
+viewer_native = []
+viewer_web = ["dep:view"]
 
 [dependencies]
-chrono.workspace = true
-clap.workspace = true
-egui.workspace = true
-egui_dock.workspace = true
-egui_extras.workspace = true
-egui-file-dialog.workspace = true
-egui-winit.workspace = true
-egui-gizmo.workspace = true
-egui_plot.workspace = true
-egui-toast.workspace = true
-env_logger.workspace = true
-embree = { workspace = true, optional = true }
-exr.workspace = true
-flate2.workspace = true
-log.workspace = true
-rand.workspace = true
-rayon.workspace = true
-serde.workspace = true
-serde_yaml.workspace = true
-uuid.workspace = true
-approx.workspace = true
-bincode.workspace = true
-bytemuck.workspace = true
-dirs.workspace = true
-futures-intrusive.workspace = true
-image.workspace = true
-levenberg-marquardt.workspace = true
-numpy.workspace = true
-nalgebra.workspace = true
-pollster.workspace = true
-pyo3.workspace = true
-rand_chacha.workspace = true
-static_assertions.workspace = true
-toml.workspace = true
-type-map.workspace = true
-winit.workspace = true
-wgpu.workspace = true
-surf = { package = "vgonio-surf", path = "../vgonio-surf", features = ["exr"] }
-base = { package = "vgonio-base", path = "../vgonio-base", features = ["cli", "winit", "io"] }
-bxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf", features = ["cli", "exr"] }
-jabr = { package = "vgonio-jabr", path = "../vgonio-jabr" }
-gxtk = { package = "vgonio-gxtk", path = "../vgonio-gxtk" }
-uxtk = { package = "vgonio-uxtk", path = "../vgonio-uxtk" }
+view = { package = "vgonio-view", path = "../vgonio-view", optional = true }
+comp = { package = "vgonio-comp", path = "../vgonio-comp", optional = true }

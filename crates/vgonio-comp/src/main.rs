@@ -1,12 +1,28 @@
-#![warn(clippy::all, rust_2018_idioms)]
+#![warn(clippy::all, rust_2021_compatibility)]
+// Hide the console window on Windows when in release mode.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod app;
-pub use app::TemplateApp;
+// TODO: rewrite in client/server model to separate the UI from the computation
+// to allow for a web UI using wasm.
+
+// Entry point for the native viewer.
+#[cfg(and(not(target_arch = "wasm32")), feature = "native_viewer")]
+fn main() {
+    std::process::exit(match vgonio::run() {
+        Ok(_) => 0,
+        Err(ref e) => {
+            eprintln!("{e}");
+            1
+        },
+    })
+}
+
+// TODO: Default entry point
 
 
-
-#[cfg(target_arch = "wasm32")]
-pub fn run_vgonio_viewer_web() {
+// Entry point for the web viewer.
+#[cfg(and(target_arch = "wasm32"), feature = "web_viewer")]
+fn main() {
     use eframe::wasm_bindgen::JsCast as _;
 
     // Redirect `log` message to `console.log` and friends:
@@ -30,7 +46,7 @@ pub fn run_vgonio_viewer_web() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(TemplateApp::new(cc)))),
+                Box::new(|cc| Ok(Box::new(view::TemplateApp::new(cc)))),
             )
             .await;
 

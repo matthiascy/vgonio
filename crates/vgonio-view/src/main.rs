@@ -4,6 +4,8 @@
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
+    use vgonio_view::TemplateApp;
+
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
     let native_options = eframe::NativeOptions {
@@ -20,7 +22,7 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "eframe template",
         native_options,
-        Box::new(|cc| Ok(Box::new(vgonio-view::TemplateApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(TemplateApp::new(cc)))),
     )
 }
 
@@ -50,7 +52,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(vgonio-view::TemplateApp::new(cc)))),
+                Box::new(|cc| Ok(Box::new(view::TemplateApp::new(cc)))),
             )
             .await;
 

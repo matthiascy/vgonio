@@ -13,3 +13,4 @@ debug_*/
 **.lib
 **.exr
 rustc-ice-**.txt
+**dist/
