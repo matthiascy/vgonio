@@ -30,8 +30,7 @@ pub fn run_native() -> eframe::Result {
 }
 
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen::prelude::wasm_bindgen(start)]
-pub fn run_web() {
+pub fn run_wasm32() {
     use eframe::wasm_bindgen::JsCast as _;
 
     // Redirect `log` message to `console.log` and friends:

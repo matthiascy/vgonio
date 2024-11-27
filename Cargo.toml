@@ -9,11 +9,12 @@ members = [
     "crates/vgonio-visu",
     "crates/vgonio-gxtk",
     "crates/vgonio-uxtk",
-    "crates/vgonio-view"
-, "crates/vgonio-comp"]
+    "crates/vgonio-view",
+    "crates/vgonio-comp"
+]
 
 [workspace.package]
-authors = ["Yang Chen <y.chen-14@tudelft.nl>"]
+authors = ["Yang Chen <matthiasychen@gmail.com>"]
 edition = "2021"
 license = "Apache-2.0"
 license-file = "LICENSE-APACHE"
@@ -49,7 +50,6 @@ chrono = "0.4"
 clap = { version = "~4", features = ["derive", "wrap_help"] }
 csv = "1"
 dirs = "5.0"
-eframe = { version = "0.29", default-features = false, features = ["accesskit", "default_fonts", "wgpu", "x11", "wayland", "persistence"] }
 egui = { version = "~0.29", features = ["bytemuck", "rayon", "puffin", "log", "callstack"] }
 egui_dock = { version = "~0.14" }
 egui_extras = { version = "~0.29", features = ["all_loaders"] }
