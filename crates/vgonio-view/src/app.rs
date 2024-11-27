@@ -1,3 +1,5 @@
+use crate::dock::DockSpace;
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -7,6 +9,9 @@ pub struct VGonioViewApp {
 
     #[serde(skip)] // This how you opt-out of serialization of a field
     value: f32,
+
+    #[serde(skip)]
+    dockspace: DockSpace,
 }
 
 impl Default for VGonioViewApp {
@@ -15,6 +20,7 @@ impl Default for VGonioViewApp {
             // Example stuff:
             label: "Hello World!".to_owned(),
             value: 2.7,
+            dockspace: DockSpace::default_layout(),
         }
     }
 }
@@ -92,6 +98,8 @@ impl eframe::App for VGonioViewApp {
                 egui::warn_if_debug_build(ui);
             });
         });
+
+        self.dockspace.show(ctx);
     }
 }
 

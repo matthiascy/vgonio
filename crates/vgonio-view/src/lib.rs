@@ -1,6 +1,7 @@
-#![warn(clippy::all, rust_2018_idioms)]
+#![warn(clippy::all, rust_2021_compatibility)]
 
 mod app;
+pub mod dock;
 pub use app::VGonioViewApp;
 
 #[cfg(not(target_arch = "wasm32"))]

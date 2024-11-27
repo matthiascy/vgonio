@@ -60,7 +60,6 @@ pub struct VgonioGui {
 
     cache: Cache,
 
-    // pub simulation_workspace: SimulationWorkspace, // TODO: make private, simplify access
     /// The drag and drop state.
     drag_drop: FileDragDrop,
 
