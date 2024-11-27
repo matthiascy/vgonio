@@ -1,17 +1,20 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
 mod app;
-pub use app::TemplateApp;
-
+pub use app::VGonioViewApp;
 
 #[cfg(not(target_arch = "wasm32"))]
-fn run_vognio_viewer_native() -> eframe::Result {
+pub fn run_native() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([400.0, 300.0])
-            .with_min_inner_size([300.0, 220.0])
+            .with_inner_size([1600.0, 900.0])
+            .with_min_inner_size([1024.0, 768.0])
+            .with_decorations(true)
+            .with_transparent(false)
+            .with_resizable(true)
+            .with_title("VGonio Viewer")
             .with_icon(
                 // NOTE: Adding an icon is optional
                 eframe::icon_data::from_png_bytes(&include_bytes!("../assets/icon-256.png")[..])
@@ -20,15 +23,15 @@ fn run_vognio_viewer_native() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "eframe template",
+        "VGonio Viewer",
         native_options,
-        Box::new(|cc| Ok(Box::new(TemplateApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(VGonioViewApp::new(cc)))),
     )
 }
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen(start)]
-pub fn run_vgonio_viewer_web() {
+pub fn run_web() {
     use eframe::wasm_bindgen::JsCast as _;
 
     // Redirect `log` message to `console.log` and friends:
@@ -52,7 +55,7 @@ pub fn run_vgonio_viewer_web() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(TemplateApp::new(cc)))),
+                Box::new(|cc| Ok(Box::new(VGonioViewApp::new(cc)))),
             )
             .await;
 
