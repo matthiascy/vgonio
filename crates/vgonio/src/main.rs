@@ -26,20 +26,16 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let subcmd = format!("vgonio-{}", &args[1]);
-
             let search_paths = vgonio::search_paths();
             let subcmds = vgonio::list_all_external_commands(&search_paths);
 
             if subcmds.contains_key(&subcmd) {
                 let mut cmd = std::process::Command::new(&subcmds[&subcmd]);
                 cmd.args(&args[2..]);
-
                 let status = cmd.status().expect("Failed to execute subcommand");
-
                 std::process::exit(status.code().unwrap_or(1));
             } else {
                 let _ = err.print();
-
                 std::process::exit(1);
             }
         },

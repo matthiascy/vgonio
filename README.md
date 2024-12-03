@@ -200,3 +200,7 @@ Share your thoughts and report any issues on the [issue tracker](https://github.
 VGonio is distributed under the terms of the Apache License (Version 2.0).
 
 See [LICENSE](LICENSE) for details.
+
+This project may include code and libraries that are subject to different licenses,
+depending on the features used.
+For more information, see the [Third-party licenses file](./THIRD-PARTY) file.

@@ -6,6 +6,26 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+/// A pane/tab that can be stored in a dock space.
+pub struct DockPane {
+    /// Index of the tab in the dock space state.
+    pub index: u32,
+    /// Widget to be displayed in the tab.
+    pub dockable: Box<dyn Dockable>,
+}
+
+impl Debug for DockPane {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "DockWidget {{ index: {}, dockable: {:?}@{:?}  }}",
+            self.index,
+            self.dockable.uuid(),
+            self.dockable.kind()
+        )
+    }
+}
+
 /// Common trait for all dockable widgets.
 pub trait Dockable {
     /// Kind of the widget.
@@ -57,36 +77,16 @@ impl Dockable for DummyDockable {
     }
 }
 
-/// A tab that can be stored in a dock space.
-pub struct DockWidget {
-    /// Index of the tab in the dock space state.
-    pub index: u32,
-    /// Widget to be displayed in the tab.
-    pub dockable: Box<dyn Dockable>,
-}
-
-impl Debug for DockWidget {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "DockWidget {{ index: {}, dockable: {:?}@{:?}  }}",
-            self.index,
-            self.dockable.uuid(),
-            self.dockable.kind()
-        )
-    }
-}
-
 /// Docking space for widgets.
 pub struct DockSpace {
     /// The underlying tree of the dock space.
-    state: DockState<DockWidget>,
+    state: DockState<DockPane>,
     /// New widgets to be added to the dock space.
     to_add: Vec<NewWidget>,
 }
 
 impl Deref for DockSpace {
-    type Target = DockState<DockWidget>;
+    type Target = DockState<DockPane>;
 
     fn deref(&self) -> &Self::Target { &self.state }
 }
@@ -103,14 +103,14 @@ impl DockSpace {
     /// |   | 2 |
     pub fn default_layout() -> Self {
         let surf_viewer = Box::new(DummyDockable::new(WidgetKind::SurfViewer));
-        let mut state = DockState::new(vec![DockWidget {
+        let mut state = DockState::new(vec![DockPane {
             index: 0,
             dockable: surf_viewer,
         }]);
         let [_, r] = state.main_surface_mut().split_right(
             egui_dock::NodeIndex::root(),
             0.8,
-            vec![DockWidget {
+            vec![DockPane {
                 index: 1,
                 dockable: Box::new(DummyDockable::new(WidgetKind::Outliner)),
             }],
@@ -118,7 +118,7 @@ impl DockSpace {
         state.main_surface_mut().split_below(
             r,
             0.5,
-            vec![DockWidget {
+            vec![DockPane {
                 index: 2,
                 dockable: Box::new(DummyDockable::new(WidgetKind::Properties)),
             }],
@@ -157,7 +157,7 @@ impl DockSpace {
                 WidgetKind::Plotting => Box::new(DummyDockable::new(WidgetKind::Plotting)),
                 WidgetKind::BsdfViewer => Box::new(DummyDockable::new(WidgetKind::BsdfViewer)),
             };
-            self.state.push_to_focused_leaf(DockWidget {
+            self.state.push_to_focused_leaf(DockPane {
                 index: index as u32,
                 dockable: widget,
             });
@@ -174,7 +174,7 @@ impl DockSpace {
             return;
         }
 
-        self.state.push_to_first_leaf(DockWidget {
+        self.state.push_to_first_leaf(DockPane {
             index: self.state.main_surface().num_tabs() as u32,
             dockable: widget,
         });
@@ -202,7 +202,7 @@ pub struct DockSpaceView<'a> {
 }
 
 impl<'a> egui_dock::TabViewer for DockSpaceView<'a> {
-    type Tab = DockWidget;
+    type Tab = DockPane;
 
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText { tab.dockable.title() }
 

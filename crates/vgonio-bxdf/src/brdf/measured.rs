@@ -45,6 +45,7 @@ pub mod merl;
 pub mod utia;
 pub mod vgonio;
 pub mod yan;
+pub mod rgl;
 
 /// The origin of the measured BRDF.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
