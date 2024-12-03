@@ -203,4 +203,4 @@ See [LICENSE](LICENSE) for details.
 
 This project may include code and libraries that are subject to different licenses,
 depending on the features used.
-For more information, see the [Third-party licenses file](./THIRD-PARTY) file.
+For more information, see the [Third-party licenses file](./THIRD-PARTY.md) file.
