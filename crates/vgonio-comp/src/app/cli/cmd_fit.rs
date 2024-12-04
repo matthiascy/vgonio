@@ -18,7 +18,8 @@ use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
         measured::{
-            yan::Yan2018Brdf, AnalyticalFit, ClausenBrdf, VgonioBrdf, VgonioBrdfParameterisation,
+            rgl::RglBrdf, yan::Yan2018Brdf, AnalyticalFit, ClausenBrdf, VgonioBrdf,
+            VgonioBrdfParameterisation,
         },
         Bxdf, BxdfFamily,
     },
@@ -246,6 +247,28 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                 .unwrap()
                                 .measured
                                 .downcast_ref::<Yan2018Brdf>()
+                            {
+                                measured_brdf_fitting(
+                                    &opts,
+                                    &input,
+                                    brdf,
+                                    alpha,
+                                    &cache.iors,
+                                    theta_limit,
+                                );
+                            }
+                        }
+                    },
+                    MeasuredBrdfKind::Rgl => {
+                        for input in &opts.inputs {
+                            let measurement = cache
+                                .load_micro_surface_measurement(&config, &input)
+                                .unwrap();
+                            if let Some(brdf) = cache
+                                .get_measurement(measurement)
+                                .unwrap()
+                                .measured
+                                .downcast_ref::<RglBrdf>()
                             {
                                 measured_brdf_fitting(
                                     &opts,

@@ -9,13 +9,13 @@ use base::{
     medium::Medium,
     optics::ior::RefractiveIndexRegistry,
     range::{RangeByStepSizeExclusive, RangeByStepSizeInclusive},
-    units::{rad, Degrees, Nanometres, Radians, Rads},
+    units::{rad, Degrees, LengthUnit::M, Nanometres, Radians, Rads},
     MeasuredBrdfKind, MeasuredData,
 };
 use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
-        measured::{ClausenBrdf, VgonioBrdf, Yan2018Brdf},
+        measured::{rgl::RglBrdf, ClausenBrdf, VgonioBrdf, Yan2018Brdf},
     },
     Scattering,
 };
@@ -610,7 +610,9 @@ pub fn plot_brdf_fitting(
     alphas: &[(f64, f64)],
     iors: &RefractiveIndexRegistry,
 ) -> PyResult<()> {
+    log::info!("Plotting BRDF fitting...");
     let n_models = alphas.len();
+    log::info!("Number of models: {}", n_models);
     let bk_models = alphas
         .iter()
         .map(|(alpha_x, alpha_y)| BeckmannBrdf::new(*alpha_x, *alpha_y))
@@ -801,7 +803,7 @@ pub fn plot_brdf_fitting(
                         .step_by(brdf.params.n_zenith_i)
                         .map(|x| x.phi.as_f32())
                         .collect::<Vec<_>>();
-                    let theta_o = RangeByStepSizeExclusive::new(0.0f32, 90.0, 0.25)
+                    let theta_o = RangeByStepSizeExclusive::new(0.0f32, 90.0, 1.0)
                         .values()
                         .map(|x| x.to_radians())
                         .collect::<Vec<_>>();
@@ -1103,6 +1105,144 @@ pub fn plot_brdf_fitting(
                         (
                             samples
                                 .reshape((n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_spectrum))?,
+                            (theta_i, phi_i),
+                            (theta_o, phi_o),
+                            wavelength,
+                            (fitted_bk, fitted_tr),
+                            alphas,
+                        ),
+                    )?;
+                },
+                MeasuredBrdfKind::Rgl => {
+                    let brdf = brdf.downcast_ref::<RglBrdf>().unwrap();
+                    let iors_i = iors
+                        .ior_of_spectrum(brdf.incident_medium, brdf.spectrum.as_ref())
+                        .unwrap();
+                    let iors_t = iors
+                        .ior_of_spectrum(brdf.transmitted_medium, brdf.spectrum.as_ref())
+                        .unwrap();
+                    let n_spectrum = brdf.n_spectrum();
+                    let theta_i = brdf
+                        .params
+                        .incoming
+                        .iter()
+                        .take(brdf.params.n_zenith_i)
+                        .map(|x| x.theta.as_f32())
+                        .collect::<Vec<_>>();
+                    let phi_i = brdf
+                        .params
+                        .incoming
+                        .iter()
+                        .step_by(brdf.params.n_zenith_i)
+                        .map(|x| x.phi.as_f32())
+                        .collect::<Vec<_>>();
+                    let theta_o = RangeByStepSizeInclusive::new(0.0f32, 80.0, 1.0)
+                        .values()
+                        .map(|x| x.to_radians())
+                        .collect::<Vec<_>>();
+                    let phi_o = RangeByStepSizeExclusive::new(0.0f32, 360.0, 30.0)
+                        .values()
+                        .map(|x| x.to_radians())
+                        .collect::<Vec<_>>();
+                    let n_theta_i = theta_i.len();
+                    let n_phi_i = phi_i.len();
+                    let n_theta_o = theta_o.len();
+                    let n_phi_o = phi_o.len();
+                    // n_theta_i x n_phi_i x n_theta_o x n_phi_o x n_spectrum
+                    let samples = PyArray1::zeros_bound(
+                        py,
+                        [n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
+                        false,
+                    );
+                    let fitted_bk = PyArray1::zeros_bound(
+                        py,
+                        [n_models * n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
+                        false,
+                    );
+                    let fitted_tr = PyArray1::zeros_bound(
+                        py,
+                        [n_models * n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
+                        false,
+                    );
+                    // Fill the samples and fitted data
+                    for (i, t_i) in theta_i.iter().enumerate() {
+                        for (j, p_i) in phi_i.iter().enumerate() {
+                            for (k, t_o) in theta_o.iter().enumerate() {
+                                for (l, p_o) in phi_o.iter().enumerate() {
+                                    let wi = Sph2::new(rad!(*t_i), rad!(*p_i));
+                                    let wo = Sph2::new(rad!(*t_o), rad!(*p_o));
+                                    let resampled =
+                                        brdf.params.original.eval(*t_i, *p_i, *t_o, *p_o);
+                                    let offset = i * n_phi_i * n_phi_o * n_theta_o * n_spectrum
+                                        + j * n_phi_o * n_theta_o * n_spectrum
+                                        + l * n_theta_o * n_spectrum
+                                        + k * n_spectrum;
+                                    unsafe {
+                                        samples.as_slice_mut().unwrap()
+                                            [offset..offset + n_spectrum]
+                                            .copy_from_slice(&resampled);
+                                    }
+                                    for (m, (bk, tr)) in
+                                        bk_models.iter().zip(tr_models.iter()).enumerate()
+                                    {
+                                        let spectral_samples_bk =
+                                            Scattering::eval_reflectance_spectrum(
+                                                bk,
+                                                &wi.to_cartesian(),
+                                                &wo.to_cartesian(),
+                                                &iors_i,
+                                                &iors_t,
+                                            );
+                                        let spectral_samples_tr =
+                                            Scattering::eval_reflectance_spectrum(
+                                                tr,
+                                                &wi.to_cartesian(),
+                                                &wo.to_cartesian(),
+                                                &iors_i,
+                                                &iors_t,
+                                            );
+                                        let offset = m
+                                            * n_theta_i
+                                            * n_phi_i
+                                            * n_phi_o
+                                            * n_theta_o
+                                            * n_spectrum
+                                            + i * n_phi_i * n_phi_o * n_theta_o * n_spectrum
+                                            + j * n_phi_o * n_theta_o * n_spectrum
+                                            + l * n_theta_o * n_spectrum
+                                            + k * n_spectrum;
+
+                                        unsafe {
+                                            fitted_bk.as_slice_mut().unwrap()
+                                                [offset..offset + n_spectrum]
+                                                .copy_from_slice(&spectral_samples_bk);
+                                            fitted_tr.as_slice_mut().unwrap()
+                                                [offset..offset + n_spectrum]
+                                                .copy_from_slice(&spectral_samples_tr);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    let samples =
+                        samples.reshape((n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_spectrum))?;
+                    let theta_o = PyArray1::from_vec_bound(py, theta_o);
+                    let theta_i = PyArray1::from_vec_bound(py, theta_i);
+                    let phi_i = PyArray1::from_vec_bound(py, phi_i);
+                    let phi_o = PyArray1::from_vec_bound(py, phi_o);
+                    let wavelength = PyArray1::from_vec_bound(
+                        py,
+                        brdf.spectrum.iter().map(|x| x.as_f32()).collect::<Vec<_>>(),
+                    );
+                    let fitted_bk = fitted_bk
+                        .reshape((n_models, n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_spectrum))?;
+                    let fitted_tr = fitted_tr
+                        .reshape((n_models, n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_spectrum))?;
+                    fun.call1(
+                        py,
+                        (
+                            samples,
                             (theta_i, phi_i),
                             (theta_o, phi_o),
                             wavelength,

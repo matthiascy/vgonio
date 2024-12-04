@@ -9,19 +9,21 @@ use crate::{
     Scattering,
 };
 use base::{
-    math,
+    impl_measured_data_trait, math,
     math::{Sph2, Vec3},
     medium::Medium,
     optics::ior::RefractiveIndexRegistry,
-    range::{RangeByStepCount, RangeByStepCountInclusive, RangeByStepSizeInclusive},
+    range::RangeByStepSizeInclusive,
     units::{deg, rad, Nanometres, Radians},
-    ErrorMetric, MeasuredBrdfKind, ResidualErrorMetric,
+    ErrorMetric, MeasuredBrdfKind, MeasuredData, MeasurementKind, ResidualErrorMetric,
 };
 use jabr::array::DyArr;
 use std::path::Path;
 
 /// Parametrisation of the BRDF measured in RGL (https://rgl.epfl.ch/pages/lab/material-database) at EPFL by Jonathan Dupuy and Wenzel Jakob.
 pub type RglBrdf = MeasuredBrdf<RglBrdfParameterisation, 3>;
+
+impl_measured_data_trait!(RglBrdf, Bsdf, Some(MeasuredBrdfKind::Rgl));
 
 unsafe impl Send for RglBrdf {}
 unsafe impl Sync for RglBrdf {}
@@ -43,12 +45,14 @@ pub struct RglBrdfParameterisation {
     /// row-major 1D array. The first dimension is the zenith angle and the
     /// second dimension is the azimuth angle. The zenith angles are in the
     /// range [0, π/2]. The azimuth angles are in the range [0, 2π].
+    /// Zenith angles increase the fastest.
     pub incoming: DyArr<Sph2>,
     /// Outgoing directions.
     /// Directions are stored in spherical coordinates (zenith, azimuth) in a
     /// row-major 1D array. The first dimension is the zenith angle and the
     /// second dimension is the azimuth angle. The zenith angles are in the
     /// range [0, π/2]. The azimuth angles are in the range [0, 2π].
+    /// Zenith angles increase the fastest.
     pub outgoing: DyArr<Sph2>,
     /// Temporarily store the original data.
     pub original: powitacq::BrdfData,
@@ -84,7 +88,7 @@ impl RglBrdf {
     // TODO: check other BRDFs decide if we need to load the BRDFs in the
     // constructor.
     pub fn load(path: &Path, transmitted_medium: Medium) -> Self {
-        let brdf = powitacq::BrdfData::new(path.as_ref());
+        let brdf = powitacq::BrdfData::new(path);
         let spectrum = {
             let mut spectrum = brdf.wavelengths();
             DyArr::from_iterator([-1], spectrum.iter().map(|&x| Nanometres::new(x)))
@@ -109,19 +113,27 @@ impl RglBrdf {
             deg!(360.0).to_radians(),
             deg!(30.0).to_radians(),
         );
-        let theta_i_vals = theta_i.values_wrapped();
-        let phi_i_vals = phi_i.values_wrapped();
-        let theta_o_vals = theta_o.values_wrapped();
-        let phi_o_vals = phi_o.values_wrapped();
+        let theta_i_vals = theta_i.values_wrapped().collect::<Box<_>>();
+        let phi_i_vals = phi_i.values_wrapped().collect::<Box<_>>();
+        let theta_o_vals = theta_o.values_wrapped().collect::<Box<_>>();
+        let phi_o_vals = phi_o.values_wrapped().collect::<Box<_>>();
 
         let incoming = DyArr::from_iterator(
             [-1],
-            theta_i_vals.map(|theta_i| phi_i_vals.map(|phi_i| Sph2::new(theta_i, phi_i))),
+            phi_i_vals.iter().flat_map(|phi_i| {
+                theta_i_vals
+                    .iter()
+                    .map(|theta_i| Sph2::new(*theta_i, *phi_i))
+            }),
         );
 
         let outgoing = DyArr::from_iterator(
             [-1],
-            theta_o_vals.map(|theta_o| phi_o_vals.map(|phi_o| Sph2::new(theta_o, phi_o))),
+            phi_o_vals.iter().flat_map(|phi_o| {
+                theta_o_vals
+                    .iter()
+                    .map(|theta_o| Sph2::new(*theta_o, *phi_o))
+            }),
         );
 
         let n_zenith_i = theta_i_vals.len();
@@ -151,19 +163,11 @@ impl RglBrdf {
                         wo.phi.as_f32(),
                     );
                     let index = idx_wi * n_wo * n_spectrum + idx_wo * n_spectrum;
-                    samples.as_mut_slice()[index..index + n_spectrum]
-                        .copy_from_slice(&samples_spectrum);
+                    samples[index..index + n_spectrum].copy_from_slice(&samples_spectrum);
                 }
             }
 
-            DyArr::from_boxed_slice(
-                [
-                    parameterisation.n_wi() as isize,
-                    parameterisation.n_wo() as isize,
-                    n_spectrum as isize,
-                ],
-                samples,
-            )
+            DyArr::from_boxed_slice([n_wi, n_wo, n_spectrum], samples)
         };
 
         Self {

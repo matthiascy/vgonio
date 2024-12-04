@@ -49,7 +49,10 @@ impl RefractiveIndexRegistry {
         let i = refractive_indices
             .iter()
             .position(|ior| ior.wavelength >= wavelength)
-            .unwrap();
+            .expect(&format!(
+                "Medium: {:?}, IOR {} not found in the database",
+                medium, wavelength
+            ));
         let ior_after = refractive_indices[i];
         // If the first wavelength is equal to the given one, return it.
         if math::ulp_eq(ior_after.wavelength.value(), wavelength.value()) {

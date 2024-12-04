@@ -45,6 +45,9 @@ pub struct UserConfig {
     /// Triangulation pattern for heightfield.
     #[serde(default = "TriangulationPattern::default")]
     pub triangulation: TriangulationPattern,
+
+    /// Excluded ior files.
+    pub excluded_ior_files: Option<Vec<String>>,
 }
 
 impl UserConfig {
@@ -79,6 +82,7 @@ impl UserConfig {
         log::info!("    - User output directory: {:?}", config.output_dir);
         log::info!("    - User data directory: {:?}", config.data_dir);
         log::info!("    - Triangulation pattern: {:?}", config.triangulation);
+        log::info!("    - Excluded IOR files: {:?}", config.excluded_ior_files);
         Ok(config)
     }
 }
@@ -229,6 +233,7 @@ impl Config {
                         output_dir: None,
                         data_dir: Some(sys_data_dir.clone()),
                         triangulation: TriangulationPattern::default(),
+                        excluded_ior_files: Some(Vec::new()),
                     };
                     let serialized = toml::to_string(&user_config).map_err(|err| {
                         VgonioError::new(

@@ -25,9 +25,11 @@ use base::{
     medium::Medium,
     partition::{SphericalDomain, SphericalPartition},
     units::{rad, Radians},
-    Asset, MeasuredData, MeasurementKind, Version,
+    Asset,
+    MeasuredBrdfKind::Rgl,
+    MeasuredData, MeasurementKind, Version,
 };
-use bxdf::brdf::measured::{ClausenBrdf, VgonioBrdf, Yan2018Brdf};
+use bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, VgonioBrdf, Yan2018Brdf};
 use chrono::{DateTime, Local};
 use rand::{
     distributions::{Distribution, Uniform},
@@ -185,6 +187,30 @@ impl Measurement {
 
     /// Loads the measurement data from a file.
     pub fn read_from_file(filepath: &Path) -> Result<Self, VgonioError> {
+        // TODO: unified file loading
+        if filepath.extension().unwrap() == "bsdf" {
+            println!("Loading RGL BSDF file: {}", filepath.display());
+            let filename = filepath.file_stem().unwrap().to_str().unwrap();
+            let mut medium = Medium::Air;
+            for m in filename.split('_') {
+                if m == "aluminium" {
+                    medium = Medium::Aluminium;
+                    break;
+                }
+                if m == "copper" {
+                    medium = Medium::Copper;
+                    break;
+                }
+            }
+            let loaded = RglBrdf::load(filepath, medium);
+            return Ok(Measurement {
+                name: format!("bsdf_{}", filepath.file_name().unwrap().to_str().unwrap()),
+                source: MeasurementSource::Loaded(filepath.to_path_buf()),
+                timestamp: Local::now(),
+                measured: Box::new(loaded),
+            });
+        }
+
         let file = File::open(filepath).map_err(|err| {
             VgonioError::from_io_error(
                 err,

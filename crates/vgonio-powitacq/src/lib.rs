@@ -1,4 +1,4 @@
-use std::ptr;
+use std::{path::Path, ptr};
 
 #[cxx::bridge]
 mod ffi {
@@ -20,11 +20,14 @@ pub struct BrdfData {
     inner: cxx::SharedPtr<ffi::BRDF>,
 }
 
+unsafe impl Send for BrdfData {}
+unsafe impl Sync for BrdfData {}
+
 impl BrdfData {
     /// Load a BRDF from the given file.
-    pub fn new(path: &str) -> Self {
+    pub fn new(path: &Path) -> Self {
         BrdfData {
-            inner: ffi::load_brdf(path),
+            inner: ffi::load_brdf(path.as_os_str().to_str().unwrap()),
         }
     }
 

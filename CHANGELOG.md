@@ -15,6 +15,8 @@
   Efficient Rendering of Glossy Surfaces
 - Support for saving height field files in EXR image format: single channel 32-bit float with extra surface information
 - Implement cargo like external subcommands
+- Load BRDF data measured from RGL's BRDF database
+- Enable excluding ior files in configuration
 
 ## 0.3.2 - 2024-08-16
 
