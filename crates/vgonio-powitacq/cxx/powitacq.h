@@ -33,11 +33,13 @@
 */
 
 /*
- Modified by Yang Chen on 2024-12-02:
-   - Removed the POWITACQ_IMPLEMENTATION macro
-   - New function load_brdf() to return a unique_ptr<BRDF>
-   - Renamed the implementation file to powitacq.cc
- */
+ Modified by Yang Chen:
+ - Removed the POWITACQ_IMPLEMENTATION macro
+ - New function load_brdf() to return a shared_ptr<BRDF>
+ - Renamed the implementation file to powitacq.cc
+ - Added few functions to expose the BRDF API to Rust
+ - Add a new member variable m_filename to store the path to the BRDF file
+*/
 
 #pragma once
 
