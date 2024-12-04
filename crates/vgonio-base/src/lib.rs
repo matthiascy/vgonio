@@ -198,6 +198,8 @@ pub enum MeasuredBrdfKind {
     Merl,
     #[cfg_attr(feature = "cli", clap(name = "utia"))]
     Utia,
+    #[cfg_attr(feature = "cli", clap(name = "rgl"))]
+    Rgl,
     #[cfg_attr(feature = "cli", clap(name = "vgonio"))]
     Vgonio,
     #[cfg_attr(feature = "cli", clap(name = "yan2018"))]

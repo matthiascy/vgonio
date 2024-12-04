@@ -947,6 +947,8 @@ BRDF::BRDF(const std::string &path_to_file) {
           jacobian.dtype == Tensor::UInt8))
             throw std::runtime_error("Invalid file structure: " + tf.to_string());
 
+    m_filename = path_to_file;
+
     m_data = std::unique_ptr<BRDF::Data>(new BRDF::Data());
 
     m_data->isotropic = phi_i.shape[0] <= 2;
@@ -1181,8 +1183,8 @@ Spectrum BRDF::sample(const Vector2f &u, const Vector3f &wi,
     return fr / pdf;
 }
 
-std::unique_ptr<BRDF> load_brdf(rust::Str filename) {
-    return std::unique_ptr<BRDF>(new BRDF(std::string(filename)));
+std::shared_ptr<BRDF> load_brdf(rust::Str filename) {
+    return std::shared_ptr<BRDF>(new BRDF(std::string(filename)));
 }
 
 rust::Vec<float> brdf_wavelengths(const BRDF &brdf) {
@@ -1213,4 +1215,8 @@ rust::Vec<float> brdf_eval(const BRDF &brdf, float theta_i, float phi_i, float t
 
 uint32_t brdf_n_wavelengths(const BRDF &brdf) {
     return brdf.wavelengths().size();
+}
+
+bool brdf_eq(const BRDF &brdf1, const BRDF &brdf2) {
+    return brdf1.m_filename == brdf2.m_filename;
 }

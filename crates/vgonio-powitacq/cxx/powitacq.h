@@ -134,13 +134,17 @@ public:
     /// evaluate the PDF of a sample
     float pdf(const Vector3f &wi, const Vector3f &wo) const;
 
+public:
+    std::string m_filename;
+
 private:
     Spectrum zero() const;
 };
 
 /* 2024-12-02 */
-std::unique_ptr<BRDF> load_brdf(rust::Str path_to_file);
+std::shared_ptr<BRDF> load_brdf(rust::Str path_to_file);
 rust::Vec<float> brdf_wavelengths(const BRDF &brdf);
 // Evaluate f_r for a given pair of directions
 rust::Vec<float> brdf_eval(const BRDF &brdf, float theta_i, float phi_i, float theta_o, float phi_o);
 uint32_t brdf_n_wavelengths(const BRDF &brdf);
+bool brdf_eq(const BRDF &brdf1, const BRDF &brdf2);

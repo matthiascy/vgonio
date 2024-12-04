@@ -1,3 +1,5 @@
+use std::ptr;
+
 #[cxx::bridge]
 mod ffi {
     unsafe extern "C++" {
@@ -5,15 +7,17 @@ mod ffi {
 
         type BRDF;
 
-        fn load_brdf(path: &str) -> UniquePtr<BRDF>;
+        fn load_brdf(path: &str) -> SharedPtr<BRDF>;
         fn brdf_wavelengths(brdf: &BRDF) -> Vec<f32>;
         fn brdf_eval(brdf: &BRDF, theta_i: f32, phi_i: f32, theta_r: f32, phi_r: f32) -> Vec<f32>;
         fn brdf_n_wavelengths(brdf: &BRDF) -> u32;
+        fn brdf_eq(brdf1: &BRDF, brdf2: &BRDF) -> bool;
     }
 }
 
+#[derive(Clone)]
 pub struct BrdfData {
-    inner: cxx::UniquePtr<ffi::BRDF>,
+    inner: cxx::SharedPtr<ffi::BRDF>,
 }
 
 impl BrdfData {
@@ -33,4 +37,15 @@ impl BrdfData {
     pub fn eval(&self, theta_i: f32, phi_i: f32, theta_o: f32, phi_o: f32) -> Vec<f32> {
         ffi::brdf_eval(&self.inner, theta_i, phi_i, theta_o, phi_o)
     }
+}
+
+impl std::fmt::Debug for BrdfData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BrdfData").finish()
+    }
+}
+
+// Workaround to be able to but the type inside the MeasuredBrdf struct.
+impl PartialEq for BrdfData {
+    fn eq(&self, other: &Self) -> bool { ffi::brdf_eq(&self.inner, &other.inner) }
 }
