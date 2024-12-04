@@ -1284,10 +1284,12 @@ pub enum MicroSurfaceOrigin {
     Usurf,
     /// Micro-geometry height field from OmniSurf3D.
     OmniSurf3D,
+    /// Micro-geometry height field from an EXR file.
+    Exr,
 }
 
 impl MicroSurface {
-    // TODO: read from exr file.
+    // TODO: unify the reading functions, either all by filepath or all by reader.
     #[rustfmt::skip]
     /// Creates micro-geometry height field by reading the samples stored in
     /// different file format. Supported formats are
@@ -1300,16 +1302,23 @@ impl MicroSurface {
     /// 3. Micro-surface height field file (binary format, ends with *.vgms).
     ///
     /// 4. Micro-surface height field cache file (binary format, ends with *.vgcc).
+    ///
+    /// 5. Micro-geometry height field from EXR file, only read the first channel of
+    ///    the first part.
     pub fn read_from_file(
         filepath: &Path,
         origin: Option<MicroSurfaceOrigin>,
     ) -> Result<MicroSurface, VgonioError> {
+        // TODO: get rid of the creation of the BufReader in case of reading from
+        // the exr file as the read_exr only takes the path.
+        // Or, unify the reading functions, either all by filepath or all by reader.
         use crate::io;
         let file = File::open(filepath).map_err(|err| {
             VgonioError::from_io_error(
                 err,
                 format!("Failed to open micro-surface file: {}", filepath.display()))
         })?;
+        let extension = filepath.extension().and_then(|ext| ext.to_str()).unwrap();
         let mut reader = BufReader::new(file);
 
         if let Some(origin) = origin {
@@ -1318,8 +1327,12 @@ impl MicroSurface {
                 MicroSurfaceOrigin::Dong2015 => io::read_ascii_dong2015(&mut reader, filepath),
                 MicroSurfaceOrigin::Usurf => io::read_ascii_usurf(&mut reader, filepath),
                 MicroSurfaceOrigin::OmniSurf3D => io::read_omni_surf_3d(&mut reader, filepath),
+                MicroSurfaceOrigin::Exr => io::read_exr(&filepath),
             }
         } else {
+            if extension == "exr" {
+                return io::read_exr(&filepath);
+            }
             // Otherwise, try to figure out the file format by reading the first several bytes.
             let mut buf = [0_u8; 4];
             reader.read_exact(&mut buf).map_err(|err| {

@@ -629,6 +629,22 @@ impl VgonioGui {
                             }
                         })
                     },
+                    "exr" => {
+                        log::debug!("Opening EXR height field: {:?}", filepath);
+                        self.cache.write(|cache| {
+                            match cache.load_micro_surface(&self.config, &filepath, None) {
+                                Ok((surf, _)) => {
+                                    let _ = cache
+                                        .create_micro_surface_renderable_mesh(&self.gpu_ctx, surf)
+                                        .unwrap();
+                                    surfaces.push(surf)
+                                },
+                                Err(e) => {
+                                    log::error!("Failed to load height field: {:?}", e);
+                                },
+                            }
+                        })
+                    },
                     "spd" => {
                         todo!()
                     },

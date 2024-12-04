@@ -646,6 +646,33 @@ pub fn read_wavefront<R: BufRead>(
     ))
 }
 
+/// Reads a micro-surface from an EXR file.
+pub fn read_exr(filepath: &Path) -> Result<MicroSurface, VgonioError> {
+    // TODO: horizontal and vertical spacing
+    let image =
+        exr::prelude::read_first_flat_layer_from_file(filepath).expect("Failed to read EXR file");
+    let (width, height) = (
+        image.attributes.display_window.size.width(),
+        image.attributes.display_window.size.height(),
+    );
+    let (du, dv) = (1.0, 1.0); // TODO: read from EXR file, temporarily set to 1.0 um.
+    let samples = image.layer_data.channel_data.list[0]
+        .sample_data
+        .values_as_f32()
+        .collect::<Box<_>>();
+    Ok(MicroSurface::from_samples(
+        height,
+        width,
+        (du as f32, dv as f32),
+        LengthUnit::UM,
+        samples,
+        filepath
+            .file_name()
+            .and_then(|name| name.to_str().map(|name| name.to_owned())),
+        Some(filepath.into()),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

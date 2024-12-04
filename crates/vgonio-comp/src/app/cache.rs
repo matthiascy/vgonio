@@ -387,8 +387,8 @@ impl RawCache {
     ///
     /// * `config` - The application configuration.
     ///
-    /// * `paths` - Paths to the surfaces to be load. Paths may not in canonical
-    ///   form.
+    /// * `paths` - Paths to the surfaces to be loaded. Paths may not in
+    ///   canonical form.
     ///
     /// * `alignment` - The axis alignment when constructing the surface mesh.
     pub fn load_micro_surfaces(
