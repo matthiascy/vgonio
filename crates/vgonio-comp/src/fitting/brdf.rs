@@ -13,6 +13,7 @@ use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
         measured::{
+            rgl::{RglBrdf, RglBrdfParameterisation},
             AnalyticalFit, BrdfParameterisation, ClausenBrdf, ClausenBrdfParameterisation,
             VgonioBrdf, VgonioBrdfParameterisation, Yan2018Brdf, Yan2018BrdfParameterisation,
         },
@@ -205,6 +206,10 @@ impl<'a, P: BrdfParameterisation> FittingProblem for MicrofacetBrdfFittingProble
                         let brdf = self.measured.as_any().downcast_ref::<Yan2018Brdf>().unwrap();
                         switch_isotropy!(Yan2018Brdf<Yan2018BrdfParameterisation> => isotropy, self, brdf, model, solver, rmetric)
                     },
+                    MeasuredBrdfKind::Rgl => {
+                        let brdf = self.measured.as_any().downcast_ref::<RglBrdf>().unwrap();
+                        switch_isotropy!(RglBrdf<RglBrdfParameterisation> => isotropy, self, brdf, model, solver, rmetric)
+                    }
                     _ => {
                         log::warn!("Unsupported BRDF kind: {:?}", self.measured.kind());
                         return None;
@@ -301,7 +306,7 @@ macro_rules! impl_fitting_proxy_using_cartesian_cache {
                 let cache = $self
                 .cache
                 .downcast_ref::<CartesianDirectionsCache>()
-                .unwrap();
+                .expect("invalid cartesian directions cache type");
                 // Row-major [snapshot, patch, wavelength]
                 let mut rs = Box::new_uninit_slice(n_wi * n_wo * n_spectrum);
                 for (i, snapshot) in $self.measured.snapshots().enumerate() {
@@ -359,17 +364,17 @@ macro_rules! impl_fitting_proxy_using_cartesian_cache {
                 let cache = $self
                     .cache
                     .downcast_ref::<CartesianDirectionsCache>()
-                    .unwrap();
+                    .expect("invalid cartesian directions cache type");;
                 let n_wi_filtered = cache
                     .wis
                     .iter()
                     .position(|wi| base::math::theta(wi) >= $self.theta_limit)
-                    .unwrap();
+                    .unwrap_or(n_wi);
                 let n_wo_filtered = cache
                     .wos
                     .iter()
                     .position(|wo| base::math::theta(wo) >= $self.theta_limit)
-                    .unwrap();
+                    .unwrap_or(n_wo);
                 // Row-major [snapshot, patch, wavelength] = [wi, wo, wavelength]
                 let mut rs = Box::new_uninit_slice(n_wi_filtered * n_wo_filtered * n_spectrum);
                 // Incident directions.
@@ -444,17 +449,17 @@ macro_rules! impl_fitting_proxy_using_cartesian_cache {
                 let cache = $self
                     .cache
                     .downcast_ref::<CartesianDirectionsCache>()
-                    .unwrap();
+                    .expect("invalid cartesian directions cache type");
                 let n_wi_filtered = cache
                     .wis
                     .iter()
                     .position(|wi| base::math::theta(wi) >= $self.theta_limit)
-                    .unwrap();
+                    .unwrap_or(n_wi);
                 let n_wo_filtered = cache
                     .wos
                     .iter()
                     .position(|wo| base::math::theta(wo) >= $self.theta_limit)
-                    .unwrap();
+                    .unwrap_or(n_wo);
                 let derivative_per_wavelength = $self
                     .iors_i
                     .iter()
@@ -484,17 +489,17 @@ macro_rules! impl_fitting_proxy_using_cartesian_cache {
                 let cache = $self
                     .cache
                     .downcast_ref::<CartesianDirectionsCache>()
-                    .unwrap();
+                    .expect("invalid cartesian directions cache type");
                 let n_wi_filtered = cache
                     .wis
                     .iter()
                     .position(|wi| base::math::theta(wi) >= $self.theta_limit)
-                    .unwrap();
+                    .unwrap_or(n_wi);
                 let n_wo_filtered = cache
                     .wos
                     .iter()
                     .position(|wo| base::math::theta(wo) >= $self.theta_limit)
-                    .unwrap();
+                    .unwrap_or(n_wo);
                 let derivative_per_wavelength = $self
                     .iors_i
                     .iter()
@@ -527,7 +532,7 @@ macro_rules! impl_fitting_proxy_using_cartesian_cache {
                 let cache = $self
                     .cache
                     .downcast_ref::<CartesianDirectionsCache>()
-                    .unwrap();
+                    .expect("invalid cartesian directions cache type");
                 let derivative_per_wavelength = $self
                     .iors_i
                     .iter()
@@ -559,6 +564,7 @@ macro_rules! impl_fitting_proxy_using_cartesian_cache {
 
 impl_fitting_proxy_using_cartesian_cache!(VgonioBrdf, VgonioBrdfParameterisation, self);
 impl_fitting_proxy_using_cartesian_cache!(Yan2018Brdf, Yan2018BrdfParameterisation, self);
+impl_fitting_proxy_using_cartesian_cache!(RglBrdf, RglBrdfParameterisation, self);
 
 // Macro to generate the residuals method for the fitting problem proxy to avoid
 // code duplication.
@@ -646,6 +652,8 @@ impl_lsq_using_cartesian_cache!(iso VgonioBrdf, VgonioBrdfParameterisation, self
 impl_lsq_using_cartesian_cache!(aniso VgonioBrdf, VgonioBrdfParameterisation, self);
 impl_lsq_using_cartesian_cache!(iso Yan2018Brdf, Yan2018BrdfParameterisation, self);
 impl_lsq_using_cartesian_cache!(aniso Yan2018Brdf, Yan2018BrdfParameterisation, self);
+impl_lsq_using_cartesian_cache!(iso RglBrdf, RglBrdfParameterisation, self);
+impl_lsq_using_cartesian_cache!(aniso RglBrdf, RglBrdfParameterisation, self);
 
 impl<'a, const I: Isotropy>
     BrdfFittingProblemProxy<'a, ClausenBrdfParameterisation, ClausenBrdf, I>

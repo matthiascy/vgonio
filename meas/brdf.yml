@@ -9,9 +9,9 @@ type: !bsdf
     num_rays: 375000000
     num_sectors: 2
     max_bounces: 8
-    zenith: 0deg .. =80deg / 10deg
+    zenith: 0deg .. =80deg / 5deg
     azimuth: 0deg .. =360deg / 120deg
-    spectrum: 400 nm .. =700 nm / 100 nm # 400 nm to 700 nm in 300 nm steps resulting in 3 wavelengths
+    spectrum: 400 nm .. =700 nm / 100 nm # 400 nm to 700 nm in 100 nm steps resulting in 4 wavelengths
   receivers:
     # Support for multiple receivers
     - domain: upper_hemisphere
@@ -35,6 +35,7 @@ type: !bsdf
 #        phi: 0.5 deg # only for equal-angle scheme
 #      scheme: beckers
 surfaces:
+  - usr://surfaces/yan2018/isotropic.exr
   # - usr://surfaces/olaf/aluminium4bar100.vgms ~~ curved l1
   #  - usr://surfaces/olaf/al0.vgms ~~ wiggly l1 k100
   # - usr://surfaces/olaf/al0.vgms ~~ wiggly l1 k10
@@ -42,7 +43,7 @@ surfaces:
   # - usr://surfaces/olaf/al2bar100.vgms ~~ wiggly l1 k10
   # - usr://surfaces/olaf/al3bar100.vgms ~~ wiggly l1 k10
   # - usr://surfaces/olaf/al4bar100.vgms ~~ wiggly l1 k10
-  - usr://surfaces/olaf/al65bar100.vgms ~~ wiggly l2 k20
+  #  - usr://surfaces/olaf/al65bar100.vgms ~~ wiggly l2 k20
   #  - usr://surfaces/olaf/al1bar100.vgms ~~ wiggly l1 k100
   #  - usr://surfaces/olaf/al2bar100.vgms ~~ wiggly l1 k100
   #  - usr://surfaces/olaf/al3bar100.vgms ~~ wiggly l1 k100

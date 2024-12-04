@@ -199,7 +199,7 @@ impl AnalyticalFit for RglBrdf {
 
     impl_analytical_fit_trait!(self);
 
-    fn kind(&self) -> MeasuredBrdfKind { todo!() }
+    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Rgl }
 
     fn new_analytical(
         medium_i: Medium,
@@ -298,7 +298,46 @@ impl AnalyticalFit for RglBrdf {
     where
         Self: Sized,
     {
-        todo!()
+        assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
+        if self.params != other.params {
+            panic!("Parameterization must be the same!");
+        }
+        if (limit.as_f64() - std::f64::consts::FRAC_PI_2).abs() < 1e-6 {
+            return self.distance(other, metric, rmetric);
+        }
+        let n_wo = self.params.n_wo();
+        let n_wi_filtered = self
+            .params
+            .incoming
+            .iter()
+            .position(|sph| sph.theta >= limit)
+            .unwrap_or(self.params.n_wi());
+        let n_wo_filtered = self
+            .params
+            .outgoing
+            .iter()
+            .position(|sph| sph.theta >= limit)
+            .unwrap_or(self.params.n_wo());
+        let n_spectrum = self.spectrum.len();
+        let n_samples = n_wi_filtered * n_wo_filtered * n_spectrum;
+
+        let factor = match metric {
+            ErrorMetric::Mse => math::rcp_f64(n_samples as f64),
+            ErrorMetric::Nllsq => 0.5,
+        };
+
+        let mut dist = 0.0;
+        for i in 0..n_wi_filtered {
+            for j in 0..n_wo_filtered {
+                for k in 0..n_spectrum {
+                    let offset = i * n_wo * n_spectrum + j * n_spectrum + k;
+                    let diff = self.samples[offset] as f64 - other.samples[offset] as f64;
+                    dist += math::sqr(diff) * factor;
+                }
+            }
+        }
+
+        dist
     }
 }
 
