@@ -1,3 +1,7 @@
+use crate::{
+    brdf::{analytical::microfacet::MicrofacetBrdf, Bxdf, BxdfFamily},
+    distro::{BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind},
+};
 use base::math::{cart_to_sph, cos_theta, Vec3};
 #[cfg(feature = "fitting")]
 use base::{
@@ -6,11 +10,7 @@ use base::{
 };
 #[cfg(feature = "fitting")]
 use libm::erf;
-
-use crate::{
-    brdf::{analytical::microfacet::MicrofacetBrdf, Bxdf, BxdfFamily},
-    distro::{BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind},
-};
+use num_traits::Float;
 
 /// Microfacet BRDF model based on Beckmann distribution.
 pub type BeckmannBrdf = MicrofacetBrdf<BeckmannDistribution>;
@@ -152,7 +152,7 @@ impl Bxdf for BeckmannBrdf {
             * (-(-bo2).exp() * cos_phi_ho2 * gi * tan_theta_ho * rcp_ao
                 - (-bi2).exp() * cos_phi_hi2 * go * tan_theta_hi * rcp_ai
                 + (sqrt_pi * 2.0 * sin_theta_h2 * rcp_alpha_x4 - sqrt_pi * rcp_alpha_x2) * gi * go);
-        let denominator_x = sqrt_pi * sqrt_pi * sqrt_pi * alpha_y * gi2 * go2;
+        // let denominator_x = sqrt_pi * sqrt_pi * sqrt_pi * alpha_y * gi2 * go2;
 
         let nominator_y = f
             * c
@@ -163,10 +163,72 @@ impl Bxdf for BeckmannBrdf {
                 - (-bi2).exp() * sin_phi_hi2 * go * tan_theta_hi * rcp_ai
                 - (sqrt_pi * gi * go * rcp_alpha_y2)
                 + (sqrt_pi * 2.0 * sin_theta_h2 * tan_theta_h2 * gi * go * rcp_alpha_y4));
-        let denominator_y = sqrt_pi * sqrt_pi * sqrt_pi * alpha_x * gi2 * go2;
+        // let denominator_y = sqrt_pi * sqrt_pi * sqrt_pi * alpha_x * gi2 * go2;
 
-        let dfr_dalpha_x = nominator_x * rcp_f64(denominator_x);
-        let dfr_dalpha_y = nominator_y * rcp_f64(denominator_y);
+        let rcp_gi = rcp_f64(gi);
+        let rcp_go = rcp_f64(go);
+        let mut dfr_dalpha_x = if nominator_x == 0.0 {
+            0.0
+        } else {
+            nominator_x
+                * rcp_gi
+                * rcp_gi
+                * rcp_go
+                * rcp_go
+                * rcp_f64(sqrt_pi * sqrt_pi * sqrt_pi * alpha_y)
+        };
+        let mut dfr_dalpha_y = if nominator_y == 0.0 {
+            0.0
+        } else {
+            nominator_y
+                * rcp_gi
+                * rcp_gi
+                * rcp_go
+                * rcp_go
+                * rcp_f64(sqrt_pi * sqrt_pi * sqrt_pi * alpha_x)
+        };
+
+        // let mut dfr_dalpha_x = nominator_x * rcp_f64(denominator_x);
+        // let mut dfr_dalpha_y = nominator_y * rcp_f64(denominator_y);
+        // if dfr_dalpha_x.is_nan() || dfr_dalpha_x.is_infinite() {
+        //     dfr_dalpha_x = 0.0;
+        // }
+        // if dfr_dalpha_y.is_nan() || dfr_dalpha_y.is_infinite() {
+        //     dfr_dalpha_y = 0.0;
+        // }
+        if dfr_dalpha_x.is_infinite() || dfr_dalpha_x.is_nan() {
+            println!(
+                "nominator_x: {}, gi: {}, go: {}, alpha_x: {}",
+                nominator_x, gi, go, alpha_x
+            );
+        }
+        if dfr_dalpha_y.is_infinite() || dfr_dalpha_y.is_nan() {
+            println!(
+                "nominator_y: {}, gi: {}, go: {}, alpha_y: {}",
+                nominator_y, gi, go, alpha_y
+            );
+        }
+        assert!(!nominator_x.is_nan(), "nominator_x is NaN");
+        assert!(nominator_x.is_finite(), "nominator_x is infinite");
+        assert!(!nominator_y.is_nan(), "nominator_y is NaN");
+        assert!(nominator_y.is_finite(), "nominator_y is infinite");
+        assert!(!alpha_x.is_nan(), "alpha_x is NaN");
+        assert!(!alpha_x.is_infinite(), "alpha_x is infinite");
+        assert!(!alpha_y.is_nan(), "alpha_y is NaN");
+        assert!(!alpha_y.is_infinite(), "alpha_y is infinite");
+        assert!(!gi.is_nan(), "gi is NaN");
+        assert!(!gi.is_infinite(), "gi is infinite");
+        assert!(!go.is_nan(), "go is NaN");
+        assert!(!go.is_infinite(), "go is infinite");
+        assert!(!gi2.is_nan(), "gi2 is NaN");
+        assert!(!gi2.is_infinite(), "gi2 is infinite");
+        assert!(!go2.is_nan(), "go2 is NaN");
+        assert!(!go2.is_infinite(), "go2 is infinite");
+        assert!(!dfr_dalpha_x.is_nan(), "dfr_dalpha_x is NaN");
+        assert!(!dfr_dalpha_x.is_infinite(), "dfr_dalpha_x is infinite");
+        assert!(!dfr_dalpha_y.is_nan(), "dfr_dalpha_y is NaN");
+        assert!(!dfr_dalpha_y.is_infinite(), "dfr_dalpha_y is infinite");
+
         [dfr_dalpha_x, dfr_dalpha_y]
     }
 

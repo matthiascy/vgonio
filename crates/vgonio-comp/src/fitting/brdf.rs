@@ -108,19 +108,32 @@ fn initialise_microfacet_bsdf_models(
     max: f64,
     num: u32,
     target: MicrofacetDistroKind,
+    isotropy: Isotropy,
 ) -> Vec<Box<dyn Bxdf<Params = [f64; 2]>>> {
     let step = (max - min) / num as f64;
     match target {
         MicrofacetDistroKind::TrowbridgeReitz => (0..=num)
             .map(|i| {
                 let alpha = min + step * i as f64;
-                Box::new(TrowbridgeReitzBrdf::new(alpha, alpha)) as _
+                match isotropy {
+                    Isotropy::Isotropic => Box::new(TrowbridgeReitzBrdf::new(alpha, alpha)) as _,
+                    Isotropy::Anisotropic => Box::new(TrowbridgeReitzBrdf::new(
+                        alpha + 0.001 * (-1.0f64).powi(i as i32),
+                        alpha + 0.001 * (-1.0f64).powi(i as i32 + 1),
+                    )) as _,
+                }
             })
             .collect(),
         MicrofacetDistroKind::Beckmann => (0..=num)
             .map(|i| {
                 let alpha = min + step * i as f64;
-                Box::new(BeckmannBrdf::new(alpha, alpha)) as _
+                match isotropy {
+                    Isotropy::Isotropic => Box::new(BeckmannBrdf::new(alpha, alpha)) as _,
+                    Isotropy::Anisotropic => Box::new(BeckmannBrdf::new(
+                        alpha + 0.001 * (-1.0f64).powi(i as i32),
+                        alpha + 0.001 * (-1.0f64).powi(i as i32 + 1),
+                    )) as _,
+                }
             })
             .collect(),
     }
@@ -182,6 +195,7 @@ impl<'a, P: BrdfParameterisation> FittingProblem for MicrofacetBrdfFittingProble
                 self.initial_guess.stop,
                 self.initial_guess.step_count() as u32 - 1,
                 self.target,
+                isotropy,
             )
             .into_par_iter()
             .filter_map(|model| {
