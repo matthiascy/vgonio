@@ -1,14 +1,20 @@
-use crate::brdf::measured::{BrdfParameterisation, MeasuredBrdf, Origin, ParametrisationKind};
-// #[cfg(feature = "fitting")]
+#[cfg(feature = "fitting")]
 use crate::brdf::measured::AnalyticalFit;
+use crate::brdf::{
+    measured::{BrdfParameterisation, MeasuredBrdf, Origin, ParametrisationKind},
+    Bxdf,
+};
 #[cfg(feature = "io")]
 use base::error::VgonioError;
 use base::{
     impl_measured_data_trait,
-    units::{nm, Radians},
-    MeasuredBrdfKind, MeasuredData, MeasurementKind,
+    medium::Medium,
+    optics::ior::RefractiveIndexRegistry,
+    units::{nm, Nanometres, Radians},
+    ErrorMetric, MeasuredBrdfKind, MeasuredData, MeasurementKind, ResidualErrorMetric,
 };
 use jabr::array::{s, DArr, DyArr};
+use std::any::Any;
 #[cfg(feature = "io")]
 use std::path::Path;
 
@@ -220,5 +226,45 @@ impl MerlBrdf {
     pub fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
 }
 
-// #[cfg(feature = "fitting")]
-impl AnalyticalFit for MerlBrdf {}
+#[cfg(feature = "fitting")]
+impl AnalyticalFit for MerlBrdf {
+    type Params = MerlBrdfParameterisation;
+
+    impl_analytical_fit_trait!(self);
+
+    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
+
+    fn new_analytical(
+        medium_i: Medium,
+        medium_t: Medium,
+        spectrum: &[Nanometres],
+        params: &Self::Params,
+        model: &dyn Bxdf<Params = [f64; 2]>,
+        iors: &RefractiveIndexRegistry,
+    ) -> Self
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+
+    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: ResidualErrorMetric) -> f64
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+
+    fn filtered_distance(
+        &self,
+        other: &Self,
+        metric: ErrorMetric,
+        rmetric: ResidualErrorMetric,
+        limit: Radians,
+    ) -> f64
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+}
