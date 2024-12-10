@@ -5,6 +5,7 @@ pub mod mfd;
 pub mod params;
 
 use crate::{
+    app::cli::ansi::YELLOW_GT,
     io::{
         vgmo::{vgmo_header_ext_from_data, VgmoHeaderExt},
         OutputFileFormatOption,
@@ -29,7 +30,7 @@ use base::{
     MeasuredBrdfKind::Rgl,
     MeasuredData, MeasurementKind, Version,
 };
-use bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, VgonioBrdf, Yan2018Brdf};
+use bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan2018Brdf};
 use chrono::{DateTime, Local};
 use rand::{
     distributions::{Distribution, Uniform},
@@ -205,6 +206,21 @@ impl Measurement {
             let loaded = RglBrdf::load(filepath, medium);
             return Ok(Measurement {
                 name: format!("bsdf_{}", filepath.file_name().unwrap().to_str().unwrap()),
+                source: MeasurementSource::Loaded(filepath.to_path_buf()),
+                timestamp: Local::now(),
+                measured: Box::new(loaded),
+            });
+        } else if filepath.extension().unwrap() == "binary" {
+            println!(
+                "  {YELLOW_GT} Loading MERL BSDF file: {}",
+                filepath.display()
+            );
+            let loaded = MerlBrdf::load(filepath)?;
+            return Ok(Measurement {
+                name: format!(
+                    "merl_bsdf_{}",
+                    filepath.file_name().unwrap().to_str().unwrap()
+                ),
                 source: MeasurementSource::Loaded(filepath.to_path_buf()),
                 timestamp: Local::now(),
                 measured: Box::new(loaded),

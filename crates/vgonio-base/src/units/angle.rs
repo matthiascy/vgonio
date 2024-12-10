@@ -1,7 +1,7 @@
 use crate::math::NumericCast;
 use core::fmt::{Debug, Display};
 use std::str::FromStr;
-
+use num_traits::Zero;
 // TODO: refactor this module to use const generics
 
 /// Radian unit.
@@ -214,6 +214,12 @@ impl<A: AngleUnit> Angle<A> {
 
     /// Returns the largest angle between `self` and `other`.
     pub fn max(self, other: Self) -> Self { Self::new(self.value.max(other.value)) }
+}
+
+impl<A: AngleUnit> Zero for Angle<A> {
+    fn zero() -> Self { Self::new(0.0) }
+
+    fn is_zero(&self) -> bool { self.value == 0.0 }
 }
 
 impl<A: AngleUnit> From<f32> for Angle<A> {
