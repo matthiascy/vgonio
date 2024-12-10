@@ -97,9 +97,6 @@ unsafe impl Send for MerlBrdf {}
 unsafe impl Sync for MerlBrdf {}
 
 impl MerlBrdf {
-    /// Get the index of the zenith angle for the half-vector.
-    pub fn phi_d_index(phi_d: Radians) -> usize { (phi_d / Radians::PI).round() as usize }
-
     #[cfg(feature = "io")]
     pub fn load<P: AsRef<Path>>(filepath: P) -> Result<Self, VgonioError> {
         use std::{fs::File, io::Read};

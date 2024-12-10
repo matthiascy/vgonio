@@ -1,8 +1,8 @@
 use crate::{
     brdf::{
         measured::{
-            AnalyticalFit, BrdfParameterisation, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf,
-            Origin, ParametrisationKind, VgonioBrdfParameterisation,
+            BrdfParameterisation, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
+            ParametrisationKind, VgonioBrdfParameterisation,
         },
         Bxdf,
     },
@@ -19,6 +19,9 @@ use base::{
 };
 use jabr::array::DyArr;
 use std::path::Path;
+
+#[cfg(feature = "fitting")]
+use crate::brdf::measured::AnalyticalFit;
 
 /// Parametrisation of the BRDF measured in RGL (https://rgl.epfl.ch/pages/lab/material-database) at EPFL by Jonathan Dupuy and Wenzel Jakob.
 pub type RglBrdf = MeasuredBrdf<RglBrdfParameterisation, 3>;
