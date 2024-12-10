@@ -1,5 +1,8 @@
 use crate::distro::MicrofacetDistroKind;
-use base::{math::Vec3, Isotropy};
+use base::{
+    math::{Sph2, Vec3},
+    Isotropy,
+};
 use num_traits::Float;
 use std::fmt::Debug;
 
@@ -189,7 +192,7 @@ impl<P: 'static + Clone> Clone for Box<dyn Bxdf<Params = P>> {
 /// * `i` - The incident direction.
 /// * `o` - The outgoing direction.
 pub fn io2hd(i: &Vec3, o: &Vec3) -> (Vec3, Vec3) {
-    todo!()
+    todo!("io2hd")
 }
 
 #[rustfmt::skip]

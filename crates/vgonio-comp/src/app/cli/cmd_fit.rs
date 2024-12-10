@@ -18,7 +18,7 @@ use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
         measured::{
-            rgl::RglBrdf, yan::Yan2018Brdf, AnalyticalFit, ClausenBrdf, VgonioBrdf,
+            merl::MerlBrdf, rgl::RglBrdf, yan::Yan2018Brdf, AnalyticalFit, ClausenBrdf, VgonioBrdf,
             VgonioBrdfParameterisation,
         },
         Bxdf, BxdfFamily,
@@ -210,7 +210,29 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             }
                         }
                     },
-                    MeasuredBrdfKind::Merl => {},
+                    MeasuredBrdfKind::Merl => {
+                        for input in &opts.inputs {
+                            let measurement = cache
+                                .load_micro_surface_measurement(&config, &input)
+                                .unwrap();
+                            println!("Get merl measurement");
+                            if let Some(measured) = cache
+                                .get_measurement(measurement)
+                                .unwrap()
+                                .measured
+                                .downcast_ref::<MerlBrdf>()
+                            {
+                                measured_brdf_fitting(
+                                    &opts,
+                                    &input,
+                                    brdf,
+                                    alpha,
+                                    &cache.iors,
+                                    theta_limit,
+                                );
+                            }
+                        }
+                    },
                     MeasuredBrdfKind::Utia => {},
                     MeasuredBrdfKind::Vgonio => {
                         for input in &opts.inputs {

@@ -21,6 +21,8 @@ pub enum Medium {
     /// Copper.
     #[serde(rename = "cu")]
     Copper = 0x03,
+    #[serde(rename = "unknown")]
+    Unknown,
 }
 
 impl From<u8> for Medium {
@@ -61,6 +63,7 @@ impl Medium {
         match self {
             Self::Air | Self::Vacuum => MaterialKind::Insulator,
             Self::Aluminium | Self::Copper => MaterialKind::Conductor,
+            Self::Unknown => panic!("Unknown medium"),
         }
     }
 
@@ -72,6 +75,7 @@ impl Medium {
             Self::Air => buf[0..3].copy_from_slice(b"air"),
             Self::Aluminium => buf[0..3].copy_from_slice(b"al\0"),
             Self::Copper => buf[0..3].copy_from_slice(b"cu\0"),
+            Self::Unknown => panic!("Unknown medium"),
         }
     }
 

@@ -42,10 +42,10 @@ macro_rules! impl_analytical_fit_trait {
 
 pub mod clausen;
 pub mod merl;
+pub mod rgl;
 pub mod utia;
 pub mod vgonio;
 pub mod yan;
-pub mod rgl;
 
 /// The origin of the measured BRDF.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -76,6 +76,7 @@ pub trait BrdfParameterisation: PartialEq {
 
 #[cfg(feature = "fitting")]
 use crate::brdf::Bxdf;
+
 pub use clausen::*;
 pub use merl::*;
 pub use utia::*;
