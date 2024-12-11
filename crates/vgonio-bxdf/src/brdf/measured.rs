@@ -5,6 +5,7 @@ use base::{
 };
 use jabr::array::DyArr;
 use std::{fmt::Debug, ops::Index};
+use log::warn;
 
 #[cfg(feature = "fitting")]
 macro_rules! impl_analytical_fit_trait {
@@ -159,6 +160,26 @@ pub trait AnalyticalFit {
     fn as_any(&self) -> &dyn std::any::Any;
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+}
+
+/// A proxy for a BRDF that can be fitted analytically.
+///
+/// This is useful when the stored raw BRDF data is in compressed form and
+/// cannot be directly used for fitting. The proxy can be used to store
+/// the resampled BRDF data to be used for fitting.
+pub struct BrdfAnalyticalFitProxy<'a, T> {
+    /// The raw BRDF data that the proxy is associated with.
+    brdf: &'a T,
+    /// Incident angles (polar angle) of the resampled BRDF data.
+    i_thetas: DyArr<f32>,
+    /// Incident angles (azimuthal angle) of the resampled BRDF data.
+    i_phis: DyArr<f32>,
+    /// Outgoing angles (polar angle) of the resampled BRDF data.
+    o_thetas: DyArr<f32>,
+    /// Outgoing angles (azimuthal angle) of the resampled BRDF data.
+    o_phis: DyArr<f32>,
+    /// The resampled BRDF data.
+    resampled: DyArr<f32, 4>
 }
 
 /// A BRDF measured either in the real world or in a simulation.

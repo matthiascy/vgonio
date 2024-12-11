@@ -80,7 +80,7 @@ impl BrdfParameterisation for MerlBrdfParameterisation {
 ///
 /// The original data of MERL BRDF is stored as row-major order in a 1D array
 /// with dimensions: (channel, theta_h, theta_d, phi_d), where channel is the
-/// index of the RGB color channels (0: Red, 1: Green, 2: Blue). The right-most
+/// index of the RGB colour channels (0: Red, 1: Green, 2: Blue). The right-most
 /// index is the fastest varying index.
 ///
 /// Inside the `MerlBrdf` structure, the data is stored as a 4D row-majored
@@ -97,6 +97,39 @@ unsafe impl Send for MerlBrdf {}
 unsafe impl Sync for MerlBrdf {}
 
 impl MerlBrdf {
+    /// Lookup the index of the azimuthal angle for the difference vector.
+    pub fn phi_d_index(&self, phi_d: Radians) -> usize {
+        // Make sure the angle is in the range [0, π].
+        let phi_d = if phi_d < Radians::ZERO {
+            phi_d + Radians::PI
+        } else if phi_d >= Radians::PI{
+            // Mirror the angle to the range [0, π].
+            phi_d - Radians::PI
+        } else {
+            phi_d
+        };
+
+        let index = ((phi_d / Radians::PI) * MerlBrdfParameterisation::RES_PHI_D as f32).round() as i32;
+        index.clamp(0, MerlBrdfParameterisation::RES_PHI_D as i32 - 1) as usize
+    }
+
+    /// Lookup the index of the zenith angle for the half-vector.
+    pub fn theta_d_index(&self, theta_d: Radians) -> usize {
+        assert!(theta_d >= Radians::ZERO && theta_d <= Radians::HALF_PI);
+        let index = ((theta_d * 2.0 / Radians::PI) * MerlBrdfParameterisation::RES_THETA_D as f32).round() as i32;
+        index.clamp(0, MerlBrdfParameterisation::RES_THETA_D as i32 - 1) as usize
+    }
+
+    /// Lookup the index of the zenith angle for the difference vector.
+    ///
+    /// The mapping is not linear.
+    pub fn theta_h_index(&self, theta_h: Radians) -> usize {
+        assert!(theta_h >= Radians::ZERO && theta_h <= Radians::HALF_PI);
+        let theta_h_deg = theta_h * 0.5 / Radians::PI * BRDF_THETA_H as f32;
+        let index = (theta_h_deg * MerlBrdfParameterisation::RES_THETA_H as f32).sqrt().round() as i32;
+        index.clamp(0, MerlBrdfParameterisation::RES_THETA_H as i32 - 1) as usize
+    }
+
     #[cfg(feature = "io")]
     pub fn load<P: AsRef<Path>>(filepath: P) -> Result<Self, VgonioError> {
         use std::{fs::File, io::Read};
@@ -242,7 +275,25 @@ impl AnalyticalFit for MerlBrdf {
     where
         Self: Sized,
     {
-        todo!()
+        let iors_i = iors.ior_of_spectrum(medium_i, spectrum).unwrap();
+        let iors_t = iors.ior_of_spectrum(medium_t, spectrum).unwrap();
+        let n_spectrum = 3;
+        let mut samples = DyArr::<f32, 3>::zeros([
+            MerlBrdfParameterisation::RES_THETA_H as usize,
+            MerlBrdfParameterisation::RES_THETA_D as usize,
+            MerlBrdfParameterisation::RES_PHI_D as usize,
+            n_spectrum,
+        ]);
+        params.zenith_h.iter().enumerate().for_each(|(i, &theta_h)| {
+            params.zenith_d.iter().enumerate().for_each(|(j, &theta_d)| {
+                params.azimuth_d.iter().enumerate().for_each(|(k, &phi_d)| {
+                    let wd = Sph2::new(theta_d, phi_d);
+                    let d = wd.to_cartesian();
+                    let wh = Sph2::new(theta_h, 0.0);
+                    let (i, o) = hd2io(, d);
+                });
+            });
+        });
     }
 
     fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: ResidualErrorMetric) -> f64

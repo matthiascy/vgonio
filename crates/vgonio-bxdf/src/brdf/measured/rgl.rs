@@ -215,8 +215,8 @@ impl AnalyticalFit for RglBrdf {
     where
         Self: Sized,
     {
-        let iors_t = iors.ior_of_spectrum(medium_i, spectrum).unwrap();
-        let iors_i = iors.ior_of_spectrum(medium_t, spectrum).unwrap();
+        let iors_i = iors.ior_of_spectrum(medium_i, spectrum).unwrap();
+        let iors_t = iors.ior_of_spectrum(medium_t, spectrum).unwrap();
         let n_spectrum = spectrum.len();
         let n_wi = params.n_wi();
         let n_wo = params.n_wo();
