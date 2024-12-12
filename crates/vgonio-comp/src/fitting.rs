@@ -32,7 +32,7 @@ mod mfd;
 pub use brdf::*;
 pub use mfd::*;
 
-use base::{Isotropy, ResidualErrorMetric};
+use base::{Isotropy, Weighting};
 use bxdf::{
     brdf::{Bxdf, BxdfFamily},
     distro::{MicrofacetDistribution, MicrofacetDistroKind},
@@ -212,6 +212,6 @@ pub trait FittingProblem {
     fn lsq_lm_fit(
         self,
         isotropy: Isotropy,
-        rmetric: ResidualErrorMetric,
+        rmetric: Weighting,
     ) -> FittingReport<Self::Model>;
 }

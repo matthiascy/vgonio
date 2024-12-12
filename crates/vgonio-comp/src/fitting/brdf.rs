@@ -1,5 +1,5 @@
 use crate::{
-    fitting::{FittingProblem, FittingReport, ResidualErrorMetric},
+    fitting::{FittingProblem, FittingReport, Weighting},
     measure::bsdf::MeasuredBrdfLevel,
 };
 use base::{
@@ -185,7 +185,7 @@ impl<'a, P: BrdfParameterisation> FittingProblem for MicrofacetBrdfFittingProble
     fn lsq_lm_fit(
         self,
         isotropy: Isotropy,
-        rmetric: ResidualErrorMetric,
+        rmetric: Weighting,
     ) -> FittingReport<Self::Model> {
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
@@ -269,7 +269,7 @@ where
     /// angles.
     theta_limit: Radians,
     /// Error metric for the residuals.
-    error_metric: ResidualErrorMetric,
+    error_metric: Weighting,
     /// Cached data for the fitting problem.
     cache: Box<dyn Any>,
 }
@@ -293,7 +293,7 @@ macro_rules! impl_fitting_proxy_using_cartesian_cache {
                 iors_i: &'a [Ior],
                 iors_t: &'a [Ior],
                 theta_limit: Radians,
-                error_metric: ResidualErrorMetric,
+                error_metric: Weighting,
             ) -> Self {
                 let cache = CartesianDirectionsCache {
                     wis: measured.params().incoming_cartesian(),
@@ -340,7 +340,7 @@ macro_rules! impl_fitting_proxy_using_cartesian_cache {
                                 $self.iors_t,
                             );
                             match $self.error_metric {
-                                ResidualErrorMetric::Identity => {
+                                Weighting::None => {
                                     samples
                                         .iter()
                                         .zip(modelled_values.iter())
@@ -350,7 +350,7 @@ macro_rules! impl_fitting_proxy_using_cartesian_cache {
                                                 .write(modelled - *measured as f64);
                                         });
                                 },
-                                ResidualErrorMetric::JLow => {
+                                Weighting::JLow => {
                                     samples
                                         .iter()
                                         .zip(modelled_values.iter())
@@ -678,7 +678,7 @@ impl<'a, const I: Isotropy>
         iors_i: &'a [Ior],
         iors_t: &'a [Ior],
         theta_limit: Radians,
-        error_metric: ResidualErrorMetric,
+        error_metric: Weighting,
     ) -> Self {
         Self {
             measured,
@@ -723,13 +723,13 @@ impl<'a, const I: Isotropy>
                             let measured =
                                 &self.measured.samples.as_slice()[offset..offset + n_spectrum];
 
-                            if self.error_metric == ResidualErrorMetric::Identity {
+                            if self.error_metric == Weighting::None {
                                 modelled.iter_mut().zip(measured.iter()).for_each(
                                     |(modelled, measured)| {
                                         *modelled = *measured as f64 - *modelled;
                                     },
                                 );
-                            } else if self.error_metric == ResidualErrorMetric::JLow {
+                            } else if self.error_metric == Weighting::JLow {
                                 modelled.iter_mut().zip(measured.iter()).for_each(
                                     |(modelled, measured)| {
                                         let me = (*measured as f64 * cos_theta_i + 1.0).ln();

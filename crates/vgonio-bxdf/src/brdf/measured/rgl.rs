@@ -15,7 +15,7 @@ use base::{
     optics::ior::RefractiveIndexRegistry,
     range::RangeByStepSizeInclusive,
     units::{deg, rad, Nanometres, Radians},
-    ErrorMetric, MeasuredBrdfKind, MeasuredData, MeasurementKind, ResidualErrorMetric,
+    ErrorMetric, MeasuredBrdfKind, MeasuredData, MeasurementKind, Weighting,
 };
 use jabr::array::DyArr;
 use std::path::Path;
@@ -247,7 +247,7 @@ impl AnalyticalFit for RglBrdf {
         }
     }
 
-    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: ResidualErrorMetric) -> f64
+    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: Weighting) -> f64
     where
         Self: Sized,
     {
@@ -264,7 +264,7 @@ impl AnalyticalFit for RglBrdf {
             ErrorMetric::Nllsq => 0.5,
         };
         match rmetric {
-            ResidualErrorMetric::Identity => {
+            Weighting::None => {
                 self.samples
                     .iter()
                     .zip(other.samples.iter())
@@ -272,8 +272,8 @@ impl AnalyticalFit for RglBrdf {
                         let diff = *x as f64 - *y as f64;
                         acc + math::sqr(diff) * factor
                     })
-            },
-            ResidualErrorMetric::JLow => {
+            }
+            Weighting::JLow => {
                 self.snapshots()
                     .zip(other.snapshots())
                     .fold(0.0f64, |acc, (xs, ys)| {
@@ -295,7 +295,7 @@ impl AnalyticalFit for RglBrdf {
         &self,
         other: &Self,
         metric: ErrorMetric,
-        rmetric: ResidualErrorMetric,
+        rmetric: Weighting,
         limit: Radians,
     ) -> f64
     where

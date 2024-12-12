@@ -1,7 +1,7 @@
 #![feature(decl_macro)]
 #![feature(associated_type_defaults)]
 #![feature(downcast_unchecked)]
-
+#![feature(stdarch_x86_avx512)]
 extern crate core;
 
 pub mod brdf;

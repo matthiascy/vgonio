@@ -4458,6 +4458,7 @@ dependencies = [
  "libm",
  "log",
  "num-traits",
+ "rayon",
  "serde-pickle",
  "serde_json",
  "vgonio-base",

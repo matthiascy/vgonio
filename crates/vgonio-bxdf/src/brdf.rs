@@ -1,11 +1,10 @@
 use crate::distro::MicrofacetDistroKind;
 use base::{
-    math::{Sph2, Vec3},
+    math::{Mat3, Sph2, Vec3},
     Isotropy,
 };
 use num_traits::Float;
 use std::fmt::Debug;
-use base::math::Mat3;
 
 pub mod analytical;
 pub mod lambert;
@@ -13,6 +12,9 @@ pub mod measured;
 
 #[cfg(feature = "fitting")]
 use base::optics::ior::Ior;
+
+#[cfg(feature = "fitting")]
+pub mod fitting;
 
 /// Different kinds of BRDFs.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
@@ -28,7 +30,7 @@ pub enum BxdfFamily {
     Utia,
 }
 
-/// Common interface for BxDFs.
+/// Common interface for BxDFs (analytical BRDF models).
 pub trait Bxdf: Send + Sync + Debug + 'static {
     /// The type of the parameters of the BRDF model.
     type Params;

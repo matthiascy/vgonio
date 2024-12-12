@@ -1,5 +1,5 @@
 use crate::{
-    fitting::{FittingProblem, FittingReport, ResidualErrorMetric},
+    fitting::{FittingProblem, FittingReport, Weighting},
     measure::{
         mfd::{MeasuredGafData, MeasuredNdfData},
         params::NdfMeasurementMode,
@@ -69,7 +69,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
     fn lsq_lm_fit(
         self,
         isotropy: Isotropy,
-        _re: ResidualErrorMetric,
+        _re: Weighting,
     ) -> FittingReport<Self::Model> {
         println!("Fitting MDF with isotropy: {:?}", isotropy);
         use rayon::iter::{IntoParallelIterator, ParallelIterator};

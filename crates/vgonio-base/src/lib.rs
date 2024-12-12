@@ -164,28 +164,37 @@ pub mod utils {
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ErrorMetric {
-    /// Mean squared error.
+    /// L1 norm: sum of the absolute differences between the observed data and
+    /// the predicted model values.
+    L1,
+    /// L2 norm: square root of the sum of the squared differences between the
+    /// observed data and the predicted model values.
+    L2,
+    /// Mean squared error: the average of the squared differences between the
+    /// observed data and the predicted model values.
     Mse,
-    /// Most commonly used error metrics in non-linear least squares fitting.
-    /// Which is the half of the sum of the squares of the differences between
-    /// the measured data and the model.
+    /// Root mean squared error: square root of the mean squared error.
+    Rmse,
+    /// 0.5 times the sum of squared residuals.
     #[default]
     Nllsq,
 }
 
-// TODO: rename to loss function
-/// Loss function to use for the least-squares fitting.
+/// Weighting function to apply to the observed data and predicted model values.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResidualErrorMetric {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Weighting {
     /// Nothing applied to the measured data and model values.
-    #[cfg_attr(feature = "cli", clap(name = "identity"))]
-    Identity,
+    #[cfg_attr(feature = "cli", clap(name = "none"))]
+    #[default]
+    None,
     /// From paper "BRDF Models for Accurate and Efficient Rendering of Glossy
     /// Surfaces".
     /// ln(1 + cos_theta_i * d) where d is the measured data or model value.
-    #[cfg_attr(feature = "cli", clap(name = "jlow"))]
-    JLow,
+    /// This weighting function is trying to reduce the influence of the
+    /// grazing angles.
+    #[cfg_attr(feature = "cli", clap(name = "lncos"))]
+    LnCos,
 }
 
 /// The kind of the measured BRDF.
@@ -202,7 +211,7 @@ pub enum MeasuredBrdfKind {
     /// The measured BRDF by UTIA at Czech Technical University.
     Utia,
     #[cfg_attr(feature = "cli", clap(name = "rgl"))]
-    /// The measured BRDF by Dupuy, Jakob in RGL at EPFL.
+    /// The measured BRDF by Dupuy and Jakob in RGL at EPFL.
     Rgl,
     #[cfg_attr(feature = "cli", clap(name = "vgonio"))]
     /// The simulated BRDF by vgonio.

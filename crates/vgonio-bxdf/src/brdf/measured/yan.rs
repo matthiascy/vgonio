@@ -17,7 +17,7 @@ use base::{
 };
 #[cfg(feature = "fitting")]
 use base::{
-    math, optics::ior::RefractiveIndexRegistry, units::Radians, ErrorMetric, ResidualErrorMetric,
+    math, optics::ior::RefractiveIndexRegistry, units::Radians, ErrorMetric, Weighting,
 };
 use jabr::array::DyArr;
 use std::{cmp::Ordering, fmt::Debug, path::Path, str::FromStr};
@@ -551,7 +551,7 @@ impl AnalyticalFit for Yan2018Brdf {
         }
     }
 
-    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: ResidualErrorMetric) -> f64
+    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: Weighting) -> f64
     where
         Self: Sized,
     {
@@ -568,14 +568,14 @@ impl AnalyticalFit for Yan2018Brdf {
             ErrorMetric::Nllsq => 0.5,
         };
         match rmetric {
-            ResidualErrorMetric::Identity => self
+            Weighting::None => self
                 .samples
                 .iter()
                 .zip(other.samples.iter())
                 .fold(0.0, |acc, (s1, s2)| {
                     acc + math::sqr(*s1 as f64 - *s2 as f64) * factor
                 }),
-            ResidualErrorMetric::JLow => {
+            Weighting::JLow => {
                 self.snapshots()
                     .zip(other.snapshots())
                     .fold(0.0, |acc, (xs, ys)| {
@@ -598,7 +598,7 @@ impl AnalyticalFit for Yan2018Brdf {
         &self,
         other: &Self,
         metric: ErrorMetric,
-        rmetric: ResidualErrorMetric,
+        rmetric: Weighting,
         limit: Radians,
     ) -> f64
     where

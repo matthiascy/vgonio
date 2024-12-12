@@ -12,7 +12,7 @@ use base::{
     MeasuredBrdfKind, MeasuredData, MeasurementKind,
 };
 #[cfg(feature = "fitting")]
-use base::{math, optics::ior::RefractiveIndexRegistry, ErrorMetric, ResidualErrorMetric};
+use base::{math, optics::ior::RefractiveIndexRegistry, ErrorMetric, Weighting};
 use jabr::array::DyArr;
 use std::{
     fs::File,
@@ -362,7 +362,7 @@ impl AnalyticalFit for ClausenBrdf {
     }
 
     /// Computes the distance between the measured data and the model.
-    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: ResidualErrorMetric) -> f64 {
+    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: Weighting) -> f64 {
         assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
         if self.params() != other.params() {
             panic!("Parameterization must be the same!");
@@ -372,7 +372,7 @@ impl AnalyticalFit for ClausenBrdf {
             ErrorMetric::Nllsq => 0.5,
         };
         match rmetric {
-            ResidualErrorMetric::Identity => self
+            Weighting::None => self
                 .samples()
                 .iter()
                 .zip(other.samples().iter())
@@ -380,7 +380,7 @@ impl AnalyticalFit for ClausenBrdf {
                     let diff = *a as f64 - *b as f64;
                     acc + math::sqr(diff) * factor
                 }),
-            ResidualErrorMetric::JLow => {
+            Weighting::JLow => {
                 let n_spectrum = self.n_spectrum();
                 let n_wo = self.n_wo();
                 self.params
@@ -406,7 +406,7 @@ impl AnalyticalFit for ClausenBrdf {
         &self,
         other: &Self,
         metric: ErrorMetric,
-        rmetric: ResidualErrorMetric,
+        rmetric: Weighting,
         limit: Radians,
     ) -> f64 {
         log::debug!("Filtering distance with limit: {}", limit.prettified());

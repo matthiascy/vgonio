@@ -35,7 +35,7 @@ use base::{
     handle::Handle,
     io::{CompressionScheme, FileEncoding},
     units::Radians,
-    MeasurementKind, ResidualErrorMetric,
+    MeasurementKind, Weighting,
 };
 #[cfg(feature = "fitting")]
 use bxdf::brdf::BxdfFamily;
@@ -260,7 +260,7 @@ impl VgonioGui {
                                         &cache.iors,
                                         Radians::HALF_PI,
                                     );
-                                    problem.lsq_lm_fit(*isotropy, ResidualErrorMetric::Identity)
+                                    problem.lsq_lm_fit(*isotropy, Weighting::None)
                                 });
                                 report.print_fitting_report();
                                 // TODO: update the fitted models
@@ -304,7 +304,7 @@ impl VgonioGui {
                             };
                             let problem =
                                 MicrofacetDistributionFittingProblem::new(data, *model, *scale);
-                            problem.lsq_lm_fit(*isotropy, ResidualErrorMetric::Identity)
+                            problem.lsq_lm_fit(*isotropy, Weighting::None)
                         });
                         report.print_fitting_report();
                         if let Some(model) = report.best_model() {

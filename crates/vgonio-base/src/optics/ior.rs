@@ -16,30 +16,30 @@ use std::path::Path;
 
 /// Refractive index database.
 #[derive(Debug)]
-pub struct RefractiveIndexRegistry(pub(crate) HashMap<Medium, Vec<RefractiveIndexRecord>>);
+pub struct IorRegistry(pub(crate) HashMap<Medium, Vec<IorRecord>>);
 
-impl Default for RefractiveIndexRegistry {
+impl Default for IorRegistry {
     fn default() -> Self { Self::new() }
 }
 
-impl Deref for RefractiveIndexRegistry {
-    type Target = HashMap<Medium, Vec<RefractiveIndexRecord>>;
+impl Deref for IorRegistry {
+    type Target = HashMap<Medium, Vec<IorRecord>>;
     fn deref(&self) -> &Self::Target { &self.0 }
 }
 
-impl DerefMut for RefractiveIndexRegistry {
+impl DerefMut for IorRegistry {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
-impl RefractiveIndexRegistry {
+impl IorRegistry {
     /// Create an empty database.
-    pub fn new() -> RefractiveIndexRegistry { RefractiveIndexRegistry(HashMap::new()) }
+    pub fn new() -> IorRegistry { IorRegistry(HashMap::new()) }
 
     /// Returns the refractive index of the given medium at the given wavelength
     /// (in nanometres).
-    pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<RefractiveIndexRecord> {
+    pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<IorRecord> {
         if medium == Medium::Vacuum {
-            return Some(RefractiveIndexRecord::VACUUM);
+            return Some(IorRecord::VACUUM);
         }
         let refractive_indices = self
             .get(&medium)
@@ -68,7 +68,7 @@ impl RefractiveIndexRegistry {
             let diff_k = ior_after.k - ior_before.k;
             let t = (wavelength - ior_before.wavelength)
                 / (ior_after.wavelength - ior_before.wavelength);
-            Some(RefractiveIndexRecord {
+            Some(IorRecord {
                 wavelength,
                 ior: Ior {
                     eta: ior_before.eta + t * diff_eta,
@@ -97,7 +97,7 @@ impl RefractiveIndexRegistry {
     #[cfg(feature = "io")]
     /// Read a csv file and return a vector of refractive indices.
     /// File format: "wavelength, µm", "eta", "k"
-    pub fn read_iors_from_file(path: &Path) -> Option<Box<[RefractiveIndexRecord]>> {
+    pub fn read_iors_from_file(path: &Path) -> Option<Box<[IorRecord]>> {
         std::fs::File::open(path)
             .map(|f| {
                 let mut rdr = csv::Reader::from_reader(f);
@@ -124,7 +124,7 @@ impl RefractiveIndexRegistry {
                                 let wavelength = record[0].parse::<f32>().unwrap() * coefficient;
                                 let eta = record[1].parse::<f32>().unwrap();
                                 let k = record[2].parse::<f32>().unwrap();
-                                Some(RefractiveIndexRecord::new(wavelength.into(), eta, k))
+                                Some(IorRecord::new(wavelength.into(), eta, k))
                             },
                             Err(_) => None,
                         })
@@ -135,7 +135,7 @@ impl RefractiveIndexRegistry {
                             Ok(record) => {
                                 let wavelength = record[0].parse::<f32>().unwrap() * coefficient;
                                 let eta = record[1].parse::<f32>().unwrap();
-                                Some(RefractiveIndexRecord::new(wavelength.into(), eta, 0.0))
+                                Some(IorRecord::new(wavelength.into(), eta, 0.0))
                             },
                             Err(_) => None,
                         })
@@ -153,30 +153,30 @@ impl RefractiveIndexRegistry {
 /// Wavelength 0.0 means that the refractive index is constant over all the
 /// wavelengths.
 #[derive(Copy, Clone, PartialEq)]
-pub struct RefractiveIndexRecord {
+pub struct IorRecord {
     /// corresponding wavelength in nanometres.
     pub wavelength: Nanometres,
     /// Index of refraction data.
     pub ior: Ior,
 }
 
-impl Debug for RefractiveIndexRecord {
+impl Debug for IorRecord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "IOR({}, η={}, κ={})", self.wavelength, self.eta, self.k)
     }
 }
 
-impl Display for RefractiveIndexRecord {
+impl Display for IorRecord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { write!(f, "{:?}", self) }
 }
 
-impl PartialOrd for RefractiveIndexRecord {
+impl PartialOrd for IorRecord {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.wavelength.partial_cmp(&other.wavelength)
     }
 }
 
-impl RefractiveIndexRecord {
+impl IorRecord {
     /// Refractive index of vacuum.
     pub const VACUUM: Self = Self {
         wavelength: nanometres!(0.0),
@@ -184,8 +184,8 @@ impl RefractiveIndexRecord {
     };
 
     /// Creates a new refractive index.
-    pub fn new(wavelength: Nanometres, eta: f32, k: f32) -> RefractiveIndexRecord {
-        RefractiveIndexRecord {
+    pub fn new(wavelength: Nanometres, eta: f32, k: f32) -> IorRecord {
+        IorRecord {
             wavelength,
             ior: Ior { eta, k },
         }
@@ -201,7 +201,7 @@ impl RefractiveIndexRecord {
     }
 }
 
-impl Deref for RefractiveIndexRecord {
+impl Deref for IorRecord {
     type Target = Ior;
 
     fn deref(&self) -> &Self::Target { &self.ior }

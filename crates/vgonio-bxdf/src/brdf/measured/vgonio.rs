@@ -11,7 +11,7 @@ use crate::{
 };
 #[cfg(feature = "fitting")]
 use base::{
-    math, optics::ior::RefractiveIndexRegistry, units::Radians, ErrorMetric, ResidualErrorMetric,
+    math, optics::ior::RefractiveIndexRegistry, units::Radians, ErrorMetric, Weighting,
 };
 
 use base::{
@@ -297,7 +297,7 @@ impl AnalyticalFit for VgonioBrdf {
     }
 
     /// Returns the distance between two VGonio BRDFs.
-    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: ResidualErrorMetric) -> f64 {
+    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: Weighting) -> f64 {
         assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
         if self.params() != other.params() {
             panic!("Parameterization must be the same!");
@@ -307,7 +307,7 @@ impl AnalyticalFit for VgonioBrdf {
             ErrorMetric::Nllsq => 0.5,
         };
         match rmetric {
-            ResidualErrorMetric::Identity => self
+            Weighting::None => self
                 .samples()
                 .iter()
                 .zip(other.samples().iter())
@@ -315,7 +315,7 @@ impl AnalyticalFit for VgonioBrdf {
                     let diff = *a as f64 - *b as f64;
                     acc + math::sqr(diff) * factor
                 }),
-            ResidualErrorMetric::JLow => {
+            Weighting::JLow => {
                 self.snapshots()
                     .zip(other.snapshots())
                     .fold(0.0f64, |acc, (xs, ys)| {
@@ -339,7 +339,7 @@ impl AnalyticalFit for VgonioBrdf {
         &self,
         other: &Self,
         metric: ErrorMetric,
-        rmetric: ResidualErrorMetric,
+        rmetric: Weighting,
         limit: Radians,
     ) -> f64 {
         assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");

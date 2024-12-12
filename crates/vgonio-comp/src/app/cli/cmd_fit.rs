@@ -12,7 +12,7 @@ use base::{
     partition::{PartitionScheme, SphericalDomain},
     range::RangeByStepSizeInclusive,
     units::{nm, Radians, Rads},
-    ErrorMetric, Isotropy, MeasuredBrdfKind, ResidualErrorMetric,
+    ErrorMetric, Isotropy, MeasuredBrdfKind, Weighting,
 };
 use bxdf::{
     brdf::{
@@ -28,6 +28,7 @@ use bxdf::{
 use core::slice::SlicePattern;
 use jabr::array::DyArr;
 use std::path::PathBuf;
+use base::optics::ior::IorRegistry;
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     println!(
@@ -318,7 +319,7 @@ fn brdf_fitting_brute_force<F: AnalyticalFit + Sync>(
     filepath: &PathBuf,
     opts: &FitOptions,
     alpha: RangeByStepSizeInclusive<f64>,
-    iors: &RefractiveIndexRegistry,
+    iors: &IorRegistry,
 ) {
     let errs = err::compute_microfacet_brdf_err(
         brdf,
@@ -363,7 +364,7 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
     filepath: &PathBuf,
     brdf: &F,
     alpha: RangeByStepSizeInclusive<f64>,
-    iors: &RefractiveIndexRegistry,
+    iors: &IorRegistry,
     theta_limit: Option<Radians>,
 ) {
     let limit = theta_limit.unwrap_or(Radians::HALF_PI);
@@ -535,7 +536,7 @@ pub struct FitOptions {
         help = "The error metric to use to weight the measured data.",
         default_value = "identity"
     )]
-    pub residual_error_metric: ResidualErrorMetric,
+    pub residual_error_metric: Weighting,
 
     #[clap(
         long,

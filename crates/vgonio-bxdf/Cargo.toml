@@ -7,7 +7,7 @@ version.workspace = true
 [features]
 default = ["io"]
 exr = ["dep:exr", "dep:chrono"]
-fitting = []
+fitting = ["dep:rayon"]
 cli = ["dep:clap"]
 io = ["dep:serde_json", "dep:serde-pickle"]
 
@@ -17,6 +17,7 @@ exr = { workspace = true, optional = true }
 libm.workspace = true
 num-traits.workspace = true
 log.workspace = true
+rayon = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 serde-pickle = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }

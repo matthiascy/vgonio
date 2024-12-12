@@ -11,7 +11,7 @@ use crate::{
     measure::{params::SurfacePath, Measurement},
 };
 use base::{
-    error::VgonioError, handle::Handle, medium::Medium, optics::ior::RefractiveIndexRegistry,
+    error::VgonioError, handle::Handle, medium::Medium, optics::ior::IorRegistry,
 };
 use gxtk::{context::GpuContext, mesh::RenderableMesh};
 use surf::{
@@ -61,7 +61,7 @@ pub struct RawCache {
     pub dir: PathBuf,
 
     /// Refractive index database.
-    pub iors: RefractiveIndexRegistry,
+    pub iors: IorRegistry,
 
     /// Micro-surface record cache, indexed by micro-surface uuid.
     pub records: HashMap<Handle<MicroSurface>, MicroSurfaceRecord>,
@@ -94,7 +94,7 @@ impl RawCache {
             meshes: Default::default(),
             recent_opened_files: None,
             last_opened_dir: None,
-            iors: RefractiveIndexRegistry::default(),
+            iors: IorRegistry::default(),
             renderables: Default::default(),
             records: Default::default(),
             measurements: Default::default(),
@@ -510,7 +510,7 @@ impl RawCache {
     /// Load the refractive index database from the given path.
     /// Returns the number of files loaded.
     fn load_refractive_indices(
-        iors: &mut RefractiveIndexRegistry,
+        iors: &mut IorRegistry,
         path: &Path,
         excluded: &[String],
     ) -> u32 {
@@ -533,7 +533,7 @@ impl RawCache {
             )
             .unwrap();
             // TODO: make this a method of RefractiveIndexRegistry
-            let refractive_indices = RefractiveIndexRegistry::read_iors_from_file(path).unwrap();
+            let refractive_indices = IorRegistry::read_iors_from_file(path).unwrap();
             let iors = iors.entry(medium).or_default();
             for ior in refractive_indices.iter() {
                 if !iors.contains(ior) {

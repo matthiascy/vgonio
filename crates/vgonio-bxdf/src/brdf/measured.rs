@@ -1,11 +1,9 @@
 use base::{math::Sph2, medium::Medium, units::Nanometres, MeasuredBrdfKind};
 #[cfg(feature = "fitting")]
-use base::{
-    optics::ior::RefractiveIndexRegistry, units::Radians, ErrorMetric, ResidualErrorMetric,
-};
+use base::{optics::ior::IorRegistry, units::Radians, ErrorMetric, Weighting};
 use jabr::array::DyArr;
-use std::{fmt::Debug, ops::Index};
 use log::warn;
+use std::{borrow::Cow, fmt::Debug, ops::Index};
 
 #[cfg(feature = "fitting")]
 macro_rules! impl_analytical_fit_trait {
@@ -63,16 +61,17 @@ pub enum Origin {
 
 /// The parameterisation kind of the measured BRDF.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub enum ParametrisationKind {
+pub enum BrdfParamKind {
     /// The BRDF is parameterised in the half-vector domain.
     HalfVector,
     /// The BRDF is parameterised in the incident direction domain.
     IncidentDirection,
 }
 
-pub trait BrdfParameterisation: PartialEq {
+/// Measured BRDF parameterisation.
+pub trait BrdfParam: PartialEq {
     /// Returns the kind of the parameterisation.
-    fn kind() -> ParametrisationKind;
+    fn kind() -> BrdfParamKind;
 }
 
 #[cfg(feature = "fitting")]
@@ -87,7 +86,7 @@ pub use yan::*;
 #[cfg(feature = "fitting")]
 /// A BRDF that can be fitted analytically.
 pub trait AnalyticalFit {
-    type Params: BrdfParameterisation;
+    type Params: BrdfParam;
 
     fn kind(&self) -> MeasuredBrdfKind;
 
@@ -128,7 +127,7 @@ pub trait AnalyticalFit {
     /// The final distance is calculated based on the given error metric.
     /// The residual error metric is used to calculate the distance between
     /// two single values.
-    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: ResidualErrorMetric) -> f64
+    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: Weighting) -> f64
     where
         Self: Sized;
 
@@ -138,7 +137,7 @@ pub trait AnalyticalFit {
         &self,
         other: &Self,
         metric: ErrorMetric,
-        rmetric: ResidualErrorMetric,
+        rmetric: Weighting,
         limit: Radians,
     ) -> f64
     where
@@ -162,26 +161,6 @@ pub trait AnalyticalFit {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
 }
 
-/// A proxy for a BRDF that can be fitted analytically.
-///
-/// This is useful when the stored raw BRDF data is in compressed form and
-/// cannot be directly used for fitting. The proxy can be used to store
-/// the resampled BRDF data to be used for fitting.
-pub struct BrdfAnalyticalFitProxy<'a, T> {
-    /// The raw BRDF data that the proxy is associated with.
-    brdf: &'a T,
-    /// Incident angles (polar angle) of the resampled BRDF data.
-    i_thetas: DyArr<f32>,
-    /// Incident angles (azimuthal angle) of the resampled BRDF data.
-    i_phis: DyArr<f32>,
-    /// Outgoing angles (polar angle) of the resampled BRDF data.
-    o_thetas: DyArr<f32>,
-    /// Outgoing angles (azimuthal angle) of the resampled BRDF data.
-    o_phis: DyArr<f32>,
-    /// The resampled BRDF data.
-    resampled: DyArr<f32, 4>
-}
-
 /// A BRDF measured either in the real world or in a simulation.
 ///
 /// The BRDF is parameterised by a specific parameterisation. Extra data can be
@@ -189,7 +168,7 @@ pub struct BrdfAnalyticalFitProxy<'a, T> {
 #[derive(Clone, Debug)]
 pub struct MeasuredBrdf<P, const N: usize>
 where
-    P: Clone + Send + Sync + BrdfParameterisation + 'static,
+    P: Clone + Send + Sync + BrdfParam + 'static,
 {
     /// The origin of the measured BRDF.
     pub origin: Origin,
@@ -208,7 +187,7 @@ where
 
 impl<P, const N: usize> MeasuredBrdf<P, N>
 where
-    P: Clone + Send + Sync + BrdfParameterisation + PartialEq + 'static,
+    P: Clone + Send + Sync + BrdfParam + PartialEq + 'static,
 {
     /// Returns the number of wavelengths of the measured BRDF.
     pub fn n_spectrum(&self) -> usize { self.spectrum.len() }
@@ -219,7 +198,7 @@ where
 
 impl<P, const N: usize> PartialEq for MeasuredBrdf<P, N>
 where
-    P: Clone + Send + Sync + BrdfParameterisation + PartialEq + 'static,
+    P: Clone + Send + Sync + BrdfParam + PartialEq + 'static,
 {
     fn eq(&self, other: &Self) -> bool {
         self.origin == other.origin
@@ -234,7 +213,7 @@ where
 /// An iterator over the snapshots of a measured BRDF.
 pub struct BrdfSnapshotIterator<'a, P, const N: usize>
 where
-    P: Clone + Send + Sync + BrdfParameterisation + PartialEq + 'static,
+    P: Clone + Send + Sync + BrdfParam + PartialEq + 'static,
 {
     /// The measured BRDF.
     brdf: &'a MeasuredBrdf<P, N>,
@@ -275,7 +254,7 @@ impl<S: 'static> Index<[usize; 2]> for BrdfSnapshot<'_, S> {
 impl<'a, P, S: 'static, const N: usize> ExactSizeIterator for BrdfSnapshotIterator<'a, P, N>
 where
     BrdfSnapshotIterator<'a, P, N>: Iterator<Item = BrdfSnapshot<'a, S>>,
-    P: Clone + Send + Sync + BrdfParameterisation + PartialEq + 'static,
+    P: Clone + Send + Sync + BrdfParam + PartialEq + 'static,
 {
     fn len(&self) -> usize { self.n_incoming - self.index }
 }

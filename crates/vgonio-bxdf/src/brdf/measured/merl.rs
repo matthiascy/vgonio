@@ -1,7 +1,7 @@
 #[cfg(feature = "fitting")]
 use crate::brdf::measured::AnalyticalFit;
 use crate::brdf::{
-    measured::{BrdfParameterisation, MeasuredBrdf, Origin, ParametrisationKind},
+    measured::{BrdfParam, MeasuredBrdf, Origin, BrdfParamKind},
     Bxdf,
 };
 #[cfg(feature = "io")]
@@ -9,18 +9,19 @@ use base::error::VgonioError;
 use base::{
     impl_measured_data_trait,
     medium::Medium,
-    optics::ior::RefractiveIndexRegistry,
+    optics::ior::IorRegistry,
     units::{nm, Nanometres, Radians},
-    ErrorMetric, MeasuredBrdfKind, MeasuredData, MeasurementKind, ResidualErrorMetric,
+    ErrorMetric, MeasuredBrdfKind, MeasuredData, MeasurementKind, Weighting,
 };
 use jabr::array::{s, DArr, DyArr};
 use std::any::Any;
 #[cfg(feature = "io")]
 use std::path::Path;
+use base::math::Sph2;
 
 /// Parameterisation for a measured BRDF from the MERL database: <http://www.merl.com/brdf/>
 #[derive(Debug, Clone, PartialEq)]
-pub struct MerlBrdfParameterisation {
+pub struct MerlBrdfParam {
     /// The zenith angles difference between the incident and outgoing
     /// directions.
     zenith_d: DArr<Radians, s![90]>,
@@ -31,7 +32,7 @@ pub struct MerlBrdfParameterisation {
     zenith_h: DArr<Radians, s![90]>,
 }
 
-impl MerlBrdfParameterisation {
+impl MerlBrdfParam {
     /// The number of zenith angles for the half-vector.
     pub const RES_THETA_H: u32 = 90;
     /// The number of zenith ang90les for the difference vector.
@@ -50,7 +51,7 @@ impl MerlBrdfParameterisation {
     pub const B_SCALE: f64 = 1.66 / 1500.0;
 }
 
-impl Default for MerlBrdfParameterisation {
+impl Default for MerlBrdfParam {
     fn default() -> Self {
         let mut zenith = DArr::zeros();
         for i in 0..Self::RES_THETA_H as usize {
@@ -72,8 +73,8 @@ impl Default for MerlBrdfParameterisation {
     }
 }
 
-impl BrdfParameterisation for MerlBrdfParameterisation {
-    fn kind() -> ParametrisationKind { ParametrisationKind::HalfVector }
+impl BrdfParameterisation for MerlBrdfParam {
+    fn kind() -> BrdfParamKind { BrdfParamKind::HalfVector }
 }
 
 /// BRDF from the MERL database: <http://www.merl.com/brdf/>
@@ -89,7 +90,7 @@ impl BrdfParameterisation for MerlBrdfParameterisation {
 /// in the original data are reversed as BGR as Blue has the smallest
 /// wavelength. The chosen wavelengths of the BGR channels are 435.8, 546.1, and
 /// 700 nm, respectively.
-pub type MerlBrdf = MeasuredBrdf<MerlBrdfParameterisation, 4>;
+pub type MerlBrdf = MeasuredBrdf<MerlBrdfParam, 4>;
 
 impl_measured_data_trait!(MerlBrdf, Bsdf, Some(MeasuredBrdfKind::Merl));
 
@@ -109,15 +110,15 @@ impl MerlBrdf {
             phi_d
         };
 
-        let index = ((phi_d / Radians::PI) * MerlBrdfParameterisation::RES_PHI_D as f32).round() as i32;
-        index.clamp(0, MerlBrdfParameterisation::RES_PHI_D as i32 - 1) as usize
+        let index = ((phi_d / Radians::PI) * MerlBrdfParam::RES_PHI_D as f32).round() as i32;
+        index.clamp(0, MerlBrdfParam::RES_PHI_D as i32 - 1) as usize
     }
 
     /// Lookup the index of the zenith angle for the half-vector.
     pub fn theta_d_index(&self, theta_d: Radians) -> usize {
         assert!(theta_d >= Radians::ZERO && theta_d <= Radians::HALF_PI);
-        let index = ((theta_d * 2.0 / Radians::PI) * MerlBrdfParameterisation::RES_THETA_D as f32).round() as i32;
-        index.clamp(0, MerlBrdfParameterisation::RES_THETA_D as i32 - 1) as usize
+        let index = ((theta_d * 2.0 / Radians::PI) * MerlBrdfParam::RES_THETA_D as f32).round() as i32;
+        index.clamp(0, MerlBrdfParam::RES_THETA_D as i32 - 1) as usize
     }
 
     /// Lookup the index of the zenith angle for the difference vector.
@@ -126,8 +127,8 @@ impl MerlBrdf {
     pub fn theta_h_index(&self, theta_h: Radians) -> usize {
         assert!(theta_h >= Radians::ZERO && theta_h <= Radians::HALF_PI);
         let theta_h_deg = theta_h * 0.5 / Radians::PI * BRDF_THETA_H as f32;
-        let index = (theta_h_deg * MerlBrdfParameterisation::RES_THETA_H as f32).sqrt().round() as i32;
-        index.clamp(0, MerlBrdfParameterisation::RES_THETA_H as i32 - 1) as usize
+        let index = (theta_h_deg * MerlBrdfParam::RES_THETA_H as f32).sqrt().round() as i32;
+        index.clamp(0, MerlBrdfParam::RES_THETA_H as i32 - 1) as usize
     }
 
     #[cfg(feature = "io")]
@@ -186,12 +187,12 @@ impl MerlBrdf {
             count *= n;
         }
 
-        if count != MerlBrdfParameterisation::RES_TOTAL {
+        if count != MerlBrdfParam::RES_TOTAL {
             return Err(VgonioError::new(
                 format!(
                     "Can't read MERL BRDF from {:?}: invalid dimensions (expecting {}, actual {})!",
                     filepath.as_ref(),
-                    MerlBrdfParameterisation::RES_TOTAL,
+                    MerlBrdfParam::RES_TOTAL,
                     count
                 ),
                 None,
@@ -214,24 +215,24 @@ impl MerlBrdf {
         // TODO: ideally, we should simply read the data into a 4D array directly
         // following the MERL BRDF layout then apply the dimension permutation.
         let mut samples = DyArr::zeros([
-            MerlBrdfParameterisation::RES_THETA_H as usize,
-            MerlBrdfParameterisation::RES_THETA_D as usize,
-            MerlBrdfParameterisation::RES_PHI_D as usize,
+            MerlBrdfParam::RES_THETA_H as usize,
+            MerlBrdfParam::RES_THETA_D as usize,
+            MerlBrdfParam::RES_PHI_D as usize,
             3,
         ]);
 
-        let stride_c = MerlBrdfParameterisation::RES_TOTAL as usize;
-        let stride_th = MerlBrdfParameterisation::RES_THETA_D as usize
-            * MerlBrdfParameterisation::RES_PHI_D as usize;
-        let stride_td = MerlBrdfParameterisation::RES_PHI_D as usize;
+        let stride_c = MerlBrdfParam::RES_TOTAL as usize;
+        let stride_th = MerlBrdfParam::RES_THETA_D as usize
+            * MerlBrdfParam::RES_PHI_D as usize;
+        let stride_td = MerlBrdfParam::RES_PHI_D as usize;
         let scale = [
-            MerlBrdfParameterisation::R_SCALE,
-            MerlBrdfParameterisation::G_SCALE,
-            MerlBrdfParameterisation::B_SCALE,
+            MerlBrdfParam::R_SCALE,
+            MerlBrdfParam::G_SCALE,
+            MerlBrdfParam::B_SCALE,
         ];
-        for i in 0..MerlBrdfParameterisation::RES_THETA_H as usize {
-            for j in 0..MerlBrdfParameterisation::RES_THETA_D as usize {
-                for k in 0..MerlBrdfParameterisation::RES_PHI_D as usize {
+        for i in 0..MerlBrdfParam::RES_THETA_H as usize {
+            for j in 0..MerlBrdfParam::RES_THETA_D as usize {
+                for k in 0..MerlBrdfParam::RES_PHI_D as usize {
                     for c in 0..3 {
                         let offset = c * stride_c + i * stride_th + j * stride_td + k;
                         samples[[i, j, k, c]] = (data[offset] * scale[c]) as f32;
@@ -241,7 +242,7 @@ impl MerlBrdf {
         }
 
         let spectrum = DyArr::from_vec_1d(vec![nm!(435.8), nm!(546.1), nm!(700.0)]);
-        let params = Box::new(MerlBrdfParameterisation::default());
+        let params = Box::new(MerlBrdfParam::default());
 
         Ok(Self {
             origin: Origin::RealWorld,
@@ -258,7 +259,7 @@ impl MerlBrdf {
 
 #[cfg(feature = "fitting")]
 impl AnalyticalFit for MerlBrdf {
-    type Params = MerlBrdfParameterisation;
+    type Params = MerlBrdfParam;
 
     impl_analytical_fit_trait!(self);
 
@@ -270,7 +271,7 @@ impl AnalyticalFit for MerlBrdf {
         spectrum: &[Nanometres],
         params: &Self::Params,
         model: &dyn Bxdf<Params = [f64; 2]>,
-        iors: &RefractiveIndexRegistry,
+        iors: &IorRegistry,
     ) -> Self
     where
         Self: Sized,
@@ -279,9 +280,9 @@ impl AnalyticalFit for MerlBrdf {
         let iors_t = iors.ior_of_spectrum(medium_t, spectrum).unwrap();
         let n_spectrum = 3;
         let mut samples = DyArr::<f32, 3>::zeros([
-            MerlBrdfParameterisation::RES_THETA_H as usize,
-            MerlBrdfParameterisation::RES_THETA_D as usize,
-            MerlBrdfParameterisation::RES_PHI_D as usize,
+            MerlBrdfParam::RES_THETA_H as usize,
+            MerlBrdfParam::RES_THETA_D as usize,
+            MerlBrdfParam::RES_PHI_D as usize,
             n_spectrum,
         ]);
         params.zenith_h.iter().enumerate().for_each(|(i, &theta_h)| {
@@ -296,7 +297,7 @@ impl AnalyticalFit for MerlBrdf {
         });
     }
 
-    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: ResidualErrorMetric) -> f64
+    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: Weighting) -> f64
     where
         Self: Sized,
     {
@@ -307,7 +308,7 @@ impl AnalyticalFit for MerlBrdf {
         &self,
         other: &Self,
         metric: ErrorMetric,
-        rmetric: ResidualErrorMetric,
+        rmetric: Weighting,
         limit: Radians,
     ) -> f64
     where
