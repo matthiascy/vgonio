@@ -15,7 +15,7 @@ use base::{
     math::Sph2,
     optics::ior::Ior,
     partition::{PartitionScheme, SphericalDomain, SphericalPartition},
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units::{Nanometres, Radians},
 };
 use serde::{Deserialize, Serialize};
@@ -49,7 +49,7 @@ impl ReceiverParams {
             },
             PartitionScheme::EqualAngle => {
                 let num_rings = (Radians::HALF_PI / self.precision.theta).round() as usize + 1;
-                let num_patches_per_ring = RangeByStepSizeInclusive::new(
+                let num_patches_per_ring = StepRangeIncl::new(
                     Radians::ZERO,
                     Radians::TWO_PI,
                     self.precision.phi,

@@ -162,7 +162,7 @@
 
 use crate::{
     math::rcp_f32,
-    optics::ior::{Ior, RefractiveIndexRecord},
+    optics::ior::{Ior, IorRecord},
 };
 use glam::Vec3A;
 
@@ -579,7 +579,7 @@ pub fn reflectance(cos_i: f32, ior_i: &Ior, ior_t: &Ior) -> f32 {
 pub fn reflectance_dielectric_conductor_spectrum(
     cos: f32,
     eta_i: f32,
-    ior_t: &[RefractiveIndexRecord],
+    ior_t: &[IorRecord],
 ) -> Vec<f32> {
     assert!(
         (0.0..=1.0).contains(&cos),
@@ -594,7 +594,7 @@ pub fn reflectance_dielectric_conductor_spectrum(
 
 #[cfg(test)]
 mod tests {
-    use crate::{optics::ior::RefractiveIndexRecord, units::nm};
+    use crate::{optics::ior::IorRecord, units::nm};
     use std::{fs::OpenOptions, io::Write};
 
     #[test]
@@ -695,9 +695,9 @@ mod tests {
 
     #[test]
     fn reflectance_no_output() {
-        let ior_vacuum = RefractiveIndexRecord::VACUUM;
-        let ior_al = RefractiveIndexRecord::new(nm!(600.0), 1.1893, 6.9762);
-        let ior_glass = RefractiveIndexRecord::new(nm!(600.0), 1.5, 0.0);
+        let ior_vacuum = IorRecord::VACUUM;
+        let ior_al = IorRecord::new(nm!(600.0), 1.1893, 6.9762);
+        let ior_glass = IorRecord::new(nm!(600.0), 1.5, 0.0);
         for i in 0..1000 {
             let cos_i = (1000 - i) as f32 / 1000.0;
             let angle = cos_i.acos();

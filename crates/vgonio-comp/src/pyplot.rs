@@ -8,7 +8,7 @@ use base::{
     math::Sph2,
     medium::Medium,
     optics::ior::RefractiveIndexRegistry,
-    range::{RangeByStepSizeExclusive, RangeByStepSizeInclusive},
+    range::{StepRangeExcl, StepRangeIncl},
     units::{rad, Degrees, LengthUnit::M, Nanometres, Radians, Rads},
     MeasuredBrdfKind, MeasuredData,
 };
@@ -565,7 +565,7 @@ pub fn plot_brdf_3d(
             .iter()
             .map(|x| x.zenith_center().as_f32())
             .collect::<Vec<_>>();
-        let phi = RangeByStepSizeInclusive::new(0.0, 360.0, 5.0f32)
+        let phi = StepRangeIncl::new(0.0, 360.0, 5.0f32)
             .values()
             .map(|x| x.to_radians())
             .collect::<Vec<_>>();
@@ -672,7 +672,7 @@ pub fn plot_brdf_fitting(
                         .iter()
                         .map(|x| x.zenith_center().as_f32())
                         .collect::<Vec<_>>();
-                    let phi_o = RangeByStepSizeExclusive::new(0.0f32, 360.0, 15.0)
+                    let phi_o = StepRangeExcl::new(0.0f32, 360.0, 15.0)
                         .values()
                         .map(|x| x.to_radians())
                         .collect::<Vec<_>>();
@@ -803,11 +803,11 @@ pub fn plot_brdf_fitting(
                         .step_by(brdf.params.n_zenith_i)
                         .map(|x| x.phi.as_f32())
                         .collect::<Vec<_>>();
-                    let theta_o = RangeByStepSizeExclusive::new(0.0f32, 90.0, 1.0)
+                    let theta_o = StepRangeExcl::new(0.0f32, 90.0, 1.0)
                         .values()
                         .map(|x| x.to_radians())
                         .collect::<Vec<_>>();
-                    let phi_o = RangeByStepSizeExclusive::new(0.0f32, 360.0, 60.0)
+                    let phi_o = StepRangeExcl::new(0.0f32, 360.0, 60.0)
                         .values()
                         .map(|x| x.to_radians())
                         .collect::<Vec<_>>();
@@ -1136,11 +1136,11 @@ pub fn plot_brdf_fitting(
                         .step_by(brdf.params.n_zenith_i)
                         .map(|x| x.phi.as_f32())
                         .collect::<Vec<_>>();
-                    let theta_o = RangeByStepSizeInclusive::new(0.0f32, 80.0, 1.0)
+                    let theta_o = StepRangeIncl::new(0.0f32, 80.0, 1.0)
                         .values()
                         .map(|x| x.to_radians())
                         .collect::<Vec<_>>();
-                    let phi_o = RangeByStepSizeExclusive::new(0.0f32, 360.0, 30.0)
+                    let phi_o = StepRangeExcl::new(0.0f32, 360.0, 30.0)
                         .values()
                         .map(|x| x.to_radians())
                         .collect::<Vec<_>>();

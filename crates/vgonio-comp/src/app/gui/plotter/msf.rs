@@ -14,7 +14,7 @@ use crate::{
 };
 use base::{
     handle::Handle,
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units::{rad, Radians},
     MeasurementKind,
 };
@@ -34,9 +34,9 @@ pub struct MaskingShadowingExtra {
     /// displayed,
     pub azimuth_v: Radians,
     /// The azimuthal angle range of the measured data, in radians.
-    pub azimuth_range: RangeByStepSizeInclusive<Radians>,
+    pub azimuth_range: StepRangeIncl<Radians>,
     /// The zenith angle range of the measured data, in radians.
-    pub zenith_range: RangeByStepSizeInclusive<Radians>,
+    pub zenith_range: StepRangeIncl<Radians>,
     /// Curve cache extracted from the measurement data. The first index is the
     /// azimuthal angle of microfacet normal m, the second index is the zenith
     /// angle of microfacet normal m, the third index is the azimuthal angle of
@@ -53,12 +53,12 @@ impl Default for MaskingShadowingExtra {
             azimuth_m: rad!(0.0),
             zenith_m: rad!(0.0),
             azimuth_v: rad!(0.0),
-            azimuth_range: RangeByStepSizeInclusive {
+            azimuth_range: StepRangeIncl {
                 start: rad!(0.0),
                 stop: rad!(0.0),
                 step_size: rad!(0.0),
             },
-            zenith_range: RangeByStepSizeInclusive {
+            zenith_range: StepRangeIncl {
                 start: rad!(0.0),
                 stop: rad!(0.0),
                 step_size: rad!(0.0),

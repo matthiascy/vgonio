@@ -39,7 +39,7 @@ pub mod vgmo {
         math::Sph2,
         medium::Medium,
         partition::{PartitionScheme, Ring, SphericalDomain, SphericalPartition},
-        range::RangeByStepSizeInclusive,
+        range::StepRangeIncl,
         units::{rad, Nanometres, Radians},
         MeasuredData, MeasurementKind, Version,
     };
@@ -360,8 +360,8 @@ pub mod vgmo {
     }
 
     fn madf_or_mmsf_samples_count(
-        zenith: &RangeByStepSizeInclusive<Radians>,
-        azimuth: &RangeByStepSizeInclusive<Radians>,
+        zenith: &StepRangeIncl<Radians>,
+        azimuth: &StepRangeIncl<Radians>,
         is_madf: bool,
     ) -> usize {
         let zenith_step_count = zenith.step_count_wrapped();
@@ -375,8 +375,8 @@ pub mod vgmo {
 
     /// Writes the ADF and MSF measurement parameters to the VGMO file.
     fn write_adf_or_msf_params_to_vgmo<W: Write>(
-        azimuth: &RangeByStepSizeInclusive<Radians>,
-        zenith: &RangeByStepSizeInclusive<Radians>,
+        azimuth: &StepRangeIncl<Radians>,
+        zenith: &StepRangeIncl<Radians>,
         writer: &mut BufWriter<W>,
         is_madf: bool,
     ) -> Result<(), std::io::Error> {
@@ -436,15 +436,15 @@ pub mod vgmo {
                         u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
                     offset += 4;
 
-                    let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(
+                    let azimuth = StepRangeIncl::<Radians>::read_from_buf(
                         &buf[offset..offset + 16],
                     );
                     offset += 16;
-                    let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(
+                    let zenith = StepRangeIncl::<Radians>::read_from_buf(
                         &buf[offset..offset + 16],
                     );
                     offset += 16;
-                    let spectrum = RangeByStepSizeInclusive::<Nanometres>::read_from_buf(
+                    let spectrum = StepRangeIncl::<Nanometres>::read_from_buf(
                         &buf[offset..offset + 16],
                     );
                     Self {
@@ -608,9 +608,9 @@ pub mod vgmo {
                             let mut buf = [0u8; 36];
                             reader.read_exact(&mut buf)?;
                             let azimuth =
-                                RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[0..16]);
+                                StepRangeIncl::<Radians>::read_from_buf(&buf[0..16]);
                             let zenith =
-                                RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[16..32]);
+                                StepRangeIncl::<Radians>::read_from_buf(&buf[16..32]);
                             let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
                             debug_assert_eq!(
                                 sample_count as usize,
@@ -671,8 +671,8 @@ pub mod vgmo {
                 } => {
                     let mut buf = [0u8; 36];
                     reader.read_exact(&mut buf)?;
-                    let azimuth = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[0..16]);
-                    let zenith = RangeByStepSizeInclusive::<Radians>::read_from_buf(&buf[16..32]);
+                    let azimuth = StepRangeIncl::<Radians>::read_from_buf(&buf[0..16]);
+                    let zenith = StepRangeIncl::<Radians>::read_from_buf(&buf[16..32]);
                     let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
                     debug_assert_eq!(
                         sample_count as usize,
@@ -1498,7 +1498,7 @@ mod tests {
         math::Sph2,
         medium::Medium,
         partition::{PartitionScheme, SphericalDomain, SphericalPartition},
-        range::RangeByStepSizeInclusive,
+        range::StepRangeIncl,
         units::{nm, rad, Rads},
         Version,
     };
@@ -1520,9 +1520,9 @@ mod tests {
             emitter: EmitterParams {
                 num_rays: 0,
                 max_bounces: 0,
-                zenith: RangeByStepSizeInclusive::new(rad!(0.0), rad!(0.0), rad!(0.0)),
-                azimuth: RangeByStepSizeInclusive::new(rad!(0.0), rad!(0.0), rad!(0.0)),
-                spectrum: RangeByStepSizeInclusive::new(nm!(400.0), nm!(700.0), nm!(100.0)),
+                zenith: StepRangeIncl::new(rad!(0.0), rad!(0.0), rad!(0.0)),
+                azimuth: StepRangeIncl::new(rad!(0.0), rad!(0.0), rad!(0.0)),
+                spectrum: StepRangeIncl::new(nm!(400.0), nm!(700.0), nm!(100.0)),
             },
             receivers: vec![ReceiverParams {
                 domain: SphericalDomain::Upper,
@@ -1734,17 +1734,17 @@ mod tests {
         let emitter_params = EmitterParams {
             num_rays: 0,
             max_bounces: 0,
-            zenith: RangeByStepSizeInclusive {
+            zenith: StepRangeIncl {
                 start: Rads::from_degrees(0.0),
                 stop: Rads::from_degrees(90.0),
                 step_size: Rads::from_degrees(90.0),
             },
-            azimuth: RangeByStepSizeInclusive {
+            azimuth: StepRangeIncl {
                 start: Rads::from_degrees(0.0),
                 stop: Rads::from_degrees(360.0),
                 step_size: Rads::from_degrees(180.0),
             },
-            spectrum: RangeByStepSizeInclusive::new(nm!(400.0), nm!(700.0), nm!(100.0)),
+            spectrum: StepRangeIncl::new(nm!(400.0), nm!(700.0), nm!(100.0)),
         };
         let incoming = DyArr::from_boxed_slice_1d(emitter_params.generate_measurement_points().0);
         let spectrum = DyArr::from_vec_1d(emitter_params.spectrum.values().collect::<Vec<_>>());

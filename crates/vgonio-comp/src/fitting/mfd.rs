@@ -8,7 +8,7 @@ use crate::{
 use base::{
     math::sph_to_cart,
     partition::{SphericalDomain, SphericalPartition},
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units::Radians,
     Isotropy,
 };
@@ -238,8 +238,8 @@ fn initialise_microfacet_mdf_models(
 /// operation to them.p
 fn extract_azimuth_zenith_angles(
     len: usize, // sample count
-    azimuth: RangeByStepSizeInclusive<Radians>,
-    zenith: RangeByStepSizeInclusive<Radians>,
+    azimuth: StepRangeIncl<Radians>,
+    zenith: StepRangeIncl<Radians>,
 ) -> (Vec<f64>, Vec<f64>) {
     let theta_step_count = zenith.step_count_wrapped();
     (0..len)
@@ -256,8 +256,8 @@ fn extract_azimuth_zenith_angles(
 
 fn extract_azimuth_zenith_angles_cos(
     len: usize, // sample count
-    azimuth: RangeByStepSizeInclusive<Radians>,
-    zenith: RangeByStepSizeInclusive<Radians>,
+    azimuth: StepRangeIncl<Radians>,
+    zenith: StepRangeIncl<Radians>,
 ) -> (Vec<f64>, Vec<f64>) {
     let theta_step_count = zenith.step_count_wrapped();
     (0..len)

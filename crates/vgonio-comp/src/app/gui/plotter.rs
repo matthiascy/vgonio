@@ -26,7 +26,7 @@ use crate::{
 use base::{
     handle::Handle,
     math,
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units::{deg, rad, Radians},
     MeasurementKind,
 };
@@ -191,7 +191,7 @@ impl Curve {
     fn from_adf_or_msf_data(
         first_part: impl Iterator<Item = [f64; 2]>,
         opposite: Option<&[f32]>,
-        zenith_range: &RangeByStepSizeInclusive<Radians>,
+        zenith_range: &StepRangeIncl<Radians>,
     ) -> Curve {
         let zenith_step_count = zenith_range.step_count_wrapped();
         match opposite {
@@ -490,7 +490,7 @@ impl PlottingWidget for PlotInspector {
                 .y_grid_spacer(ndf_msf_y_uniform_spacer)
                 .x_axis_formatter(|x, _| format!("{:.2}°", x.value.to_degrees()));
             let azimuth_range =
-                RangeByStepSizeInclusive::new(Radians::ZERO, Radians::TAU, deg!(1.0).to_radians());
+                StepRangeIncl::new(Radians::ZERO, Radians::TAU, deg!(1.0).to_radians());
             angle_knob(
                 ui,
                 true,
@@ -925,7 +925,7 @@ fn angle_knob(
 #[cfg(debug_assertions)]
 fn debug_print_angle_pair(
     initial: Radians,
-    range: &RangeByStepSizeInclusive<Radians>,
+    range: &StepRangeIncl<Radians>,
     ui: &mut Ui,
     text: &str,
 ) {
@@ -944,7 +944,7 @@ fn debug_print_angle_pair(
 #[cfg(debug_assertions)]
 fn debug_print_angle(
     initial: Radians,
-    range: &RangeByStepSizeInclusive<Radians>,
+    range: &StepRangeIncl<Radians>,
     ui: &mut Ui,
     text: &str,
 ) {

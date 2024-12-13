@@ -5,7 +5,7 @@ edition.workspace = true
 version.workspace = true
 
 [features]
-default = ["io"]
+default = ["io", "fitting"]
 exr = ["dep:exr", "dep:chrono"]
 fitting = ["dep:rayon"]
 cli = ["dep:clap"]

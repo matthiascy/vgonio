@@ -10,7 +10,7 @@ use base::{
     medium::Medium,
     optics::ior::RefractiveIndexRegistry,
     partition::{PartitionScheme, SphericalDomain},
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units::{nm, Radians, Rads},
     ErrorMetric, Isotropy, MeasuredBrdfKind, Weighting,
 };
@@ -43,7 +43,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
         .and_then(|t| Some(Radians::from_degrees(t)));
     // Load the data from the cache if the fitting is BxDF
     let cache = Cache::new(config.cache_dir());
-    let alpha = RangeByStepSizeInclusive::new(
+    let alpha = StepRangeIncl::new(
         opts.alpha_start.unwrap(),
         opts.alpha_stop.unwrap(),
         opts.alpha_step.unwrap(),
@@ -51,7 +51,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     cache.write(|cache| {
         cache.load_ior_database(&config);
         if opts.generate {
-            let roughness = RangeByStepSizeInclusive::new(
+            let roughness = StepRangeIncl::new(
                 opts.alpha_start.unwrap(),
                 opts.alpha_stop.unwrap(),
                 opts.alpha_step.unwrap(),
@@ -78,19 +78,19 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                 },
                 _ => unimplemented!("Only microfacet-based BxDFs are supported."),
             };
-            let spectrum = RangeByStepSizeInclusive {
+            let spectrum = StepRangeIncl {
                 start: nm!(400.0),
                 stop: nm!(700.0),
                 step_size: nm!(300.0),
             }
             .values()
             .collect::<Vec<_>>();
-            let zenith = RangeByStepSizeInclusive {
+            let zenith = StepRangeIncl {
                 start: Rads::ZERO,
                 stop: Rads::HALF_PI,
                 step_size: Rads::from_degrees(5.0),
             };
-            let azimuth = RangeByStepSizeInclusive {
+            let azimuth = StepRangeIncl {
                 start: Rads::ZERO,
                 stop: Rads::TWO_PI,
                 step_size: Rads::from_degrees(60.0),
@@ -318,7 +318,7 @@ fn brdf_fitting_brute_force<F: AnalyticalFit + Sync>(
     brdf: &F,
     filepath: &PathBuf,
     opts: &FitOptions,
-    alpha: RangeByStepSizeInclusive<f64>,
+    alpha: StepRangeIncl<f64>,
     iors: &IorRegistry,
 ) {
     let errs = err::compute_microfacet_brdf_err(
@@ -363,7 +363,7 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
     opts: &FitOptions,
     filepath: &PathBuf,
     brdf: &F,
-    alpha: RangeByStepSizeInclusive<f64>,
+    alpha: StepRangeIncl<f64>,
     iors: &IorRegistry,
     theta_limit: Option<Radians>,
 ) {

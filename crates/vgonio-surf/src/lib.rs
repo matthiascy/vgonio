@@ -26,7 +26,7 @@ use base::{
         WriteFileErrorKind,
     },
     math::{pairwise_sum, rcp_f32, sqr, Aabb, Vec3},
-    range::RangeByStepCountInclusive,
+    range::CountRangeIncl,
     units::LengthUnit,
     Asset, Version,
 };
@@ -1166,7 +1166,7 @@ impl TriangleUVSubdivision {
     /// The UV coordinates are generated in the order first by u then by v (v
     /// increases faster).
     fn calc_pnts_uvs(n_ctrl_pnts_per_edge: u32, n_pnts_per_facet: u32) -> Box<[Vec2]> {
-        let uv_vals = RangeByStepCountInclusive::new(0.0f32, 1.0, n_ctrl_pnts_per_edge as usize)
+        let uv_vals = CountRangeIncl::new(0.0f32, 1.0, n_ctrl_pnts_per_edge as usize)
             .values()
             .map(|x| x.min(1.0))
             .collect::<Box<_>>();

@@ -5,7 +5,7 @@ use crate::{
 use base::{
     math::Vec3,
     optics::ior::{Ior, RefractiveIndexRegistry},
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units::Radians,
     ErrorMetric, Isotropy, MeasuredBrdfKind,
 };
@@ -44,7 +44,7 @@ pub struct MicrofacetBrdfFittingProblem<'a, P: BrdfParameterisation> {
     /// wavelengths.
     pub iors_t: Box<[Ior]>,
     /// The initial guess for the roughness parameter.
-    pub initial_guess: RangeByStepSizeInclusive<f64>,
+    pub initial_guess: StepRangeIncl<f64>,
     /// The polar angle limit for the data fitting.
     pub theta_limit: Radians,
 }
@@ -67,7 +67,7 @@ impl<'a, P: BrdfParameterisation> MicrofacetBrdfFittingProblem<'a, P> {
     pub fn new(
         measured: &'a (dyn AnalyticalFit<Params = P> + Sync),
         target: MicrofacetDistroKind,
-        initial: RangeByStepSizeInclusive<f64>,
+        initial: StepRangeIncl<f64>,
         level: MeasuredBrdfLevel, // temporarily only one level is supported
         iors: &'a RefractiveIndexRegistry,
         theta_limit: Radians,
@@ -182,11 +182,7 @@ macro_rules! switch_isotropy {
 impl<'a, P: BrdfParameterisation> FittingProblem for MicrofacetBrdfFittingProblem<'a, P> {
     type Model = Box<dyn Bxdf<Params = [f64; 2]>>;
 
-    fn lsq_lm_fit(
-        self,
-        isotropy: Isotropy,
-        rmetric: Weighting,
-    ) -> FittingReport<Self::Model> {
+    fn lsq_lm_fit(self, isotropy: Isotropy, rmetric: Weighting) -> FittingReport<Self::Model> {
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
         let mut results = {

@@ -19,7 +19,7 @@ use crate::{
 use base::Isotropy;
 use base::{
     handle::Handle,
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units::{rad, Radians},
 };
 
@@ -48,9 +48,9 @@ impl ModelSelector {
 /// Extra data for the normal distribution plot.
 pub struct AreaDistributionExtra {
     /// The azimuthal angle range of the measured data, in radians.
-    pub azimuth_range: RangeByStepSizeInclusive<Radians>,
+    pub azimuth_range: StepRangeIncl<Radians>,
     /// The zenith angle range of the measured data, in radians.
-    pub zenith_range: RangeByStepSizeInclusive<Radians>,
+    pub zenith_range: StepRangeIncl<Radians>,
     /// The azimuthal angle (facet normal m) of the slice to be displayed, in
     /// radians.
     pub azimuth_m: Radians,
@@ -75,12 +75,12 @@ pub struct AreaDistributionExtra {
 impl Default for AreaDistributionExtra {
     fn default() -> Self {
         Self {
-            azimuth_range: RangeByStepSizeInclusive {
+            azimuth_range: StepRangeIncl {
                 start: rad!(0.0),
                 stop: rad!(0.0),
                 step_size: rad!(0.0),
             },
-            zenith_range: RangeByStepSizeInclusive {
+            zenith_range: StepRangeIncl {
                 start: rad!(0.0),
                 stop: rad!(0.0),
                 step_size: rad!(0.0),

@@ -30,7 +30,7 @@ use crate::{
     measure::Measurement,
 };
 #[cfg(feature = "fitting")]
-use base::range::RangeByStepSizeInclusive;
+use base::range::StepRangeIncl;
 use base::{
     handle::Handle,
     io::{CompressionScheme, FileEncoding},
@@ -255,7 +255,7 @@ impl VgonioGui {
                                     let problem = MicrofacetBrdfFittingProblem::new(
                                         measured_brdf_data.brdf_at(MeasuredBrdfLevel::L0).unwrap(),
                                         distro.unwrap(),
-                                        RangeByStepSizeInclusive::new(0.001, 1.0, 0.01),
+                                        StepRangeIncl::new(0.001, 1.0, 0.01),
                                         MeasuredBrdfLevel::L0,
                                         &cache.iors,
                                         Radians::HALF_PI,

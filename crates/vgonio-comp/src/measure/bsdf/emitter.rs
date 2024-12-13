@@ -6,7 +6,7 @@ use crate::{
 };
 use base::{
     math::{Sph2, Vec3},
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units::{deg, nm, rad, Nanometres, Radians, Rads},
 };
 use rayon::prelude::*;
@@ -35,14 +35,14 @@ pub struct EmitterParams {
 
     /// Inclination angle (polar angle) of emitter's possible positions (center
     /// of the emitter) in spherical coordinates.
-    pub zenith: RangeByStepSizeInclusive<Radians>,
+    pub zenith: StepRangeIncl<Radians>,
 
     /// Azimuthal angle range of emitter's possible positions (center of the
     /// emitter) in spherical coordinates.
-    pub azimuth: RangeByStepSizeInclusive<Radians>,
+    pub azimuth: StepRangeIncl<Radians>,
 
     /// Light source's spectrum.
-    pub spectrum: RangeByStepSizeInclusive<Nanometres>,
+    pub spectrum: StepRangeIncl<Nanometres>,
 }
 
 impl Default for EmitterParams {
@@ -51,17 +51,17 @@ impl Default for EmitterParams {
             num_rays: 2 ^ 20,
             num_sectors: 1,
             max_bounces: 8,
-            zenith: RangeByStepSizeInclusive::new(
+            zenith: StepRangeIncl::new(
                 rad!(0.0),
                 Radians::HALF_PI,
                 deg!(2.0).to_radians(),
             ),
-            azimuth: RangeByStepSizeInclusive::new(
+            azimuth: StepRangeIncl::new(
                 rad!(0.0),
                 Radians::TWO_PI,
                 deg!(5.0).to_radians(),
             ),
-            spectrum: RangeByStepSizeInclusive::new(nm!(400.0), nm!(700.0), nm!(100.0)),
+            spectrum: StepRangeIncl::new(nm!(400.0), nm!(700.0), nm!(100.0)),
         }
     }
 }

@@ -3,19 +3,19 @@ use base::{
     error::VgonioError,
     math::Sph2,
     partition::PartitionScheme,
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units::{deg, rad, Radians},
 };
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// Default azimuth angle range for the measurement: [0°, 360°] with 5° step
 /// size.
-const DEFAULT_AZIMUTH_RANGE: RangeByStepSizeInclusive<Radians> =
-    RangeByStepSizeInclusive::new(Radians::ZERO, Radians::TWO_PI, deg!(5.0).in_radians());
+const DEFAULT_AZIMUTH_RANGE: StepRangeIncl<Radians> =
+    StepRangeIncl::new(Radians::ZERO, Radians::TWO_PI, deg!(5.0).in_radians());
 
 /// Default zenith angle range for the measurement: [0°, 90°] with 2° step size.
-pub const DEFAULT_ZENITH_RANGE: RangeByStepSizeInclusive<Radians> =
-    RangeByStepSizeInclusive::new(Radians::ZERO, Radians::HALF_PI, deg!(2.0).in_radians());
+pub const DEFAULT_ZENITH_RANGE: StepRangeIncl<Radians> =
+    StepRangeIncl::new(Radians::ZERO, Radians::HALF_PI, deg!(2.0).in_radians());
 
 /// Parameters for microfacet area distribution measurement.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -38,9 +38,9 @@ pub enum NdfMeasurementMode {
     #[serde(rename = "points")]
     ByPoints {
         /// Azimuthal angle sampling range.
-        azimuth: RangeByStepSizeInclusive<Radians>,
+        azimuth: StepRangeIncl<Radians>,
         /// Polar angle sampling range.
-        zenith: RangeByStepSizeInclusive<Radians>,
+        zenith: StepRangeIncl<Radians>,
     },
     /// Measure the area distribution function by partitioning the hemisphere
     /// covering the surface using Beckers' partitioning scheme.
@@ -112,8 +112,8 @@ impl NdfMeasurementMode {
     pub fn as_mode_by_points(
         &self,
     ) -> Option<(
-        RangeByStepSizeInclusive<Radians>,
-        RangeByStepSizeInclusive<Radians>,
+        StepRangeIncl<Radians>,
+        StepRangeIncl<Radians>,
     )> {
         match self {
             NdfMeasurementMode::ByPoints { azimuth, zenith } => Some((*azimuth, *zenith)),
@@ -138,8 +138,8 @@ impl NdfMeasurementParams {
     /// Counts the number of samples (on hemisphere) that will be taken during
     /// the measurement.
     pub fn expected_samples_count_by_points(
-        azi: &RangeByStepSizeInclusive<Radians>,
-        zen: &RangeByStepSizeInclusive<Radians>,
+        azi: &StepRangeIncl<Radians>,
+        zen: &StepRangeIncl<Radians>,
     ) -> usize {
         azi.step_count_wrapped() * zen.step_count_wrapped()
     }
@@ -198,9 +198,9 @@ impl NdfMeasurementParams {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct GafMeasurementParams {
     /// Azimuthal angle sampling range.
-    pub azimuth: RangeByStepSizeInclusive<Radians>,
+    pub azimuth: StepRangeIncl<Radians>,
     /// Polar angle sampling range.
-    pub zenith: RangeByStepSizeInclusive<Radians>,
+    pub zenith: StepRangeIncl<Radians>,
     /// Discretisation resolution during the measurement (area estimation).
     pub resolution: u32,
     /// Whether to strictly use only the facet normals falling into the sampling
@@ -228,8 +228,8 @@ impl GafMeasurementParams {
     /// Counts the number of samples (on hemisphere) that will be taken during
     /// the measurement.
     pub fn expected_samples_count(
-        azi: &RangeByStepSizeInclusive<Radians>,
-        zen: &RangeByStepSizeInclusive<Radians>,
+        azi: &StepRangeIncl<Radians>,
+        zen: &StepRangeIncl<Radians>,
     ) -> usize {
         (azi.step_count_wrapped() * zen.step_count_wrapped()).pow(2)
     }

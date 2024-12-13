@@ -592,7 +592,7 @@ mod tests {
     use base::{
         medium::Medium,
         partition::{PartitionScheme, SphericalDomain},
-        range::RangeByStepSizeInclusive,
+        range::StepRangeIncl,
         units::nm,
     };
 
@@ -605,7 +605,7 @@ mod tests {
         let partition =
             SphericalPartition::new(PartitionScheme::Beckers, SphericalDomain::Upper, precision);
         let n_wo = partition.n_patches();
-        let spectrum_range = RangeByStepSizeInclusive::new(nm!(100.0), nm!(400.0), nm!(100.0));
+        let spectrum_range = StepRangeIncl::new(nm!(100.0), nm!(400.0), nm!(100.0));
         let spectrum = DyArr::from_iterator([-1], spectrum_range.values());
         let n_spectrum = spectrum.len();
         let mut bsdfs = HashMap::new();
@@ -629,8 +629,8 @@ mod tests {
                 emitter: EmitterParams {
                     num_rays: 0,
                     max_bounces: 0,
-                    zenith: RangeByStepSizeInclusive::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
-                    azimuth: RangeByStepSizeInclusive::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
+                    zenith: StepRangeIncl::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
+                    azimuth: StepRangeIncl::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
                     spectrum: spectrum_range,
                 },
                 receivers: vec![ReceiverParams {

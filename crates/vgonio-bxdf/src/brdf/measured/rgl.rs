@@ -13,7 +13,7 @@ use base::{
     math::{Sph2, Vec3},
     medium::Medium,
     optics::ior::RefractiveIndexRegistry,
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units::{deg, rad, Nanometres, Radians},
     ErrorMetric, MeasuredBrdfKind, MeasuredData, MeasurementKind, Weighting,
 };
@@ -96,22 +96,22 @@ impl RglBrdf {
             let mut spectrum = brdf.wavelengths();
             DyArr::from_iterator([-1], spectrum.iter().map(|&x| Nanometres::new(x)))
         };
-        let theta_i = RangeByStepSizeInclusive::new(
+        let theta_i = StepRangeIncl::new(
             rad!(0.0),
             deg!(80.0).to_radians(),
             deg!(5.0).to_radians(),
         );
-        let phi_i = RangeByStepSizeInclusive::new(
+        let phi_i = StepRangeIncl::new(
             deg!(0.0).to_radians(),
             deg!(360.0).to_radians(),
             deg!(60.0).to_radians(),
         );
-        let theta_o = RangeByStepSizeInclusive::new(
+        let theta_o = StepRangeIncl::new(
             rad!(0.0),
             deg!(80.0).to_radians(),
             deg!(2.0).to_radians(),
         );
-        let phi_o = RangeByStepSizeInclusive::new(
+        let phi_o = StepRangeIncl::new(
             deg!(0.0).to_radians(),
             deg!(360.0).to_radians(),
             deg!(30.0).to_radians(),

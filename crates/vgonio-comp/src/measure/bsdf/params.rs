@@ -7,7 +7,7 @@ use base::{
     math::Sph2,
     medium::Medium,
     partition::{PartitionScheme, SphericalDomain},
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units::{deg, nm, rad},
 };
 use serde::{Deserialize, Serialize};
@@ -92,17 +92,17 @@ impl Default for BsdfMeasurementParams {
                 num_rays: 1000,
                 num_sectors: 1,
                 max_bounces: 10,
-                zenith: RangeByStepSizeInclusive::new(
+                zenith: StepRangeIncl::new(
                     deg!(0.0).in_radians(),
                     deg!(90.0).in_radians(),
                     deg!(5.0).in_radians(),
                 ),
-                azimuth: RangeByStepSizeInclusive::new(
+                azimuth: StepRangeIncl::new(
                     deg!(0.0).in_radians(),
                     deg!(360.0).in_radians(),
                     deg!(60.0).in_radians(),
                 ),
-                spectrum: RangeByStepSizeInclusive::new(nm!(400.0), nm!(700.0), nm!(100.0)),
+                spectrum: StepRangeIncl::new(nm!(400.0), nm!(700.0), nm!(100.0)),
             },
             receivers: vec![ReceiverParams {
                 domain: SphericalDomain::Upper,

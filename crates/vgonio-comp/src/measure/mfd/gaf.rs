@@ -7,7 +7,7 @@ use base::{
     handle::Handle,
     impl_measured_data_trait, math,
     math::{Mat4, Vec3},
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units::Radians,
     MeasuredBrdfKind, MeasurementKind,
 };
@@ -1414,8 +1414,8 @@ impl MeasuredGafData {
     pub fn measurement_range(
         &self,
     ) -> (
-        RangeByStepSizeInclusive<Radians>,
-        RangeByStepSizeInclusive<Radians>,
+        StepRangeIncl<Radians>,
+        StepRangeIncl<Radians>,
     ) {
         (self.params.azimuth, self.params.zenith)
     }

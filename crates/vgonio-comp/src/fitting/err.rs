@@ -1,10 +1,7 @@
 //! Error computation for fitting measured data to a model.
 
 use crate::fitting::Weighting;
-use base::{
-    optics::ior::RefractiveIndexRegistry, range::RangeByStepSizeInclusive, units::Radians,
-    ErrorMetric,
-};
+use base::{optics::ior::IorRegistry, range::StepRangeIncl, units::Radians, ErrorMetric};
 use bxdf::{
     brdf::{
         analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
@@ -19,8 +16,8 @@ use rayon::prelude::{IndexedParallelIterator, ParallelIterator, ParallelSliceMut
 pub fn compute_microfacet_brdf_err<M: AnalyticalFit + Sync>(
     measured: &M,
     distro: MicrofacetDistroKind,
-    alpha: RangeByStepSizeInclusive<f64>,
-    iors: &RefractiveIndexRegistry,
+    alpha: StepRangeIncl<f64>,
+    iors: &IorRegistry,
     theta_limit: Radians,
     metric: ErrorMetric,
     rmetric: Weighting,

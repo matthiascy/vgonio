@@ -15,7 +15,7 @@ use crate::{
 };
 use base::{
     handle::Handle,
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units::{deg, rad, Radians},
 };
 use egui::{Align, Ui};
@@ -25,9 +25,9 @@ pub struct SlopeDistributionExtra {
     /// The azimuth of the facet normal.
     pub azimuth_m: Radians,
     /// The range of azimuth and it's bin size.
-    pub azi_range: RangeByStepSizeInclusive<Radians>,
+    pub azi_range: StepRangeIncl<Radians>,
     /// The range of zenith and it's bin size.
-    pub zen_range: RangeByStepSizeInclusive<Radians>,
+    pub zen_range: StepRangeIncl<Radians>,
     /// Whether to apply the Jacobian from SDF to NDF.
     pub apply_jacobian: bool,
     /// The curves of the slope distribution function estimated from the
@@ -39,12 +39,12 @@ impl Default for SlopeDistributionExtra {
     fn default() -> Self {
         Self {
             azimuth_m: rad!(0.0),
-            azi_range: RangeByStepSizeInclusive::new(
+            azi_range: StepRangeIncl::new(
                 Radians::ZERO,
                 Radians::TAU,
                 deg!(5.0).to_radians(),
             ),
-            zen_range: RangeByStepSizeInclusive::new(
+            zen_range: StepRangeIncl::new(
                 Radians::ZERO,
                 Radians::HALF_PI,
                 deg!(2.0).to_radians(),
@@ -95,7 +95,7 @@ impl SlopeDistributionExtra {
 
     pub fn current_azimuth_idx(&self) -> usize {
         let azi_m = self.azimuth_m.wrap_to_tau();
-        RangeByStepSizeInclusive::new(Radians::ZERO, Radians::TAU, self.azi_range.step_size)
+        StepRangeIncl::new(Radians::ZERO, Radians::TAU, self.azi_range.step_size)
             .index_of(azi_m)
     }
 }

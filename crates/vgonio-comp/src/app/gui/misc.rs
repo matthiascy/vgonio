@@ -1,6 +1,6 @@
 use egui::DragValue;
 
-use base::range::{RangeByStepCountInclusive, RangeByStepSizeInclusive};
+use base::range::{CountRangeIncl, StepRangeIncl};
 
 pub fn drag_angle<'a, A: AngleUnit>(angle: &'a mut Angle<A>, prefix: &str) -> DragValue<'a> {
     DragValue::new(angle.value_mut())
@@ -19,7 +19,7 @@ pub fn drag_angle<'a, A: AngleUnit>(angle: &'a mut Angle<A>, prefix: &str) -> Dr
 }
 
 pub fn range_step_size_inclusive_angle_ui<A: AngleUnit>(
-    range: &mut RangeByStepSizeInclusive<Angle<A>>,
+    range: &mut StepRangeIncl<Angle<A>>,
     ui: &mut egui::Ui,
 ) -> egui::Response {
     ui.horizontal(|ui| {
@@ -52,7 +52,7 @@ pub fn range_step_size_inclusive_angle_ui<A: AngleUnit>(
 }
 
 pub fn range_step_count_inclusive_angle_ui<A: AngleUnit>(
-    range: &mut RangeByStepCountInclusive<Angle<A>>,
+    range: &mut CountRangeIncl<Angle<A>>,
     ui: &mut egui::Ui,
 ) -> egui::Response {
     // Creates the UI for the range.
@@ -65,7 +65,7 @@ pub fn range_step_count_inclusive_angle_ui<A: AngleUnit>(
 }
 
 pub fn range_step_size_inclusive_length_ui<L: LengthMeasurement>(
-    range: &mut RangeByStepSizeInclusive<Length<L>>,
+    range: &mut StepRangeIncl<Length<L>>,
     ui: &mut egui::Ui,
 ) -> egui::Response {
     // Creates the UI for the range.

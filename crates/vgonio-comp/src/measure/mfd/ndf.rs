@@ -11,7 +11,7 @@ use base::{
     impl_measured_data_trait, math,
     math::{theta, Sph2, Vec3Swizzles},
     partition::{DataCarriedOnHemisphereImageWriter, SphericalDomain, SphericalPartition},
-    range::RangeByStepSizeInclusive,
+    range::StepRangeIncl,
     units,
     units::{rad, Radians},
     MeasuredBrdfKind, MeasurementKind,
@@ -104,10 +104,10 @@ impl MeasuredNdfData {
                     zenith.step_size > rad!(0.0) && azimuth.step_size > rad!(0.0),
                     "The step size of zenith and azimuth must be greater than 0."
                 );
-                let n_theta = RangeByStepSizeInclusive::zero_to_half_pi(zenith.step_size)
+                let n_theta = StepRangeIncl::zero_to_half_pi(zenith.step_size)
                     .step_count_wrapped();
                 let n_phi =
-                    RangeByStepSizeInclusive::zero_to_tau(azimuth.step_size).step_count_wrapped();
+                    StepRangeIncl::zero_to_tau(azimuth.step_size).step_count_wrapped();
                 // NDF samples in ByPoints mode are stored by azimuth first, then by zenith.
                 // We need to rearrange the data to match the patch order, which is by zenith
                 // first, then by azimuth.
@@ -145,8 +145,8 @@ impl MeasuredNdfData {
     pub fn measurement_range(
         &self,
     ) -> Option<(
-        RangeByStepSizeInclusive<Radians>,
-        RangeByStepSizeInclusive<Radians>,
+        StepRangeIncl<Radians>,
+        StepRangeIncl<Radians>,
     )> {
         match self.params.mode {
             NdfMeasurementMode::ByPoints { zenith, azimuth } => Some((azimuth, zenith)),
@@ -159,7 +159,7 @@ impl MeasuredNdfData {
 
     /// Returns the zenith range of the measurement only if the measurement is
     /// in the ByPoints mode.
-    pub fn zenith_range(&self) -> Option<RangeByStepSizeInclusive<Radians>> {
+    pub fn zenith_range(&self) -> Option<StepRangeIncl<Radians>> {
         match self.params.mode {
             NdfMeasurementMode::ByPoints { zenith, .. } => Some(zenith),
             NdfMeasurementMode::ByPartition { .. } => {
@@ -520,7 +520,7 @@ pub fn surface_area_of_spherical_cap(zenith: Radians, radius: f32) -> f32 {
 /// The indices of the bins that the zenith angle falls into.
 fn classify_normal_by_zenith(
     zenith: Radians,
-    zenith_range: RangeByStepSizeInclusive<Radians>,
+    zenith_range: StepRangeIncl<Radians>,
     bin_width_scale: f32,
 ) -> [u8; 2] {
     let mut indices = [0xFF; 2];
@@ -542,7 +542,7 @@ fn classify_normal_by_zenith(
 fn test_normal_classification_by_zenith() {
     use base::units::deg;
     let range =
-        RangeByStepSizeInclusive::new(Radians::ZERO, Radians::HALF_PI, deg!(30.0).to_radians());
+        StepRangeIncl::new(Radians::ZERO, Radians::HALF_PI, deg!(30.0).to_radians());
     assert_eq!(
         classify_normal_by_zenith(deg!(0.0).to_radians(), range, 1.0),
         [0, 0xff]
