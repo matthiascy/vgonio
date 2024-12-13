@@ -13,16 +13,16 @@ use crate::{
 };
 
 /// Microfacet BRDF model
-pub type TrowbridgeReitzBrdf = MicrofacetBrdf<TrowbridgeReitzDistribution>;
+pub type MicrofacetBrdfTR = MicrofacetBrdf<TrowbridgeReitzDistribution>;
 
-impl TrowbridgeReitzBrdf {
+impl MicrofacetBrdfTR {
     /// Creates a new microfacet BRDF model with the given roughness parameters.
     pub fn new(alpha_x: f64, alpha_y: f64) -> Self {
         MicrofacetBrdf::from(TrowbridgeReitzDistribution::new(alpha_x, alpha_y))
     }
 }
 
-impl Bxdf for TrowbridgeReitzBrdf {
+impl Bxdf for MicrofacetBrdfTR {
     type Params = <TrowbridgeReitzDistribution as MicrofacetDistribution>::Params;
 
     fn family(&self) -> BxdfFamily { BxdfFamily::Microfacet }

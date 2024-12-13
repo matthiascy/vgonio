@@ -13,16 +13,16 @@ use libm::erf;
 use num_traits::Float;
 
 /// Microfacet BRDF model based on Beckmann distribution.
-pub type BeckmannBrdf = MicrofacetBrdf<BeckmannDistribution>;
+pub type MicrofacetBrdfBK = MicrofacetBrdf<BeckmannDistribution>;
 
-impl BeckmannBrdf {
+impl MicrofacetBrdfBK {
     /// Creates a new Beckmann microfacet BRDF model.
     pub fn new(alpha_x: f64, alpha_y: f64) -> Self {
         MicrofacetBrdf::from(BeckmannDistribution::new(alpha_x, alpha_y))
     }
 }
 
-impl Bxdf for BeckmannBrdf {
+impl Bxdf for MicrofacetBrdfBK {
     type Params = <BeckmannDistribution as MicrofacetDistribution>::Params;
 
     fn family(&self) -> BxdfFamily { BxdfFamily::Microfacet }
