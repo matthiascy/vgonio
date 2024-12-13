@@ -38,18 +38,16 @@ use std::{
     fs::File,
     io::{BufReader, BufWriter, Read, Seek, Write},
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU32, Ordering},
 };
 
-/// Static variable used to generate height field name.
-static mut MICRO_SURFACE_COUNTER: u32 = 0;
+/// Static counter used to generate height field names.
+static MICRO_SURFACE_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 /// Helper function to generate a default name for height field instance.
 fn gen_micro_surface_name() -> String {
-    unsafe {
-        let name = format!("micro_surface_{MICRO_SURFACE_COUNTER:03}");
-        MICRO_SURFACE_COUNTER += 1;
-        name
-    }
+    let id = MICRO_SURFACE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("micro_surface_{id:03}")
 }
 
 /// Offset used when generating [`MicroSurfaceMesh`].
