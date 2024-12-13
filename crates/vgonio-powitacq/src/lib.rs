@@ -1,4 +1,4 @@
-use std::{path::Path, ptr};
+use std::path::Path;
 
 #[cxx::bridge]
 mod ffi {
