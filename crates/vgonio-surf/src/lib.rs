@@ -1573,7 +1573,7 @@ mod pybind {
     #[pymodule]
     fn vgonio_surf(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_function(wrap_pyfunction!(sum_as_string, module)?)?;
-        module.add_class::<MicroSurface>();
+        module.add_class::<MicroSurface>()?;
         Ok(())
     }
 }
