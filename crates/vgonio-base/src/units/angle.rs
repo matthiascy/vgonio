@@ -1,7 +1,7 @@
 use crate::math::NumericCast;
 use core::fmt::{Debug, Display};
-use std::str::FromStr;
 use num_traits::Zero;
+use std::str::FromStr;
 // TODO: refactor this module to use const generics
 
 /// Radian unit.
@@ -113,6 +113,9 @@ impl<A: AngleUnit> Angle<A> {
 
     /// 2 * PI in radians.
     pub const TAU: Self = Self::new(A::TAU);
+
+    /// 1e-6 in radians.
+    pub const EPSILON: Self = Self::new(1e-6);
 
     /// Create a new angle with unit.
     pub const fn new(value: f32) -> Self {
