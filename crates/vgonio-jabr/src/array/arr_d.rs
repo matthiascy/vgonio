@@ -5,8 +5,10 @@ use crate::array::{
     DyArr,
 };
 use num_traits::{One, Zero};
-use std::{fmt::Debug, ops::Index};
-use std::ops::IndexMut;
+use std::{
+    fmt::Debug,
+    ops::{Index, IndexMut},
+};
 
 /// A fixed-size multidimensional array on the heap with type level fixed shape,
 /// in other words with fixed dimensions and size of each dimension.
@@ -100,7 +102,6 @@ where
     fn index_mut(&mut self, index: [usize; N]) -> &mut Self::Output { &mut self.0[index] }
 }
 
-
 impl<T, S, const L: MemLayout> Clone for DArr<T, S, L>
 where
     T: Clone,
@@ -167,7 +168,7 @@ mod tests {
 
     #[test]
     fn test_darr_creation() {
-        let arr: DArr<i32, s![1, 3, 2, 2], { MemLayout::RowMajor }> = DArr::new([
+        let arr: DArr<i32, s![2, 3, 2, 2], { MemLayout::RowMajor }> = DArr::new([
             1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
         ]);
         assert_eq!(arr.shape(), &[2, 3, 2, 2]);

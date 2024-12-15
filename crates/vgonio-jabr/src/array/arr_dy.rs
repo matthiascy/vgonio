@@ -1,9 +1,9 @@
 use crate::array::{core::ArrCore, mem::heap::DynSized, shape::compute_n_elems, MemLayout};
-use num_traits::{One, Zero};
+use num_traits::{Euclid, One, Zero};
 use std::{
     fmt::Debug,
     mem::MaybeUninit,
-    ops::{Index, IndexMut},
+    ops::{Index, IndexMut, Range, RangeInclusive, Rem},
     slice::Iter,
 };
 
@@ -115,12 +115,41 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
     ///
     /// * `shape` - The new shape of the array. Only one dimension size can be
     ///   -1, which means that the size of that dimension is inferred.
-    pub fn reshape(&self, shape: [i32; N]) -> DyArr<T, N, L> {
+    pub fn reshape<const M: usize>(&self, shape: [i32; M]) -> DyArr<T, M, L>
+    where
+        T: Clone,
+    {
+        let num_minuses = shape.iter().filter(|&&x| x == -1).count();
         assert!(
-            shape.iter().filter(|&&x| x == -1).count() <= 1,
-            "Only one dimension size can be -1"
+            num_minuses <= 1,
+            "Only one dimension size can be -1, found {}",
+            num_minuses
         );
-        todo!()
+        if num_minuses == 0 {
+            let shape = shape.map(|x| x as usize);
+            assert_eq!(
+                compute_n_elems(&shape),
+                self.0.data.len(),
+                "Shape and data length mismatch"
+            );
+            return DyArr(ArrCore::new(shape, self.0.data.clone()));
+        }
+
+        let n_elems = self.0.data.len();
+        let known_size = shape.iter().filter(|&&x| x != -1).product::<i32>() as usize;
+        let (inferred_size, rem) = n_elems.div_rem_euclid(&known_size);
+        if rem != 0 {
+            panic!("Data length is not divisible by known size");
+        }
+        let mut new_shape = [0; M];
+        for (o, n) in shape.iter().zip(new_shape.iter_mut()) {
+            if *o == -1 {
+                *n = inferred_size as usize;
+            } else {
+                *n = *o as usize;
+            }
+        }
+        DyArr(ArrCore::new(new_shape, self.0.data.clone()))
     }
 
     /// Creates a new array with all elements set to zero.
@@ -198,6 +227,36 @@ impl<T, const N: usize, const L: MemLayout> Index<[usize; N]> for DyArr<T, N, L>
 impl<T, const N: usize, const L: MemLayout> IndexMut<[usize; N]> for DyArr<T, N, L> {
     #[inline]
     fn index_mut(&mut self, index: [usize; N]) -> &mut Self::Output { &mut self.0[index] }
+}
+
+impl<T, const N: usize, const L: MemLayout> Index<Range<usize>> for DyArr<T, N, L> {
+    type Output = [T];
+
+    #[inline]
+    fn index(&self, index: Range<usize>) -> &Self::Output { &self.0.data.as_slice()[index] }
+}
+
+impl<T, const N: usize, const L: MemLayout> IndexMut<Range<usize>> for DyArr<T, N, L> {
+    #[inline]
+    fn index_mut(&mut self, index: Range<usize>) -> &mut Self::Output {
+        &mut self.0.data.as_mut_slice()[index]
+    }
+}
+
+impl<T, const N: usize, const L: MemLayout> Index<RangeInclusive<usize>> for DyArr<T, N, L> {
+    type Output = [T];
+
+    #[inline]
+    fn index(&self, index: RangeInclusive<usize>) -> &Self::Output {
+        &self.0.data.as_slice()[index]
+    }
+}
+
+impl<T, const N: usize, const L: MemLayout> IndexMut<RangeInclusive<usize>> for DyArr<T, N, L> {
+    #[inline]
+    fn index_mut(&mut self, index: RangeInclusive<usize>) -> &mut Self::Output {
+        &mut self.0.data.as_mut_slice()[index]
+    }
 }
 
 // impl<T, const L: MemLayout> Index<(usize,)> for DyArr<T, 1, L> {
