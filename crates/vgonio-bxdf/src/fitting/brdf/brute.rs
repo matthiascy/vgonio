@@ -14,19 +14,18 @@ use crate::{
     distro::MicrofacetDistroKind,
 };
 
-use crate::brdf::fitting::AnalyticalFit2;
+use crate::fitting::brdf::AnalyticalFit2;
 
 use super::BrdfFittingProxy;
 
 /// Compute the distance between a measured BRDF and a modelled BRDF.
-pub fn compute_distance_between_measured_and_modelled<Brdf: AnalyticalFit2 + Sync>(
+pub fn compute_distance_between_measured_and_modelled<Brdf: AnalyticalFit2>(
     measured: &BrdfFittingProxy<Brdf>,
     distro: MicrofacetDistroKind,
     metric: ErrorMetric,
     weighting: Weighting,
     alphax: f64,
     alphay: f64,
-    iors: &IorRegistry,
     max_theta_i: Radians,
     max_theta_o: Radians,
 ) -> f64 {
@@ -38,14 +37,8 @@ pub fn compute_distance_between_measured_and_modelled<Brdf: AnalyticalFit2 + Syn
             Box::new(MicrofacetBrdfTR::new(alphax, alphay)) as Box<dyn Bxdf<Params = [f64; 2]>>
         },
     };
-    let modelled = measured.generate_analytical(
-        measured.brdf.medium_i(),
-        measured.brdf.medium_t(),
-        &*m,
-        iors,
-    );
+    let modelled = measured.generate_analytical(&*m);
     let filtering = !(max_theta_i >= Radians::HALF_PI && max_theta_o >= Radians::HALF_PI);
-    log::debug!("filtered: {}", filtering);
     if filtering {
         measured.distance_filtered(
             &modelled,
@@ -60,7 +53,7 @@ pub fn compute_distance_between_measured_and_modelled<Brdf: AnalyticalFit2 + Syn
 }
 
 /// Brute force fitting for isotropic microfacet BRDFs.
-pub fn brdf_fitting_brute_force_isotropic<F: AnalyticalFit2 + Sync>(
+pub fn brdf_fitting_brute_force_isotropic<F: AnalyticalFit2>(
     measured: &F,
     distro: MicrofacetDistroKind,
     metric: ErrorMetric,
@@ -80,13 +73,12 @@ pub fn brdf_fitting_brute_force_isotropic<F: AnalyticalFit2 + Sync>(
             for j in 0..err_chunks.len() {
                 let alpha = (i * chunk_size + j) as f64 * alpha.step_size + alpha.start;
                 err_chunks[j].write(compute_distance_between_measured_and_modelled(
-                    &measured.proxy(),
+                    &measured.proxy(iors),
                     distro,
                     metric,
                     weighting,
                     alpha,
                     alpha,
-                    iors,
                     max_theta_i,
                     max_theta_o,
                 ));
@@ -98,7 +90,7 @@ pub fn brdf_fitting_brute_force_isotropic<F: AnalyticalFit2 + Sync>(
 }
 
 /// Brute force fitting for anisotropic microfacet BRDFs.
-pub fn brdf_fitting_brute_force_anisotropic<F: AnalyticalFit2 + Sync>(
+pub fn brdf_fitting_brute_force_anisotropic<F: AnalyticalFit2>(
     measured: &F,
     distro: MicrofacetDistroKind,
     metric: ErrorMetric,
@@ -126,13 +118,12 @@ pub fn brdf_fitting_brute_force_anisotropic<F: AnalyticalFit2 + Sync>(
                 let alpha_x = alphax.start + alpha_x_idx as f64 * alphax.step_size;
                 let alpha_y = alphay.start + alpha_y_idx as f64 * alphay.step_size;
                 err_chunks[j].write(compute_distance_between_measured_and_modelled(
-                    &measured.proxy(),
+                    &measured.proxy(iors),
                     distro,
                     metric,
                     weighting,
                     alpha_x,
                     alpha_y,
-                    iors,
                     max_theta_i,
                     max_theta_o,
                 ));

@@ -1,19 +1,20 @@
-use crate::{
-    fitting::{FittingProblem, FittingReport, Weighting},
-    measure::{
-        mfd::{MeasuredGafData, MeasuredNdfData},
-        params::NdfMeasurementMode,
-    },
+use crate::measure::{
+    mfd::{MeasuredGafData, MeasuredNdfData},
+    params::NdfMeasurementMode,
 };
 use base::{
     math::sph_to_cart,
     partition::{SphericalDomain, SphericalPartition},
     range::StepRangeIncl,
     units::Radians,
-    Isotropy,
+    Isotropy, Weighting,
 };
-use bxdf::distro::{
-    BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind, TrowbridgeReitzDistribution,
+use bxdf::{
+    distro::{
+        BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind,
+        TrowbridgeReitzDistribution,
+    },
+    fitting::{FittingProblem, FittingReport},
 };
 use levenberg_marquardt::{
     LeastSquaresProblem, LevenbergMarquardt, MinimizationReport, TerminationReason,
@@ -66,11 +67,7 @@ impl<'a> MicrofacetDistributionFittingProblem<'a> {
 impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
     type Model = Box<dyn MicrofacetDistribution<Params = [f64; 2]>>;
 
-    fn lsq_lm_fit(
-        self,
-        isotropy: Isotropy,
-        _re: Weighting,
-    ) -> FittingReport<Self::Model> {
+    fn lsq_lm_fit(self, isotropy: Isotropy, _re: Weighting) -> FittingReport<Self::Model> {
         println!("Fitting MDF with isotropy: {:?}", isotropy);
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();

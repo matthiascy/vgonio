@@ -3,13 +3,10 @@ use crate::app::gui::docking::{Dockable, WidgetKind};
 use base::Isotropy;
 use base::{partition::beckers, MeasurementKind};
 #[cfg(feature = "fitting")]
-use bxdf::{brdf::BxdfFamily, distro::MicrofacetDistroKind};
+use bxdf::{brdf::BxdfFamily, distro::MicrofacetDistroKind, fitting::FittingProblemKind};
 use std::sync::{Arc, RwLock};
 use surf::subdivision::SubdivisionKind;
 use uuid::Uuid;
-
-#[cfg(feature = "fitting")]
-use crate::fitting::FittingProblemKind;
 
 use crate::{
     app::{

@@ -1,7 +1,5 @@
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;
-#[cfg(feature = "fitting")]
-use crate::fitting::FittedModel;
 use crate::{
     app::{
         cache::{Cache, RawCache},
@@ -18,6 +16,8 @@ use base::{
     range::StepRangeIncl,
     units::{deg, rad, Radians},
 };
+#[cfg(feature = "fitting")]
+use bxdf::fitting::FittedModel;
 use egui::{Align, Ui};
 use std::any::Any;
 
@@ -39,16 +39,8 @@ impl Default for SlopeDistributionExtra {
     fn default() -> Self {
         Self {
             azimuth_m: rad!(0.0),
-            azi_range: StepRangeIncl::new(
-                Radians::ZERO,
-                Radians::TAU,
-                deg!(5.0).to_radians(),
-            ),
-            zen_range: StepRangeIncl::new(
-                Radians::ZERO,
-                Radians::HALF_PI,
-                deg!(2.0).to_radians(),
-            ),
+            azi_range: StepRangeIncl::new(Radians::ZERO, Radians::TAU, deg!(5.0).to_radians()),
+            zen_range: StepRangeIncl::new(Radians::ZERO, Radians::HALF_PI, deg!(2.0).to_radians()),
             apply_jacobian: false,
             curves: Vec::new(),
         }
@@ -95,8 +87,7 @@ impl SlopeDistributionExtra {
 
     pub fn current_azimuth_idx(&self) -> usize {
         let azi_m = self.azimuth_m.wrap_to_tau();
-        StepRangeIncl::new(Radians::ZERO, Radians::TAU, self.azi_range.step_size)
-            .index_of(azi_m)
+        StepRangeIncl::new(Radians::ZERO, Radians::TAU, self.azi_range.step_size).index_of(azi_m)
     }
 }
 

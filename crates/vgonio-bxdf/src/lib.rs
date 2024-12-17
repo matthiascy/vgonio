@@ -1,4 +1,5 @@
 #![feature(decl_macro)]
+#![feature(adt_const_params)]
 #![feature(associated_type_defaults)]
 #![feature(downcast_unchecked)]
 #![feature(stdarch_x86_avx512)]
@@ -6,6 +7,9 @@ extern crate core;
 
 pub mod brdf;
 pub mod distro;
+
+#[cfg(feature = "fitting")]
+pub mod fitting;
 
 use crate::brdf::Bxdf;
 use base::{

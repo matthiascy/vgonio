@@ -1,9 +1,9 @@
 //! BRDF from the VGonio simulator.
-use crate::brdf::{
-    fitting::{AnalyticalFit2, BrdfFittingProxy, OutgoingDirs, ProxySource},
-    measured::{
+use crate::{
+    brdf::measured::{
         BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
     },
+    fitting::brdf::{AnalyticalFit2, BrdfFittingProxy, OutgoingDirs, ProxySource},
 };
 
 #[cfg(feature = "fitting")]
@@ -19,18 +19,14 @@ use base::{
     math::{Sph2, Vec3},
     medium::Medium,
     partition::SphericalPartition,
-    units::{rad, Nanometres},
+    units::Nanometres,
     MeasuredBrdfKind,
 };
 #[cfg(feature = "exr")]
 use chrono::{DateTime, Local};
 
 use jabr::array::{DyArr, DynArr};
-use std::{
-    borrow::{Borrow, Cow},
-    collections::HashMap,
-    path::Path,
-};
+use std::{borrow::Cow, collections::HashMap, path::Path};
 
 /// Parameterisation of the VGonio BRDF.
 #[derive(Clone, PartialEq, Debug)]
@@ -447,7 +443,16 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, VgonioBrdfParameterisation, 3> {
 
 #[cfg(feature = "fitting")]
 impl AnalyticalFit2 for VgonioBrdf {
-    fn proxy(&self) -> BrdfFittingProxy<Self> {
+    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> {
+        let iors_i = iors
+            .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
+            .unwrap()
+            .into_vec();
+        let iors_t = iors
+            .ior_of_spectrum(self.transmitted_medium, self.spectrum.as_slice())
+            .unwrap()
+            .into_vec();
+
         let n_theta_i = self.params.n_wi_zenith();
         let n_phi_i = self.params.n_wi_azimuth();
         let i_thetas = DyArr::from_iterator(
@@ -520,12 +525,10 @@ impl AnalyticalFit2 for VgonioBrdf {
             i_phis: Cow::Owned(i_phis),
             o_dirs: o_dirs,
             resampled: Cow::Owned(resampled),
+            iors_i: Cow::Owned(iors_i),
+            iors_t: Cow::Owned(iors_t),
         }
     }
 
     fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
-
-    fn medium_i(&self) -> Medium { self.incident_medium }
-
-    fn medium_t(&self) -> Medium { self.transmitted_medium }
 }

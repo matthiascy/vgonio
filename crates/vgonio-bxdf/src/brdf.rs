@@ -13,9 +13,6 @@ pub mod measured;
 #[cfg(feature = "fitting")]
 use base::optics::ior::Ior;
 
-#[cfg(feature = "fitting")]
-pub mod fitting;
-
 /// Different kinds of BRDFs.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

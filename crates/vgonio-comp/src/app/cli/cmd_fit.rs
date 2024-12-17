@@ -1,6 +1,6 @@
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
-    fitting::{err, FittingProblem, MicrofacetBrdfFittingProblem},
+    fitting::{err, MicrofacetBrdfFittingProblem},
     measure::bsdf::{receiver::ReceiverParams, MeasuredBrdfLevel, MeasuredBsdfData},
     pyplot::plot_err,
 };
@@ -17,7 +17,6 @@ use base::{
 use bxdf::{
     brdf::{
         analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-        fitting::AnalyticalFit2,
         measured::{
             merl::MerlBrdf, rgl::RglBrdf, yan::Yan2018Brdf, AnalyticalFit, ClausenBrdf, VgonioBrdf,
             VgonioBrdfParameterisation,
@@ -25,6 +24,7 @@ use bxdf::{
         Bxdf, BxdfFamily,
     },
     distro::MicrofacetDistroKind,
+    fitting::{brdf::AnalyticalFit2, FittingProblem},
 };
 use core::slice::SlicePattern;
 use jabr::array::DyArr;
@@ -341,7 +341,7 @@ fn brdf_fitting_brute_force<F: AnalyticalFit + Sync + AnalyticalFit2>(
     println!("    {} Took: {:?}", ansi::YELLOW_GT, end - start);
 
     let start = std::time::Instant::now();
-    let errs2 = bxdf::brdf::fitting::brute::brdf_fitting_brute_force_isotropic(
+    let errs2 = bxdf::fitting::brdf::brute::brdf_fitting_brute_force_isotropic(
         brdf,
         opts.distro,
         opts.error_metric.unwrap_or(ErrorMetric::Mse),

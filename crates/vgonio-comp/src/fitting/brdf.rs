@@ -1,13 +1,10 @@
-use crate::{
-    fitting::{FittingProblem, FittingReport, Weighting},
-    measure::bsdf::MeasuredBrdfLevel,
-};
+use crate::{fitting::Weighting, measure::bsdf::MeasuredBrdfLevel};
 use base::{
     math::Vec3,
     optics::ior::{Ior, IorRegistry},
     range::StepRangeIncl,
     units::Radians,
-    ErrorMetric, Isotropy, MeasuredBrdfKind,
+    Isotropy, MeasuredBrdfKind,
 };
 use bxdf::{
     brdf::{
@@ -20,6 +17,7 @@ use bxdf::{
         Bxdf,
     },
     distro::MicrofacetDistroKind,
+    fitting::{FittingProblem, FittingReport},
     Scattering,
 };
 use jabr::array::DyArr;

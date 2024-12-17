@@ -1,7 +1,5 @@
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::{debug_print_angle, debug_print_angle_pair};
-#[cfg(feature = "fitting")]
-use crate::fitting::FittedModel;
 use crate::{
     app::{
         cache::{Cache, RawCache},
@@ -20,6 +18,8 @@ use base::{
 };
 #[cfg(feature = "fitting")]
 use bxdf::distro::MicrofacetDistribution;
+#[cfg(feature = "fitting")]
+use bxdf::fitting::FittedModel;
 use egui::{Align, Ui};
 use std::any::Any;
 

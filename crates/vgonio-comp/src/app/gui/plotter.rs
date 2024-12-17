@@ -5,9 +5,6 @@ mod sdf;
 pub use msf::*;
 pub use ndf::*;
 
-#[cfg(feature = "fitting")]
-use crate::fitting::FittedModel;
-
 use crate::{
     app::{
         cache::{Cache, RawCache},
@@ -31,6 +28,8 @@ use base::{
     MeasurementKind,
 };
 use bxdf::distro::{BeckmannDistribution, MicrofacetDistribution, TrowbridgeReitzDistribution};
+#[cfg(feature = "fitting")]
+use bxdf::fitting::FittedModel;
 use egui::{Context, Response, Ui, WidgetText};
 use egui_plot::*;
 use std::{
@@ -98,7 +97,7 @@ pub trait VariantData {
 
     #[cfg(feature = "fitting")]
     /// Updates the fitted curves according to the given fitted models.
-    fn update_fitted_curves(&mut self, fitted: &[FittedModel]);
+    fn update_fitted_curves(&mut self, fitted: &[bxdf::fitting::FittedModel]);
 
     fn as_any(&self) -> &dyn Any;
 
@@ -942,12 +941,7 @@ fn debug_print_angle_pair(
 }
 
 #[cfg(debug_assertions)]
-fn debug_print_angle(
-    initial: Radians,
-    range: &StepRangeIncl<Radians>,
-    ui: &mut Ui,
-    text: &str,
-) {
+fn debug_print_angle(initial: Radians, range: &StepRangeIncl<Radians>, ui: &mut Ui, text: &str) {
     if ui.button(text).clicked() {
         let initial = initial.wrap_to_tau();
         println!(

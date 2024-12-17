@@ -1,8 +1,7 @@
 use super::{docking::DockSpace, event::EventResponse};
 #[cfg(feature = "fitting")]
 use crate::fitting::{
-    FittedModel, FittingProblem, FittingProblemKind, FittingReport, MfdFittingData,
-    MicrofacetBrdfFittingProblem, MicrofacetDistributionFittingProblem,
+    MfdFittingData, MicrofacetBrdfFittingProblem, MicrofacetDistributionFittingProblem,
 };
 #[cfg(feature = "fitting")]
 use crate::measure::{
@@ -39,6 +38,7 @@ use base::{
 };
 #[cfg(feature = "fitting")]
 use bxdf::brdf::BxdfFamily;
+use bxdf::fitting::{FittedModel, FittingProblem, FittingProblemKind, FittingReport};
 use egui_file_dialog::{DialogMode, FileDialog};
 use gxtk::{context::GpuContext, mesh::RenderableMesh};
 use std::{

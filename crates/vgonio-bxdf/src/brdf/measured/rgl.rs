@@ -1,11 +1,11 @@
 use crate::{
     brdf::{
-        fitting::{AnalyticalFit2, BrdfFittingProxy, OutgoingDirs, ProxySource},
         measured::{
             BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
         },
         Bxdf,
     },
+    fitting::brdf::{AnalyticalFit2, BrdfFittingProxy, OutgoingDirs, ProxySource},
     Scattering,
 };
 use base::{
@@ -379,7 +379,15 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, RglBrdfParameterisation, 3> {
 
 #[cfg(feature = "fitting")]
 impl AnalyticalFit2 for RglBrdf {
-    fn proxy(&self) -> BrdfFittingProxy<Self> {
+    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> {
+        let iors_i = iors
+            .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
+            .unwrap()
+            .into_vec();
+        let iors_t = iors
+            .ior_of_spectrum(self.transmitted_medium, self.spectrum.as_slice())
+            .unwrap()
+            .into_vec();
         let n_theta_i = self.params.n_wi_zenith();
         let n_phi_i = self.params.n_wi_azimuth();
         let n_theta_o = self.params.n_wo_zenith();
@@ -455,12 +463,10 @@ impl AnalyticalFit2 for RglBrdf {
             i_phis: Cow::Owned(i_phis),
             o_dirs,
             resampled: Cow::Owned(resampled),
+            iors_i: Cow::Owned(iors_i),
+            iors_t: Cow::Owned(iors_t),
         }
     }
 
     fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
-
-    fn medium_i(&self) -> Medium { self.incident_medium }
-
-    fn medium_t(&self) -> Medium { self.transmitted_medium }
 }

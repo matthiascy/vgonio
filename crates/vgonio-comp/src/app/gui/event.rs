@@ -1,6 +1,4 @@
 use super::outliner::OutlinerItem;
-#[cfg(feature = "fitting")]
-use crate::fitting::FittingProblemKind;
 use crate::{
     app::gui::{
         notify::NotifyKind,
@@ -20,6 +18,8 @@ use base::{
     units::Degrees,
     MeasurementKind,
 };
+#[cfg(feature = "fitting")]
+use bxdf::fitting::FittingProblemKind;
 use std::path::PathBuf;
 use surf::{subdivision::Subdivision, MicroSurface, MicroSurfaceMesh};
 use uuid::Uuid;

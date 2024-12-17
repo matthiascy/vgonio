@@ -6,10 +6,9 @@ use crate::measure::{
 };
 use base::{
     math::Sph2,
-    medium::Medium,
     optics::ior::IorRegistry,
     range::{StepRangeExcl, StepRangeIncl},
-    units::{rad, Degrees, LengthUnit::M, Nanometres, Radians, Rads},
+    units::{rad, Degrees, Nanometres, Radians, Rads},
     MeasuredBrdfKind, MeasuredData,
 };
 use bxdf::{
@@ -19,16 +18,13 @@ use bxdf::{
     },
     Scattering,
 };
-use egui::ahash::{HashSet, HashSetExt};
 use exr::{
     image::{FlatImage, FlatSamples},
     prelude::Text,
 };
 use jabr::array::DyArr;
-use log::debug;
-use numpy::{PyArray1, PyArray2, PyArray5, PyArrayMethods, PyUntypedArrayMethods};
+use numpy::{PyArray1, PyArray2, PyArrayMethods};
 use pyo3::{prelude::*, types::PyList};
-use rand::seq::index::sample;
 use surf::MicroSurface;
 
 pub fn plot_err(errs: &[f64], alpha_start: f64, alpha_stop: f64, alpha_step: f64) -> PyResult<()> {

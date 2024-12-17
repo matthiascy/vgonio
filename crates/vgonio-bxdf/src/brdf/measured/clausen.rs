@@ -1,11 +1,11 @@
 //! BRDF measured in the paper "Investigation and Simulation of Diffraction on
 //! Rough Surfaces" by O. Clausen, Y. Chen, A. Fuhrmann and R. Marroquim.
-use crate::brdf::{
-    fitting::{AnalyticalFit2, BrdfFittingProxy},
-    measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
-};
 #[cfg(feature = "fitting")]
 use crate::{brdf::measured::AnalyticalFit, Bxdf, Scattering};
+use crate::{
+    brdf::measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
+    fitting::brdf::{AnalyticalFit2, BrdfFittingProxy},
+};
 use base::{
     error::VgonioError,
     impl_measured_data_trait,
@@ -464,11 +464,7 @@ impl AnalyticalFit for ClausenBrdf {
 
 #[cfg(feature = "fitting")]
 impl AnalyticalFit2 for ClausenBrdf {
-    fn proxy(&self) -> BrdfFittingProxy<Self> { todo!() }
+    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> { todo!() }
 
     fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
-
-    fn medium_i(&self) -> Medium { self.incident_medium }
-
-    fn medium_t(&self) -> Medium { self.transmitted_medium }
 }
