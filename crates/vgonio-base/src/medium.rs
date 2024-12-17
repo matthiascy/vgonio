@@ -21,6 +21,7 @@ pub enum Medium {
     /// Copper.
     #[serde(rename = "cu")]
     Copper = 0x03,
+    /// Unknown.
     #[serde(rename = "unknown")]
     Unknown,
 }

@@ -117,18 +117,18 @@ impl Scattering {
     /// * `ior_t` - The refractive index of the transmitted medium.
     pub fn eval_reflectance<P: 'static>(
         brdf: &dyn Bxdf<Params = P>,
-        wi: &Vec3,
-        wo: &Vec3,
+        vi: &Vec3,
+        vo: &Vec3,
         ior_i: &Ior,
         ior_t: &Ior,
     ) -> f64 {
-        fresnel::reflectance(cos_theta(&(-*wi)), ior_i, ior_t) as f64 * brdf.eval(wi, wo)
+        fresnel::reflectance(cos_theta(&(-*vi)), ior_i, ior_t) as f64 * brdf.eval(vi, vo)
     }
 
     pub fn eval_reflectance_spectrum<P: 'static>(
         brdf: &dyn Bxdf<Params = P>,
-        wi: &Vec3,
-        wo: &Vec3,
+        vi: &Vec3,
+        vo: &Vec3,
         iors_i: &[Ior],
         iors_t: &[Ior],
     ) -> Box<[f64]> {
@@ -139,7 +139,7 @@ impl Scattering {
             .zip(iors_t.iter())
             .zip(reflectances.iter_mut())
         {
-            refl.write(Scattering::eval_reflectance(brdf, wi, wo, ior_i, ior_t));
+            refl.write(Scattering::eval_reflectance(brdf, vi, vo, ior_i, ior_t));
         }
         unsafe { reflectances.assume_init() }
     }

@@ -4,18 +4,18 @@ use crate::{
 };
 use base::{
     math::Vec3,
-    optics::ior::{Ior, RefractiveIndexRegistry},
+    optics::ior::{Ior, IorRegistry},
     range::StepRangeIncl,
     units::Radians,
     ErrorMetric, Isotropy, MeasuredBrdfKind,
 };
 use bxdf::{
     brdf::{
-        analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
+        analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
         measured::{
             rgl::{RglBrdf, RglBrdfParameterisation},
-            AnalyticalFit, BrdfParameterisation, ClausenBrdf, ClausenBrdfParameterisation,
-            VgonioBrdf, VgonioBrdfParameterisation, Yan2018Brdf, Yan2018BrdfParameterisation,
+            AnalyticalFit, BrdfParam, ClausenBrdf, ClausenBrdfParameterisation, VgonioBrdf,
+            VgonioBrdfParameterisation, Yan2018Brdf, Yan2018BrdfParameterisation,
         },
         Bxdf,
     },
@@ -30,7 +30,7 @@ use std::{any::Any, fmt::Display};
 /// The fitting problem for the microfacet based BSDF model.
 ///
 /// The fitting procedure is based on the Levenberg-Marquardt algorithm.
-pub struct MicrofacetBrdfFittingProblem<'a, P: BrdfParameterisation> {
+pub struct MicrofacetBrdfFittingProblem<'a, P: BrdfParam> {
     /// The measured BSDF data.
     pub measured: &'a (dyn AnalyticalFit<Params = P> + Sync),
     /// The target BSDF model.
@@ -49,7 +49,7 @@ pub struct MicrofacetBrdfFittingProblem<'a, P: BrdfParameterisation> {
     pub theta_limit: Radians,
 }
 
-impl<'a, P: BrdfParameterisation> Display for MicrofacetBrdfFittingProblem<'a, P> {
+impl<'a, P: BrdfParam> Display for MicrofacetBrdfFittingProblem<'a, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BSDF Fitting Problem")
             .field("target", &self.target)
@@ -57,7 +57,7 @@ impl<'a, P: BrdfParameterisation> Display for MicrofacetBrdfFittingProblem<'a, P
     }
 }
 
-impl<'a, P: BrdfParameterisation> MicrofacetBrdfFittingProblem<'a, P> {
+impl<'a, P: BrdfParam> MicrofacetBrdfFittingProblem<'a, P> {
     /// Creates a new BSDF fitting problem.
     ///
     /// # Arguments
@@ -69,7 +69,7 @@ impl<'a, P: BrdfParameterisation> MicrofacetBrdfFittingProblem<'a, P> {
         target: MicrofacetDistroKind,
         initial: StepRangeIncl<f64>,
         level: MeasuredBrdfLevel, // temporarily only one level is supported
-        iors: &'a RefractiveIndexRegistry,
+        iors: &'a IorRegistry,
         theta_limit: Radians,
     ) -> Self {
         let spectrum = measured.spectrum();
@@ -116,8 +116,8 @@ fn initialise_microfacet_bsdf_models(
             .map(|i| {
                 let alpha = min + step * i as f64;
                 match isotropy {
-                    Isotropy::Isotropic => Box::new(TrowbridgeReitzBrdf::new(alpha, alpha)) as _,
-                    Isotropy::Anisotropic => Box::new(TrowbridgeReitzBrdf::new(
+                    Isotropy::Isotropic => Box::new(MicrofacetBrdfTR::new(alpha, alpha)) as _,
+                    Isotropy::Anisotropic => Box::new(MicrofacetBrdfTR::new(
                         alpha + 0.001 * (-1.0f64).powi(i as i32),
                         alpha + 0.001 * (-1.0f64).powi(i as i32 + 1),
                     )) as _,
@@ -128,8 +128,8 @@ fn initialise_microfacet_bsdf_models(
             .map(|i| {
                 let alpha = min + step * i as f64;
                 match isotropy {
-                    Isotropy::Isotropic => Box::new(BeckmannBrdf::new(alpha, alpha)) as _,
-                    Isotropy::Anisotropic => Box::new(BeckmannBrdf::new(
+                    Isotropy::Isotropic => Box::new(MicrofacetBrdfBK::new(alpha, alpha)) as _,
+                    Isotropy::Anisotropic => Box::new(MicrofacetBrdfBK::new(
                         alpha + 0.001 * (-1.0f64).powi(i as i32),
                         alpha + 0.001 * (-1.0f64).powi(i as i32 + 1),
                     )) as _,
@@ -179,7 +179,7 @@ macro_rules! switch_isotropy {
 }
 
 // Actual implementation of the fitting problem.
-impl<'a, P: BrdfParameterisation> FittingProblem for MicrofacetBrdfFittingProblem<'a, P> {
+impl<'a, P: BrdfParam> FittingProblem for MicrofacetBrdfFittingProblem<'a, P> {
     type Model = Box<dyn Bxdf<Params = [f64; 2]>>;
 
     fn lsq_lm_fit(self, isotropy: Isotropy, rmetric: Weighting) -> FittingReport<Self::Model> {
@@ -247,7 +247,7 @@ impl<'a, P: BrdfParameterisation> FittingProblem for MicrofacetBrdfFittingProble
 
 struct BrdfFittingProblemProxy<'a, P, M, const I: Isotropy>
 where
-    P: BrdfParameterisation,
+    P: BrdfParam,
     M: AnalyticalFit<Params = P>,
 {
     /// The measured BSDF data.
@@ -346,7 +346,7 @@ macro_rules! impl_fitting_proxy_using_cartesian_cache {
                                                 .write(modelled - *measured as f64);
                                         });
                                 },
-                                Weighting::JLow => {
+                                Weighting::LnCos => {
                                     samples
                                         .iter()
                                         .zip(modelled_values.iter())
@@ -725,7 +725,7 @@ impl<'a, const I: Isotropy>
                                         *modelled = *measured as f64 - *modelled;
                                     },
                                 );
-                            } else if self.error_metric == Weighting::JLow {
+                            } else if self.error_metric == Weighting::LnCos {
                                 modelled.iter_mut().zip(measured.iter()).for_each(
                                     |(modelled, measured)| {
                                         let me = (*measured as f64 * cos_theta_i + 1.0).ln();

@@ -7,14 +7,14 @@ use crate::measure::{
 use base::{
     math::Sph2,
     medium::Medium,
-    optics::ior::RefractiveIndexRegistry,
+    optics::ior::IorRegistry,
     range::{StepRangeExcl, StepRangeIncl},
     units::{rad, Degrees, LengthUnit::M, Nanometres, Radians, Rads},
     MeasuredBrdfKind, MeasuredData,
 };
 use bxdf::{
     brdf::{
-        analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
+        analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
         measured::{rgl::RglBrdf, ClausenBrdf, VgonioBrdf, Yan2018Brdf},
     },
     Scattering,
@@ -608,18 +608,18 @@ pub fn plot_brdf_3d(
 pub fn plot_brdf_fitting(
     brdf: &Box<dyn MeasuredData>,
     alphas: &[(f64, f64)],
-    iors: &RefractiveIndexRegistry,
+    iors: &IorRegistry,
 ) -> PyResult<()> {
     log::info!("Plotting BRDF fitting...");
     let n_models = alphas.len();
     log::info!("Number of models: {}", n_models);
     let bk_models = alphas
         .iter()
-        .map(|(alpha_x, alpha_y)| BeckmannBrdf::new(*alpha_x, *alpha_y))
+        .map(|(alpha_x, alpha_y)| MicrofacetBrdfBK::new(*alpha_x, *alpha_y))
         .collect::<Box<_>>();
     let tr_models = alphas
         .iter()
-        .map(|(alpha_x, alpha_y)| TrowbridgeReitzBrdf::new(*alpha_x, *alpha_y))
+        .map(|(alpha_x, alpha_y)| MicrofacetBrdfTR::new(*alpha_x, *alpha_y))
         .collect::<Box<_>>();
     Python::with_gil(|py| {
         let fun: Py<PyAny> =

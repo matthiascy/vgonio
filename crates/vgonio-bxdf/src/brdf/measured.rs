@@ -2,8 +2,7 @@ use base::{math::Sph2, medium::Medium, units::Nanometres, MeasuredBrdfKind};
 #[cfg(feature = "fitting")]
 use base::{optics::ior::IorRegistry, units::Radians, ErrorMetric, Weighting};
 use jabr::array::DyArr;
-use log::warn;
-use std::{borrow::Cow, fmt::Debug, ops::Index};
+use std::{fmt::Debug, ops::Index};
 
 #[cfg(feature = "fitting")]
 macro_rules! impl_analytical_fit_trait {
@@ -98,7 +97,7 @@ pub trait AnalyticalFit {
         spectrum: &[Nanometres],
         params: &Self::Params,
         model: &dyn Bxdf<Params = [f64; 2]>,
-        iors: &RefractiveIndexRegistry,
+        iors: &IorRegistry,
     ) -> Self
     where
         Self: Sized;
@@ -108,7 +107,7 @@ pub trait AnalyticalFit {
     fn new_analytical_from_self(
         &self,
         model: &dyn Bxdf<Params = [f64; 2]>,
-        iors: &RefractiveIndexRegistry,
+        iors: &IorRegistry,
     ) -> Self
     where
         Self: Sized,

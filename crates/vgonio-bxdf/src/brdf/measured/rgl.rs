@@ -1,8 +1,8 @@
 use crate::{
     brdf::{
+        fitting::{AnalyticalFit2, BrdfFittingProxy, OutgoingDirs, ProxySource},
         measured::{
-            BrdfParameterisation, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
-            ParametrisationKind, VgonioBrdfParameterisation,
+            BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
         },
         Bxdf,
     },
@@ -12,13 +12,13 @@ use base::{
     impl_measured_data_trait, math,
     math::{Sph2, Vec3},
     medium::Medium,
-    optics::ior::RefractiveIndexRegistry,
+    optics::ior::IorRegistry,
     range::StepRangeIncl,
     units::{deg, rad, Nanometres, Radians},
     ErrorMetric, MeasuredBrdfKind, MeasuredData, MeasurementKind, Weighting,
 };
-use jabr::array::DyArr;
-use std::path::Path;
+use jabr::array::{DyArr, DynArr};
+use std::{borrow::Cow, path::Path};
 
 #[cfg(feature = "fitting")]
 use crate::brdf::measured::AnalyticalFit;
@@ -61,8 +61,8 @@ pub struct RglBrdfParameterisation {
     pub original: powitacq::BrdfData,
 }
 
-impl BrdfParameterisation for RglBrdfParameterisation {
-    fn kind() -> ParametrisationKind { ParametrisationKind::IncidentDirection }
+impl BrdfParam for RglBrdfParameterisation {
+    fn kind() -> BrdfParamKind { BrdfParamKind::IncidentDirection }
 }
 
 impl RglBrdfParameterisation {
@@ -93,24 +93,18 @@ impl RglBrdf {
     pub fn load(path: &Path, transmitted_medium: Medium) -> Self {
         let brdf = powitacq::BrdfData::new(path);
         let spectrum = {
-            let mut spectrum = brdf.wavelengths();
+            let spectrum = brdf.wavelengths();
             DyArr::from_iterator([-1], spectrum.iter().map(|&x| Nanometres::new(x)))
         };
-        let theta_i = StepRangeIncl::new(
-            rad!(0.0),
-            deg!(80.0).to_radians(),
-            deg!(5.0).to_radians(),
-        );
+        let theta_i =
+            StepRangeIncl::new(rad!(0.0), deg!(80.0).to_radians(), deg!(5.0).to_radians());
         let phi_i = StepRangeIncl::new(
             deg!(0.0).to_radians(),
             deg!(360.0).to_radians(),
             deg!(60.0).to_radians(),
         );
-        let theta_o = StepRangeIncl::new(
-            rad!(0.0),
-            deg!(80.0).to_radians(),
-            deg!(2.0).to_radians(),
-        );
+        let theta_o =
+            StepRangeIncl::new(rad!(0.0), deg!(80.0).to_radians(), deg!(2.0).to_radians());
         let phi_o = StepRangeIncl::new(
             deg!(0.0).to_radians(),
             deg!(360.0).to_radians(),
@@ -210,7 +204,7 @@ impl AnalyticalFit for RglBrdf {
         spectrum: &[Nanometres],
         params: &Self::Params,
         model: &dyn Bxdf<Params = [f64; 2]>,
-        iors: &RefractiveIndexRegistry,
+        iors: &IorRegistry,
     ) -> Self
     where
         Self: Sized,
@@ -262,6 +256,9 @@ impl AnalyticalFit for RglBrdf {
         let factor = match metric {
             ErrorMetric::Mse => math::rcp_f64(self.samples().len() as f64),
             ErrorMetric::Nllsq => 0.5,
+            ErrorMetric::L1 => todo!(),
+            ErrorMetric::L2 => todo!(),
+            ErrorMetric::Rmse => todo!(),
         };
         match rmetric {
             Weighting::None => {
@@ -272,8 +269,8 @@ impl AnalyticalFit for RglBrdf {
                         let diff = *x as f64 - *y as f64;
                         acc + math::sqr(diff) * factor
                     })
-            }
-            Weighting::JLow => {
+            },
+            Weighting::LnCos => {
                 self.snapshots()
                     .zip(other.snapshots())
                     .fold(0.0f64, |acc, (xs, ys)| {
@@ -301,46 +298,63 @@ impl AnalyticalFit for RglBrdf {
     where
         Self: Sized,
     {
-        assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
+        assert_eq!(self.spectrum, other.spectrum, "Spectra must be equal!");
         if self.params != other.params {
             panic!("Parameterization must be the same!");
         }
         if (limit.as_f64() - std::f64::consts::FRAC_PI_2).abs() < 1e-6 {
             return self.distance(other, metric, rmetric);
         }
-        let n_wo = self.params.n_wo();
-        let n_wi_filtered = self
+        let wi_filtered = self
             .params
             .incoming
             .iter()
-            .position(|sph| sph.theta >= limit)
-            .unwrap_or(self.params.n_wi());
-        let n_wo_filtered = self
+            .enumerate()
+            .filter_map(|(i, sph)| if sph.theta < limit { Some(i) } else { None })
+            .collect::<Box<_>>();
+        let wo_filtered = self
             .params
             .outgoing
             .iter()
-            .position(|sph| sph.theta >= limit)
-            .unwrap_or(self.params.n_wo());
+            .enumerate()
+            .filter_map(|(i, sph)| if sph.theta < limit { Some(i) } else { None })
+            .collect::<Box<_>>();
         let n_spectrum = self.spectrum.len();
-        let n_samples = n_wi_filtered * n_wo_filtered * n_spectrum;
+        let n_samples = wi_filtered.len() * wo_filtered.len() * n_spectrum;
 
         let factor = match metric {
-            ErrorMetric::Mse => math::rcp_f64(n_samples as f64),
+            ErrorMetric::Mse | ErrorMetric::Rmse => math::rcp_f64(n_samples as f64),
             ErrorMetric::Nllsq => 0.5,
+            ErrorMetric::L1 => todo!(),
+            ErrorMetric::L2 => todo!(),
         };
 
         let mut dist = 0.0;
-        for i in 0..n_wi_filtered {
-            for j in 0..n_wo_filtered {
+        for i in wi_filtered.iter() {
+            for j in wo_filtered.iter() {
                 for k in 0..n_spectrum {
-                    let offset = i * n_wo * n_spectrum + j * n_spectrum + k;
-                    let diff = self.samples[offset] as f64 - other.samples[offset] as f64;
-                    dist += math::sqr(diff) * factor;
+                    match rmetric {
+                        Weighting::None => {
+                            let diff = self.samples[[*i, *j, k]] as f64
+                                - other.samples[[*i, *j, k]] as f64;
+                            dist += math::sqr(diff) * factor;
+                        },
+                        Weighting::LnCos => {
+                            let cos_theta_i = self.params.incoming[*i].theta.cos() as f64;
+                            let diff = (self.samples[[*i, *j, k]] as f64 * cos_theta_i + 1.0).ln()
+                                - (other.samples[[*i, *j, k]] as f64 * cos_theta_i + 1.0).ln();
+                            dist += math::sqr(diff) * factor;
+                        },
+                    }
                 }
             }
         }
 
-        dist
+        if metric == ErrorMetric::Rmse {
+            dist.sqrt()
+        } else {
+            dist
+        }
     }
 }
 
@@ -361,4 +375,92 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, RglBrdfParameterisation, 3> {
         self.index += 1;
         Some(snapshot)
     }
+}
+
+#[cfg(feature = "fitting")]
+impl AnalyticalFit2 for RglBrdf {
+    fn proxy(&self) -> BrdfFittingProxy<Self> {
+        let n_theta_i = self.params.n_wi_zenith();
+        let n_phi_i = self.params.n_wi_azimuth();
+        let n_theta_o = self.params.n_wo_zenith();
+        let n_phi_o = self.params.n_wo_azimuth();
+        let n_spectrum = self.spectrum.len();
+        let i_thetas = DyArr::from_iterator(
+            [-1],
+            self.params
+                .incoming
+                .iter()
+                .take(n_theta_i)
+                .map(|sph| sph.theta.as_f32()),
+        );
+        let i_phis = DyArr::from_iterator(
+            [-1],
+            self.params
+                .incoming
+                .iter()
+                .step_by(n_theta_i)
+                .map(|sph| sph.phi.as_f32()),
+        );
+        let o_thetas = DyArr::from_iterator(
+            [-1],
+            self.params
+                .outgoing
+                .iter()
+                .take(n_theta_o)
+                .map(|sph| sph.theta.as_f32()),
+        );
+        let o_phis = DyArr::from_iterator(
+            [-1],
+            self.params
+                .outgoing
+                .iter()
+                .step_by(n_theta_o)
+                .map(|sph| sph.phi.as_f32()),
+        );
+        // Rearrange the samples to match the new dimensions.
+        // The original dimensions are [n_phi_i, n_theta_i, n_phi_o, n_theta_o,
+        // n_spectrum] The target dimensions are [n_theta_i, n_phi_i, n_theta_o,
+        // n_phi_o, n_spectrum]
+        let mut resampled = DynArr::zeros(&[n_theta_i, n_phi_i, n_theta_o, n_phi_o, n_spectrum]);
+        let &[stride_theta_i, stride_phi_i, stride_theta_o, stride_phi_o, ..] = resampled.strides()
+        else {
+            panic!("Invalid strides!");
+        };
+        let org_strides = self.samples.strides();
+        for i in 0..n_theta_i {
+            for j in 0..n_phi_i {
+                for k in 0..n_theta_o {
+                    for l in 0..n_phi_o {
+                        let org_wi_idx = i + j * n_theta_i;
+                        let org_wo_idx = k + l * n_theta_o;
+                        let org_offset = org_wi_idx * org_strides[0] + org_wo_idx * org_strides[1];
+                        let new_offset = i * stride_theta_i
+                            + j * stride_phi_i
+                            + k * stride_theta_o
+                            + l * stride_phi_o;
+                        resampled.as_mut_slice()[new_offset..new_offset + n_spectrum]
+                            .copy_from_slice(
+                                &self.samples.as_slice()[org_offset..org_offset + n_spectrum],
+                            );
+                    }
+                }
+            }
+        }
+
+        let o_dirs = OutgoingDirs::new_grid(Cow::Owned(o_thetas), Cow::Owned(o_phis));
+        BrdfFittingProxy {
+            brdf: self,
+            source: ProxySource::Measured,
+            i_thetas: Cow::Owned(i_thetas),
+            i_phis: Cow::Owned(i_phis),
+            o_dirs,
+            resampled: Cow::Owned(resampled),
+        }
+    }
+
+    fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
+
+    fn medium_i(&self) -> Medium { self.incident_medium }
+
+    fn medium_t(&self) -> Medium { self.transmitted_medium }
 }

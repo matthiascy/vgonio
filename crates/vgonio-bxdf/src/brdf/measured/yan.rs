@@ -1,6 +1,8 @@
-use crate::brdf::measured::{
-    BrdfParameterisation, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
-    ParametrisationKind,
+use crate::brdf::{
+    fitting::{AnalyticalFit2, BrdfFittingProxy},
+    measured::{
+        BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
+    },
 };
 #[cfg(feature = "fitting")]
 use crate::{
@@ -16,9 +18,7 @@ use base::{
     MeasuredBrdfKind, MeasuredData, MeasurementKind,
 };
 #[cfg(feature = "fitting")]
-use base::{
-    math, optics::ior::RefractiveIndexRegistry, units::Radians, ErrorMetric, Weighting,
-};
+use base::{math, optics::ior::IorRegistry, units::Radians, ErrorMetric, Weighting};
 use jabr::array::DyArr;
 use std::{cmp::Ordering, fmt::Debug, path::Path, str::FromStr};
 
@@ -51,8 +51,8 @@ pub struct Yan2018BrdfParameterisation {
     pub height: u32,
 }
 
-impl BrdfParameterisation for Yan2018BrdfParameterisation {
-    fn kind() -> ParametrisationKind { ParametrisationKind::IncidentDirection }
+impl BrdfParam for Yan2018BrdfParameterisation {
+    fn kind() -> BrdfParamKind { BrdfParamKind::IncidentDirection }
 }
 
 impl Yan2018BrdfParameterisation {
@@ -516,7 +516,7 @@ impl AnalyticalFit for Yan2018Brdf {
         spectrum: &[Nanometres],
         params: &Self::Params,
         model: &dyn Bxdf<Params = [f64; 2]>,
-        iors: &RefractiveIndexRegistry,
+        iors: &IorRegistry,
     ) -> Self
     where
         Self: Sized,
@@ -566,6 +566,9 @@ impl AnalyticalFit for Yan2018Brdf {
         let factor = match metric {
             ErrorMetric::Mse => math::rcp_f64(self.samples().len() as f64),
             ErrorMetric::Nllsq => 0.5,
+            ErrorMetric::L1 => todo!(),
+            ErrorMetric::L2 => todo!(),
+            ErrorMetric::Rmse => todo!(),
         };
         match rmetric {
             Weighting::None => self
@@ -575,7 +578,7 @@ impl AnalyticalFit for Yan2018Brdf {
                 .fold(0.0, |acc, (s1, s2)| {
                     acc + math::sqr(*s1 as f64 - *s2 as f64) * factor
                 }),
-            Weighting::JLow => {
+            Weighting::LnCos => {
                 self.snapshots()
                     .zip(other.snapshots())
                     .fold(0.0, |acc, (xs, ys)| {
@@ -604,11 +607,7 @@ impl AnalyticalFit for Yan2018Brdf {
     where
         Self: Sized,
     {
-        assert_eq!(
-            self.spectrum(),
-            other.spectrum(),
-            "The spectra must be equal."
-        );
+        assert_eq!(self.spectrum, other.spectrum, "The spectra must be equal.");
         if self.params != other.params {
             panic!("The BRDFs must have the same parameterisation.");
         }
@@ -635,6 +634,9 @@ impl AnalyticalFit for Yan2018Brdf {
         let factor = match metric {
             ErrorMetric::Mse => math::rcp_f64(n_samples as f64),
             ErrorMetric::Nllsq => 0.5,
+            ErrorMetric::L1 => todo!(),
+            ErrorMetric::L2 => todo!(),
+            ErrorMetric::Rmse => todo!(),
         };
 
         let mut dist = 0.0;
@@ -669,4 +671,15 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, Yan2018BrdfParameterisation, 3> {
         self.index += 1;
         Some(snapshot)
     }
+}
+
+#[cfg(feature = "fitting")]
+impl AnalyticalFit2 for Yan2018Brdf {
+    fn proxy(&self) -> BrdfFittingProxy<Self> { todo!() }
+
+    fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
+
+    fn medium_i(&self) -> Medium { self.incident_medium }
+
+    fn medium_t(&self) -> Medium { self.transmitted_medium }
 }

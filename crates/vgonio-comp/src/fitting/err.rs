@@ -4,7 +4,7 @@ use crate::fitting::Weighting;
 use base::{optics::ior::IorRegistry, range::StepRangeIncl, units::Radians, ErrorMetric};
 use bxdf::{
     brdf::{
-        analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
+        analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
         measured::AnalyticalFit,
         Bxdf,
     },
@@ -29,12 +29,6 @@ pub fn compute_microfacet_brdf_err<M: AnalyticalFit + Sync>(
         epsilon = 1e-6
     );
 
-    if equals_half_pi {
-        log::debug!("compute full distance");
-    } else {
-        log::debug!("compute filtered distance");
-    }
-
     const CHUNK_SIZE: usize = 32;
     let mut errs = Box::new_uninit_slice(count);
     errs.par_chunks_mut(CHUNK_SIZE)
@@ -44,10 +38,12 @@ pub fn compute_microfacet_brdf_err<M: AnalyticalFit + Sync>(
                 let alpha_x = (i * CHUNK_SIZE + j) as f64 * alpha.step_size + alpha.start;
                 let alpha_y = (i * CHUNK_SIZE + j) as f64 * alpha.step_size + alpha.start;
                 let m = match distro {
-                    MicrofacetDistroKind::Beckmann => Box::new(BeckmannBrdf::new(alpha_x, alpha_y))
-                        as Box<dyn Bxdf<Params = [f64; 2]>>,
+                    MicrofacetDistroKind::Beckmann => {
+                        Box::new(MicrofacetBrdfBK::new(alpha_x, alpha_y))
+                            as Box<dyn Bxdf<Params = [f64; 2]>>
+                    },
                     MicrofacetDistroKind::TrowbridgeReitz => {
-                        Box::new(TrowbridgeReitzBrdf::new(alpha_x, alpha_y))
+                        Box::new(MicrofacetBrdfTR::new(alpha_x, alpha_y))
                             as Box<dyn Bxdf<Params = [f64; 2]>>
                     },
                 };

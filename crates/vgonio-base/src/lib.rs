@@ -220,6 +220,7 @@ pub enum MeasuredBrdfKind {
     /// The BRDF model by Yan et al. 2018.
     Yan2018,
     #[cfg_attr(feature = "cli", clap(name = "unknown"))]
+    /// Unknown.
     Unknown,
 }
 

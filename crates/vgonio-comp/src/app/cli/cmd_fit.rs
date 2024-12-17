@@ -8,7 +8,7 @@ use base::{
     error::VgonioError,
     math::Sph2,
     medium::Medium,
-    optics::ior::RefractiveIndexRegistry,
+    optics::ior::IorRegistry,
     partition::{PartitionScheme, SphericalDomain},
     range::StepRangeIncl,
     units::{nm, Radians, Rads},
@@ -16,7 +16,8 @@ use base::{
 };
 use bxdf::{
     brdf::{
-        analytical::microfacet::{BeckmannBrdf, TrowbridgeReitzBrdf},
+        analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
+        fitting::AnalyticalFit2,
         measured::{
             merl::MerlBrdf, rgl::RglBrdf, yan::Yan2018Brdf, AnalyticalFit, ClausenBrdf, VgonioBrdf,
             VgonioBrdfParameterisation,
@@ -28,7 +29,6 @@ use bxdf::{
 use core::slice::SlicePattern;
 use jabr::array::DyArr;
 use std::path::PathBuf;
-use base::optics::ior::IorRegistry;
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     println!(
@@ -62,7 +62,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     MicrofacetDistroKind::Beckmann => {
                         let mut models = vec![];
                         for alpha in alphas {
-                            models.push(Box::new(BeckmannBrdf::new(alpha, alpha))
+                            models.push(Box::new(MicrofacetBrdfBK::new(alpha, alpha))
                                 as Box<dyn Bxdf<Params = [f64; 2]>>);
                         }
                         models.into_boxed_slice()
@@ -70,7 +70,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     MicrofacetDistroKind::TrowbridgeReitz => {
                         let mut models = vec![];
                         for alpha in alphas {
-                            models.push(Box::new(TrowbridgeReitzBrdf::new(alpha, alpha))
+                            models.push(Box::new(MicrofacetBrdfTR::new(alpha, alpha))
                                 as Box<dyn Bxdf<Params = [f64; 2]>>);
                         }
                         models.into_boxed_slice()
@@ -223,14 +223,15 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                 .measured
                                 .downcast_ref::<MerlBrdf>()
                             {
-                                measured_brdf_fitting(
-                                    &opts,
-                                    &input,
-                                    brdf,
-                                    alpha,
-                                    &cache.iors,
-                                    theta_limit,
-                                );
+                                // measured_brdf_fitting(
+                                //     &opts,
+                                //     &input,
+                                //     brdf,
+                                //     alpha,
+                                //     &cache.iors,
+                                //     theta_limit,
+                                // );
+                                todo!()
                             }
                         }
                     },
@@ -293,6 +294,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                                 .measured
                                 .downcast_ref::<RglBrdf>()
                             {
+                                log::debug!("RGL BRDF fitting");
                                 measured_brdf_fitting(
                                     &opts,
                                     &input,
@@ -314,13 +316,14 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     })
 }
 
-fn brdf_fitting_brute_force<F: AnalyticalFit + Sync>(
+fn brdf_fitting_brute_force<F: AnalyticalFit + Sync + AnalyticalFit2>(
     brdf: &F,
     filepath: &PathBuf,
     opts: &FitOptions,
     alpha: StepRangeIncl<f64>,
     iors: &IorRegistry,
 ) {
+    let start = std::time::Instant::now();
     let errs = err::compute_microfacet_brdf_err(
         brdf,
         opts.distro,
@@ -330,23 +333,52 @@ fn brdf_fitting_brute_force<F: AnalyticalFit + Sync>(
             .and_then(|t| Some(Radians::from_degrees(t)))
             .unwrap_or(Radians::HALF_PI),
         opts.error_metric.unwrap_or(ErrorMetric::Mse),
-        opts.residual_error_metric,
+        opts.weighting,
     );
     let min_err = errs.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
     let min_idx = errs.iter().position(|&x| x == min_err).unwrap();
+    let end = std::time::Instant::now();
+    println!("    {} Took: {:?}", ansi::YELLOW_GT, end - start);
+
+    let start = std::time::Instant::now();
+    let errs2 = bxdf::brdf::fitting::brute::brdf_fitting_brute_force_isotropic(
+        brdf,
+        opts.distro,
+        opts.error_metric.unwrap_or(ErrorMetric::Mse),
+        opts.theta_limit
+            .and_then(|t| Some(Radians::from_degrees(t)))
+            .unwrap_or(Radians::HALF_PI),
+        opts.theta_limit
+            .and_then(|t| Some(Radians::from_degrees(t)))
+            .unwrap_or(Radians::HALF_PI),
+        opts.weighting,
+        alpha,
+        iors,
+    );
+    let min_err2 = errs2.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
+    let min_idx2 = errs2.iter().position(|&x| x == min_err2).unwrap();
+    let end = std::time::Instant::now();
+    println!("    {} Took: {:?}", ansi::YELLOW_GT, end - start);
+
     println!(
-        "    {}>{} MSEs ({}) {:?}",
-        ansi::BRIGHT_YELLOW,
-        ansi::RESET,
+        "    {} {:?}s ({}) {:?} @v2 {:?}  ",
+        ansi::YELLOW_GT,
+        opts.error_metric.unwrap_or(ErrorMetric::Mse),
         filepath.file_name().unwrap().display(),
-        errs.as_slice()
+        errs.as_slice(),
+        errs2.as_slice()
     );
     println!(
-        "    {}>{} Minimum error: {} at alpha = {}",
-        ansi::BRIGHT_YELLOW,
-        ansi::RESET,
+        "    {} Minimum error: {} at alpha = {}",
+        ansi::YELLOW_GT,
         min_err,
         alpha.values().nth(min_idx).unwrap()
+    );
+    println!(
+        "    {} Minimum error V2: {} at alpha = {}",
+        ansi::YELLOW_GT,
+        min_err2,
+        alpha.values().nth(min_idx2).unwrap()
     );
     if opts.plot {
         plot_err(
@@ -359,7 +391,7 @@ fn brdf_fitting_brute_force<F: AnalyticalFit + Sync>(
     }
 }
 
-fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
+fn measured_brdf_fitting<F: AnalyticalFit + Sync + AnalyticalFit2>(
     opts: &FitOptions,
     filepath: &PathBuf,
     brdf: &F,
@@ -369,24 +401,23 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
 ) {
     let limit = theta_limit.unwrap_or(Radians::HALF_PI);
     println!(
-        "    {}>{} Fitting ({:?}) to model: {:?}, distro: {:?}, isotropy: {}, method: {:?}, \
-         residual error metric: {:?}, θ < {}",
-        ansi::BRIGHT_YELLOW,
-        ansi::RESET,
+        "    {} Fitting ({:?}) to model: {:?}, distro: {:?}, isotropy: {}, method: {:?}, error \
+         metric: {:?}, weighting: {:?}, θ < {}",
+        ansi::YELLOW_GT,
         brdf.kind(),
         opts.family,
         opts.distro,
         opts.isotropy,
         opts.method,
-        opts.residual_error_metric,
+        opts.error_metric.unwrap_or(ErrorMetric::Mse),
+        opts.weighting,
         limit.prettified()
     );
     if brdf.kind() == MeasuredBrdfKind::Clausen {
         let brdf = brdf.as_any().downcast_ref::<ClausenBrdf>().unwrap();
         println!(
-            "    {}>{} Clausen's data, data point positions:",
-            ansi::BRIGHT_YELLOW,
-            ansi::RESET,
+            "    {} Clausen's data, data point positions:",
+            ansi::YELLOW_GT,
         );
         for (_, (wi, wos)) in brdf.params.wi_wos_iter() {
             print!("        wi: {} - wo:", wi);
@@ -408,7 +439,7 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync>(
                 limit,
             );
             problem
-                .lsq_lm_fit(opts.isotropy, opts.residual_error_metric)
+                .lsq_lm_fit(opts.isotropy, opts.weighting)
                 .print_fitting_report();
         },
     }
@@ -532,11 +563,12 @@ pub struct FitOptions {
     pub error_metric: Option<ErrorMetric>,
 
     #[clap(
+        short,
         long,
-        help = "The error metric to use to weight the measured data.",
-        default_value = "identity"
+        help = "The weighting to use to weight the measured data.",
+        default_value = "none"
     )]
-    pub residual_error_metric: Weighting,
+    pub weighting: Weighting,
 
     #[clap(
         long,

@@ -1,23 +1,22 @@
 #[cfg(feature = "fitting")]
 use crate::brdf::measured::AnalyticalFit;
 use crate::brdf::{
-    measured::{BrdfParam, MeasuredBrdf, Origin, BrdfParamKind},
+    measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
     Bxdf,
 };
 #[cfg(feature = "io")]
 use base::error::VgonioError;
 use base::{
     impl_measured_data_trait,
+    math::Sph2,
     medium::Medium,
     optics::ior::IorRegistry,
     units::{nm, Nanometres, Radians},
     ErrorMetric, MeasuredBrdfKind, MeasuredData, MeasurementKind, Weighting,
 };
 use jabr::array::{s, DArr, DyArr};
-use std::any::Any;
 #[cfg(feature = "io")]
 use std::path::Path;
-use base::math::Sph2;
 
 /// Parameterisation for a measured BRDF from the MERL database: <http://www.merl.com/brdf/>
 #[derive(Debug, Clone, PartialEq)]
@@ -73,7 +72,7 @@ impl Default for MerlBrdfParam {
     }
 }
 
-impl BrdfParameterisation for MerlBrdfParam {
+impl BrdfParam for MerlBrdfParam {
     fn kind() -> BrdfParamKind { BrdfParamKind::HalfVector }
 }
 
@@ -103,7 +102,7 @@ impl MerlBrdf {
         // Make sure the angle is in the range [0, π].
         let phi_d = if phi_d < Radians::ZERO {
             phi_d + Radians::PI
-        } else if phi_d >= Radians::PI{
+        } else if phi_d >= Radians::PI {
             // Mirror the angle to the range [0, π].
             phi_d - Radians::PI
         } else {
@@ -117,7 +116,8 @@ impl MerlBrdf {
     /// Lookup the index of the zenith angle for the half-vector.
     pub fn theta_d_index(&self, theta_d: Radians) -> usize {
         assert!(theta_d >= Radians::ZERO && theta_d <= Radians::HALF_PI);
-        let index = ((theta_d * 2.0 / Radians::PI) * MerlBrdfParam::RES_THETA_D as f32).round() as i32;
+        let index =
+            ((theta_d * 2.0 / Radians::PI) * MerlBrdfParam::RES_THETA_D as f32).round() as i32;
         index.clamp(0, MerlBrdfParam::RES_THETA_D as i32 - 1) as usize
     }
 
@@ -126,8 +126,10 @@ impl MerlBrdf {
     /// The mapping is not linear.
     pub fn theta_h_index(&self, theta_h: Radians) -> usize {
         assert!(theta_h >= Radians::ZERO && theta_h <= Radians::HALF_PI);
-        let theta_h_deg = theta_h * 0.5 / Radians::PI * BRDF_THETA_H as f32;
-        let index = (theta_h_deg * MerlBrdfParam::RES_THETA_H as f32).sqrt().round() as i32;
+        let theta_h_deg = theta_h * 0.5 / Radians::PI * MerlBrdfParam::RES_THETA_H as f32;
+        let index = (theta_h_deg * MerlBrdfParam::RES_THETA_H as f32)
+            .sqrt()
+            .round() as i32;
         index.clamp(0, MerlBrdfParam::RES_THETA_H as i32 - 1) as usize
     }
 
@@ -222,8 +224,7 @@ impl MerlBrdf {
         ]);
 
         let stride_c = MerlBrdfParam::RES_TOTAL as usize;
-        let stride_th = MerlBrdfParam::RES_THETA_D as usize
-            * MerlBrdfParam::RES_PHI_D as usize;
+        let stride_th = MerlBrdfParam::RES_THETA_D as usize * MerlBrdfParam::RES_PHI_D as usize;
         let stride_td = MerlBrdfParam::RES_PHI_D as usize;
         let scale = [
             MerlBrdfParam::R_SCALE,
@@ -257,63 +258,63 @@ impl MerlBrdf {
     pub fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
 }
 
-#[cfg(feature = "fitting")]
-impl AnalyticalFit for MerlBrdf {
-    type Params = MerlBrdfParam;
+// #[cfg(feature = "fitting")]
+// impl AnalyticalFit for MerlBrdf {
+//     type Params = MerlBrdfParam;
 
-    impl_analytical_fit_trait!(self);
+//     impl_analytical_fit_trait!(self);
 
-    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
+//     fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
 
-    fn new_analytical(
-        medium_i: Medium,
-        medium_t: Medium,
-        spectrum: &[Nanometres],
-        params: &Self::Params,
-        model: &dyn Bxdf<Params = [f64; 2]>,
-        iors: &IorRegistry,
-    ) -> Self
-    where
-        Self: Sized,
-    {
-        let iors_i = iors.ior_of_spectrum(medium_i, spectrum).unwrap();
-        let iors_t = iors.ior_of_spectrum(medium_t, spectrum).unwrap();
-        let n_spectrum = 3;
-        let mut samples = DyArr::<f32, 3>::zeros([
-            MerlBrdfParam::RES_THETA_H as usize,
-            MerlBrdfParam::RES_THETA_D as usize,
-            MerlBrdfParam::RES_PHI_D as usize,
-            n_spectrum,
-        ]);
-        params.zenith_h.iter().enumerate().for_each(|(i, &theta_h)| {
-            params.zenith_d.iter().enumerate().for_each(|(j, &theta_d)| {
-                params.azimuth_d.iter().enumerate().for_each(|(k, &phi_d)| {
-                    let wd = Sph2::new(theta_d, phi_d);
-                    let d = wd.to_cartesian();
-                    let wh = Sph2::new(theta_h, 0.0);
-                    let (i, o) = hd2io(, d);
-                });
-            });
-        });
-    }
+//     fn new_analytical(
+//         medium_i: Medium,
+//         medium_t: Medium,
+//         spectrum: &[Nanometres],
+//         params: &Self::Params,
+//         model: &dyn Bxdf<Params = [f64; 2]>,
+//         iors: &IorRegistry,
+//     ) -> Self
+//     where
+//         Self: Sized,
+//     {
+//         let iors_i = iors.ior_of_spectrum(medium_i, spectrum).unwrap();
+//         let iors_t = iors.ior_of_spectrum(medium_t, spectrum).unwrap();
+//         let n_spectrum = 3;
+//         let mut samples = DyArr::<f32, 3>::zeros([
+//             MerlBrdfParam::RES_THETA_H as usize,
+//             MerlBrdfParam::RES_THETA_D as usize,
+//             MerlBrdfParam::RES_PHI_D as usize,
+//             n_spectrum,
+//         ]);
+//         params.zenith_h.iter().enumerate().for_each(|(i, &theta_h)| {
+//             params.zenith_d.iter().enumerate().for_each(|(j, &theta_d)| {
+//                 params.azimuth_d.iter().enumerate().for_each(|(k, &phi_d)| {
+//                     let wd = Sph2::new(theta_d, phi_d);
+//                     let d = wd.to_cartesian();
+//                     let wh = Sph2::new(theta_h, 0.0);
+//                     let (i, o) = hd2io(, d);
+//                 });
+//             });
+//         });
+//     }
 
-    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: Weighting) -> f64
-    where
-        Self: Sized,
-    {
-        todo!()
-    }
+//     fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: Weighting)
+// -> f64     where
+//         Self: Sized,
+//     {
+//         todo!()
+//     }
 
-    fn filtered_distance(
-        &self,
-        other: &Self,
-        metric: ErrorMetric,
-        rmetric: Weighting,
-        limit: Radians,
-    ) -> f64
-    where
-        Self: Sized,
-    {
-        todo!()
-    }
-}
+//     fn filtered_distance(
+//         &self,
+//         other: &Self,
+//         metric: ErrorMetric,
+//         rmetric: Weighting,
+//         limit: Radians,
+//     ) -> f64
+//     where
+//         Self: Sized,
+//     {
+//         todo!()
+//     }
+// }

@@ -1,6 +1,9 @@
 //! BRDF measured in the paper "Investigation and Simulation of Diffraction on
 //! Rough Surfaces" by O. Clausen, Y. Chen, A. Fuhrmann and R. Marroquim.
-use crate::brdf::measured::{BrdfParameterisation, MeasuredBrdf, Origin, ParametrisationKind};
+use crate::brdf::{
+    fitting::{AnalyticalFit2, BrdfFittingProxy},
+    measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
+};
 #[cfg(feature = "fitting")]
 use crate::{brdf::measured::AnalyticalFit, Bxdf, Scattering};
 use base::{
@@ -12,7 +15,7 @@ use base::{
     MeasuredBrdfKind, MeasuredData, MeasurementKind,
 };
 #[cfg(feature = "fitting")]
-use base::{math, optics::ior::RefractiveIndexRegistry, ErrorMetric, Weighting};
+use base::{math, optics::ior::IorRegistry, ErrorMetric, Weighting};
 use jabr::array::DyArr;
 use std::{
     fs::File,
@@ -38,8 +41,8 @@ pub struct ClausenBrdfParameterisation {
     pub n_wo: usize,
 }
 
-impl BrdfParameterisation for ClausenBrdfParameterisation {
-    fn kind() -> ParametrisationKind { ParametrisationKind::IncidentDirection }
+impl BrdfParam for ClausenBrdfParameterisation {
+    fn kind() -> BrdfParamKind { BrdfParamKind::IncidentDirection }
 }
 
 impl ClausenBrdfParameterisation {
@@ -325,7 +328,7 @@ impl AnalyticalFit for ClausenBrdf {
         spectrum: &[Nanometres],
         params: &Self::Params,
         model: &dyn Bxdf<Params = [f64; 2]>,
-        iors: &RefractiveIndexRegistry,
+        iors: &IorRegistry,
     ) -> Self {
         let iors_i = iors.ior_of_spectrum(medium_i, spectrum).unwrap();
         let iors_t = iors.ior_of_spectrum(medium_t, spectrum).unwrap();
@@ -363,24 +366,28 @@ impl AnalyticalFit for ClausenBrdf {
 
     /// Computes the distance between the measured data and the model.
     fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: Weighting) -> f64 {
-        assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
+        assert_eq!(self.spectrum, other.spectrum, "Spectra must be equal!");
         if self.params() != other.params() {
             panic!("Parameterization must be the same!");
         }
         let factor = match metric {
             ErrorMetric::Mse => math::rcp_f64(self.samples().len() as f64),
             ErrorMetric::Nllsq => 0.5,
+            ErrorMetric::L1 => todo!(),
+            ErrorMetric::L2 => todo!(),
+            ErrorMetric::Rmse => todo!(),
         };
         match rmetric {
-            Weighting::None => self
-                .samples()
-                .iter()
-                .zip(other.samples().iter())
-                .fold(0.0f64, |acc, (a, b)| {
-                    let diff = *a as f64 - *b as f64;
-                    acc + math::sqr(diff) * factor
-                }),
-            Weighting::JLow => {
+            Weighting::None => {
+                self.samples()
+                    .iter()
+                    .zip(other.samples().iter())
+                    .fold(0.0f64, |acc, (a, b)| {
+                        let diff = *a as f64 - *b as f64;
+                        acc + math::sqr(diff) * factor
+                    })
+            },
+            Weighting::LnCos => {
                 let n_spectrum = self.n_spectrum();
                 let n_wo = self.n_wo();
                 self.params
@@ -410,7 +417,7 @@ impl AnalyticalFit for ClausenBrdf {
         limit: Radians,
     ) -> f64 {
         log::debug!("Filtering distance with limit: {}", limit.prettified());
-        assert_eq!(self.spectrum(), other.spectrum(), "Spectra must be equal!");
+        assert_eq!(self.spectrum, other.spectrum, "Spectra must be equal!");
         if self.params() != other.params() {
             panic!("Parameterization must be the same!");
         }
@@ -429,6 +436,9 @@ impl AnalyticalFit for ClausenBrdf {
         let factor = match metric {
             ErrorMetric::Mse => math::rcp_f64(n_samples as f64),
             ErrorMetric::Nllsq => 0.5,
+            ErrorMetric::L1 => todo!(),
+            ErrorMetric::L2 => todo!(),
+            ErrorMetric::Rmse => todo!(),
         };
         self.params
             .all_wi_wo_iter()
@@ -450,4 +460,15 @@ impl AnalyticalFit for ClausenBrdf {
                 }
             })
     }
+}
+
+#[cfg(feature = "fitting")]
+impl AnalyticalFit2 for ClausenBrdf {
+    fn proxy(&self) -> BrdfFittingProxy<Self> { todo!() }
+
+    fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
+
+    fn medium_i(&self) -> Medium { self.incident_medium }
+
+    fn medium_t(&self) -> Medium { self.transmitted_medium }
 }

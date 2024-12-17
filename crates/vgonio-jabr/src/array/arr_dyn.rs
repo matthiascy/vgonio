@@ -6,7 +6,7 @@ use crate::array::{
     shape::compute_n_elems,
 };
 use std::{
-    fmt::{Debug, Formatter, Result},
+    fmt::Debug,
     mem::MaybeUninit,
     ops::{Index, IndexMut},
     slice::{Iter, IterMut},
