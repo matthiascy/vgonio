@@ -10,7 +10,6 @@ use base::{
 };
 #[cfg(feature = "fitting")]
 use libm::erf;
-use num_traits::Float;
 
 /// Microfacet BRDF model based on Beckmann distribution.
 pub type MicrofacetBrdfBK = MicrofacetBrdf<BeckmannDistribution>;
@@ -167,7 +166,7 @@ impl Bxdf for MicrofacetBrdfBK {
 
         let rcp_gi = rcp_f64(gi);
         let rcp_go = rcp_f64(go);
-        let mut dfr_dalpha_x = if nominator_x == 0.0 {
+        let dfr_dalpha_x = if nominator_x == 0.0 {
             0.0
         } else {
             nominator_x
@@ -177,7 +176,7 @@ impl Bxdf for MicrofacetBrdfBK {
                 * rcp_go
                 * rcp_f64(sqrt_pi * sqrt_pi * sqrt_pi * alpha_y)
         };
-        let mut dfr_dalpha_y = if nominator_y == 0.0 {
+        let dfr_dalpha_y = if nominator_y == 0.0 {
             0.0
         } else {
             nominator_y
