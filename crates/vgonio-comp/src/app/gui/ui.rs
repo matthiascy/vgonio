@@ -260,9 +260,16 @@ impl VgonioGui {
                                         &cache.iors,
                                         Radians::HALF_PI,
                                     );
-                                    problem.lsq_lm_fit(*isotropy, Weighting::None)
+                                    problem.nllsq_fit(
+                                        distro.unwrap(),
+                                        *isotropy,
+                                        Weighting::None,
+                                        StepRangeIncl::new(0.001, 1.0, 0.01),
+                                        None,
+                                        None,
+                                    )
                                 });
-                                report.print_fitting_report();
+                                report.print_fitting_report(16);
                                 // TODO: update the fitted models
                             },
                             _ => unimplemented!("Fitting BxDF family: {:?}", family),
@@ -304,9 +311,16 @@ impl VgonioGui {
                             };
                             let problem =
                                 MicrofacetDistributionFittingProblem::new(data, *model, *scale);
-                            problem.lsq_lm_fit(*isotropy, Weighting::None)
+                            problem.nllsq_fit(
+                                *model,
+                                *isotropy,
+                                Weighting::None,
+                                StepRangeIncl::new(0.001, 2.0, 0.01),
+                                None,
+                                None,
+                            )
                         });
-                        report.print_fitting_report();
+                        report.print_fitting_report(16);
                         if let Some(model) = report.best_model() {
                             fitted.push(FittedModel::Ndf(model.clone_box(), *scale));
                         } else {

@@ -43,7 +43,7 @@ mod dim;
 mod mem;
 mod ops;
 mod packet;
-mod shape;
+pub mod shape;
 mod traits;
 
 pub use arr_d::*;

@@ -58,9 +58,9 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Arguments
     ///
-    /// * `i` - The incident direction (normalized).
-    /// * `o` - The outgoing direction (normalized).
-    fn eval(&self, i: &Vec3, o: &Vec3) -> f64;
+    /// * `vi` - The incident direction (normalized).
+    /// * `vo` - The outgoing direction (normalized).
+    fn eval(&self, vi: &Vec3, vo: &Vec3) -> f64;
 
     #[rustfmt::skip]
     /// Evaluates the BRDF ($f_r$) with the Rusinkiewicz parameterization.
@@ -74,9 +74,9 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Arguments
     ///
-    /// * `h` - The half vector.
-    /// * `d` - The difference vector.
-    fn eval_hd(&self, h: &Vec3, d: &Vec3) -> f64;
+    /// * `vh` - The half vector.
+    /// * `vd` - The difference vector.
+    fn eval_hd(&self, vh: &Vec3, vd: &Vec3) -> f64;
 
     /// Evaluates the projected BRDF with the classical parameterization.
     ///
@@ -84,9 +84,9 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Arguments
     ///
-    /// * `i` - The incident direction.
-    /// * `o` - The outgoing direction.
-    fn evalp(&self, i: &Vec3, o: &Vec3) -> f64;
+    /// * `vi` - The incident direction.
+    /// * `vo` - The outgoing direction.
+    fn evalp(&self, vi: &Vec3, vo: &Vec3) -> f64;
 
     /// Evaluates the projected BRDF with the Rusinkiewicz parameterization.
     ///
@@ -94,12 +94,12 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Arguments
     ///
-    /// * `h` - The half vector.
-    /// * `d` - The difference vector.
-    fn evalp_hd(&self, h: &Vec3, d: &Vec3) -> f64;
+    /// * `vh` - The half vector.
+    /// * `vd` - The difference vector.
+    fn evalp_hd(&self, vh: &Vec3, vd: &Vec3) -> f64;
 
     /// Evaluates the projected BRDF with importance sampling.
-    fn evalp_is(&self, u: f32, v: f32, o: &Vec3, i: &mut Vec3, pdf: &mut f32) -> f64;
+    fn evalp_is(&self, u: f32, v: f32, vo: &Vec3, vi: &mut Vec3, pdf: &mut f32) -> f64;
 
     /// Importance sample f_r * cos_theta_i using two uniform variates.
     ///
@@ -107,11 +107,11 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// * `u` - The first uniform variate.
     /// * `v` - The second uniform variate.
-    /// * `o` - The outgoing direction.
-    fn sample(&self, u: f32, v: f32, o: &Vec3) -> f64;
+    /// * `vo` - The outgoing direction.
+    fn sample(&self, u: f32, v: f32, vo: &Vec3) -> f64;
 
     /// Evaluates the PDF of a sample.
-    fn pdf(&self, i: &Vec3, o: &Vec3) -> f64;
+    fn pdf(&self, vi: &Vec3, vo: &Vec3) -> f64;
 
     #[cfg(feature = "fitting")]
     /// Computes the partial derivatives of the BRDF model with respect to the
@@ -119,8 +119,8 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Arguments
     ///
-    /// * `i` - The incident directions.
-    /// * `o` - The outgoing directions.
+    /// * `vi` - The incident directions.
+    /// * `vo` - The outgoing directions.
     ///
     /// # Returns
     ///
@@ -133,13 +133,13 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     /// length of `i` times the length of `o`. For each incident direction
     /// `i`, the derivatives with respect to params are evaluated for each
     /// outgoing direction `o`.
-    fn pds(&self, i: &[Vec3], o: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
+    fn pds(&self, vi: &[Vec3], vo: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
 
     /// Computes the partial derivatives of the BRDF model with respect to the
     /// roughness parameters of the model for a single incident and outgoing
     /// direction pair.
     #[cfg(feature = "fitting")]
-    fn pd(&self, i: &Vec3, o: &Vec3, ior_i: &Ior, ior_t: &Ior) -> [f64; 2];
+    fn pd(&self, vi: &Vec3, vo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> [f64; 2];
 
     #[cfg(feature = "fitting")]
     /// Computes the partial derivatives of the BRDF model with respect to the
@@ -147,8 +147,8 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Arguments
     ///
-    /// * `i` - The incident directions.
-    /// * `o` - The outgoing directions.
+    /// * `vi` - The incident directions.
+    /// * `vo` - The outgoing directions.
     ///
     /// # Returns
     ///
@@ -157,21 +157,30 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     ///
     /// # Note
     ///
-    /// For each incident direction *i*, the derivatives with respect to params
-    /// are evaluated for each outgoing direction *o*.
+    /// For each incident direction `vi`, the derivatives with respect to params
+    ///  
+    /// are evaluated for each outgoing direction `vo`.
     /// The returned vector has the length of number of parameters times the
-    /// length of `i` times the length of `o`.
-    fn pds_iso(&self, i: &[Vec3], o: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
+    /// length of `vi` times the length of `vo`.
+    fn pds_iso(&self, vi: &[Vec3], vo: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]>;
 
     /// Computes the partial derivatives of the BRDF model with respect to the
     /// roughness parameters of the model for a single incident and outgoing
     /// direction pair for isotropic materials.
     #[cfg(feature = "fitting")]
-    fn pd_iso(&self, i: &Vec3, o: &Vec3, ior_i: &Ior, ior_t: &Ior) -> f64;
+    fn pd_iso(&self, vi: &Vec3, vo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> f64;
+
+    /// Enables cloning the BRDF model from a Boxed trait object.
+    ///
+    /// # Note
+    ///
+    /// This method is used to implement the `Clone` trait for the `Box<dyn
+    /// Bxdf>` type.
+    fn clone_box(&self) -> Box<dyn Bxdf<Params = Self::Params>>;
 }
 
 impl<P: 'static + Clone> Clone for Box<dyn Bxdf<Params = P>> {
-    fn clone(&self) -> Box<dyn Bxdf<Params = P>> { self.clone() }
+    fn clone(&self) -> Box<dyn Bxdf<Params = P>> { self.clone_box() }
 }
 
 #[rustfmt::skip]
@@ -186,21 +195,21 @@ impl<P: 'static + Clone> Clone for Box<dyn Bxdf<Params = P>> {
 /// $$
 ///
 /// where $\theta_h$ and $\phi_h$ are the polar and azimuthal angles of the half vector.
-/// 
+///
 /// # Arguments
 ///
-/// * `i` - The incident direction.
-/// * `o` - The outgoing direction.
+/// * `vi` - The incident direction.
+/// * `vo` - The outgoing direction.
 ///
 /// # Returns
 ///
 /// (half, difference)
-pub fn io2hd(i: &Vec3, o: &Vec3) -> (Vec3, Vec3) {
-    let h = (*i + *o).normalize();
+pub fn io2hd(vi: &Vec3, vo: &Vec3) -> (Vec3, Vec3) {
+    let h = (*vi + *vo).normalize();
     let wh = Sph2::from_cartesian(h);
     let rot_y = Mat3::from_rotation_y(-wh.theta.as_f32());
     let rot_z = Mat3::from_rotation_z(-wh.phi.as_f32());
-    let d = rot_y * rot_z * *i;
+    let d = rot_y * rot_z * *vi;
     (h, d)
 }
 
@@ -238,21 +247,21 @@ pub fn io2hd_sph(wi: &Sph2, wo: &Sph2) -> (Sph2, Sph2) {
 ///
 /// # Arguments
 ///
-/// * `h` - The half vector.
-/// * `d` - The difference vector.
+/// * `vh` - The half vector.
+/// * `vd` - The difference vector.
 ///
 /// # Returns
 ///
 /// (incident, outgoing)
-pub fn hd2io(h: &Vec3, d: &Vec3) -> (Vec3, Vec3) {
-    let wh = Sph2::from_cartesian(*h);
+pub fn hd2io(vh: &Vec3, vd: &Vec3) -> (Vec3, Vec3) {
+    let wh = Sph2::from_cartesian(*vh);
     let phi_h = wh.phi;
     let theta_h = wh.theta;
     let rot_y = Mat3::from_rotation_y(theta_h.as_f32());
     let rot_z = Mat3::from_rotation_z(phi_h.as_f32());
-    let i = rot_z * rot_y * *d;
-    let o = 2.0 * i.dot(*h) * *h - i;
-    (i, o)
+    let vi = rot_z * rot_y * *vd;
+    let vo = 2.0 * vi.dot(*vh) * *vh - vi;
+    (vi, vo)
 }
 
 /// Converts the half and difference vectors to the incident and outgoing

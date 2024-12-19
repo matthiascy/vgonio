@@ -37,11 +37,11 @@ pub enum MfdFittingData<'a> {
 /// The fitting procedure is based on the Levenberg-Marquardt algorithm.
 pub struct MicrofacetDistributionFittingProblem<'a> {
     /// Scaling factor for the measured data.
-    scale: f32,
+    pub scale: f32,
     /// The measured data to fit to.
-    measured: MfdFittingData<'a>,
+    pub measured: MfdFittingData<'a>,
     /// The target model distribution kind.
-    target: MicrofacetDistroKind,
+    pub target: MicrofacetDistroKind,
 }
 
 impl<'a> Display for MicrofacetDistributionFittingProblem<'a> {
@@ -67,14 +67,25 @@ impl<'a> MicrofacetDistributionFittingProblem<'a> {
 impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
     type Model = Box<dyn MicrofacetDistribution<Params = [f64; 2]>>;
 
-    fn lsq_lm_fit(self, isotropy: Isotropy, _re: Weighting) -> FittingReport<Self::Model> {
+    // TODO: implement this
+    fn nllsq_fit(
+        &self,
+        target: MicrofacetDistroKind,
+        isotropy: Isotropy,
+        weighting: Weighting,
+        initial: StepRangeIncl<f64>,
+        max_theta_i: Option<Radians>,
+        max_theta_o: Option<Radians>,
+    ) -> FittingReport<Self::Model> {
         println!("Fitting MDF with isotropy: {:?}", isotropy);
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
-        let mut result: Vec<(
-            Box<dyn MicrofacetDistribution<Params = [f64; 2]>>,
-            MinimizationReport<f64>,
-        )> = {
+        let result: Box<
+            [(
+                Box<dyn MicrofacetDistribution<Params = [f64; 2]>>,
+                MinimizationReport<f64>,
+            )],
+        > = {
             match self.measured {
                 MfdFittingData::Ndf(measured) => {
                     initialise_microfacet_mdf_models(0.001, 2.0, 32, self.target)
@@ -161,8 +172,19 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                 .collect(),
             }
         };
-        result.shrink_to_fit();
         FittingReport::new(result)
+    }
+
+    fn brute_fit(
+        &self,
+        isotropy: Isotropy,
+        metric: base::ErrorMetric,
+        weighting: Weighting,
+        max_theta_i: Radians,
+        max_theta_o: Radians,
+        precision: u32,
+    ) -> FittingReport<Self::Model> {
+        todo!()
     }
 }
 

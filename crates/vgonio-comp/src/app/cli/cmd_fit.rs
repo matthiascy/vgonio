@@ -360,14 +360,14 @@ fn brdf_fitting_brute_force<F: AnalyticalFit + Sync + AnalyticalFit2>(
     let end = std::time::Instant::now();
     println!("    {} Took: {:?}", ansi::YELLOW_GT, end - start);
 
-    println!(
-        "    {} {:?}s ({}) {:?} @v2 {:?}  ",
-        ansi::YELLOW_GT,
-        opts.error_metric.unwrap_or(ErrorMetric::Mse),
-        filepath.file_name().unwrap().display(),
-        errs.as_slice(),
-        errs2.as_slice()
-    );
+    // println!(
+    //     "    {} {:?}s ({}) {:?} @v2 {:?}  ",
+    //     ansi::YELLOW_GT,
+    //     opts.error_metric.unwrap_or(ErrorMetric::Mse),
+    //     filepath.file_name().unwrap().display(),
+    //     errs.as_slice(),
+    //     errs2.as_slice()
+    // );
     println!(
         "    {} Minimum error: {} at alpha = {}",
         ansi::YELLOW_GT,
@@ -439,8 +439,28 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync + AnalyticalFit2>(
                 limit,
             );
             problem
-                .lsq_lm_fit(opts.isotropy, opts.weighting)
-                .print_fitting_report();
+                .nllsq_fit(
+                    opts.distro,
+                    opts.isotropy,
+                    opts.weighting,
+                    alpha,
+                    None,
+                    None,
+                )
+                .print_fitting_report(4);
+
+            println!("{} V2", ansi::YELLOW_GT);
+            let proxy = brdf.proxy(iors);
+            log::debug!("Fitting with αx = {} αy = {}", alpha.start, alpha.stop);
+            let report = proxy.nllsq_fit(
+                opts.distro,
+                opts.isotropy,
+                opts.weighting,
+                alpha,
+                opts.theta_limit.map(|t| Radians::from_degrees(t)),
+                opts.theta_limit.map(|t| Radians::from_degrees(t)),
+            );
+            report.print_fitting_report(4);
         },
     }
 }

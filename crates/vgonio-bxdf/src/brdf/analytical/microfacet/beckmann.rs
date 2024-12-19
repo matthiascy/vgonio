@@ -232,12 +232,12 @@ impl Bxdf for MicrofacetBrdfBK {
     }
 
     #[cfg(feature = "fitting")]
-    fn pds_iso(&self, i: &[Vec3], o: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]> {
+    fn pds_iso(&self, vi: &[Vec3], vo: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]> {
         debug_assert!(self.distro.is_isotropic());
-        let mut result = Box::new_uninit_slice(i.len() * o.len());
-        for j in 0..i.len() {
-            for k in 0..o.len() {
-                result[j * o.len() + k].write(self.pd_iso(&i[j], &o[k], ior_i, ior_t));
+        let mut result = Box::new_uninit_slice(vi.len() * vo.len());
+        for j in 0..vi.len() {
+            for k in 0..vo.len() {
+                result[j * vo.len() + k].write(self.pd_iso(&vi[j], &vo[k], ior_i, ior_t));
             }
         }
         unsafe { result.assume_init() }
@@ -288,4 +288,6 @@ impl Bxdf for MicrofacetBrdfBK {
         let denominator = cbr(sqrt_pi) * alpha5 * sqr(bhi) * sqr(bho) * cos_theta_h4_i_o;
         nominator * rcp_f64(denominator)
     }
+
+    fn clone_box(&self) -> Box<dyn Bxdf<Params = Self::Params>> { Box::new(self.clone()) }
 }

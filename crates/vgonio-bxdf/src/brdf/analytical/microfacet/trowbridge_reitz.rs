@@ -254,6 +254,8 @@ impl Bxdf for MicrofacetBrdfTR {
         let denominator = one_plus_ai2 * one_plus_ao2 * (alpha2 + tan_theta_h2).powi(3) * ai * ao;
         part_one * nominator * rcp_f64(denominator)
     }
+
+    fn clone_box(&self) -> Box<dyn Bxdf<Params = Self::Params>> { Box::new(self.clone()) }
 }
 
 /// Trowbridge-Reitz (GGX) microfacet BRDF model.

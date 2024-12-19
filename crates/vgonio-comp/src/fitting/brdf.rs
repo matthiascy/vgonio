@@ -180,7 +180,15 @@ macro_rules! switch_isotropy {
 impl<'a, P: BrdfParam> FittingProblem for MicrofacetBrdfFittingProblem<'a, P> {
     type Model = Box<dyn Bxdf<Params = [f64; 2]>>;
 
-    fn lsq_lm_fit(self, isotropy: Isotropy, rmetric: Weighting) -> FittingReport<Self::Model> {
+    fn nllsq_fit(
+        &self,
+        distro: MicrofacetDistroKind,
+        isotropy: Isotropy,
+        weighting: Weighting,
+        alpha: StepRangeIncl<f64>,
+        max_theta_i: Option<Radians>,
+        max_theta_o: Option<Radians>,
+    ) -> FittingReport<Self::Model> {
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
         let mut results = {
@@ -202,21 +210,21 @@ impl<'a, P: BrdfParam> FittingProblem for MicrofacetBrdfFittingProblem<'a, P> {
                             ClausenBrdfParameterisation,
                             ClausenBrdf,
                             { Isotropy::Isotropic },
-                        >::new(brdf, model, &self.iors_i, &self.iors_t, self.theta_limit, rmetric);
+                        >::new(brdf, model, &self.iors_i, &self.iors_t, self.theta_limit, weighting);
                         let (result, report) = solver.minimize(problem);
                         (result.model, report)
                     },
                     MeasuredBrdfKind::Vgonio => {
                         let brdf = self.measured.as_any().downcast_ref::<VgonioBrdf>().unwrap();
-                        switch_isotropy!(VgonioBrdf<VgonioBrdfParameterisation> => isotropy, self, brdf, model, solver, rmetric)
+                        switch_isotropy!(VgonioBrdf<VgonioBrdfParameterisation> => isotropy, self, brdf, model, solver, weighting)
                     },
                     MeasuredBrdfKind::Yan2018 => {
                         let brdf = self.measured.as_any().downcast_ref::<Yan2018Brdf>().unwrap();
-                        switch_isotropy!(Yan2018Brdf<Yan2018BrdfParameterisation> => isotropy, self, brdf, model, solver, rmetric)
+                        switch_isotropy!(Yan2018Brdf<Yan2018BrdfParameterisation> => isotropy, self, brdf, model, solver, weighting)
                     },
                     MeasuredBrdfKind::Rgl => {
                         let brdf = self.measured.as_any().downcast_ref::<RglBrdf>().unwrap();
-                        switch_isotropy!(RglBrdf<RglBrdfParameterisation> => isotropy, self, brdf, model, solver, rmetric)
+                        switch_isotropy!(RglBrdf<RglBrdfParameterisation> => isotropy, self, brdf, model, solver, weighting)
                     }
                     _ => {
                         log::warn!("Unsupported BRDF kind: {:?}", self.measured.kind());
@@ -236,10 +244,21 @@ impl<'a, P: BrdfParam> FittingProblem for MicrofacetBrdfFittingProblem<'a, P> {
                     _ => None,
                 }
             })
-            .collect::<Vec<_>>()
+            .collect::<Box<[_]>>()
         };
-        results.shrink_to_fit();
         FittingReport::new(results)
+    }
+
+    fn brute_fit(
+        &self,
+        isotropy: Isotropy,
+        metric: base::ErrorMetric,
+        weighting: Weighting,
+        max_theta_i: Radians,
+        max_theta_o: Radians,
+        precision: u32,
+    ) -> FittingReport<Self::Model> {
+        todo!()
     }
 }
 

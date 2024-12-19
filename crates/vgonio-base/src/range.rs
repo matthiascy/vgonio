@@ -8,6 +8,7 @@ use crate::{
     units::{Angle, AngleUnit, Radians},
 };
 use approx::AbsDiffEq;
+use num_traits::Float;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
@@ -617,8 +618,10 @@ where
     usize: NumericCast<T>,
 {
     /// Returns all possible values in this range.
-    pub fn values(&self) -> impl Iterator<Item = T> + '_ {
-        (0..self.step_count).map(move |i| self.start + self.step_size() * i.cast())
+    pub fn values(&self) -> impl Iterator<Item = T> {
+        let step_size = self.step_size();
+        let start = self.start;
+        (0..self.step_count).map(move |i| start + step_size * i.cast())
     }
 }
 

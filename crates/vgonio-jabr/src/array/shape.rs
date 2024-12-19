@@ -269,7 +269,7 @@ pub(crate) const fn compute_n_elems(shape: &[usize]) -> usize {
 }
 
 /// Computes the strides of an array with the given shape and layout.
-pub(crate) const fn compute_strides(shape: &[usize], strides: &mut [usize], layout: MemLayout) {
+pub const fn compute_strides(shape: &[usize], strides: &mut [usize], layout: MemLayout) {
     let n = shape.len();
     let mut i = 0;
     let mut stride = 1;
@@ -289,6 +289,24 @@ pub(crate) const fn compute_strides(shape: &[usize], strides: &mut [usize], layo
             }
         },
     }
+}
+
+/// Computes the index of an element in an array with the given strides.
+///
+/// # Note
+///
+/// The layout is provided implicitly by the order of the strides.
+/// - Row-major: the last stride is always 1.
+/// - Column-major: the first stride is always 1.
+pub const fn compute_index_from_strides(index: &[usize], strides: &[usize]) -> usize {
+    let mut idx = 0;
+    let mut i = 0;
+    let n = strides.len();
+    while i < n {
+        idx += index[i] * strides[i];
+        i += 1;
+    }
+    idx
 }
 
 #[cfg(test)]

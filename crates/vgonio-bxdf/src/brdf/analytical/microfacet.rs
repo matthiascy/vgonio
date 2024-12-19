@@ -26,3 +26,11 @@ impl<D: MicrofacetDistribution> Debug for MicrofacetBrdf<D> {
         write!(f, "MicrofacetBrdf {{ distro: {:?} }}", self.distro)
     }
 }
+
+impl<D: MicrofacetDistribution + Clone> Clone for MicrofacetBrdf<D> {
+    fn clone(&self) -> Self {
+        MicrofacetBrdf {
+            distro: self.distro.clone(),
+        }
+    }
+}

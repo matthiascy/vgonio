@@ -2,7 +2,7 @@ use crate::{
     brdf::{Bxdf, BxdfFamily},
     distro::{MicrofacetDistribution, MicrofacetDistroKind},
 };
-use base::{Isotropy, Weighting};
+use base::{range::StepRangeIncl, units::Radians, ErrorMetric, Isotropy, Weighting};
 use levenberg_marquardt::MinimizationReport;
 use std::fmt::Debug;
 
@@ -88,8 +88,8 @@ pub struct FittingReport<M> {
 
 impl<M> FittingReport<M> {
     /// Creates a new fitting report from the results of the fitting process.
-    pub fn new(results: Vec<(M, MinimizationReport<f64>)>) -> Self {
-        let mut reports = results.into_boxed_slice();
+    pub fn new(results: Box<[(M, MinimizationReport<f64>)]>) -> Self {
+        let mut reports = results;
         reports.sort_by(|(_, r1), (_, r2)| {
             r1.objective_function
                 .partial_cmp(&r2.objective_function)
@@ -124,12 +124,16 @@ impl<M> FittingReport<M> {
     }
 
     /// Log the fitting report.
-    pub fn print_fitting_report(&self)
+    ///
+    /// # Arguments
+    ///
+    /// * `n` - The number of best models to log.
+    pub fn print_fitting_report(&self, n: usize)
     where
         M: Debug,
     {
-        println!("Fitting reports (first 16):");
-        for (m, r) in self.reports.iter().take(16) {
+        println!("Fitting reports (first {}):", n);
+        for (m, r) in self.reports.iter().take(n) {
             println!(
                 "    - Model: {:?}, objective_function: {}",
                 m, r.objective_function
@@ -149,7 +153,36 @@ pub trait FittingProblem {
     type Model;
 
     /// Non-linear least squares fitting using Levenberg-Marquardt algorithm.
-    fn lsq_lm_fit(self, isotropy: Isotropy, rmetric: Weighting) -> FittingReport<Self::Model>;
+    fn nllsq_fit(
+        &self,
+        target: MicrofacetDistroKind,
+        isotropy: Isotropy,
+        weighting: Weighting,
+        initial: StepRangeIncl<f64>,
+        max_theta_i: Option<Radians>,
+        max_theta_o: Option<Radians>,
+    ) -> FittingReport<Self::Model>;
+
+    /// brute force fitting.
+    ///
+    /// # Arguments
+    ///
+    /// * `isotropy` - The isotropy of the model.
+    /// * `metric` - The error metric to use.
+    /// * `weighting` - The weighting to use.
+    /// * `max_theta_i` - The maximum incident angle to consider.
+    /// * `max_theta_o` - The maximum outgoing angle to consider.
+    /// * `precision` - The number of digits after the decimal point to
+    ///   consider.
+    fn brute_fit(
+        &self,
+        isotropy: Isotropy,
+        metric: ErrorMetric,
+        weighting: Weighting,
+        max_theta_i: Radians,
+        max_theta_o: Radians,
+        precision: u32,
+    ) -> FittingReport<Self::Model>;
 }
 
 /// Fitting for BRDFs.
@@ -164,13 +197,24 @@ pub mod brdf {
     use base::{
         math::{self, Sph2},
         optics::ior::{Ior, IorRegistry},
-        units::{rad, Nanometres},
-        ErrorMetric, Weighting,
+        range::StepRangeIncl,
+        units::{rad, Nanometres, Radians},
+        ErrorMetric, Isotropy, Weighting,
     };
-    use jabr::array::{DyArr, DynArr};
-    use rayon::iter::{ParallelBridge, ParallelIterator};
+    use jabr::array::{
+        shape::{compute_index_from_strides, compute_strides},
+        DyArr, DynArr, MemLayout,
+    };
+    use levenberg_marquardt::{LevenbergMarquardt, TerminationReason};
+    use nllsq::{init_microfacet_brdf_models, NllsqBrdfFittingProxy};
+    use rayon::{
+        iter::{ParallelBridge, ParallelIterator},
+        slice::ParallelSlice,
+    };
 
-    use crate::{brdf::Bxdf, Scattering};
+    use crate::{brdf::Bxdf, distro::MicrofacetDistroKind, Scattering};
+
+    use super::{FittingProblem, FittingReport};
 
     /// The source of the proxy.
     ///
@@ -199,18 +243,18 @@ pub mod brdf {
         /// angles
         Grid {
             /// Outgoing polar angles in radians.
-            theta_o: Cow<'a, DyArr<f32>>,
+            o_thetas: Cow<'a, DyArr<f32>>,
             /// Outgoing azimuthal angles in radians.
-            phi_o: Cow<'a, DyArr<f32>>,
+            o_phis: Cow<'a, DyArr<f32>>,
         },
         /// List of outgoing directions organized by theta bands, suitable for
         /// the case where the outgoing directions are arranged on top of the
         /// hemisphere preserving the theta band structure.
         List {
             /// Outgoing polar angles in radians
-            theta_o: Cow<'a, DyArr<f32>>,
+            o_thetas: Cow<'a, DyArr<f32>>,
             /// All phi_o angles in radians stored in a flat array
-            phi_o: Cow<'a, DyArr<f32>>,
+            o_phis: Cow<'a, DyArr<f32>>,
             /// Offsets into phi_o array for each theta_o band.
             ///
             /// The length of this array is 1 + theta_o.len(), where the last
@@ -225,7 +269,10 @@ pub mod brdf {
 
     impl<'a> OutgoingDirs<'a> {
         pub fn new_grid(theta_o: Cow<'a, DyArr<f32>>, phi_o: Cow<'a, DyArr<f32>>) -> Self {
-            Self::Grid { theta_o, phi_o }
+            Self::Grid {
+                o_thetas: theta_o,
+                o_phis: phi_o,
+            }
         }
 
         pub fn new_list(
@@ -239,8 +286,8 @@ pub mod brdf {
                 "The length of theta_o must be one less than the length of offsets"
             );
             Self::List {
-                theta_o,
-                phi_o,
+                o_thetas: theta_o,
+                o_phis: phi_o,
                 offsets,
             }
         }
@@ -255,23 +302,23 @@ pub mod brdf {
             match (self, other) {
                 (
                     OutgoingDirs::Grid {
-                        theta_o: a,
-                        phi_o: b,
+                        o_thetas: a,
+                        o_phis: b,
                     },
                     OutgoingDirs::Grid {
-                        theta_o: c,
-                        phi_o: d,
+                        o_thetas: c,
+                        o_phis: d,
                     },
                 ) => a == c && b == d,
                 (
                     OutgoingDirs::List {
-                        theta_o: a,
-                        phi_o: b,
+                        o_thetas: a,
+                        o_phis: b,
                         offsets: c,
                     },
                     OutgoingDirs::List {
-                        theta_o: d,
-                        phi_o: e,
+                        o_thetas: d,
+                        o_phis: e,
                         offsets: f,
                     },
                 ) => a == d && b == e && c == f,
@@ -336,6 +383,44 @@ pub mod brdf {
         /// Returns the resampled BRDF data.
         pub fn samples(&self) -> &[f32] { self.resampled.as_slice() }
 
+        /// Returns the shape of the resampled BRDF data after filtering.
+        /// Depends on the outgoing directns, the dimensions could be 4 or 5.
+        pub fn filtered_shape(&self, max_theta_i: f32, max_theta_o: f32) -> Box<[usize]> {
+            let old_shape = self.resampled.shape();
+            let n_theta_i = self
+                .i_thetas
+                .as_slice()
+                .partition_point(|&x| x < max_theta_i);
+            match &self.o_dirs {
+                OutgoingDirs::Grid {
+                    o_thetas: theta_o, ..
+                } => {
+                    let n_theta_o = theta_o.as_slice().partition_point(|&x| x < max_theta_o);
+                    Box::new([
+                        n_theta_i,    // Nθ_i
+                        old_shape[1], // Nφ_i
+                        n_theta_o,    // Nθ_o
+                        old_shape[3], // Nφ_o
+                        old_shape[4], // Nλ
+                    ])
+                },
+                OutgoingDirs::List {
+                    o_thetas: theta_o,
+                    offsets,
+                    ..
+                } => {
+                    let n_theta_o = theta_o.as_slice().partition_point(|&x| x < max_theta_o);
+                    let n_wo = offsets[n_theta_o];
+                    Box::new([
+                        n_theta_i,    // Nθ_i
+                        old_shape[1], // Nφ_i
+                        n_wo,         // Nω_o
+                        old_shape[3], // Nλ
+                    ])
+                },
+            }
+        }
+
         /// Checks if the two proxies have the same parameters.
         fn same_params_p<O: AnalyticalFit2>(&self, other: &BrdfFittingProxy<O>) -> bool {
             self.i_thetas == other.i_thetas
@@ -399,6 +484,47 @@ pub mod brdf {
             }
         }
 
+        /// Computes the residuals between two BRDF proxies derived from the
+        /// the same BRDF(may generated from an analytical BRDF). Stores the
+        /// individual residuals in a row-major array following the
+        /// shape of the resampled data.
+        fn residuals(&self, other: &Self, weighting: Weighting, residuals: &mut [f64]) {
+            assert!(
+                self.same_params_p(other),
+                "The two BRDFs must have the same parameters"
+            );
+            assert_eq!(
+                residuals.len(),
+                self.resampled.len(),
+                "The length of residuals must match the length of the resampled data"
+            );
+            let stride_theta_i = self.resampled.strides()[0];
+            self.resampled
+                .as_slice()
+                .chunks(stride_theta_i)
+                .zip(other.resampled.as_slice().chunks(stride_theta_i))
+                .zip(self.i_thetas.iter())
+                .zip(residuals.chunks_mut(stride_theta_i))
+                .par_bridge()
+                .for_each(|(((xs, ys), theta_i), rs)| {
+                    let cos_theta_i = theta_i.cos();
+                    xs.iter()
+                        .zip(ys.iter())
+                        .zip(rs.iter_mut())
+                        .for_each(|((x, y), r)| match weighting {
+                            Weighting::None => {
+                                let diff = *x as f64 - *y as f64;
+                                *r = diff;
+                            },
+                            Weighting::LnCos => {
+                                let diff = ((x * cos_theta_i + 1.0) as f64).ln()
+                                    - ((y * cos_theta_i + 1.0) as f64).ln();
+                                *r = diff;
+                            },
+                        });
+                });
+        }
+
         /// Computes the distance between two BRDF poxies derived from the same
         /// BRDF with a filtered range of incident and outgoing angles.
         fn distance_filtered<O: AnalyticalFit2 + Sync>(
@@ -421,7 +547,9 @@ pub mod brdf {
             let is_rmse = metric == ErrorMetric::Rmse;
 
             let sum = match &self.o_dirs {
-                OutgoingDirs::Grid { theta_o, phi_o: _ } => {
+                OutgoingDirs::Grid {
+                    o_thetas: theta_o, ..
+                } => {
                     let n_theta_o = theta_o.as_slice().partition_point(|&x| x < max_theta_o);
                     // [Nθ_i, Nφ_i, Nθ_o, Nφ_o, Nλ]
                     let shape = self.resampled.shape();
@@ -470,9 +598,9 @@ pub mod brdf {
                         .sum::<f64>()
                 },
                 OutgoingDirs::List {
-                    theta_o,
-                    phi_o: _,
+                    o_thetas: theta_o,
                     offsets,
+                    ..
                 } => {
                     let n_theta_o = theta_o.as_slice().partition_point(|&x| x < max_theta_o);
                     // The total number of outgoing directions after filtering
@@ -534,6 +662,126 @@ pub mod brdf {
             }
         }
 
+        /// Computes the residuals between two BRDF proxies derived from the
+        /// the same BRDF with a filtered range of incident and outgoing angles.
+        /// Stores the individual residuals in a row-major array following the
+        /// shape of the resampled data.
+        fn residuals_filtered(
+            &self,
+            other: &Self,
+            weighting: Weighting,
+            residuals: &mut [f64],
+            max_theta_i: f32,
+            max_theta_o: f32,
+        ) {
+            assert!(
+                self.same_params_p(other),
+                "The two BRDFs must have the same parameters"
+            );
+            // Find the cutoff indices for theta angles only
+            let n_theta_i = self
+                .i_thetas
+                .as_slice()
+                .partition_point(|&x| x < max_theta_i);
+
+            match &self.o_dirs {
+                OutgoingDirs::Grid {
+                    o_thetas: theta_o, ..
+                } => {
+                    let n_theta_o = theta_o.as_slice().partition_point(|&x| x < max_theta_o);
+                    // [Nθ_i, Nφ_i, Nθ_o, Nφ_o, Nλ]
+                    let shape = self.resampled.shape();
+                    let filtered_shape = [n_theta_i, shape[1], n_theta_o, shape[3], shape[4]];
+                    let mut filtered_strides = [0; 5];
+                    compute_strides(&filtered_shape, &mut filtered_strides, MemLayout::RowMajor);
+
+                    let xs = &self.resampled;
+                    let ys = &other.resampled;
+
+                    (0..filtered_shape[0])
+                        .into_iter()
+                        .zip(self.i_thetas.as_slice().iter())
+                        .zip(residuals.chunks_mut(filtered_strides[0]))
+                        .par_bridge()
+                        .for_each(|((i, theta_i), rs)| {
+                            let cos_theta_i = theta_i.cos() as f64;
+                            (0..filtered_shape[1]).for_each(|j| {
+                                for k in 0..filtered_shape[2] {
+                                    for l in 0..filtered_shape[3] {
+                                        for m in 0..filtered_shape[4] {
+                                            let x = xs[[i, j, k, l, m]] as f64;
+                                            let y = ys[[i, j, k, l, m]] as f64;
+                                            let idx = compute_index_from_strides(
+                                                &[j, k, l, m],
+                                                &filtered_strides[1..],
+                                            );
+                                            rs[idx] = match weighting {
+                                                Weighting::None => x - y,
+                                                Weighting::LnCos => {
+                                                    let ln_x_cos = (x * cos_theta_i + 1.0).ln();
+                                                    let ln_y_cos = (y * cos_theta_i + 1.0).ln();
+                                                    ln_x_cos - ln_y_cos
+                                                },
+                                            };
+                                        }
+                                    }
+                                }
+                            })
+                        })
+                },
+                OutgoingDirs::List {
+                    o_thetas: theta_o,
+                    offsets,
+                    ..
+                } => {
+                    let n_theta_o = theta_o.as_slice().partition_point(|&x| x < max_theta_o);
+                    // The total number of outgoing directions after filtering
+                    let n_wo = offsets[n_theta_o];
+                    // [Nθ_i, Nφ_i, Nω_o, Nλ]
+                    let shape = self.resampled.shape();
+                    let filtered_shape = [n_theta_i, shape[1], n_wo, shape[3]];
+                    let mut filtered_strides = [0; 4];
+                    compute_strides(&filtered_shape, &mut filtered_strides, MemLayout::RowMajor);
+
+                    let xs = &self.resampled;
+                    let ys = &other.resampled;
+
+                    (0..filtered_shape[0])
+                        .into_iter()
+                        .zip(self.i_thetas.as_slice().iter())
+                        .zip(residuals.chunks_mut(filtered_strides[0]))
+                        .par_bridge()
+                        .for_each(|((i, theta_i), rs)| {
+                            let cos_theta_i = theta_i.cos();
+                            (0..filtered_shape[1]).for_each(|j| {
+                                for k in 0..n_theta_o {
+                                    for l in offsets[k]..offsets[k + 1] {
+                                        for m in 0..filtered_shape[3] {
+                                            let x = xs[[i, j, l, m]];
+                                            let y = ys[[i, j, l, m]];
+                                            let idx = compute_index_from_strides(
+                                                &[j, l, m],
+                                                &filtered_strides[1..],
+                                            );
+                                            rs[idx] = match weighting {
+                                                Weighting::None => x as f64 - y as f64,
+                                                Weighting::LnCos => {
+                                                    let ln_x_cos =
+                                                        ((x * cos_theta_i + 1.0) as f64).ln();
+                                                    let ln_y_cos =
+                                                        ((y * cos_theta_i + 1.0) as f64).ln();
+                                                    ln_x_cos - ln_y_cos
+                                                },
+                                            };
+                                        }
+                                    }
+                                }
+                            })
+                        })
+                },
+            };
+        }
+
         // TODO: potentially considering generating only the data points for the
         // filtered incident and outgoing angles
         /// Generate the data points following the same incident and outgoing
@@ -546,7 +794,7 @@ pub mod brdf {
             let strides = self.resampled.strides();
 
             match &self.o_dirs {
-                OutgoingDirs::Grid { theta_o, phi_o } => {
+                OutgoingDirs::Grid { o_thetas, o_phis } => {
                     resampled
                         .as_mut_slice()
                         .chunks_mut(strides[0])
@@ -560,11 +808,11 @@ pub mod brdf {
                                     let vi = Sph2::new(rad!(*theta_i), rad!(*phi_i)).to_cartesian();
                                     per_phi_i
                                         .chunks_mut(strides[2])
-                                        .zip(theta_o.as_slice().iter())
+                                        .zip(o_thetas.as_slice().iter())
                                         .for_each(|(per_theta_o, theta_o)| {
                                             per_theta_o
                                                 .chunks_mut(strides[3])
-                                                .zip(phi_o.as_slice().iter())
+                                                .zip(o_phis.as_slice().iter())
                                                 .for_each(|(per_phi_o, phi_o)| {
                                                     let vo =
                                                         Sph2::new(rad!(*theta_o), rad!(*phi_o))
@@ -588,8 +836,8 @@ pub mod brdf {
                         });
                 },
                 OutgoingDirs::List {
-                    theta_o,
-                    phi_o,
+                    o_thetas,
+                    o_phis,
                     offsets,
                 } => {
                     // Parallelize the filling on the theta_i dimension
@@ -607,8 +855,8 @@ pub mod brdf {
                                     let vi = Sph2::new(rad!(*theta_i), rad!(*phi_i)).to_cartesian();
                                     // Iterate over the wo dimension
                                     let mut wo_idx = 0;
-                                    for (i, theta_o) in theta_o.iter().enumerate() {
-                                        for phi_o in phi_o[offsets[i]..offsets[i + 1]].iter() {
+                                    for (i, theta_o) in o_thetas.iter().enumerate() {
+                                        for phi_o in o_phis[offsets[i]..offsets[i + 1]].iter() {
                                             let vo = Sph2::new(rad!(*theta_o), rad!(*phi_o))
                                                 .to_cartesian();
                                             let spectral_samples =
@@ -643,6 +891,92 @@ pub mod brdf {
                 iors_i: self.iors_i.clone(),
                 iors_t: self.iors_t.clone(),
             }
+        }
+    }
+
+    impl<'a, Brdf: AnalyticalFit2> FittingProblem for BrdfFittingProxy<'a, Brdf> {
+        type Model = Box<dyn Bxdf<Params = [f64; 2]>>;
+
+        fn nllsq_fit(
+            &self,
+            target: MicrofacetDistroKind,
+            isotropy: Isotropy,
+            weighting: Weighting,
+            initial: StepRangeIncl<f64>,
+            max_theta_i: Option<Radians>,
+            max_theta_o: Option<Radians>,
+        ) -> FittingReport<Self::Model> {
+            let solver = LevenbergMarquardt::new();
+            let cpu_count = (std::thread::available_parallelism().unwrap().get() / 2).max(1);
+            let tasks = init_microfacet_brdf_models(initial, target, isotropy);
+            let tasks_per_cpu = tasks.len().div_ceil(cpu_count);
+            log::debug!(
+                "Solve {} models, {} per CPU, {} CPUs",
+                tasks.len(),
+                tasks_per_cpu,
+                cpu_count
+            );
+            let results = tasks
+                .par_chunks(tasks_per_cpu)
+                .flat_map(|models| {
+                    models
+                        .iter()
+                        .filter_map(|model| {
+                            let (fitted_model, report) = match isotropy {
+                                Isotropy::Isotropic => {
+                                    let nllsq_proxy = NllsqBrdfFittingProxy::<
+                                        '_,
+                                        _,
+                                        { Isotropy::Isotropic },
+                                    >::new(
+                                        &self,
+                                        model.clone(),
+                                        weighting,
+                                        max_theta_i,
+                                        max_theta_o,
+                                    );
+                                    let (result, report) = solver.minimize(nllsq_proxy);
+                                    (result.model, report)
+                                },
+                                Isotropy::Anisotropic => {
+                                    let nllsq_proxy = NllsqBrdfFittingProxy::<
+                                        '_,
+                                        _,
+                                        { Isotropy::Anisotropic },
+                                    >::new(
+                                        &self,
+                                        model.clone(),
+                                        weighting,
+                                        max_theta_i,
+                                        max_theta_o,
+                                    );
+                                    let (result, report) = solver.minimize(nllsq_proxy);
+                                    (result.model, report)
+                                },
+                            };
+
+                            match report.termination {
+                                TerminationReason::Converged { .. }
+                                | TerminationReason::LostPatience => Some((fitted_model, report)),
+                                _ => None,
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Box<[_]>>();
+            FittingReport::new(results)
+        }
+
+        fn brute_fit(
+            &self,
+            isotropy: Isotropy,
+            metric: ErrorMetric,
+            weighting: Weighting,
+            max_theta_i: Radians,
+            max_theta_o: Radians,
+            precision: u32,
+        ) -> FittingReport<Self::Model> {
+            todo!()
         }
     }
 }
