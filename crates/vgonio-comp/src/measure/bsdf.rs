@@ -530,6 +530,9 @@ impl MeasuredBsdfData {
                 incoming: params.incoming.clone(),
                 outgoing,
                 n_wo: n_wo_dense,
+                i_thetas: params.i_thetas.clone(),
+                o_thetas: params.o_thetas.clone(),
+                phis: params.phis.clone(),
             }
         } else {
             params.clone()

@@ -340,7 +340,7 @@ pub mod brdf {
     where
         Brdf: AnalyticalFit2,
     {
-        /// Signals if the resampled data may contain NaN values.
+        /// Indicates if the proxy has NaN values.
         pub(crate) has_nan: bool,
         /// The source of the proxy.
         pub(crate) source: ProxySource,
@@ -465,7 +465,7 @@ pub mod brdf {
                     match weighting {
                         Weighting::None => {
                             xs.iter().zip(ys.iter()).fold(0.0, |acc, (x, y)| {
-                                if self.has_nan && (x.is_nan() || y.is_nan()) {
+                                if has_nan && (x.is_nan() || y.is_nan()) {
                                     return acc;
                                 }
                                 let diff = *x as f64 - *y as f64;
@@ -474,7 +474,7 @@ pub mod brdf {
                         },
                         Weighting::LnCos => {
                             xs.iter().zip(ys.iter()).fold(0.0, |acc, (x, y)| {
-                                if self.has_nan && (x.is_nan() || y.is_nan()) {
+                                if has_nan && (x.is_nan() || y.is_nan()) {
                                     return acc;
                                 }
                                 let diff = ((x * cos_theta_i + 1.0) as f64).ln()
@@ -569,7 +569,6 @@ pub mod brdf {
                     let n_theta_o = theta_o.as_slice().partition_point(|&x| x < max_theta_o);
                     // [Nθ_i, Nφ_i, Nθ_o, Nφ_o, Nλ]
                     let shape = self.resampled.shape();
-
                     let factor = match metric {
                         ErrorMetric::Nllsq => 0.5,
                         ErrorMetric::L1 | ErrorMetric::L2 => 1.0,
@@ -626,7 +625,6 @@ pub mod brdf {
                     let n_wo = offsets[n_theta_o];
                     // [Nθ_i, Nφ_i, Nω_o, Nλ]
                     let shape = self.resampled.shape();
-
                     let factor = match metric {
                         ErrorMetric::Nllsq => 0.5,
                         ErrorMetric::L1 | ErrorMetric::L2 => 1.0,

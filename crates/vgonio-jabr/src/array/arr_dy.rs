@@ -3,7 +3,7 @@ use num_traits::{Euclid, One, Zero};
 use std::{
     fmt::Debug,
     mem::MaybeUninit,
-    ops::{Index, IndexMut, Range, RangeInclusive, Rem},
+    ops::{Index, IndexMut, Range, RangeInclusive},
     slice::Iter,
 };
 

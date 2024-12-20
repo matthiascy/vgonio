@@ -37,6 +37,7 @@ unsafe impl Sync for RglBrdf {}
 /// `powitacq` instead of reading the raw data (pickled Python files) directly.
 ///
 /// TODO: Read the raw data directly.
+/// TODO: use theta_i, phi_i, theta_o, phi_o, lambda
 #[derive(Clone, PartialEq, Debug)]
 pub struct RglBrdfParameterisation {
     /// Number of zenith angles for the incident directions.

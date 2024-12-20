@@ -130,6 +130,7 @@ where
         let jac_len = jac_shape.iter().product();
         let mut residuals = Vector::<f64, Dyn, VecStorage<f64, Dyn, U1>>::zeros(jac_len);
         let modelled = self.proxy.generate_analytical(&*self.model);
+        log::debug!("filtered residuals: {:?}", self.filtered());
         if self.filtered() {
             self.proxy.residuals_filtered(
                 &modelled,
@@ -564,8 +565,10 @@ where
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
         if self.filtered() {
+            log::debug!("filtered jacobian");
             Some(self.jacobian_filtered())
         } else {
+            log::debug!("unfiltered jacobian");
             Some(self.jacobian())
         }
     }

@@ -20,6 +20,7 @@ pub trait ShapeMetadata: Clone + PartialEq {
 // TODO: constify
 /// Computes the index of an element in a multidimensional array given its
 /// coordinates and the layout of the array.
+#[track_caller]
 pub fn compute_index<M, const L: MemLayout>(meta: &M, index: &[usize]) -> usize
 where
     M: ShapeMetadata,

@@ -360,14 +360,6 @@ fn brdf_fitting_brute_force<F: AnalyticalFit + Sync + AnalyticalFit2>(
     let end = std::time::Instant::now();
     println!("    {} Took: {:?}", ansi::YELLOW_GT, end - start);
 
-    // println!(
-    //     "    {} {:?}s ({}) {:?} @v2 {:?}  ",
-    //     ansi::YELLOW_GT,
-    //     opts.error_metric.unwrap_or(ErrorMetric::Mse),
-    //     filepath.file_name().unwrap().display(),
-    //     errs.as_slice(),
-    //     errs2.as_slice()
-    // );
     println!(
         "    {} Minimum error: {} at alpha = {}",
         ansi::YELLOW_GT,

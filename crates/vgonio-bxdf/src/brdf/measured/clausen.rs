@@ -4,7 +4,7 @@
 use crate::{brdf::measured::AnalyticalFit, Bxdf, Scattering};
 use crate::{
     brdf::measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
-    fitting::brdf::{AnalyticalFit2, BrdfFittingProxy},
+    fitting::brdf::{AnalyticalFit2, BrdfFittingProxy, OutgoingDirs, ProxySource},
 };
 use base::{
     error::VgonioError,
@@ -16,13 +16,16 @@ use base::{
 };
 #[cfg(feature = "fitting")]
 use base::{math, optics::ior::IorRegistry, ErrorMetric, Weighting};
-use jabr::array::DyArr;
+use core::f32;
+use jabr::array::{DyArr, DynArr};
 use std::{
+    borrow::Cow,
     fs::File,
     io::{BufRead, BufReader},
     path::Path,
 };
 
+// TODO: relayout in theta_i, phi_i, theta_o, phi_o format
 /// Parameterisation for the Clausen BRDF.
 ///
 /// BRDFs measured in the paper "Investigation and Simulation of Diffraction on
@@ -32,7 +35,11 @@ use std::{
 /// the same.
 #[derive(Clone, PartialEq, Debug)]
 pub struct ClausenBrdfParameterisation {
-    /// The incident directions of the BRDF.
+    pub i_thetas: DyArr<f32>,
+    pub o_thetas: DyArr<f32>,
+    pub phis: DyArr<f32>,
+    /// The incident directions of the BRDF in [theta, phi] format. Values are
+    /// in always sorted. Increases first by phi, then by theta.
     pub incoming: DyArr<Sph2>,
     /// The outgoing directions of the BRDF for each incident direction.
     /// Directions are stored in a 2D array with dimensions: ωi, ωo.
@@ -46,15 +53,18 @@ impl BrdfParam for ClausenBrdfParameterisation {
 }
 
 impl ClausenBrdfParameterisation {
-    /// Create a new parameterisation for the Clausen BRDF.
-    pub fn new(incoming: DyArr<Sph2>, outgoing: DyArr<Sph2, 2>) -> Self {
-        let num_outgoing_per_incoming = outgoing.shape()[1];
-        Self {
-            incoming,
-            outgoing,
-            n_wo: num_outgoing_per_incoming,
-        }
-    }
+    // /// Create a new parameterisation for the Clausen BRDF.
+    // pub fn new(incoming: DyArr<Sph2>, outgoing: DyArr<Sph2, 2>) -> Self {
+    //     let num_outgoing_per_incoming = outgoing.shape()[1];
+    //     Self {
+    //         incoming,
+    //         outgoing,
+    //         n_wo: num_outgoing_per_incoming,
+    //         i_thetas: incoming.as_slice().iter().map(|wi| wi.theta).collect(),
+    //         o_thetas: outgoing.as_slice().iter().map(|wo| wo.theta).collect(),
+    //         phis: incoming.as_slice().iter().map(|wi| wi.phi).collect(),
+    //     }
+    // }
 
     /// Returns an iterator over the incident directions and the corresponding
     /// outgoing directions.
@@ -168,6 +178,9 @@ impl ClausenBrdf {
     /// Loads the BRDF from a reader.
     #[cfg(feature = "io")]
     pub fn load_from_reader<R: BufRead>(reader: R) -> Result<Self, VgonioError> {
+        use std::collections::HashSet;
+
+        use base::units::Rads;
         use serde_json::Value;
 
         // TODO: auto detect medium from file
@@ -189,8 +202,14 @@ impl ClausenBrdf {
                 .collect::<Vec<_>>(),
         );
         let n_spectrum = spectrum.len();
+        // The measured data contains only in-plane measurements, so phi_i and
+        // phi_o are always 0 and pi.
+        let phis = DyArr::from_slice_1d(&[Rads::ZERO.as_f32(), Rads::PI.as_f32()]);
+        let mut i_thetas: Vec<f32> = vec![];
+        let mut o_thetas: Vec<f32> = vec![];
         let mut unordered_samples = Vec::new();
         let mut i = 1;
+        // Collect all samples into memory.
         loop {
             if i >= data_array.len() {
                 break;
@@ -199,11 +218,27 @@ impl ClausenBrdf {
             let wi = {
                 let phi_i = measurement["phiIn"].as_f64().unwrap() as f32;
                 let theta_i = measurement["thetaIn"].as_f64().unwrap() as f32;
+                if i_thetas
+                    .iter()
+                    .find(|&t| (*t - theta_i).abs() < 1e-6)
+                    .is_none()
+                {
+                    i_thetas.push(theta_i);
+                    i_thetas.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                }
                 Sph2::new(Radians::from_degrees(theta_i), Radians::from_degrees(phi_i))
             };
             let wo = {
                 let phi_o = measurement["phiOut"].as_f64().unwrap() as f32;
                 let theta_o = measurement["thetaOut"].as_f64().unwrap() as f32;
+                if o_thetas
+                    .iter()
+                    .find(|&t| (*t - theta_o).abs() < 1e-6)
+                    .is_none()
+                {
+                    o_thetas.push(theta_o);
+                    o_thetas.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                }
                 Sph2::new(Radians::from_degrees(theta_o), Radians::from_degrees(phi_o))
             };
             let spectrum_samples = measurement["spectrum"]
@@ -216,6 +251,12 @@ impl ClausenBrdf {
             unordered_samples.push((wi, wo, spectrum_samples));
             i += 1;
         }
+        let i_thetas = DyArr::from_iterator([-1], i_thetas.into_iter().map(f32::to_radians));
+        let o_thetas = DyArr::from_iterator([-1], o_thetas.into_iter().map(f32::to_radians));
+
+        // Sort the samples by incident direction first, then by outgoing direction.
+        // This is done by sorting the incident directions first by theta, then by phi.
+        // The outgoing directions are sorted by theta, then by phi.
         unordered_samples.sort_by(|(wi_a, wo_a, _), (wi_b, wo_b, _)| {
             // first sort by theta_i
             if wi_a.theta < wi_b.theta {
@@ -286,10 +327,16 @@ impl ClausenBrdf {
             wi_wo_pairs.iter().flat_map(|(_, wos)| wos.iter().cloned()),
         );
 
+        log::debug!("i_thetas: {:?}", i_thetas);
+        log::debug!("o_thetas: {:?}", o_thetas);
+        log::debug!("phis: {:?}", phis);
         let params = Box::new(ClausenBrdfParameterisation {
             incoming: DyArr::from_vec_1d(wi_wo_pairs.iter().map(|(wi, _)| *wi).collect::<Vec<_>>()),
             outgoing,
             n_wo,
+            i_thetas,
+            o_thetas,
+            phis,
         });
 
         debug_assert_eq!(params.incoming.len(), n_wi, "Number of incident directions");
@@ -464,7 +511,82 @@ impl AnalyticalFit for ClausenBrdf {
 
 #[cfg(feature = "fitting")]
 impl AnalyticalFit2 for ClausenBrdf {
-    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> { todo!() }
+    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> {
+        let iors_i = iors
+            .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
+            .unwrap()
+            .into_vec();
+        let iors_t = iors
+            .ior_of_spectrum(self.transmitted_medium, self.spectrum.as_slice())
+            .unwrap()
+            .into_vec();
+        let o_thetas = Cow::Borrowed(&self.params.o_thetas);
+        let phis = Cow::Borrowed(&self.params.phis);
+        let o_dirs = OutgoingDirs::new_grid(o_thetas, phis.clone());
+        let shape = [
+            self.params.i_thetas.len(),
+            self.params.phis.len(),
+            self.params.o_thetas.len(),
+            self.params.phis.len(),
+            self.n_spectrum(),
+        ];
+        let n_spectrum = self.n_spectrum();
+        let org_strides = self.samples.strides();
+        let mut resampled = DynArr::splat(f32::NAN, &shape);
+        let new_strides = resampled.strides().to_owned();
+        // Fill in the resampled array.
+        self.params.wi_wos_iter().for_each(|(i, (wi, wo))| {
+            let theta_i = wi.theta.as_f32();
+            let phi_i = wi.phi.as_f32();
+            for (j, wo) in wo.iter().enumerate() {
+                let theta_o = wo.theta.as_f32();
+                let phi_o = wo.phi.as_f32();
+                let org_offset = i * org_strides[0] + j * org_strides[1];
+                let theta_i_idx = self
+                    .params
+                    .i_thetas
+                    .iter()
+                    .position(|t| (*t - theta_i).abs() < 1e-6)
+                    .unwrap();
+                let phi_i_idx = self
+                    .params
+                    .phis
+                    .iter()
+                    .position(|p| (*p - phi_i).abs() < 1e-6)
+                    .unwrap();
+                let theta_o_idx = self
+                    .params
+                    .o_thetas
+                    .iter()
+                    .position(|t| (*t - theta_o).abs() < 1e-6)
+                    .unwrap();
+                let phi_o_idx = self
+                    .params
+                    .phis
+                    .iter()
+                    .position(|p| (*p - phi_o).abs() < 1e-6)
+                    .unwrap();
+                let new_offset = theta_i_idx * new_strides[0]
+                    + phi_i_idx * new_strides[1]
+                    + theta_o_idx * new_strides[2]
+                    + phi_o_idx * new_strides[3];
+                resampled.as_mut_slice()[new_offset..new_offset + n_spectrum]
+                    .copy_from_slice(&self.samples.as_slice()[org_offset..org_offset + n_spectrum]);
+            }
+        });
+
+        BrdfFittingProxy {
+            has_nan: true,
+            source: ProxySource::Measured,
+            brdf: self,
+            i_thetas: Cow::Borrowed(&self.params.i_thetas),
+            i_phis: Cow::Borrowed(&self.params.phis),
+            o_dirs,
+            resampled: Cow::Owned(resampled),
+            iors_i: Cow::Owned(iors_i),
+            iors_t: Cow::Owned(iors_t),
+        }
+    }
 
     fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
 }
