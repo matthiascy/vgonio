@@ -14,3 +14,4 @@ debug_*/
 **.exr
 rustc-ice-**.txt
 **dist/
+.vscode/

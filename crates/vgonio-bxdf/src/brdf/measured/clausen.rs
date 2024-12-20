@@ -152,7 +152,7 @@ impl ClausenBrdf {
                 None,
             )),
             // TODO: use OsStr::display() once it's stable
-            Some(ext) => match ext.to_str().unwrap() {
+            Some(ext) => match ext.to_str().unwrap_or("") {
                 "json" => Self::load_from_reader(BufReader::new(File::open(filepath).unwrap())),
                 _ => Err(VgonioError::new(
                     format!(

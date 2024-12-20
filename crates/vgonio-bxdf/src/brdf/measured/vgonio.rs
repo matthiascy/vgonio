@@ -519,6 +519,7 @@ impl AnalyticalFit2 for VgonioBrdf {
             }
         }
         BrdfFittingProxy {
+            has_nan: false,
             source: ProxySource::Measured,
             brdf: self,
             i_thetas: Cow::Owned(i_thetas),

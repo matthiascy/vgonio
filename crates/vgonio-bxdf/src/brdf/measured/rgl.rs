@@ -457,6 +457,7 @@ impl AnalyticalFit2 for RglBrdf {
 
         let o_dirs = OutgoingDirs::new_grid(Cow::Owned(o_thetas), Cow::Owned(o_phis));
         BrdfFittingProxy {
+            has_nan: false,
             brdf: self,
             source: ProxySource::Measured,
             i_thetas: Cow::Owned(i_thetas),

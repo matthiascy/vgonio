@@ -340,6 +340,8 @@ pub mod brdf {
     where
         Brdf: AnalyticalFit2,
     {
+        /// Signals if the resampled data may contain NaN values.
+        pub(crate) has_nan: bool,
         /// The source of the proxy.
         pub(crate) source: ProxySource,
         /// The raw BRDF data that the proxy is associated with.
@@ -442,6 +444,7 @@ pub mod brdf {
                 self.same_params_p(other),
                 "The two BRDFs must have the same parameters"
             );
+            let has_nan = self.has_nan || other.has_nan;
             let is_rmse = metric == ErrorMetric::Rmse;
             let factor = match metric {
                 ErrorMetric::Nllsq => 0.5,
@@ -462,12 +465,18 @@ pub mod brdf {
                     match weighting {
                         Weighting::None => {
                             xs.iter().zip(ys.iter()).fold(0.0, |acc, (x, y)| {
+                                if self.has_nan && (x.is_nan() || y.is_nan()) {
+                                    return acc;
+                                }
                                 let diff = *x as f64 - *y as f64;
                                 acc + math::sqr(diff)
                             }) * factor
                         },
                         Weighting::LnCos => {
                             xs.iter().zip(ys.iter()).fold(0.0, |acc, (x, y)| {
+                                if self.has_nan && (x.is_nan() || y.is_nan()) {
+                                    return acc;
+                                }
                                 let diff = ((x * cos_theta_i + 1.0) as f64).ln()
                                     - ((y * cos_theta_i + 1.0) as f64).ln();
                                 acc + math::sqr(diff)
@@ -498,6 +507,7 @@ pub mod brdf {
                 self.resampled.len(),
                 "The length of residuals must match the length of the resampled data"
             );
+            let has_nan = self.has_nan || other.has_nan;
             let stride_theta_i = self.resampled.strides()[0];
             self.resampled
                 .as_slice()
@@ -511,16 +521,21 @@ pub mod brdf {
                     xs.iter()
                         .zip(ys.iter())
                         .zip(rs.iter_mut())
-                        .for_each(|((x, y), r)| match weighting {
-                            Weighting::None => {
-                                let diff = *x as f64 - *y as f64;
-                                *r = diff;
-                            },
-                            Weighting::LnCos => {
-                                let diff = ((x * cos_theta_i + 1.0) as f64).ln()
-                                    - ((y * cos_theta_i + 1.0) as f64).ln();
-                                *r = diff;
-                            },
+                        .for_each(|((x, y), r)| {
+                            if has_nan && (x.is_nan() || y.is_nan()) {
+                                return;
+                            }
+                            match weighting {
+                                Weighting::None => {
+                                    let diff = *x as f64 - *y as f64;
+                                    *r = diff;
+                                },
+                                Weighting::LnCos => {
+                                    let diff = ((x * cos_theta_i + 1.0) as f64).ln()
+                                        - ((y * cos_theta_i + 1.0) as f64).ln();
+                                    *r = diff;
+                                },
+                            }
                         });
                 });
         }
@@ -539,6 +554,7 @@ pub mod brdf {
                 self.same_params_p(other),
                 "The two BRDFs must have the same parameters"
             );
+            let has_nan = self.has_nan || other.has_nan;
             // Find the cutoff indices for theta angles only
             let n_theta_i = self
                 .i_thetas
@@ -579,6 +595,9 @@ pub mod brdf {
                                             for m in 0..shape[4] {
                                                 let x = xs[[i, j, k, l, m]] as f64;
                                                 let y = ys[[i, j, k, l, m]] as f64;
+                                                if has_nan && (x.is_nan() || y.is_nan()) {
+                                                    continue;
+                                                }
                                                 let diff = match weighting {
                                                     Weighting::None => x - y,
                                                     Weighting::LnCos => {
@@ -633,6 +652,9 @@ pub mod brdf {
                                             for m in 0..shape[3] {
                                                 let x = xs[[i, j, l, m]];
                                                 let y = ys[[i, j, l, m]];
+                                                if has_nan && (x.is_nan() || y.is_nan()) {
+                                                    continue;
+                                                }
                                                 let diff = match weighting {
                                                     Weighting::None => x as f64 - y as f64,
                                                     Weighting::LnCos => {
@@ -678,6 +700,7 @@ pub mod brdf {
                 self.same_params_p(other),
                 "The two BRDFs must have the same parameters"
             );
+            let has_nan = self.has_nan || other.has_nan;
             // Find the cutoff indices for theta angles only
             let n_theta_i = self
                 .i_thetas
@@ -711,6 +734,9 @@ pub mod brdf {
                                         for m in 0..filtered_shape[4] {
                                             let x = xs[[i, j, k, l, m]] as f64;
                                             let y = ys[[i, j, k, l, m]] as f64;
+                                            if has_nan && (x.is_nan() || y.is_nan()) {
+                                                continue;
+                                            }
                                             let idx = compute_index_from_strides(
                                                 &[j, k, l, m],
                                                 &filtered_strides[1..],
@@ -759,6 +785,9 @@ pub mod brdf {
                                         for m in 0..filtered_shape[3] {
                                             let x = xs[[i, j, l, m]];
                                             let y = ys[[i, j, l, m]];
+                                            if has_nan && (x.is_nan() || y.is_nan()) {
+                                                continue;
+                                            }
                                             let idx = compute_index_from_strides(
                                                 &[j, l, m],
                                                 &filtered_strides[1..],
@@ -882,6 +911,7 @@ pub mod brdf {
             };
 
             BrdfFittingProxy {
+                has_nan: false,
                 source: ProxySource::Analytical,
                 brdf: self.brdf,
                 i_thetas: self.i_thetas.clone(),
