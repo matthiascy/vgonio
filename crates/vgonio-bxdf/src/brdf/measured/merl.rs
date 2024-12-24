@@ -1,20 +1,25 @@
 #[cfg(feature = "fitting")]
 use crate::brdf::measured::AnalyticalFit;
-use crate::brdf::{
-    measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
-    Bxdf,
+use crate::{
+    brdf::{
+        io2hd_sph,
+        measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
+        Bxdf,
+    },
+    fitting::brdf::{AnalyticalFit2, BrdfFittingProxy, OutgoingDirs, ProxySource},
 };
 #[cfg(feature = "io")]
 use base::error::VgonioError;
 use base::{
     impl_measured_data_trait,
-    math::Sph2,
+    math::{theta, Sph2},
     medium::Medium,
     optics::ior::IorRegistry,
     units::{nm, Nanometres, Radians},
     ErrorMetric, MeasuredBrdfKind, MeasuredData, MeasurementKind, Weighting,
 };
-use jabr::array::{s, DArr, DyArr};
+use jabr::array::{s, DArr, DyArr, DynArr};
+use std::borrow::Cow;
 #[cfg(feature = "io")]
 use std::path::Path;
 
@@ -133,6 +138,22 @@ impl MerlBrdf {
         index.clamp(0, MerlBrdfParam::RES_THETA_H as i32 - 1) as usize
     }
 
+    /// Lookup the sample of the BRDF at the given incident and outgoing
+    /// directions.
+    pub fn sample_at(&self, wi: Sph2, wo: Sph2) -> [f32; 3] {
+        let (wh, wd) = io2hd_sph(&wi, &wo);
+        let theta_h_index = self.theta_h_index(wh.theta);
+        let theta_d_index = self.theta_d_index(wd.theta);
+        let phi_d_index = self.phi_d_index(wd.phi);
+        let mut sample = [0.0f32; 3];
+        let strides = self.samples.strides();
+        let index =
+            theta_h_index * strides[0] + theta_d_index * strides[1] + phi_d_index * strides[2];
+        sample.copy_from_slice(&self.samples.as_slice()[index..index + 3]);
+        sample
+    }
+
+    #[cfg(feature = "io")]
     #[cfg(feature = "io")]
     pub fn load<P: AsRef<Path>>(filepath: P) -> Result<Self, VgonioError> {
         use std::{fs::File, io::Read};
@@ -258,63 +279,74 @@ impl MerlBrdf {
     pub fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
 }
 
-// #[cfg(feature = "fitting")]
-// impl AnalyticalFit for MerlBrdf {
-//     type Params = MerlBrdfParam;
+#[cfg(feature = "fitting")]
+impl AnalyticalFit2 for MerlBrdf {
+    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> {
+        let iors_i = Cow::Owned(
+            iors.ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
+                .unwrap()
+                .into_vec(),
+        );
+        let iors_t = Cow::Owned(
+            iors.ior_of_spectrum(self.transmitted_medium, self.spectrum.as_slice())
+                .unwrap()
+                .into_vec(),
+        );
+        let theta_res = MerlBrdfParam::RES_THETA_H as usize;
+        let phi_res = MerlBrdfParam::RES_PHI_D as usize;
+        let i_thetas = Cow::Owned(DyArr::from_iterator(
+            [-1],
+            (0..theta_res).into_iter().map(|i| (i as f32).to_radians()),
+        ));
+        let o_thetas = Cow::Owned(DyArr::from_iterator(
+            [-1],
+            (0..theta_res).into_iter().map(|i| (i as f32).to_radians()),
+        ));
+        let i_phis = Cow::Owned(DyArr::from_iterator(
+            [-1],
+            (0..phi_res).into_iter().map(|i| (i as f32).to_radians()),
+        ));
+        let o_phis = Cow::Owned(DyArr::from_iterator(
+            [-1],
+            (0..phi_res).into_iter().map(|i| (i as f32).to_radians()),
+        ));
 
-//     impl_analytical_fit_trait!(self);
+        let mut resampled = DynArr::zeros(&[theta_res, phi_res, theta_res, phi_res, 3]);
+        for i in 0..theta_res {
+            for j in 0..phi_res {
+                for k in 0..theta_res {
+                    for l in 0..phi_res {
+                        let wi = Sph2::new(
+                            Radians::from_degrees(i as f32),
+                            Radians::from_degrees(j as f32),
+                        );
+                        let wo = Sph2::new(
+                            Radians::from_degrees(k as f32),
+                            Radians::from_degrees(l as f32),
+                        );
+                        let sample = self.sample_at(wi, wo);
+                        resampled[[i, j, k, l, 0]] = sample[0];
+                        resampled[[i, j, k, l, 1]] = sample[1];
+                        resampled[[i, j, k, l, 2]] = sample[2];
+                    }
+                }
+            }
+        }
 
-//     fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
+        let o_dirs = OutgoingDirs::new_grid(o_thetas, o_phis);
 
-//     fn new_analytical(
-//         medium_i: Medium,
-//         medium_t: Medium,
-//         spectrum: &[Nanometres],
-//         params: &Self::Params,
-//         model: &dyn Bxdf<Params = [f64; 2]>,
-//         iors: &IorRegistry,
-//     ) -> Self
-//     where
-//         Self: Sized,
-//     {
-//         let iors_i = iors.ior_of_spectrum(medium_i, spectrum).unwrap();
-//         let iors_t = iors.ior_of_spectrum(medium_t, spectrum).unwrap();
-//         let n_spectrum = 3;
-//         let mut samples = DyArr::<f32, 3>::zeros([
-//             MerlBrdfParam::RES_THETA_H as usize,
-//             MerlBrdfParam::RES_THETA_D as usize,
-//             MerlBrdfParam::RES_PHI_D as usize,
-//             n_spectrum,
-//         ]);
-//         params.zenith_h.iter().enumerate().for_each(|(i, &theta_h)| {
-//             params.zenith_d.iter().enumerate().for_each(|(j, &theta_d)| {
-//                 params.azimuth_d.iter().enumerate().for_each(|(k, &phi_d)| {
-//                     let wd = Sph2::new(theta_d, phi_d);
-//                     let d = wd.to_cartesian();
-//                     let wh = Sph2::new(theta_h, 0.0);
-//                     let (i, o) = hd2io(, d);
-//                 });
-//             });
-//         });
-//     }
+        BrdfFittingProxy {
+            has_nan: false,
+            source: ProxySource::Measured,
+            brdf: self,
+            i_thetas,
+            i_phis,
+            o_dirs,
+            resampled: Cow::Owned(resampled),
+            iors_i,
+            iors_t,
+        }
+    }
 
-//     fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: Weighting)
-// -> f64     where
-//         Self: Sized,
-//     {
-//         todo!()
-//     }
-
-//     fn filtered_distance(
-//         &self,
-//         other: &Self,
-//         metric: ErrorMetric,
-//         rmetric: Weighting,
-//         limit: Radians,
-//     ) -> f64
-//     where
-//         Self: Sized,
-//     {
-//         todo!()
-//     }
-// }
+    fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
+}

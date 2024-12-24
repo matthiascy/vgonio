@@ -2,7 +2,6 @@ use crate::array::{
     core::ArrCore,
     mem::{heap::DynSized, MemLayout},
     shape::ConstShape,
-    DyArr,
 };
 use num_traits::{One, Zero};
 use std::{
@@ -144,7 +143,7 @@ where
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
     [(); S::N_ELEMS]:,
 {
-    fn as_ref(&self) -> &[T] { self.as_ref() }
+    fn as_ref(&self) -> &[T] { self.0.data.as_slice() }
 }
 
 impl<T, S, const L: MemLayout> AsMut<[T]> for DArr<T, S, L>

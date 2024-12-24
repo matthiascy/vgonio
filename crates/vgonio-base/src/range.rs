@@ -8,7 +8,6 @@ use crate::{
     units::{Angle, AngleUnit, Radians},
 };
 use approx::AbsDiffEq;
-use num_traits::Float;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
