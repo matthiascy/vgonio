@@ -178,8 +178,6 @@ impl ClausenBrdf {
     /// Loads the BRDF from a reader.
     #[cfg(feature = "io")]
     pub fn load_from_reader<R: BufRead>(reader: R) -> Result<Self, VgonioError> {
-        use std::collections::HashSet;
-
         use base::units::Rads;
         use serde_json::Value;
 

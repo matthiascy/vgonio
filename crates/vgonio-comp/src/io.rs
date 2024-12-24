@@ -436,17 +436,13 @@ pub mod vgmo {
                         u32::from_le_bytes(buf[offset..offset + 4].try_into().unwrap());
                     offset += 4;
 
-                    let azimuth = StepRangeIncl::<Radians>::read_from_buf(
-                        &buf[offset..offset + 16],
-                    );
+                    let azimuth =
+                        StepRangeIncl::<Radians>::read_from_buf(&buf[offset..offset + 16]);
                     offset += 16;
-                    let zenith = StepRangeIncl::<Radians>::read_from_buf(
-                        &buf[offset..offset + 16],
-                    );
+                    let zenith = StepRangeIncl::<Radians>::read_from_buf(&buf[offset..offset + 16]);
                     offset += 16;
-                    let spectrum = StepRangeIncl::<Nanometres>::read_from_buf(
-                        &buf[offset..offset + 16],
-                    );
+                    let spectrum =
+                        StepRangeIncl::<Nanometres>::read_from_buf(&buf[offset..offset + 16]);
                     Self {
                         num_rays,
                         num_sectors: 1,
@@ -607,10 +603,8 @@ pub mod vgmo {
                         0 => {
                             let mut buf = [0u8; 36];
                             reader.read_exact(&mut buf)?;
-                            let azimuth =
-                                StepRangeIncl::<Radians>::read_from_buf(&buf[0..16]);
-                            let zenith =
-                                StepRangeIncl::<Radians>::read_from_buf(&buf[16..32]);
+                            let azimuth = StepRangeIncl::<Radians>::read_from_buf(&buf[0..16]);
+                            let zenith = StepRangeIncl::<Radians>::read_from_buf(&buf[16..32]);
                             let sample_count = u32::from_le_bytes(buf[32..36].try_into().unwrap());
                             debug_assert_eq!(
                                 sample_count as usize,
@@ -1523,6 +1517,7 @@ mod tests {
                 zenith: StepRangeIncl::new(rad!(0.0), rad!(0.0), rad!(0.0)),
                 azimuth: StepRangeIncl::new(rad!(0.0), rad!(0.0), rad!(0.0)),
                 spectrum: StepRangeIncl::new(nm!(400.0), nm!(700.0), nm!(100.0)),
+                num_sectors: 1,
             },
             receivers: vec![ReceiverParams {
                 domain: SphericalDomain::Upper,
@@ -1595,20 +1590,20 @@ mod tests {
             .into_boxed_slice(),
         });
         let mut writer = BufWriter::new(vec![]);
-        BounceAndEnergy::write(&mut writer, &data).unwrap();
+        BounceAndEnergy::write(&mut writer, &data, true).unwrap();
         let buf = writer.into_inner().unwrap();
 
         let mut reader = BufReader::new(Cursor::new(buf));
-        let data2 = BounceAndEnergy::read(&mut reader).unwrap();
+        let data2 = BounceAndEnergy::read(&mut reader, true).unwrap();
         assert_eq!(data, data2);
 
         let data = None;
         let mut writer = BufWriter::new(vec![]);
-        BounceAndEnergy::write(&mut writer, &data).unwrap();
+        BounceAndEnergy::write(&mut writer, &data, true).unwrap();
         let buf = writer.into_inner().unwrap();
 
         let mut reader = BufReader::new(Cursor::new(buf));
-        let data2 = BounceAndEnergy::read(&mut reader).unwrap();
+        let data2 = BounceAndEnergy::read(&mut reader, true).unwrap();
         assert_eq!(data, data2);
     }
 
@@ -1733,6 +1728,7 @@ mod tests {
             SphericalPartition::new_beckers(SphericalDomain::Upper, Rads::from_degrees(45.0));
         let emitter_params = EmitterParams {
             num_rays: 0,
+            num_sectors: 1,
             max_bounces: 0,
             zenith: StepRangeIncl {
                 start: Rads::from_degrees(0.0),
@@ -1760,6 +1756,7 @@ mod tests {
                 incident_medium: Medium::Vacuum,
                 transmitted_medium: Medium::Aluminium,
                 params: Box::new(VgonioBrdfParameterisation {
+                    n_zenith_i: 4,
                     incoming: incoming.clone(),
                     outgoing: partition.clone(),
                 }),
@@ -1775,14 +1772,14 @@ mod tests {
                 incident_medium: Medium::Vacuum,
                 transmitted_medium: Medium::Aluminium,
                 emitter: emitter_params,
-                receivers: ReceiverParams {
+                receivers: vec![ReceiverParams {
                     domain: SphericalDomain::Upper,
                     precision: Sph2 {
                         theta: Rads::from_degrees(45.0),
                         phi: Rads::from_degrees(2.0),
                     },
                     scheme: PartitionScheme::Beckers,
-                },
+                }],
                 fresnel: false,
             },
             raw: RawMeasuredBsdfData {
