@@ -163,11 +163,12 @@ pub trait FittingProblem {
         max_theta_o: Option<Radians>,
     ) -> FittingReport<Self::Model>;
 
-    /// brute force fitting.
+    /// Brute force fitting.
+    ///
+    /// Note: Currently only *isotropic* models are supported.
     ///
     /// # Arguments
     ///
-    /// * `isotropy` - The isotropy of the model.
     /// * `metric` - The error metric to use.
     /// * `weighting` - The weighting to use.
     /// * `max_theta_i` - The maximum incident angle to consider.
@@ -176,11 +177,11 @@ pub trait FittingProblem {
     ///   consider.
     fn brute_fit(
         &self,
-        isotropy: Isotropy,
+        target: MicrofacetDistroKind,
         metric: ErrorMetric,
         weighting: Weighting,
-        max_theta_i: Radians,
-        max_theta_o: Radians,
+        max_theta_i: Option<Radians>,
+        max_theta_o: Option<Radians>,
         precision: u32,
     ) -> FittingReport<Self::Model>;
 }
@@ -201,18 +202,26 @@ pub mod brdf {
         units::{rad, Nanometres, Radians},
         ErrorMetric, Isotropy, Weighting,
     };
+    use brute::compute_distance_between_measured_and_modelled;
     use jabr::array::{
         shape::{compute_index_from_strides, compute_strides},
         DyArr, DynArr, MemLayout,
     };
-    use levenberg_marquardt::{LevenbergMarquardt, TerminationReason};
+    use levenberg_marquardt::{LevenbergMarquardt, MinimizationReport, TerminationReason};
     use nllsq::{init_microfacet_brdf_models, NllsqBrdfFittingProxy};
     use rayon::{
-        iter::{ParallelBridge, ParallelIterator},
-        slice::ParallelSlice,
+        iter::{IndexedParallelIterator, ParallelBridge, ParallelIterator},
+        slice::{ParallelSlice, ParallelSliceMut},
     };
 
-    use crate::{brdf::Bxdf, distro::MicrofacetDistroKind, Scattering};
+    use crate::{
+        brdf::{
+            analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
+            Bxdf,
+        },
+        distro::MicrofacetDistroKind,
+        Scattering,
+    };
 
     use super::{FittingProblem, FittingReport};
 
@@ -995,16 +1004,92 @@ pub mod brdf {
             FittingReport::new(results)
         }
 
+        /// Fit coarsely within the initial range then refine the fit within
+        /// the range of the best fit. Repeat until the precision is reached.
         fn brute_fit(
             &self,
-            isotropy: Isotropy,
+            target: MicrofacetDistroKind,
             metric: ErrorMetric,
             weighting: Weighting,
-            max_theta_i: Radians,
-            max_theta_o: Radians,
+            max_theta_i: Option<Radians>,
+            max_theta_o: Option<Radians>,
             precision: u32,
         ) -> FittingReport<Self::Model> {
-            todo!()
+            let cpu_count = ((std::thread::available_parallelism().unwrap().get()) / 2).max(1);
+            let mut step_size = 0.01;
+            let mut alphas = StepRangeIncl::new(0.0, 1.0, step_size)
+                .values()
+                .collect::<Box<[f64]>>();
+            let mut errs = vec![f64::NAN; 256].into_boxed_slice();
+            // The number of iterations as each iteration has two precision
+            let n_times = (precision + 1) / 2;
+            let mut records = Vec::with_capacity(n_times as usize * 256);
+
+            for _ in 0..n_times {
+                let chunk_size = alphas.len().div_ceil(cpu_count);
+                alphas
+                    .chunks(chunk_size)
+                    .zip(errs.chunks_mut(chunk_size))
+                    .par_bridge()
+                    .for_each(|(alpha_chunks, err_chunks)| {
+                        err_chunks
+                            .iter_mut()
+                            .zip(alpha_chunks.iter())
+                            .for_each(|(err, alpha)| {
+                                *err = compute_distance_between_measured_and_modelled(
+                                    &self,
+                                    target,
+                                    metric,
+                                    weighting,
+                                    *alpha,
+                                    *alpha,
+                                    max_theta_i.unwrap_or(Radians::HALF_PI),
+                                    max_theta_o.unwrap_or(Radians::HALF_PI),
+                                );
+                            });
+                    });
+                // Record the error and alpha
+                errs.iter().zip(alphas.iter()).for_each(|(err, alpha)| {
+                    if err.is_nan() {
+                        return;
+                    }
+                    let m = match target {
+                        MicrofacetDistroKind::Beckmann => {
+                            Box::new(MicrofacetBrdfBK::new(*alpha, *alpha))
+                                as Box<dyn Bxdf<Params = [f64; 2]>>
+                        },
+                        MicrofacetDistroKind::TrowbridgeReitz => {
+                            Box::new(MicrofacetBrdfTR::new(*alpha, *alpha))
+                                as Box<dyn Bxdf<Params = [f64; 2]>>
+                        },
+                    };
+                    records.push((
+                        m,
+                        MinimizationReport {
+                            termination: TerminationReason::User("brute force"),
+                            number_of_evaluations: 1,
+                            objective_function: *err,
+                        },
+                    ));
+                });
+                // Find the range of the best fit
+                let min_err = errs.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
+                let min_err_idx = errs.iter().position(|&x| x == min_err).unwrap();
+                let min_err_alpha = alphas[min_err_idx];
+                // Refine the range of the best fit
+                alphas = StepRangeIncl::new(
+                    (min_err_alpha - step_size).max(0.0),
+                    (min_err_alpha + step_size).min(1.0),
+                    step_size * 0.01,
+                )
+                .values()
+                .collect::<Box<[f64]>>();
+                errs.fill(f64::NAN);
+                step_size = step_size * 0.01;
+            }
+
+            // Convert the records to FittingReport
+            FittingReport::new(records.into_boxed_slice())
         }
     }
 }

@@ -251,11 +251,11 @@ impl<'a, P: BrdfParam> FittingProblem for MicrofacetBrdfFittingProblem<'a, P> {
 
     fn brute_fit(
         &self,
-        isotropy: Isotropy,
+        target: MicrofacetDistroKind,
         metric: base::ErrorMetric,
         weighting: Weighting,
-        max_theta_i: Radians,
-        max_theta_o: Radians,
+        max_theta_i: Option<Radians>,
+        max_theta_o: Option<Radians>,
         precision: u32,
     ) -> FittingReport<Self::Model> {
         todo!()

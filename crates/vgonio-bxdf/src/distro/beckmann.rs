@@ -7,6 +7,7 @@ use base::{
 };
 #[cfg(feature = "fitting")]
 use libm::{erf, sqrt};
+use std::fmt::Debug;
 
 /// Beckmann microfacet distribution function.
 ///
@@ -14,12 +15,22 @@ use libm::{erf, sqrt};
 /// microfacet slopes. If σ is the RMS slope of the microfacets, then the alpha
 /// parameter of the Beckmann distribution is given by: $\alpha = \sqrt{2}
 /// \sigma$.
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct BeckmannDistribution {
     /// Roughness parameter of the MDF (αx = √2σx).
     pub alpha_x: f64,
     /// Roughness parameter of the MDF (αy = √2σy).
     pub alpha_y: f64,
+}
+
+impl Debug for BeckmannDistribution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "BeckmannDistrib. {{ α_x: {}, α_y: {} }}",
+            self.alpha_x, self.alpha_y
+        )
+    }
 }
 
 impl BeckmannDistribution {

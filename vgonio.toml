@@ -2,4 +2,4 @@ triangulation = "top-left-to-bottom-right" # default
 # triangulation = "bottom-left-to-top-right"
 output_dir = "~/Documents/virtual-gonio/output"
 data_dir = "~/Documents/virtual-gonio/datafiles"
-# excluded_ior_files = ["al_iors_[0.15-1.7]_McPeak2015.csv"]
+excluded_ior_files = ["al_iors_[0.15-1.7]_McPeak2015.csv"]

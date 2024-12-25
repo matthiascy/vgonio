@@ -66,7 +66,8 @@ pub fn brdf_fitting_brute_force_isotropic<F: AnalyticalFit2>(
     log::debug!("compute isotropic distance");
     let count = alpha.step_count();
     let mut errs = Box::new_uninit_slice(count);
-    let chunk_size = ((std::thread::available_parallelism().unwrap().get()) / 2).max(1);
+    let cpu_count = ((std::thread::available_parallelism().unwrap().get()) / 2).max(1);
+    let chunk_size = errs.len().div_ceil(cpu_count);
     errs.par_chunks_mut(chunk_size)
         .enumerate()
         .for_each(|(i, err_chunks)| {

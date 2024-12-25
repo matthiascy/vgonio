@@ -19,7 +19,7 @@ use std::fmt::Debug;
 ///
 /// $$ D(\mathbf{m}) = \frac{\alpha_x \alpha_y}{\pi \cos^4 \theta_m (\alpha_x^2
 /// \cos^2 \phi_m + \alpha_y^2 \sin^2 \phi_m) (\alpha^2 + \tan^2 \theta_m)^2} $$
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct TrowbridgeReitzDistribution {
     /// Parameter of the microfacet area distribution function along the
     /// horizontal axis.
@@ -27,6 +27,16 @@ pub struct TrowbridgeReitzDistribution {
     /// Parameter of the microfacet area distribution function along the
     /// vertical axis.
     pub alpha_y: f64,
+}
+
+impl Debug for TrowbridgeReitzDistribution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "TrowbridgeReitzDistrib. {{ α_x: {}, α_y: {} }}",
+            self.alpha_x, self.alpha_y
+        )
+    }
 }
 
 impl TrowbridgeReitzDistribution {

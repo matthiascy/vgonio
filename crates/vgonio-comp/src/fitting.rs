@@ -26,7 +26,6 @@ macro_rules! impl_least_squares_problem_common_methods {
 }
 
 mod brdf;
-pub mod err;
 mod mfd;
 
 pub use brdf::*;

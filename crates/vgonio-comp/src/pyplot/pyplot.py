@@ -19,12 +19,12 @@ from scipy.stats import alpha
 sns.set_theme(style="whitegrid", color_codes=True)
 
 
-def plot_err(xstart, xend, xstep, errs):
+def plot_err(alphas, errs, n_digits):
     # Plot the error, with x-axis from xstart to xend (inclusive) with xstep.
-    xs = np.arange(xstart, xend + xstep, xstep)
+    xs = alphas
     x_min = np.argmin(errs)
-    plt.plot(xs, errs)
-    plt.annotate(f"Min: {xs[x_min]:.4f}", (xs[x_min], errs[x_min]))
+    plt.plot(xs, np.log10(errs))
+    plt.annotate(f"Min: {xs[x_min]:.{n_digits}f}", (xs[x_min], errs[x_min]))
     plt.show()
 
 

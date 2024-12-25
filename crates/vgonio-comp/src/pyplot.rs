@@ -24,17 +24,22 @@ use exr::{
 };
 use jabr::array::DyArr;
 use numpy::{PyArray1, PyArray2, PyArrayMethods};
-use pyo3::{prelude::*, types::PyList};
+use pyo3::{ffi::c_str, prelude::*, types::PyList};
 use surf::MicroSurface;
 
-pub fn plot_err(errs: &[f64], alpha_start: f64, alpha_stop: f64, alpha_step: f64) -> PyResult<()> {
+pub fn plot_err(errs: &[f64], alpha: &[f64], n_digits: u32) -> PyResult<()> {
     Python::with_gil(|py| {
-        let fun: Py<PyAny> =
-            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
-                .getattr("plot_err")?
-                .into();
-        let errs = PyList::new_bound(py, errs);
-        let args = (alpha_start, alpha_stop, alpha_step, errs);
+        let fun: Py<PyAny> = PyModule::from_code(
+            py,
+            c_str!(include_str!("./pyplot/pyplot.py")),
+            c_str!("pyplot.py"),
+            c_str!("vgp"),
+        )?
+        .getattr("plot_err")?
+        .into();
+        let errs = PyArray1::from_vec(py, errs.to_vec());
+        let alphas = PyArray1::from_vec(py, alpha.to_vec());
+        let args = (alphas, errs, n_digits);
         fun.call1(py, args)?;
         Ok(())
     })

@@ -236,7 +236,8 @@ impl MerlBrdf {
         // Original data layout: (channel, theta_h, theta_d, phi_d)
         // New data layout: (theta_h, theta_d, phi_d, channel)
         // TODO: ideally, we should simply read the data into a 4D array directly
-        // following the MERL BRDF layout then apply the dimension permutation.
+        // following the MERL BRDF layout then apply the dimension permutation with
+        // multidimentional indexing.
         let mut samples = DyArr::zeros([
             MerlBrdfParam::RES_THETA_H as usize,
             MerlBrdfParam::RES_THETA_D as usize,

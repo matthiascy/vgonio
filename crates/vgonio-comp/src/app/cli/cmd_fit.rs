@@ -1,6 +1,6 @@
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
-    fitting::{err, MicrofacetBrdfFittingProblem},
+    fitting::MicrofacetBrdfFittingProblem,
     measure::bsdf::{receiver::ReceiverParams, MeasuredBrdfLevel, MeasuredBsdfData},
     pyplot::plot_err,
 };
@@ -318,68 +318,35 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
 
 fn brdf_fitting_brute_force<F: AnalyticalFit + Sync + AnalyticalFit2>(
     brdf: &F,
-    filepath: &PathBuf,
     opts: &FitOptions,
-    alpha: StepRangeIncl<f64>,
     iors: &IorRegistry,
 ) {
     let start = std::time::Instant::now();
-    let errs = err::compute_microfacet_brdf_err(
-        brdf,
+    let report = brdf.proxy(iors).brute_fit(
         opts.distro,
-        alpha,
-        iors,
-        opts.theta_limit
-            .and_then(|t| Some(Radians::from_degrees(t)))
-            .unwrap_or(Radians::HALF_PI),
         opts.error_metric.unwrap_or(ErrorMetric::Mse),
         opts.weighting,
+        opts.theta_limit.map(|t| Radians::from_degrees(t)),
+        opts.theta_limit.map(|t| Radians::from_degrees(t)),
+        opts.brute_precision,
     );
-    let min_err = errs.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
-    let min_idx = errs.iter().position(|&x| x == min_err).unwrap();
     let end = std::time::Instant::now();
     println!("    {} Took: {:?}", ansi::YELLOW_GT, end - start);
 
-    let start = std::time::Instant::now();
-    let errs2 = bxdf::fitting::brdf::brute::brdf_fitting_brute_force_isotropic(
-        brdf,
-        opts.distro,
-        opts.error_metric.unwrap_or(ErrorMetric::Mse),
-        opts.theta_limit
-            .and_then(|t| Some(Radians::from_degrees(t)))
-            .unwrap_or(Radians::HALF_PI),
-        opts.theta_limit
-            .and_then(|t| Some(Radians::from_degrees(t)))
-            .unwrap_or(Radians::HALF_PI),
-        opts.weighting,
-        alpha,
-        iors,
-    );
-    let min_err2 = errs2.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
-    let min_idx2 = errs2.iter().position(|&x| x == min_err2).unwrap();
-    let end = std::time::Instant::now();
-    println!("    {} Took: {:?}", ansi::YELLOW_GT, end - start);
+    report.print_fitting_report(4);
 
-    println!(
-        "    {} Minimum error: {} at alpha = {}",
-        ansi::YELLOW_GT,
-        min_err,
-        alpha.values().nth(min_idx).unwrap()
-    );
-    println!(
-        "    {} Minimum error V2: {} at alpha = {}",
-        ansi::YELLOW_GT,
-        min_err2,
-        alpha.values().nth(min_idx2).unwrap()
-    );
     if opts.plot {
-        plot_err(
-            errs.as_slice(),
-            opts.alpha_start.unwrap_or(0.01),
-            opts.alpha_stop.unwrap_or(1.0),
-            opts.alpha_step.unwrap_or(0.01),
-        )
-        .expect("Failed to plot the error.");
+        let mut alpha_error_pairs = report
+            .reports
+            .iter()
+            .map(|(m, r)| (m.params()[0], r.objective_function))
+            .collect::<Vec<_>>();
+        // Sort the error by alpha value for later plotting
+        alpha_error_pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        let (alpha, error): (Vec<_>, Vec<_>) = alpha_error_pairs.into_iter().unzip();
+
+        plot_err(error.as_slice(), alpha.as_slice(), opts.brute_precision)
+            .expect("Failed to plot the error.");
     }
 }
 
@@ -405,22 +372,9 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync + AnalyticalFit2>(
         opts.weighting,
         limit.prettified()
     );
-    if brdf.kind() == MeasuredBrdfKind::Clausen {
-        let brdf = brdf.as_any().downcast_ref::<ClausenBrdf>().unwrap();
-        println!(
-            "    {} Clausen's data, data point positions:",
-            ansi::YELLOW_GT,
-        );
-        for (_, (wi, wos)) in brdf.params.wi_wos_iter() {
-            print!("        wi: {} - wo:", wi);
-            for wo in wos.iter() {
-                print!(" {}", wo);
-            }
-            println!();
-        }
-    }
+
     match opts.method {
-        FittingMethod::Brute => brdf_fitting_brute_force(brdf, filepath, opts, alpha, iors),
+        FittingMethod::Brute => brdf_fitting_brute_force(brdf, opts, iors),
         FittingMethod::Nllsq => {
             let problem = MicrofacetBrdfFittingProblem::new(
                 brdf,
@@ -565,6 +519,13 @@ pub struct FitOptions {
         default_value = "brute"
     )]
     pub method: FittingMethod,
+
+    #[clap(
+        long = "bprecision",
+        help = "Precision of the brute force fitting: number of digits after the decimal point.",
+        default_value = "6"
+    )]
+    pub brute_precision: u32,
 
     #[clap(
         long = "err",
