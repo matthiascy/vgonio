@@ -26,9 +26,7 @@ use base::{
     medium::Medium,
     partition::{SphericalDomain, SphericalPartition},
     units::{rad, Radians},
-    Asset,
-    MeasuredBrdfKind::Rgl,
-    MeasuredData, MeasurementKind, Version,
+    Asset, MeasuredData, MeasurementKind, Version,
 };
 use bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan2018Brdf};
 use chrono::{DateTime, Local};

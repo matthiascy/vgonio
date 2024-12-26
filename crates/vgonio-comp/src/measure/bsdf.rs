@@ -555,6 +555,7 @@ impl MeasuredBsdfData {
         });
 
         ClausenBrdf {
+            kind: MeasuredBrdfKind::Clausen,
             origin: Origin::RealWorld,
             incident_medium: self.params.incident_medium,
             transmitted_medium: self.params.transmitted_medium,

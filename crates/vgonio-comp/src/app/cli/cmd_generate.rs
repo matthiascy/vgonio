@@ -154,13 +154,13 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
             "msurf_{:?}_{:?}_{}.vgms",
             opts.kind,
             opts.method.unwrap(),
-            base::utils::iso_timestamp_short(),
+            base::utils::iso_timestamp_short(chrono::Local::now()),
         )
     } else {
         format!(
             "msurf_{:?}_{}.vgms",
             opts.kind,
-            base::utils::iso_timestamp_short(),
+            base::utils::iso_timestamp_short(chrono::Local::now()),
         )
     };
 

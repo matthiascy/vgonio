@@ -17,6 +17,8 @@
 - Implement cargo like external subcommands
 - Load BRDF data measured from RGL's BRDF database
 - Enable excluding ior files in configuration
+- New fitting interface
+- Remove `alpha_start`, `alpha_stop`, `alpha_step` from CLI
 
 ## 0.3.2 - 2024-08-16
 

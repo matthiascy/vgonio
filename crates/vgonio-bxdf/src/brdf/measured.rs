@@ -1,6 +1,4 @@
 use base::{math::Sph2, medium::Medium, units::Nanometres, MeasuredBrdfKind};
-#[cfg(feature = "fitting")]
-use base::{optics::ior::IorRegistry, units::Radians, ErrorMetric, Weighting};
 use jabr::array::DyArr;
 use std::{fmt::Debug, ops::Index};
 
@@ -63,8 +61,8 @@ pub enum Origin {
 pub enum BrdfParamKind {
     /// The BRDF is parameterised in the half-vector domain.
     HalfVector,
-    /// The BRDF is parameterised in the incident direction domain.
-    IncidentDirection,
+    /// The BRDF is parameterised in the incident and outgoing directions.
+    InOutDirs,
 }
 
 /// Measured BRDF parameterisation.
@@ -81,84 +79,6 @@ pub use merl::*;
 pub use utia::*;
 pub use vgonio::*;
 pub use yan::*;
-
-#[cfg(feature = "fitting")]
-/// A BRDF that can be fitted analytically.
-pub trait AnalyticalFit {
-    type Params: BrdfParam;
-
-    fn kind(&self) -> MeasuredBrdfKind;
-
-    /// Creates a new analytical BRDF with the same parameterisation as the
-    /// given measured BRDF.
-    fn new_analytical(
-        medium_i: Medium,
-        medium_t: Medium,
-        spectrum: &[Nanometres],
-        params: &Self::Params,
-        model: &dyn Bxdf<Params = [f64; 2]>,
-        iors: &IorRegistry,
-    ) -> Self
-    where
-        Self: Sized;
-
-    /// Creates a new analytical BRDF based on the parameterisation of the
-    /// measured BRDF (self).
-    fn new_analytical_from_self(
-        &self,
-        model: &dyn Bxdf<Params = [f64; 2]>,
-        iors: &IorRegistry,
-    ) -> Self
-    where
-        Self: Sized,
-    {
-        Self::new_analytical(
-            self.incident_medium(),
-            self.transmitted_medium(),
-            self.spectrum(),
-            self.params(),
-            model,
-            iors,
-        )
-    }
-
-    /// Returns the distance between two BRDFs.
-    /// The final distance is calculated based on the given error metric.
-    /// The residual error metric is used to calculate the distance between
-    /// two single values.
-    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: Weighting) -> f64
-    where
-        Self: Sized;
-
-    /// Returns the distance between two BRDFs with a filter applied to exclude
-    /// certain polar angles.
-    fn filtered_distance(
-        &self,
-        other: &Self,
-        metric: ErrorMetric,
-        rmetric: Weighting,
-        limit: Radians,
-    ) -> f64
-    where
-        Self: Sized;
-
-    /// Returns the wavelengths at which the BRDF is measured.
-    fn spectrum(&self) -> &[Nanometres];
-
-    /// Returns the samples of the measured BRDF as a one-dimensional array.
-    fn samples(&self) -> &[f32];
-
-    /// Returns the parameterisation of the measured BRDF.
-    fn params(&self) -> &Self::Params;
-
-    fn incident_medium(&self) -> Medium;
-
-    fn transmitted_medium(&self) -> Medium;
-
-    fn as_any(&self) -> &dyn std::any::Any;
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
-}
 
 /// A BRDF measured either in the real world or in a simulation.
 ///
@@ -182,6 +102,8 @@ where
     /// Sampled BRDF data stored in a multidimensional array.
     /// Its shape depends on the parameterisation of the BRDF.
     pub samples: DyArr<f32, N>,
+    /// The kind of the measured BRDF.
+    pub kind: MeasuredBrdfKind,
 }
 
 impl<P, const N: usize> MeasuredBrdf<P, N>
@@ -206,6 +128,7 @@ where
             && self.params == other.params
             && self.spectrum == other.spectrum
             && self.samples == other.samples
+            && self.kind == other.kind
     }
 }
 

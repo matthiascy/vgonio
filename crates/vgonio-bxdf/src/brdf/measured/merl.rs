@@ -1,10 +1,7 @@
-#[cfg(feature = "fitting")]
-use crate::brdf::measured::AnalyticalFit;
 use crate::{
     brdf::{
         io2hd_sph,
         measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
-        Bxdf,
     },
     fitting::brdf::{AnalyticalFit2, BrdfFittingProxy, OutgoingDirs, ProxySource},
 };
@@ -12,11 +9,10 @@ use crate::{
 use base::error::VgonioError;
 use base::{
     impl_measured_data_trait,
-    math::{theta, Sph2},
-    medium::Medium,
+    math::Sph2,
     optics::ior::IorRegistry,
     units::{nm, Nanometres, Radians},
-    ErrorMetric, MeasuredBrdfKind, MeasuredData, MeasurementKind, Weighting,
+    MeasuredBrdfKind, MeasuredData, MeasurementKind,
 };
 use jabr::array::{s, DArr, DyArr, DynArr};
 use std::borrow::Cow;
@@ -268,6 +264,7 @@ impl MerlBrdf {
         let params = Box::new(MerlBrdfParam::default());
 
         Ok(Self {
+            kind: MeasuredBrdfKind::Merl,
             origin: Origin::RealWorld,
             incident_medium: Medium::Air,
             transmitted_medium: medium,
@@ -350,4 +347,6 @@ impl AnalyticalFit2 for MerlBrdf {
     }
 
     fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
+
+    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
 }

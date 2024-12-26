@@ -1,11 +1,11 @@
 //! BRDF measured in the paper "Investigation and Simulation of Diffraction on
 //! Rough Surfaces" by O. Clausen, Y. Chen, A. Fuhrmann and R. Marroquim.
-#[cfg(feature = "fitting")]
-use crate::{brdf::measured::AnalyticalFit, Bxdf, Scattering};
 use crate::{
     brdf::measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
     fitting::brdf::{AnalyticalFit2, BrdfFittingProxy, OutgoingDirs, ProxySource},
 };
+#[cfg(feature = "fitting")]
+use base::optics::ior::IorRegistry;
 use base::{
     error::VgonioError,
     impl_measured_data_trait,
@@ -14,8 +14,6 @@ use base::{
     units::{nm, Nanometres, Radians},
     MeasuredBrdfKind, MeasuredData, MeasurementKind,
 };
-#[cfg(feature = "fitting")]
-use base::{math, optics::ior::IorRegistry, ErrorMetric, Weighting};
 use core::f32;
 use jabr::array::{DyArr, DynArr};
 use std::{
@@ -49,7 +47,7 @@ pub struct ClausenBrdfParameterisation {
 }
 
 impl BrdfParam for ClausenBrdfParameterisation {
-    fn kind() -> BrdfParamKind { BrdfParamKind::IncidentDirection }
+    fn kind() -> BrdfParamKind { BrdfParamKind::InOutDirs }
 }
 
 impl ClausenBrdfParameterisation {
@@ -110,6 +108,7 @@ impl ClausenBrdf {
         samples: DyArr<f32, 3>,
     ) -> Self {
         Self {
+            kind: MeasuredBrdfKind::Clausen,
             origin,
             incident_medium,
             transmitted_medium,
@@ -346,6 +345,7 @@ impl ClausenBrdf {
         );
 
         Ok(Self {
+            kind: MeasuredBrdfKind::Clausen,
             origin: Origin::RealWorld,
             incident_medium: Medium::Air,
             transmitted_medium: Medium::Aluminium,
@@ -353,157 +353,6 @@ impl ClausenBrdf {
             spectrum,
             samples,
         })
-    }
-}
-
-#[cfg(feature = "fitting")]
-impl AnalyticalFit for ClausenBrdf {
-    type Params = ClausenBrdfParameterisation;
-
-    impl_analytical_fit_trait!(self);
-
-    #[inline]
-    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Clausen }
-
-    /// Creates a new Clausen BRDF with the same parameterisation as the given
-    /// BRDF, but with new analytical samples.
-    fn new_analytical(
-        medium_i: Medium,
-        medium_t: Medium,
-        spectrum: &[Nanometres],
-        params: &Self::Params,
-        model: &dyn Bxdf<Params = [f64; 2]>,
-        iors: &IorRegistry,
-    ) -> Self {
-        let iors_i = iors.ior_of_spectrum(medium_i, spectrum).unwrap();
-        let iors_t = iors.ior_of_spectrum(medium_t, spectrum).unwrap();
-        let n_wo = params.n_wo;
-        let n_wi = params.incoming.len();
-        let n_spectrum = spectrum.len();
-        let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
-        params
-            .incoming
-            .as_slice()
-            .iter()
-            .enumerate()
-            .zip(params.outgoing.as_slice().chunks(n_wo))
-            .for_each(|((i, wi), wos)| {
-                let wi = wi.to_cartesian();
-                wos.iter().enumerate().for_each(|(j, wo)| {
-                    let wo = wo.to_cartesian();
-                    let spectral_samples =
-                        Scattering::eval_reflectance_spectrum(model, &wi, &wo, &iors_i, &iors_t);
-                    for (k, sample) in spectral_samples.iter().enumerate() {
-                        samples[[i, j, k]] = *sample as f32;
-                    }
-                });
-            });
-
-        Self {
-            origin: Origin::Analytical,
-            incident_medium: medium_i,
-            transmitted_medium: medium_t,
-            params: Box::new(params.clone()),
-            spectrum: DyArr::from_slice([n_spectrum], spectrum),
-            samples,
-        }
-    }
-
-    /// Computes the distance between the measured data and the model.
-    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: Weighting) -> f64 {
-        assert_eq!(self.spectrum, other.spectrum, "Spectra must be equal!");
-        if self.params() != other.params() {
-            panic!("Parameterization must be the same!");
-        }
-        let factor = match metric {
-            ErrorMetric::Mse => math::rcp_f64(self.samples().len() as f64),
-            ErrorMetric::Nllsq => 0.5,
-            ErrorMetric::L1 => todo!(),
-            ErrorMetric::L2 => todo!(),
-            ErrorMetric::Rmse => todo!(),
-        };
-        match rmetric {
-            Weighting::None => {
-                self.samples()
-                    .iter()
-                    .zip(other.samples().iter())
-                    .fold(0.0f64, |acc, (a, b)| {
-                        let diff = *a as f64 - *b as f64;
-                        acc + math::sqr(diff) * factor
-                    })
-            },
-            Weighting::LnCos => {
-                let n_spectrum = self.n_spectrum();
-                let n_wo = self.n_wo();
-                self.params
-                    .wi_wos_iter()
-                    .fold(0.0f64, |acc, (i, (wi, wos))| {
-                        let cos_theta_i = wi.theta.cos() as f64;
-                        acc + wos.iter().enumerate().fold(0.0f64, |acc, (j, wo)| {
-                            let offset = i * n_wo * n_spectrum + j * n_spectrum;
-                            let a = &self.samples.as_slice()[offset..offset + n_spectrum];
-                            let b = &other.samples.as_slice()[offset..offset + n_spectrum];
-                            acc + a.iter().zip(b.iter()).fold(0.0, |acc, (a, b)| {
-                                let diff = (*a as f64 * cos_theta_i + 1.0).ln()
-                                    - (*b as f64 * cos_theta_i + 1.0).ln();
-                                acc + math::sqr(diff) * factor
-                            })
-                        })
-                    })
-            },
-        }
-    }
-
-    fn filtered_distance(
-        &self,
-        other: &Self,
-        metric: ErrorMetric,
-        rmetric: Weighting,
-        limit: Radians,
-    ) -> f64 {
-        log::debug!("Filtering distance with limit: {}", limit.prettified());
-        assert_eq!(self.spectrum, other.spectrum, "Spectra must be equal!");
-        if self.params() != other.params() {
-            panic!("Parameterization must be the same!");
-        }
-        let n_spectrum = self.n_spectrum();
-        let n_samples = self
-            .params
-            .all_wi_wo_iter()
-            .filter(|(wi, wo)| wi.theta < limit && wo.theta < limit)
-            .count()
-            * n_spectrum;
-        log::debug!(
-            "Number of samples: {}, total: {}",
-            n_samples,
-            self.samples.len()
-        );
-        let factor = match metric {
-            ErrorMetric::Mse => math::rcp_f64(n_samples as f64),
-            ErrorMetric::Nllsq => 0.5,
-            ErrorMetric::L1 => todo!(),
-            ErrorMetric::L2 => todo!(),
-            ErrorMetric::Rmse => todo!(),
-        };
-        self.params
-            .all_wi_wo_iter()
-            .zip(
-                self.samples
-                    .as_slice()
-                    .chunks(n_spectrum)
-                    .zip(other.samples.as_slice().chunks(n_spectrum)),
-            )
-            .fold(0.0, |acc, ((wi, wo), (s1, s2))| {
-                if wi.theta < limit && wo.theta < limit {
-                    let mut diff = 0.0f64;
-                    for (a, b) in s1.iter().zip(s2.iter()) {
-                        diff += math::sqr(*a as f64 - *b as f64) * factor;
-                    }
-                    acc + diff
-                } else {
-                    acc
-                }
-            })
     }
 }
 
@@ -587,4 +436,6 @@ impl AnalyticalFit2 for ClausenBrdf {
     }
 
     fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
+
+    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Clausen }
 }

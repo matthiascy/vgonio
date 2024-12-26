@@ -1,33 +1,23 @@
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
-    fitting::MicrofacetBrdfFittingProblem,
-    measure::bsdf::{receiver::ReceiverParams, MeasuredBrdfLevel, MeasuredBsdfData},
+    measure::bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
     pyplot::plot_err,
 };
 use base::{
     error::VgonioError,
-    math::Sph2,
-    medium::Medium,
     optics::ior::IorRegistry,
-    partition::{PartitionScheme, SphericalDomain},
     range::StepRangeIncl,
-    units::{nm, Radians, Rads},
+    units::{Radians, Rads},
     ErrorMetric, Isotropy, MeasuredBrdfKind, Weighting,
 };
 use bxdf::{
     brdf::{
-        analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-        measured::{
-            merl::MerlBrdf, rgl::RglBrdf, yan::Yan2018Brdf, AnalyticalFit, ClausenBrdf, VgonioBrdf,
-            VgonioBrdfParameterisation,
-        },
-        Bxdf, BxdfFamily,
+        measured::{merl::MerlBrdf, rgl::RglBrdf, yan::Yan2018Brdf, ClausenBrdf},
+        BxdfFamily,
     },
     distro::MicrofacetDistroKind,
     fitting::{brdf::AnalyticalFit2, FittingProblem},
 };
-use core::slice::SlicePattern;
-use jabr::array::DyArr;
 use std::path::PathBuf;
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
@@ -43,284 +33,158 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
         .and_then(|t| Some(Radians::from_degrees(t)));
     // Load the data from the cache if the fitting is BxDF
     let cache = Cache::new(config.cache_dir());
-    let alpha = StepRangeIncl::new(
-        opts.alpha_start.unwrap(),
-        opts.alpha_stop.unwrap(),
-        opts.alpha_step.unwrap(),
-    );
     cache.write(|cache| {
         cache.load_ior_database(&config);
-        if opts.generate {
-            let roughness = StepRangeIncl::new(
-                opts.alpha_start.unwrap(),
-                opts.alpha_stop.unwrap(),
-                opts.alpha_step.unwrap(),
-            );
-            let alphas = roughness.values();
-            let models = match opts.family {
-                BxdfFamily::Microfacet => match opts.distro {
-                    MicrofacetDistroKind::Beckmann => {
-                        let mut models = vec![];
-                        for alpha in alphas {
-                            models.push(Box::new(MicrofacetBrdfBK::new(alpha, alpha))
-                                as Box<dyn Bxdf<Params = [f64; 2]>>);
-                        }
-                        models.into_boxed_slice()
-                    },
-                    MicrofacetDistroKind::TrowbridgeReitz => {
-                        let mut models = vec![];
-                        for alpha in alphas {
-                            models.push(Box::new(MicrofacetBrdfTR::new(alpha, alpha))
-                                as Box<dyn Bxdf<Params = [f64; 2]>>);
-                        }
-                        models.into_boxed_slice()
-                    },
-                },
-                _ => unimplemented!("Only microfacet-based BxDFs are supported."),
-            };
-            let spectrum = StepRangeIncl {
-                start: nm!(400.0),
-                stop: nm!(700.0),
-                step_size: nm!(300.0),
-            }
-            .values()
-            .collect::<Vec<_>>();
-            let zenith = StepRangeIncl {
-                start: Rads::ZERO,
-                stop: Rads::HALF_PI,
-                step_size: Rads::from_degrees(5.0),
-            };
-            let azimuth = StepRangeIncl {
-                start: Rads::ZERO,
-                stop: Rads::TWO_PI,
-                step_size: Rads::from_degrees(60.0),
-            };
-            let mut incoming =
-                DyArr::<Sph2>::zeros([zenith.step_count_wrapped() * azimuth.step_count_wrapped()]);
-            for (i, theta) in zenith.values_wrapped().enumerate() {
-                for (j, phi) in azimuth.values_wrapped().enumerate() {
-                    incoming[i * azimuth.step_count_wrapped() + j] = Sph2::new(theta, phi);
-                }
-            }
-            let params = VgonioBrdfParameterisation {
-                n_zenith_i: zenith.step_count_wrapped(),
-                incoming,
-                outgoing: ReceiverParams {
-                    domain: SphericalDomain::Upper,
-                    precision: Sph2::new(Rads::from_degrees(2.0), Rads::from_degrees(2.0)),
-                    scheme: PartitionScheme::Beckers,
-                }
-                .partitioning(),
-            };
-            for model in models.iter() {
-                let brdf = VgonioBrdf::new_analytical(
-                    Medium::Air,
-                    Medium::Aluminium,
-                    &spectrum,
-                    &params,
-                    &**model,
-                    &cache.iors,
-                );
-                let output = config.output_dir().join(format!(
-                    "{:?}_{}.exr",
-                    model.family(),
-                    model.params()[0],
+        if opts.kind == MeasuredBrdfKind::Vgonio && opts.clausen {
+            println!("Fitting simulated data to Clausen's data.");
+            if opts.inputs.len() % 2 != 0 {
+                return Err(VgonioError::new(
+                    "The input files should be in pairs of measured data and corresponding \
+                     Clausen's data.",
+                    None,
                 ));
-                brdf.write_as_exr(&output, &chrono::Local::now(), 512)
-                    .unwrap();
+            }
+            for pair in opts.inputs.chunks(2) {
+                log::debug!("inputs: {:?}, {:?}", pair[0], pair[1]);
+                let brdf = {
+                    let handles = pair
+                        .iter()
+                        .map(|p| cache.load_micro_surface_measurement(&config, p).unwrap())
+                        .collect::<Vec<_>>();
+                    let loaded = handles
+                        .iter()
+                        .map(|h| &cache.get_measurement(*h).unwrap().measured)
+                        .collect::<Vec<_>>();
+                    if loaded
+                        .iter()
+                        .all(|m| m.brdf_kind() == Some(MeasuredBrdfKind::Clausen))
+                        || loaded
+                            .iter()
+                            .all(|m| m.brdf_kind() != Some(MeasuredBrdfKind::Clausen))
+                    {
+                        return Err(VgonioError::new(
+                            "The input files should be in pairs of measured data and \
+                             corresponding Clausen's data.",
+                            None,
+                        ));
+                    }
+                    let simulated_brdf_index =
+                        if loaded[0].brdf_kind() == Some(MeasuredBrdfKind::Clausen) {
+                            1
+                        } else {
+                            0
+                        };
+                    let clausen_brdf_index = simulated_brdf_index ^ 1;
+                    let simulated_brdf = loaded[simulated_brdf_index]
+                        .downcast_ref::<MeasuredBsdfData>()
+                        .unwrap();
+                    let clausen_brdf = loaded[clausen_brdf_index]
+                        .downcast_ref::<ClausenBrdf>()
+                        .unwrap();
+                    log::debug!("Resampling the measured data, dense: {}", opts.dense);
+                    simulated_brdf.resample(
+                        &clausen_brdf.params,
+                        opts.level,
+                        opts.dense,
+                        Rads::ZERO,
+                    )
+                };
+                log::debug!("BRDF extraction done, starting fitting.");
+                measured_brdf_fitting(&opts, &brdf, &cache.iors, theta_limit);
             }
         } else {
-            if opts.kind == MeasuredBrdfKind::Vgonio && opts.clausen {
-                println!("Fitting simulated data to Clausen's data.");
-                if opts.inputs.len() % 2 != 0 {
-                    return Err(VgonioError::new(
-                        "The input files should be in pairs of measured data and corresponding \
-                         Clausen's data.",
-                        None,
-                    ));
-                }
-                for pair in opts.inputs.chunks(2) {
-                    log::debug!("inputs: {:?}, {:?}", pair[0], pair[1]);
-                    let brdf = {
-                        let handles = pair
-                            .iter()
-                            .map(|p| cache.load_micro_surface_measurement(&config, p).unwrap())
-                            .collect::<Vec<_>>();
-                        let loaded = handles
-                            .iter()
-                            .map(|h| &cache.get_measurement(*h).unwrap().measured)
-                            .collect::<Vec<_>>();
-                        if loaded
-                            .iter()
-                            .all(|m| m.brdf_kind() == Some(MeasuredBrdfKind::Clausen))
-                            || loaded
-                                .iter()
-                                .all(|m| m.brdf_kind() != Some(MeasuredBrdfKind::Clausen))
-                        {
-                            return Err(VgonioError::new(
-                                "The input files should be in pairs of measured data and \
-                                 corresponding Clausen's data.",
-                                None,
-                            ));
-                        }
-                        let simulated_brdf_index =
-                            if loaded[0].brdf_kind() == Some(MeasuredBrdfKind::Clausen) {
-                                1
-                            } else {
-                                0
-                            };
-                        let clausen_brdf_index = simulated_brdf_index ^ 1;
-                        let simulated_brdf = loaded[simulated_brdf_index]
-                            .downcast_ref::<MeasuredBsdfData>()
+            match opts.kind {
+                MeasuredBrdfKind::Clausen => {
+                    for input in &opts.inputs {
+                        let measurement = cache
+                            .load_micro_surface_measurement(&config, &input)
                             .unwrap();
-                        let clausen_brdf = loaded[clausen_brdf_index]
+                        if let Some(brdf) = cache
+                            .get_measurement(measurement)
+                            .unwrap()
+                            .measured
                             .downcast_ref::<ClausenBrdf>()
+                        {
+                            measured_brdf_fitting(&opts, brdf, &cache.iors, theta_limit);
+                        }
+                    }
+                },
+                MeasuredBrdfKind::Merl => {
+                    for input in &opts.inputs {
+                        let measurement = cache
+                            .load_micro_surface_measurement(&config, &input)
                             .unwrap();
-                        log::debug!("Resampling the measured data, dense: {}", opts.dense);
-                        simulated_brdf.resample(
-                            &clausen_brdf.params,
-                            opts.level,
-                            opts.dense,
-                            Rads::ZERO,
-                        )
-                    };
-                    log::debug!("BRDF extraction done, starting fitting.");
-                    measured_brdf_fitting(&opts, &pair[0], &brdf, alpha, &cache.iors, theta_limit);
-                }
-            } else {
-                match opts.kind {
-                    MeasuredBrdfKind::Clausen => {
-                        for input in &opts.inputs {
-                            let measurement = cache
-                                .load_micro_surface_measurement(&config, &input)
-                                .unwrap();
-                            if let Some(brdf) = cache
-                                .get_measurement(measurement)
-                                .unwrap()
-                                .measured
-                                .downcast_ref::<ClausenBrdf>()
-                            {
-                                measured_brdf_fitting(
-                                    &opts,
-                                    &input,
-                                    brdf,
-                                    alpha,
-                                    &cache.iors,
-                                    theta_limit,
-                                );
-                            }
+                        println!("Get merl measurement");
+                        if let Some(brdf) = cache
+                            .get_measurement(measurement)
+                            .unwrap()
+                            .measured
+                            .downcast_ref::<MerlBrdf>()
+                        {
+                            measured_brdf_fitting(&opts, brdf, &cache.iors, theta_limit);
                         }
-                    },
-                    MeasuredBrdfKind::Merl => {
-                        for input in &opts.inputs {
-                            let measurement = cache
-                                .load_micro_surface_measurement(&config, &input)
+                    }
+                },
+                MeasuredBrdfKind::Utia => {},
+                MeasuredBrdfKind::Vgonio => {
+                    for input in &opts.inputs {
+                        let measurement = cache
+                            .load_micro_surface_measurement(&config, &input)
+                            .unwrap();
+                        if let Some(measured) = cache
+                            .get_measurement(measurement)
+                            .unwrap()
+                            .measured
+                            .downcast_ref::<MeasuredBsdfData>()
+                        {
+                            let brdf = measured
+                                .brdf_at(MeasuredBrdfLevel::from(opts.level))
                                 .unwrap();
-                            println!("Get merl measurement");
-                            if let Some(measured) = cache
-                                .get_measurement(measurement)
-                                .unwrap()
-                                .measured
-                                .downcast_ref::<MerlBrdf>()
-                            {
-                                // measured_brdf_fitting(
-                                //     &opts,
-                                //     &input,
-                                //     brdf,
-                                //     alpha,
-                                //     &cache.iors,
-                                //     theta_limit,
-                                // );
-                                todo!()
-                            }
+                            measured_brdf_fitting(&opts, brdf, &cache.iors, theta_limit);
                         }
-                    },
-                    MeasuredBrdfKind::Utia => {},
-                    MeasuredBrdfKind::Vgonio => {
-                        for input in &opts.inputs {
-                            let measurement = cache
-                                .load_micro_surface_measurement(&config, &input)
-                                .unwrap();
-                            if let Some(measured) = cache
-                                .get_measurement(measurement)
-                                .unwrap()
-                                .measured
-                                .downcast_ref::<MeasuredBsdfData>()
-                            {
-                                let brdf = measured
-                                    .brdf_at(MeasuredBrdfLevel::from(opts.level))
-                                    .unwrap();
-                                measured_brdf_fitting(
-                                    &opts,
-                                    &input,
-                                    brdf,
-                                    alpha,
-                                    &cache.iors,
-                                    theta_limit,
-                                );
-                            }
+                    }
+                },
+                MeasuredBrdfKind::Yan2018 => {
+                    for input in &opts.inputs {
+                        let measurement = cache
+                            .load_micro_surface_measurement(&config, &input)
+                            .unwrap();
+                        if let Some(brdf) = cache
+                            .get_measurement(measurement)
+                            .unwrap()
+                            .measured
+                            .downcast_ref::<Yan2018Brdf>()
+                        {
+                            measured_brdf_fitting(&opts, brdf, &cache.iors, theta_limit);
                         }
-                    },
-                    MeasuredBrdfKind::Yan2018 => {
-                        for input in &opts.inputs {
-                            let measurement = cache
-                                .load_micro_surface_measurement(&config, &input)
-                                .unwrap();
-                            if let Some(brdf) = cache
-                                .get_measurement(measurement)
-                                .unwrap()
-                                .measured
-                                .downcast_ref::<Yan2018Brdf>()
-                            {
-                                measured_brdf_fitting(
-                                    &opts,
-                                    &input,
-                                    brdf,
-                                    alpha,
-                                    &cache.iors,
-                                    theta_limit,
-                                );
-                            }
+                    }
+                },
+                MeasuredBrdfKind::Rgl => {
+                    for input in &opts.inputs {
+                        let measurement = cache
+                            .load_micro_surface_measurement(&config, &input)
+                            .unwrap();
+                        if let Some(brdf) = cache
+                            .get_measurement(measurement)
+                            .unwrap()
+                            .measured
+                            .downcast_ref::<RglBrdf>()
+                        {
+                            log::debug!("RGL BRDF fitting");
+                            measured_brdf_fitting(&opts, brdf, &cache.iors, theta_limit);
                         }
-                    },
-                    MeasuredBrdfKind::Rgl => {
-                        for input in &opts.inputs {
-                            let measurement = cache
-                                .load_micro_surface_measurement(&config, &input)
-                                .unwrap();
-                            if let Some(brdf) = cache
-                                .get_measurement(measurement)
-                                .unwrap()
-                                .measured
-                                .downcast_ref::<RglBrdf>()
-                            {
-                                log::debug!("RGL BRDF fitting");
-                                measured_brdf_fitting(
-                                    &opts,
-                                    &input,
-                                    brdf,
-                                    alpha,
-                                    &cache.iors,
-                                    theta_limit,
-                                );
-                            }
-                        }
-                    },
-                    MeasuredBrdfKind::Unknown => {
-                        println!("Unknown measured BRDF kind specified, cannot fit!");
-                    },
-                }
+                    }
+                },
+                MeasuredBrdfKind::Unknown => {
+                    println!("Unknown measured BRDF kind specified, cannot fit!");
+                },
             }
         }
         Ok(())
     })
 }
 
-fn brdf_fitting_brute_force<F: AnalyticalFit + Sync + AnalyticalFit2>(
-    brdf: &F,
-    opts: &FitOptions,
-    iors: &IorRegistry,
-) {
+fn brdf_fitting_brute_force<F: AnalyticalFit2>(brdf: &F, opts: &FitOptions, iors: &IorRegistry) {
     let start = std::time::Instant::now();
     let report = brdf.proxy(iors).brute_fit(
         opts.distro,
@@ -350,11 +214,9 @@ fn brdf_fitting_brute_force<F: AnalyticalFit + Sync + AnalyticalFit2>(
     }
 }
 
-fn measured_brdf_fitting<F: AnalyticalFit + Sync + AnalyticalFit2>(
+fn measured_brdf_fitting<F: AnalyticalFit2>(
     opts: &FitOptions,
-    filepath: &PathBuf,
     brdf: &F,
-    alpha: StepRangeIncl<f64>,
     iors: &IorRegistry,
     theta_limit: Option<Radians>,
 ) {
@@ -376,28 +238,25 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync + AnalyticalFit2>(
     match opts.method {
         FittingMethod::Brute => brdf_fitting_brute_force(brdf, opts, iors),
         FittingMethod::Nllsq => {
-            let problem = MicrofacetBrdfFittingProblem::new(
-                brdf,
-                opts.distro,
-                alpha,
-                opts.level,
-                iors,
-                limit,
-            );
-            problem
-                .nllsq_fit(
-                    opts.distro,
-                    opts.isotropy,
-                    opts.weighting,
-                    alpha,
-                    None,
-                    None,
-                )
-                .print_fitting_report(4);
-
-            println!("{} V2", ansi::YELLOW_GT);
             let proxy = brdf.proxy(iors);
-            log::debug!("Fitting with αx = {} αy = {}", alpha.start, alpha.stop);
+
+            // Adjust the alpha range only if the model is isotropic
+            let alpha = match opts.isotropy {
+                Isotropy::Isotropic => {
+                    let report = brdf.proxy(iors).brute_fit(
+                        opts.distro,
+                        opts.error_metric.unwrap_or(ErrorMetric::Mse),
+                        opts.weighting,
+                        opts.theta_limit.map(|t| Radians::from_degrees(t)),
+                        opts.theta_limit.map(|t| Radians::from_degrees(t)),
+                        2,
+                    );
+                    let mid = report.best_model().unwrap().params()[0];
+                    StepRangeIncl::new(mid - 0.01, mid + 0.1, 0.001)
+                },
+                Isotropy::Anisotropic => StepRangeIncl::new(0.0, 1.0, 0.01),
+            };
+
             let report = proxy.nllsq_fit(
                 opts.distro,
                 opts.isotropy,
@@ -406,7 +265,7 @@ fn measured_brdf_fitting<F: AnalyticalFit + Sync + AnalyticalFit2>(
                 opts.theta_limit.map(|t| Radians::from_degrees(t)),
                 opts.theta_limit.map(|t| Radians::from_degrees(t)),
             );
-            report.print_fitting_report(4);
+            report.print_fitting_report(8);
         },
     }
 }
@@ -466,7 +325,7 @@ pub struct FitOptions {
         help = "Distribution to use for the microfacet model. If not specified, the default \
                 distribution will be used.",
         default_value = "beckmann",
-        required_if_eq_all([("family", "microfacet"), ("generate", "false")])
+        required_if_eq("family", "microfacet")
     )]
     pub distro: MicrofacetDistroKind,
 
@@ -477,37 +336,6 @@ pub struct FitOptions {
         default_value = "l0"
     )]
     pub level: MeasuredBrdfLevel,
-
-    #[clap(
-        long,
-        help = "Generate the analytical model for the given family and distribution.",
-        default_value = "false"
-    )]
-    pub generate: bool,
-
-    #[clap(
-        short = 's',
-        long = "alpha_start",
-        help = "Start roughness.",
-        default_value = "0.01"
-    )]
-    pub alpha_start: Option<f64>,
-
-    #[clap(
-        short = 'e',
-        long = "alpha_stop",
-        help = "End roughness.",
-        default_value = "1.0"
-    )]
-    pub alpha_stop: Option<f64>,
-
-    #[clap(
-        short = 'p',
-        long = "alpha_step",
-        help = "Roughness step size.",
-        default_value = "0.01"
-    )]
-    pub alpha_step: Option<f64>,
 
     #[clap(long, help = "Theta limit for the fitting in degrees. Default to 90°.")]
     pub theta_limit: Option<f32>,
@@ -531,7 +359,7 @@ pub struct FitOptions {
         long = "err",
         help = "Error metric to use ONLY for the brute force fitting.",
         default_value = "mse",
-        required_if_eq_all([("method", "bruteforce"), ("generate", "false")])
+        required_if_eq("method", "brute")
     )]
     pub error_metric: Option<ErrorMetric>,
 

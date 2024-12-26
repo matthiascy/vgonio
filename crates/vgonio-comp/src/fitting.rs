@@ -25,14 +25,12 @@ macro_rules! impl_least_squares_problem_common_methods {
     }
 }
 
-mod brdf;
 mod mfd;
 
-pub use brdf::*;
 use bxdf::fitting::{FittedModel, FittingProblemKind};
 pub use mfd::*;
 
-use base::{Isotropy, Weighting};
+use base::Isotropy;
 use std::fmt::Debug;
 
 /// A collection of fitted models without repetition.

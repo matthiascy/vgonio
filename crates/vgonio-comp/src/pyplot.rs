@@ -59,10 +59,14 @@ pub fn plot_brdf_vgonio_clausen(
     dense: bool,
 ) -> PyResult<()> {
     Python::with_gil(|py| {
-        let fun: Py<PyAny> =
-            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
-                .getattr("plot_brdf_comparison")?
-                .into();
+        let fun: Py<PyAny> = PyModule::from_code(
+            py,
+            c_str!(include_str!("./pyplot/pyplot.py")),
+            c_str!("pyplot.py"),
+            c_str!("vgp"),
+        )?
+        .getattr("plot_brdf_comparison")?
+        .into();
         let n_samples_itrp = itrp.n_samples();
         let n_samples_olaf = meas.n_samples();
         // Rearrange the data layout from [wi, wo, spectrum] to [spectrum, wi, wo]
@@ -98,12 +102,13 @@ pub fn plot_brdf_vgonio_clausen(
             .map(|(wi, wos)| {
                 (
                     (wi.theta.as_f32(), wi.phi.as_f32()),
-                    PyList::new_bound(
+                    PyList::new(
                         py,
                         wos.iter()
                             .map(|wo| (wo.theta.as_f32(), wo.phi.as_f32()))
                             .collect::<Vec<_>>(),
-                    ),
+                    )
+                    .unwrap(),
                 )
             })
             .collect::<Vec<_>>();
@@ -117,12 +122,13 @@ pub fn plot_brdf_vgonio_clausen(
             .map(|(wi, wos)| {
                 (
                     (wi.theta.as_f32(), wi.phi.as_f32()),
-                    PyList::new_bound(
+                    PyList::new(
                         py,
                         wos.iter()
                             .map(|wo| (wo.theta.as_f32(), wo.phi.as_f32()))
                             .collect::<Vec<_>>(),
-                    ),
+                    )
+                    .unwrap(),
                 )
             })
             .collect::<Vec<_>>();
@@ -181,11 +187,15 @@ pub fn plot_brdf_slice(
 ) -> PyResult<()> {
     let opposite_phi_o = (phi_o + Radians::PI).wrap_to_tau();
     Python::with_gil(|py| {
-        let fun: Py<PyAny> =
-            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
-                .getattr("plot_brdf_slice")?
-                .into();
-        let brdfs = PyList::new_bound(
+        let fun: Py<PyAny> = PyModule::from_code(
+            py,
+            c_str!(include_str!("./pyplot/pyplot.py")),
+            c_str!("pyplot.py"),
+            c_str!("vgp"),
+        )?
+        .getattr("plot_brdf_slice")?
+        .into();
+        let brdfs = PyList::new(
             py,
             brdf.iter()
                 .map(|(brdf, label)| {
@@ -199,10 +209,10 @@ pub fn plot_brdf_slice(
                         .collect::<Vec<_>>();
                     let n_spectrum = brdf.spectrum.len();
                     let spectrum =
-                        PyArray1::from_iter_bound(py, brdf.spectrum.iter().map(|x| x.as_f32()));
+                        PyArray1::from_iter(py, brdf.spectrum.iter().map(|x| x.as_f32()));
                     let slice_phi = {
                         let data = sampler.sample_slice_at(wi, phi_o).unwrap();
-                        let slice = PyArray2::zeros_bound(py, [theta.len(), n_spectrum], false);
+                        let slice = PyArray2::zeros(py, [theta.len(), n_spectrum], false);
                         unsafe {
                             slice.as_slice_mut().unwrap().copy_from_slice(&data);
                         }
@@ -213,7 +223,7 @@ pub fn plot_brdf_slice(
                             .sample_slice_at(wi, opposite_phi_o)
                             .unwrap()
                             .into_vec();
-                        let slice = PyArray2::zeros_bound(py, [theta.len(), n_spectrum], false);
+                        let slice = PyArray2::zeros(py, [theta.len(), n_spectrum], false);
                         unsafe {
                             slice.as_slice_mut().unwrap().copy_from_slice(&data);
                         }
@@ -222,13 +232,13 @@ pub fn plot_brdf_slice(
                     (
                         slice_phi,
                         slice_opposite_phi,
-                        PyArray1::from_vec_bound(py, theta),
+                        PyArray1::from_vec(py, theta),
                         spectrum,
                         label,
                     )
                 })
                 .collect::<Vec<_>>(),
-        );
+        )?;
         let args = (
             phi_o.to_degrees().as_f32(),
             opposite_phi_o.to_degrees().as_f32(),
@@ -252,11 +262,15 @@ pub fn plot_brdf_slice_in_plane(brdf: &[&VgonioBrdf], phi: Radians) -> PyResult<
         phi_opp.prettified()
     );
     Python::with_gil(|py| {
-        let fun: Py<PyAny> =
-            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
-                .getattr("plot_brdf_slice_in_plane")?
-                .into();
-        let brdfs = PyList::new_bound(
+        let fun: Py<PyAny> = PyModule::from_code(
+            py,
+            c_str!(include_str!("./pyplot/pyplot.py")),
+            c_str!("pyplot.py"),
+            c_str!("vgp"),
+        )?
+        .getattr("plot_brdf_slice_in_plane")?
+        .into();
+        let brdfs = PyList::new(
             py,
             brdf.iter()
                 .map(|&brdf| {
@@ -275,7 +289,7 @@ pub fn plot_brdf_slice_in_plane(brdf: &[&VgonioBrdf], phi: Radians) -> PyResult<
                         .iter()
                         .map(|x| x.zenith_center().to_degrees().as_f32())
                         .collect::<Vec<_>>();
-                    let wavelength = PyArray1::from_vec_bound(
+                    let wavelength = PyArray1::from_vec(
                         py,
                         brdf.spectrum.iter().map(|x| x.as_f32()).collect::<Vec<_>>(),
                     );
@@ -295,7 +309,7 @@ pub fn plot_brdf_slice_in_plane(brdf: &[&VgonioBrdf], phi: Radians) -> PyResult<
                     (slices_phi, slices_phi_opp, theta_i, theta_o, wavelength)
                 })
                 .collect::<Vec<_>>(),
-        );
+        )?;
         let args = (
             phi.to_degrees().as_f32(),
             phi_opp.to_degrees().as_f32(),
@@ -314,10 +328,10 @@ pub fn plot_ndf(
 ) -> PyResult<()> {
     Python::with_gil(|py| {
         let fun: Py<PyAny> =
-            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
+            PyModule::from_code(py, c_str!(include_str!("./pyplot/pyplot.py")), c_str!("pyplot.py"), c_str!("vgp"))?
                 .getattr("plot_ndf_slice")?
                 .into();
-        let slices = PyList::new_bound(
+        let slices = PyList::new(
             py,
             ndf.iter()
                 .enumerate()
@@ -335,16 +349,15 @@ pub fn plot_ndf(
                             let (spls, opp_spls) = ndf.slice_at(phi);
                             (
                                 label,
-                                numpy::PyArray1::from_vec_bound(py, theta),
-                                numpy::PyArray1::from_slice_bound(py, spls),
-                                numpy::PyArray1::from_slice_bound(py, opp_spls.unwrap()),
+                                numpy::PyArray1::from_vec(py, theta),
+                                numpy::PyArray1::from_slice(py, spls),
+                                numpy::PyArray1::from_slice(py, opp_spls.unwrap()),
                             )
                         },
                         NdfMeasurementMode::ByPartition { .. } => {
                             let sampler = DataCarriedOnHemisphereSampler::new(ndf).unwrap();
                             let partition = sampler.extra.as_ref().unwrap();
-                            let theta =
-                                numpy::PyArray1::zeros_bound(py, [partition.n_rings()], false);
+                            let theta = numpy::PyArray1::zeros(py, [partition.n_rings()], false);
                             partition
                                 .rings
                                 .iter()
@@ -353,11 +366,11 @@ pub fn plot_ndf(
                                     theta.as_slice_mut().unwrap()[i] = ring.zenith_center().as_f32()
                                 });
                             let phi_opp = (phi + Radians::PI).wrap_to_tau();
-                            let slice_phi = numpy::PyArray1::from_vec_bound(
+                            let slice_phi = numpy::PyArray1::from_vec(
                                 py,
                                 sampler.sample_slice_at(phi).into_vec(),
                             );
-                            let slice_phi_opp = numpy::PyArray1::from_vec_bound(
+                            let slice_phi_opp = numpy::PyArray1::from_vec(
                                 py,
                                 sampler.sample_slice_at(phi_opp).into_vec(),
                             );
@@ -366,7 +379,7 @@ pub fn plot_ndf(
                     }
                 })
                 .collect::<Vec<_>>(),
-        );
+        )?;
         let args = (
             phi.as_f32(),
             (phi + Radians::PI).wrap_to_tau().as_f32(),
@@ -387,10 +400,10 @@ pub fn plot_gaf(
 ) -> PyResult<()> {
     Python::with_gil(|py| {
         let fun: Py<PyAny> =
-            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
+            PyModule::from_code(py, c_str!(include_str!("./pyplot/pyplot.py")), c_str!("pyplot.py"), c_str!("vgp"))?
                 .getattr("plot_gaf_slice")?
                 .into();
-        let slices = PyList::new_bound(
+        let slices = PyList::new(
             py,
             gaf.iter()
                 .enumerate()
@@ -409,13 +422,13 @@ pub fn plot_gaf(
                     let (spls, opp_spls) = gaf.slice_at(wm.phi, wm.theta, phi_v);
                     (
                         label,
-                        PyArray1::from_vec_bound(py, theta),
-                        PyArray1::from_slice_bound(py, spls),
-                        PyArray1::from_slice_bound(py, opp_spls.unwrap()),
+                        PyArray1::from_vec(py, theta),
+                        PyArray1::from_slice(py, spls),
+                        PyArray1::from_slice(py, opp_spls.unwrap()),
                     )
                 })
                 .collect::<Vec<_>>(),
-        );
+        )?;
 
         let args = (
             wm.theta.as_f32(),
@@ -450,20 +463,19 @@ pub fn plot_brdf_map(
     let channel_name = Text::new_or_panic(format!("{}", lamda));
     log::debug!("layer_name: {}, channel_name: {}", layer_name, channel_name);
     Python::with_gil(|py| {
-        PyModule::from_code_bound(
+        PyModule::from_code(
             py,
-            include_str!("./pyplot/tone_mapping.py"),
-            "tone_mapping.py",
-            "tone_mapping",
-        )
-        .unwrap();
+            c_str!(include_str!("./pyplot/tone_mapping.py")),
+            c_str!("tone_mapping.py"),
+            c_str!("tone_mapping"),
+        )?;
         let fun: Py<PyAny> =
-            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")
+            PyModule::from_code(py, c_str!(include_str!("./pyplot/pyplot.py")), c_str!("pyplot.py"), c_str!("vgp"))
                 .unwrap()
                 .getattr("plot_brdf_map")
                 .unwrap()
                 .into();
-        let images = PyList::new_bound(
+        let images = PyList::new(
             py,
             imgs.iter()
                 .map(|(img, name)| {
@@ -482,7 +494,7 @@ pub fn plot_brdf_map(
 
                     let pixels = match &data.sample_data {
                         FlatSamples::F32(pixels) => {
-                            let img_data = PyArray2::zeros_bound(py, (size.0, size.1), false);
+                            let img_data = PyArray2::zeros(py, (size.0, size.1), false);
                             unsafe {
                                 img_data.as_slice_mut().unwrap().copy_from_slice(pixels);
                             }
@@ -500,7 +512,7 @@ pub fn plot_brdf_map(
                     (name, (size.0 as u32, size.1 as u32), pixels)
                 })
                 .collect::<Vec<_>>(),
-        );
+        )?;
         let args = (
             images,
             cmap.clone(),
@@ -520,16 +532,15 @@ pub fn plot_brdf_map(
 pub fn plot_surfaces(surfaces: &[&MicroSurface], downsample: u32, cmap: String) -> PyResult<()> {
     Python::with_gil(|py| {
         let fun: Py<PyAny> =
-            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
+            PyModule::from_code(py, c_str!(include_str!("./pyplot/pyplot.py")), c_str!("pyplot.py"), c_str!("vgp"))?
                 .getattr("plot_surfaces")?
                 .into();
-        let surfaces = PyList::new_bound(
+        let surfaces = PyList::new(
             py,
             surfaces
                 .iter()
                 .map(|&surface| {
-                    let samples =
-                        numpy::PyArray2::zeros_bound(py, (surface.rows, surface.cols), false);
+                    let samples = numpy::PyArray2::zeros(py, (surface.rows, surface.cols), false);
                     unsafe {
                         samples
                             .as_slice_mut()
@@ -540,7 +551,7 @@ pub fn plot_surfaces(surfaces: &[&MicroSurface], downsample: u32, cmap: String) 
                     (surface.dv, surface.du, samples, surface.name.clone())
                 })
                 .collect::<Vec<_>>(),
-        );
+        )?;
         fun.call1(py, (surfaces, cmap, downsample))?;
         Ok(())
     })
@@ -556,7 +567,7 @@ pub fn plot_brdf_3d(
     let wavelength_idx = brdf.spectrum.iter().position(|&x| x == wavelength).unwrap();
     Python::with_gil(|py| {
         let fun: Py<PyAny> =
-            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
+            PyModule::from_code(py, c_str!(include_str!("./pyplot/pyplot.py")), c_str!("pyplot.py"), c_str!("vgp"))?
                 .getattr("plot_brdf_3d")?
                 .into();
         let theta = brdf
@@ -575,7 +586,7 @@ pub fn plot_brdf_3d(
         let n_spectrum = brdf.spectrum.len();
         let vals = {
             let sampler = DataCarriedOnHemisphereSampler::new(brdf).unwrap();
-            let data = PyArray2::zeros_bound(py, [n_theta, n_phi], false);
+            let data = PyArray2::zeros(py, [n_theta, n_phi], false);
             unsafe {
                 let mut spectrum_samples = vec![0.0; n_spectrum].into_boxed_slice();
                 let slice = data.as_slice_mut().unwrap();
@@ -595,8 +606,8 @@ pub fn plot_brdf_3d(
         let args = (
             wi.theta.as_f32(),
             wi.phi.as_f32(),
-            PyArray1::from_vec_bound(py, theta),
-            PyArray1::from_vec_bound(py, phi),
+            PyArray1::from_vec(py, theta),
+            PyArray1::from_vec(py, phi),
             vals,
             cmap,
             scale,
@@ -624,14 +635,10 @@ pub fn plot_brdf_fitting(
         .collect::<Box<_>>();
     Python::with_gil(|py| {
         let fun: Py<PyAny> =
-            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
+            PyModule::from_code(py, c_str!(include_str!("./pyplot/pyplot.py")), c_str!("pyplot.py"),c_str!("vgp"))?
                 .getattr("plot_brdf_fitting")?
                 .into();
-        let fun_c: Py<PyAny> =
-            PyModule::from_code_bound(py, include_str!("./pyplot/pyplot.py"), "pyplot.py", "vgp")?
-                .getattr("plot_brdf_coverage")?
-                .into();
-        let alphas = PyArray1::from_vec_bound(
+        let alphas = PyArray1::from_vec(
             py,
             alphas
                 .iter()
@@ -682,17 +689,17 @@ pub fn plot_brdf_fitting(
                     let n_theta_o = brdf.params.outgoing.n_rings();
                     let n_phi_o = phi_o.len();
                     // n_theta_i x n_phi_i x n_phi_o x n_theta_o x n_spectrum
-                    let samples = PyArray1::zeros_bound(
+                    let samples = PyArray1::zeros(
                         py,
                         [n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
                     );
-                    let fitted_bk = PyArray1::zeros_bound(
+                    let fitted_bk = PyArray1::zeros(
                         py,
                         [n_models * n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
                     );
-                    let fitted_tr = PyArray1::zeros_bound(
+                    let fitted_tr = PyArray1::zeros(
                         py,
                         [n_models * n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
@@ -757,11 +764,11 @@ pub fn plot_brdf_fitting(
                     }
                     let samples =
                         samples.reshape((n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_spectrum))?;
-                    let theta_o = PyArray1::from_vec_bound(py, theta_o);
-                    let theta_i = PyArray1::from_vec_bound(py, theta_i);
-                    let phi_i = PyArray1::from_vec_bound(py, phi_i);
-                    let phi_o = PyArray1::from_vec_bound(py, phi_o);
-                    let wavelength = PyArray1::from_vec_bound(
+                    let theta_o = PyArray1::from_vec(py, theta_o);
+                    let theta_i = PyArray1::from_vec(py, theta_i);
+                    let phi_i = PyArray1::from_vec(py, phi_i);
+                    let phi_o = PyArray1::from_vec(py, phi_o);
+                    let wavelength = PyArray1::from_vec(
                         py,
                         brdf.spectrum.iter().map(|x| x.as_f32()).collect::<Vec<_>>(),
                     );
@@ -817,17 +824,17 @@ pub fn plot_brdf_fitting(
                     let n_theta_o = theta_o.len();
                     let n_phi_o = phi_o.len();
                     // n_theta_i x n_phi_i x n_phi_o x n_theta_o x n_spectrum
-                    let samples = PyArray1::zeros_bound(
+                    let samples = PyArray1::zeros(
                         py,
                         [n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
                     );
-                    let fitted_bk = PyArray1::zeros_bound(
+                    let fitted_bk = PyArray1::zeros(
                         py,
                         [n_models * n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
                     );
-                    let fitted_tr = PyArray1::zeros_bound(
+                    let fitted_tr = PyArray1::zeros(
                         py,
                         [n_models * n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
@@ -893,11 +900,11 @@ pub fn plot_brdf_fitting(
                     }
                     let samples =
                         samples.reshape((n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_spectrum))?;
-                    let theta_o = PyArray1::from_vec_bound(py, theta_o);
-                    let theta_i = PyArray1::from_vec_bound(py, theta_i);
-                    let phi_i = PyArray1::from_vec_bound(py, phi_i);
-                    let phi_o = PyArray1::from_vec_bound(py, phi_o);
-                    let wavelength = PyArray1::from_vec_bound(
+                    let theta_o = PyArray1::from_vec(py, theta_o);
+                    let theta_i = PyArray1::from_vec(py, theta_i);
+                    let phi_i = PyArray1::from_vec(py, phi_i);
+                    let phi_o = PyArray1::from_vec(py, phi_o);
+                    let wavelength = PyArray1::from_vec(
                         py,
                         brdf.spectrum.iter().map(|x| x.as_f32()).collect::<Vec<_>>(),
                     );
@@ -925,7 +932,7 @@ pub fn plot_brdf_fitting(
                     let iors_t = iors
                         .ior_of_spectrum(brdf.transmitted_medium, brdf.spectrum.as_ref())
                         .unwrap();
-                    let wavelength = PyArray1::from_vec_bound(
+                    let wavelength = PyArray1::from_vec(
                         py,
                         brdf.spectrum.iter().map(|x| x.as_f32()).collect::<Vec<_>>(),
                     );
@@ -1032,12 +1039,12 @@ pub fn plot_brdf_fitting(
                         });
                     });
 
-                    let fitted_bk = PyArray1::zeros_bound(
+                    let fitted_bk = PyArray1::zeros(
                         py,
                         [n_models * n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
                     );
-                    let fitted_tr = PyArray1::zeros_bound(
+                    let fitted_tr = PyArray1::zeros(
                         py,
                         [n_models * n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
@@ -1092,11 +1099,11 @@ pub fn plot_brdf_fitting(
                             }
                         }
                     }
-                    let samples = PyArray1::from_vec_bound(py, samples.into_vec());
-                    let theta_i = PyArray1::from_vec_bound(py, theta_i.into_iter().collect());
-                    let phi_i = PyArray1::from_vec_bound(py, phi_i.into_iter().collect());
-                    let theta_o = PyArray1::from_vec_bound(py, theta_o.into_iter().collect());
-                    let phi_o = PyArray1::from_vec_bound(py, phi_o.into_iter().collect());
+                    let samples = PyArray1::from_vec(py, samples.into_vec());
+                    let theta_i = PyArray1::from_vec(py, theta_i.into_iter().collect());
+                    let phi_i = PyArray1::from_vec(py, phi_i.into_iter().collect());
+                    let theta_o = PyArray1::from_vec(py, theta_o.into_iter().collect());
+                    let phi_o = PyArray1::from_vec(py, phi_o.into_iter().collect());
                     let fitted_bk = fitted_bk
                         .reshape((n_models, n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_spectrum))?;
                     let fitted_tr = fitted_tr
@@ -1150,17 +1157,17 @@ pub fn plot_brdf_fitting(
                     let n_theta_o = theta_o.len();
                     let n_phi_o = phi_o.len();
                     // n_theta_i x n_phi_i x n_theta_o x n_phi_o x n_spectrum
-                    let samples = PyArray1::zeros_bound(
+                    let samples = PyArray1::zeros(
                         py,
                         [n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
                     );
-                    let fitted_bk = PyArray1::zeros_bound(
+                    let fitted_bk = PyArray1::zeros(
                         py,
                         [n_models * n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
                     );
-                    let fitted_tr = PyArray1::zeros_bound(
+                    let fitted_tr = PyArray1::zeros(
                         py,
                         [n_models * n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
@@ -1228,11 +1235,11 @@ pub fn plot_brdf_fitting(
                     }
                     let samples =
                         samples.reshape((n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_spectrum))?;
-                    let theta_o = PyArray1::from_vec_bound(py, theta_o);
-                    let theta_i = PyArray1::from_vec_bound(py, theta_i);
-                    let phi_i = PyArray1::from_vec_bound(py, phi_i);
-                    let phi_o = PyArray1::from_vec_bound(py, phi_o);
-                    let wavelength = PyArray1::from_vec_bound(
+                    let theta_o = PyArray1::from_vec(py, theta_o);
+                    let theta_i = PyArray1::from_vec(py, theta_i);
+                    let phi_i = PyArray1::from_vec(py, phi_i);
+                    let phi_o = PyArray1::from_vec(py, phi_o);
+                    let wavelength = PyArray1::from_vec(
                         py,
                         brdf.spectrum.iter().map(|x| x.as_f32()).collect::<Vec<_>>(),
                     );

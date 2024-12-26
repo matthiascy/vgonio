@@ -1,8 +1,6 @@
 use super::{docking::DockSpace, event::EventResponse};
 #[cfg(feature = "fitting")]
-use crate::fitting::{
-    MfdFittingData, MicrofacetBrdfFittingProblem, MicrofacetDistributionFittingProblem,
-};
+use crate::fitting::{MfdFittingData, MicrofacetDistributionFittingProblem};
 #[cfg(feature = "fitting")]
 use crate::measure::{
     bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
@@ -33,12 +31,13 @@ use base::range::StepRangeIncl;
 use base::{
     handle::Handle,
     io::{CompressionScheme, FileEncoding},
-    units::Radians,
     MeasurementKind, Weighting,
 };
 #[cfg(feature = "fitting")]
 use bxdf::brdf::BxdfFamily;
-use bxdf::fitting::{FittedModel, FittingProblem, FittingProblemKind, FittingReport};
+use bxdf::fitting::{
+    brdf::AnalyticalFit2, FittedModel, FittingProblem, FittingProblemKind, FittingReport,
+};
 use egui_file_dialog::{DialogMode, FileDialog};
 use gxtk::{context::GpuContext, mesh::RenderableMesh};
 use std::{
@@ -252,15 +251,11 @@ impl VgonioGui {
                                         .downcast_ref::<MeasuredBsdfData>()
                                         .unwrap();
                                     // TODO: add ui to select the theta limit
-                                    let problem = MicrofacetBrdfFittingProblem::new(
-                                        measured_brdf_data.brdf_at(MeasuredBrdfLevel::L0).unwrap(),
-                                        distro.unwrap(),
-                                        StepRangeIncl::new(0.001, 1.0, 0.01),
-                                        MeasuredBrdfLevel::L0,
-                                        &cache.iors,
-                                        Radians::HALF_PI,
-                                    );
-                                    problem.nllsq_fit(
+                                    let proxy = measured_brdf_data
+                                        .brdf_at(MeasuredBrdfLevel::L0)
+                                        .unwrap()
+                                        .proxy(&cache.iors);
+                                    proxy.nllsq_fit(
                                         distro.unwrap(),
                                         *isotropy,
                                         Weighting::None,

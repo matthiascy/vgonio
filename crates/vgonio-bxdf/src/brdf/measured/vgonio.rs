@@ -7,12 +7,7 @@ use crate::{
 };
 
 #[cfg(feature = "fitting")]
-use crate::{
-    brdf::{measured::AnalyticalFit, Bxdf},
-    Scattering,
-};
-#[cfg(feature = "fitting")]
-use base::{math, optics::ior::IorRegistry, units::Radians, ErrorMetric, Weighting};
+use base::optics::ior::IorRegistry;
 
 use base::{
     error::VgonioError,
@@ -37,13 +32,14 @@ pub struct VgonioBrdfParameterisation {
     /// spherical coordinates, i.e. azimuthal and zenith angles; the azimuthal
     /// angle is in the range `[0, 2π]` and the zenith angle is in the range
     /// `[0, π/2]`; the zenith angle increases first.
+    /// Actual dimensions: [n_phi_i, n_theta_i]
     pub incoming: DyArr<Sph2>,
     /// The outgoing directions of the BRDF.
     pub outgoing: SphericalPartition,
 }
 
 impl BrdfParam for VgonioBrdfParameterisation {
-    fn kind() -> BrdfParamKind { BrdfParamKind::IncidentDirection }
+    fn kind() -> BrdfParamKind { BrdfParamKind::InOutDirs }
 }
 
 impl VgonioBrdfParameterisation {
@@ -108,6 +104,7 @@ impl VgonioBrdf {
         samples: DyArr<f32, 3>,
     ) -> Self {
         Self {
+            kind: MeasuredBrdfKind::Vgonio,
             origin,
             incident_medium,
             transmitted_medium,
@@ -249,179 +246,6 @@ impl VgonioBrdf {
     }
 }
 
-#[cfg(feature = "fitting")]
-impl AnalyticalFit for VgonioBrdf {
-    type Params = VgonioBrdfParameterisation;
-
-    impl_analytical_fit_trait!(self);
-
-    #[inline]
-    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Vgonio }
-
-    /// Creates a new VGonio BRDF with the same parameterisation as the given
-    /// BRDF except the BRDF samples are generated from an analytical model.
-    fn new_analytical(
-        medium_i: Medium,
-        medium_t: Medium,
-        spectrum: &[Nanometres],
-        params: &Self::Params,
-        model: &dyn Bxdf<Params = [f64; 2]>,
-        iors: &IorRegistry,
-    ) -> Self {
-        let iors_i = iors.ior_of_spectrum(medium_i, spectrum).unwrap();
-        let iors_t = iors.ior_of_spectrum(medium_t, spectrum).unwrap();
-        let n_spectrum = spectrum.len();
-        let n_wi = params.n_wi();
-        let n_wo = params.n_wo();
-        let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
-        for (i, wi) in params.incoming.iter().enumerate() {
-            let vi = wi.to_cartesian();
-            for (j, vo) in params.outgoing_cartesian().iter().enumerate() {
-                let spectral_samples =
-                    Scattering::eval_reflectance_spectrum(model, &vi, &vo, &iors_i, &iors_t)
-                        .iter()
-                        .map(|&x| x as f32)
-                        .collect::<Box<_>>();
-                let offset = i * n_wo * n_spectrum + j * n_spectrum;
-                samples.as_mut_slice()[offset..offset + n_spectrum]
-                    .copy_from_slice(&spectral_samples);
-            }
-        }
-
-        Self {
-            origin: Origin::Analytical,
-            incident_medium: medium_i,
-            transmitted_medium: medium_t,
-            params: Box::new(params.clone()),
-            spectrum: DyArr::from_slice([n_spectrum], spectrum),
-            samples,
-        }
-    }
-
-    /// Returns the distance between two VGonio BRDFs.
-    fn distance(&self, other: &Self, metric: ErrorMetric, rmetric: Weighting) -> f64 {
-        log::debug!("--distance");
-        assert_eq!(self.spectrum, other.spectrum, "Spectra must be equal!");
-        if self.params() != other.params() {
-            panic!("Parameterization must be the same!");
-        }
-        let factor = match metric {
-            ErrorMetric::Mse => math::rcp_f64(self.samples().len() as f64),
-            ErrorMetric::Nllsq => 0.5,
-            ErrorMetric::L1 => todo!(),
-            ErrorMetric::L2 => todo!(),
-            ErrorMetric::Rmse => todo!(),
-        };
-        log::debug!("factor@1: {}", factor);
-        let sum = match rmetric {
-            Weighting::None => {
-                self.samples()
-                    .iter()
-                    .zip(other.samples().iter())
-                    .fold(0.0f64, |acc, (a, b)| {
-                        let diff = *a as f64 - *b as f64;
-                        acc + math::sqr(diff) * factor
-                    })
-            },
-            Weighting::LnCos => {
-                self.snapshots()
-                    .zip(other.snapshots())
-                    .fold(0.0f64, |acc, (xs, ys)| {
-                        let cos_theta_i = xs.wi.theta.cos() as f64;
-                        acc + xs.samples.iter().zip(ys.samples.iter()).fold(
-                            0.0f64,
-                            |acc, (a, b)| {
-                                let diff = (*a as f64 * cos_theta_i + 1.0).ln()
-                                    - (*b as f64 * cos_theta_i + 1.0).ln();
-                                acc + math::sqr(diff) * factor
-                            },
-                        )
-                    })
-            },
-        };
-        log::debug!("sum@1: {}", sum);
-        sum
-    }
-
-    /// Returns the distance between two VGonio BRDFs considering only the
-    /// samples that are lower than the given limit.
-    fn filtered_distance(
-        &self,
-        other: &Self,
-        metric: ErrorMetric,
-        rmetric: Weighting,
-        limit: Radians,
-    ) -> f64 {
-        assert_eq!(self.spectrum, other.spectrum, "Spectra must be equal!");
-        if self.params != other.params {
-            panic!("Parameterization must be the same!");
-        }
-        if (limit.as_f64() - std::f64::consts::FRAC_PI_2).abs() < 1e-6 {
-            return self.distance(other, metric, rmetric);
-        }
-        let n_wo = self.params.n_wo();
-        let wi_filtered = self
-            .params
-            .incoming
-            .iter()
-            .enumerate()
-            .filter_map(|(i, sph)| if sph.theta < limit { Some(i) } else { None })
-            .collect::<Box<_>>();
-        let n_wi_filtered = wi_filtered.len();
-        let n_wo_filtered = self
-            .params
-            .outgoing
-            .patches
-            .iter()
-            .position(|patch| patch.center().theta >= limit)
-            .unwrap_or(n_wo);
-        let n_spectrum = self.spectrum.len();
-        let n_samples = n_wi_filtered * n_wo_filtered * n_spectrum;
-
-        let factor = match metric {
-            ErrorMetric::Mse | ErrorMetric::Rmse => math::rcp_f64(n_samples as f64),
-            ErrorMetric::Nllsq => 0.5,
-            ErrorMetric::L1 => todo!(),
-            ErrorMetric::L2 => todo!(),
-        };
-
-        let mut dist = 0.0;
-
-        match rmetric {
-            Weighting::None => {
-                for i in wi_filtered {
-                    for j in 0..n_wo_filtered {
-                        for k in 0..n_spectrum {
-                            let diff =
-                                self.samples[[i, j, k]] as f64 - other.samples[[i, j, k]] as f64;
-                            dist += math::sqr(diff) * factor;
-                        }
-                    }
-                }
-            },
-            Weighting::LnCos => {
-                for i in wi_filtered {
-                    let cos_theta_i = self.params.incoming[i].theta.cos() as f64;
-                    for j in 0..n_wo_filtered {
-                        for k in 0..n_spectrum {
-                            let a = self.samples[[i, j, k]] as f64;
-                            let b = other.samples[[i, j, k]] as f64;
-                            let diff = (a * cos_theta_i + 1.0).ln() - (b * cos_theta_i + 1.0).ln();
-                            dist += math::sqr(diff) * factor;
-                        }
-                    }
-                }
-            },
-        }
-
-        if metric == ErrorMetric::Rmse {
-            dist.sqrt()
-        } else {
-            dist
-        }
-    }
-}
-
 impl<'a> Iterator for BrdfSnapshotIterator<'a, VgonioBrdfParameterisation, 3> {
     type Item = BrdfSnapshot<'a, f32>;
 
@@ -524,7 +348,7 @@ impl AnalyticalFit2 for VgonioBrdf {
             brdf: self,
             i_thetas: Cow::Owned(i_thetas),
             i_phis: Cow::Owned(i_phis),
-            o_dirs: o_dirs,
+            o_dirs,
             resampled: Cow::Owned(resampled),
             iors_i: Cow::Owned(iors_i),
             iors_t: Cow::Owned(iors_t),
@@ -532,4 +356,6 @@ impl AnalyticalFit2 for VgonioBrdf {
     }
 
     fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
+
+    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Vgonio }
 }

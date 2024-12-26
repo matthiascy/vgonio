@@ -200,7 +200,7 @@ pub mod brdf {
         optics::ior::{Ior, IorRegistry},
         range::StepRangeIncl,
         units::{rad, Nanometres, Radians},
-        ErrorMetric, Isotropy, Weighting,
+        ErrorMetric, Isotropy, MeasuredBrdfKind, Weighting,
     };
     use brute::compute_distance_between_measured_and_modelled;
     use jabr::array::{
@@ -210,8 +210,8 @@ pub mod brdf {
     use levenberg_marquardt::{LevenbergMarquardt, MinimizationReport, TerminationReason};
     use nllsq::{init_microfacet_brdf_models, NllsqBrdfFittingProxy};
     use rayon::{
-        iter::{IndexedParallelIterator, ParallelBridge, ParallelIterator},
-        slice::{ParallelSlice, ParallelSliceMut},
+        iter::{ParallelBridge, ParallelIterator},
+        slice::ParallelSlice,
     };
 
     use crate::{
@@ -271,32 +271,29 @@ pub mod brdf {
             /// For a given theta_o band of index `i`, `phi_o[i]` is the first
             /// element of the phi_o array for the theta_o band, `phi_o[i + 1]`
             /// is the last element of the phi_o array for the
-            /// theta_o band.
+            /// theta_o band (exclusive).
             offsets: DyArr<usize>,
         },
     }
 
     impl<'a> OutgoingDirs<'a> {
-        pub fn new_grid(theta_o: Cow<'a, DyArr<f32>>, phi_o: Cow<'a, DyArr<f32>>) -> Self {
-            Self::Grid {
-                o_thetas: theta_o,
-                o_phis: phi_o,
-            }
+        pub fn new_grid(o_thetas: Cow<'a, DyArr<f32>>, o_phis: Cow<'a, DyArr<f32>>) -> Self {
+            Self::Grid { o_thetas, o_phis }
         }
 
         pub fn new_list(
-            theta_o: Cow<'a, DyArr<f32>>,
-            phi_o: Cow<'a, DyArr<f32>>,
+            o_thetas: Cow<'a, DyArr<f32>>,
+            o_phis: Cow<'a, DyArr<f32>>,
             offsets: DyArr<usize>,
         ) -> Self {
             assert_eq!(
-                theta_o.len(),
+                o_thetas.len(),
                 offsets.len() - 1,
                 "The length of theta_o must be one less than the length of offsets"
             );
             Self::List {
-                o_thetas: theta_o,
-                o_phis: phi_o,
+                o_thetas,
+                o_phis,
                 offsets,
             }
         }
@@ -382,6 +379,9 @@ pub mod brdf {
 
         /// Returns the wavelengths at which the BRDF is measured.
         fn spectrum(&self) -> &[Nanometres];
+
+        /// Returns the kind of the measured BRDF.
+        fn kind(&self) -> MeasuredBrdfKind;
     }
 
     impl<Brdf> BrdfFittingProxy<'_, Brdf>

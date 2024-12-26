@@ -1,5 +1,5 @@
 #[cfg(feature = "vdbg")]
-use crate::app::gui::{widgets::ToggleSwitch, DebuggingEvent, VgonioEvent};
+use crate::app::gui::{DebuggingEvent, VgonioEvent};
 use crate::{
     app::gui::{
         event::EventLoopProxy,
@@ -14,11 +14,12 @@ use crate::{
 use base::{math::Sph2, units::Rads};
 use base::{medium::Medium, partition::SphericalDomain};
 use std::hash::Hash;
+use uxtk::widgets::ToggleSwitch;
 
 impl BsdfKind {
     /// Creates the UI for selecting the BSDF kind.
     pub fn selectable_ui(&mut self, id_source: impl Hash, ui: &mut egui::Ui) {
-        egui::ComboBox::from_id_source(id_source)
+        egui::ComboBox::from_id_salt(id_source)
             .selected_text(format!("{}", self))
             .show_ui(ui, |ui| {
                 ui.selectable_value(self, BsdfKind::Brdf, "BRDF");
@@ -31,7 +32,7 @@ impl BsdfKind {
 }
 
 pub fn medium_selectable_ui(medium: &mut Medium, id_source: impl Hash, ui: &mut egui::Ui) {
-    egui::ComboBox::from_id_source(id_source)
+    egui::ComboBox::from_id_salt(id_source)
         .selected_text(format!("{:?}", medium))
         .show_ui(ui, |ui| {
             ui.selectable_value(medium, Medium::Air, "Air");
