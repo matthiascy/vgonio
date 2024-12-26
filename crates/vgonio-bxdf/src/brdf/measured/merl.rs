@@ -3,7 +3,7 @@ use crate::{
         io2hd_sph,
         measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
     },
-    fitting::brdf::{AnalyticalFit2, BrdfFittingProxy, OutgoingDirs, ProxySource},
+    fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
 };
 #[cfg(feature = "io")]
 use base::error::VgonioError;
@@ -278,7 +278,7 @@ impl MerlBrdf {
 }
 
 #[cfg(feature = "fitting")]
-impl AnalyticalFit2 for MerlBrdf {
+impl AnalyticalFit for MerlBrdf {
     fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> {
         let iors_i = Cow::Owned(
             iors.ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())

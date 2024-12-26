@@ -16,7 +16,7 @@ use bxdf::{
         BxdfFamily,
     },
     distro::MicrofacetDistroKind,
-    fitting::{brdf::AnalyticalFit2, FittingProblem},
+    fitting::{brdf::AnalyticalFit, FittingProblem},
 };
 use std::path::PathBuf;
 
@@ -184,7 +184,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     })
 }
 
-fn brdf_fitting_brute_force<F: AnalyticalFit2>(brdf: &F, opts: &FitOptions, iors: &IorRegistry) {
+fn brdf_fitting_brute_force<F: AnalyticalFit>(brdf: &F, opts: &FitOptions, iors: &IorRegistry) {
     let start = std::time::Instant::now();
     let report = brdf.proxy(iors).brute_fit(
         opts.distro,
@@ -214,7 +214,7 @@ fn brdf_fitting_brute_force<F: AnalyticalFit2>(brdf: &F, opts: &FitOptions, iors
     }
 }
 
-fn measured_brdf_fitting<F: AnalyticalFit2>(
+fn measured_brdf_fitting<F: AnalyticalFit>(
     opts: &FitOptions,
     brdf: &F,
     iors: &IorRegistry,

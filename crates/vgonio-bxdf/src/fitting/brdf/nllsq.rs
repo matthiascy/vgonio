@@ -4,7 +4,7 @@ use crate::{
         Bxdf,
     },
     distro::MicrofacetDistroKind,
-    fitting::brdf::{AnalyticalFit2, BrdfFittingProxy, OutgoingDirs},
+    fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs},
 };
 use base::{
     math::Sph2,
@@ -71,7 +71,7 @@ pub(crate) fn init_microfacet_brdf_models(
 /// A proxy for the BRDF fitting problem using the NLLSQ algorithm.
 pub struct NllsqBrdfFittingProxy<'a, Brdf, const I: Isotropy>
 where
-    Brdf: AnalyticalFit2,
+    Brdf: AnalyticalFit,
 {
     /// The proxy for the BRDF data.
     proxy: &'a BrdfFittingProxy<'a, Brdf>,
@@ -91,7 +91,7 @@ where
 
 impl<'a, Brdf, const I: Isotropy> NllsqBrdfFittingProxy<'a, Brdf, I>
 where
-    Brdf: AnalyticalFit2,
+    Brdf: AnalyticalFit,
 {
     /// Creates a new proxy for the BRDF fitting problem using the NLLSQ
     /// algorithm.
@@ -150,7 +150,7 @@ where
 /// Specialisation for the isotropic case.
 impl<'a, Brdf> NllsqBrdfFittingProxy<'a, Brdf, { Isotropy::Isotropic }>
 where
-    Brdf: AnalyticalFit2,
+    Brdf: AnalyticalFit,
 {
     /// Computes the Jacobian matrix for the isotropic case.
     fn jacobian(&self) -> Matrix<f64, Dyn, U1, Owned<f64, Dyn, U1>> {
@@ -340,7 +340,7 @@ where
 /// Specialisation for the anisotropic case.
 impl<'a, Brdf> NllsqBrdfFittingProxy<'a, Brdf, { Isotropy::Anisotropic }>
 where
-    Brdf: AnalyticalFit2,
+    Brdf: AnalyticalFit,
 {
     /// Computes the Jacobian matrix for the anisotropic case.
     fn jacobian(&self) -> Matrix<f64, Dyn, U2, Owned<f64, Dyn, U2>> {
@@ -543,7 +543,7 @@ where
 impl<'a, Brdf> LeastSquaresProblem<f64, Dyn, U1>
     for NllsqBrdfFittingProxy<'a, Brdf, { Isotropy::Isotropic }>
 where
-    Brdf: AnalyticalFit2,
+    Brdf: AnalyticalFit,
 {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
 
@@ -577,7 +577,7 @@ where
 impl<'a, Brdf> LeastSquaresProblem<f64, Dyn, U2>
     for NllsqBrdfFittingProxy<'a, Brdf, { Isotropy::Anisotropic }>
 where
-    Brdf: AnalyticalFit2,
+    Brdf: AnalyticalFit,
 {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
 

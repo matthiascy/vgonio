@@ -36,7 +36,7 @@ use base::{
 #[cfg(feature = "fitting")]
 use bxdf::brdf::BxdfFamily;
 use bxdf::fitting::{
-    brdf::AnalyticalFit2, FittedModel, FittingProblem, FittingProblemKind, FittingReport,
+    brdf::AnalyticalFit, FittedModel, FittingProblem, FittingProblemKind, FittingReport,
 };
 use egui_file_dialog::{DialogMode, FileDialog};
 use gxtk::{context::GpuContext, mesh::RenderableMesh};

@@ -4,7 +4,7 @@ use crate::{
             BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
         },
     },
-    fitting::brdf::{AnalyticalFit2, BrdfFittingProxy, OutgoingDirs, ProxySource},
+    fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
 };
 use base::{
     impl_measured_data_trait,
@@ -207,7 +207,7 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, RglBrdfParameterisation, 3> {
 }
 
 #[cfg(feature = "fitting")]
-impl AnalyticalFit2 for RglBrdf {
+impl AnalyticalFit for RglBrdf {
     fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> {
         let iors_i = iors
             .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())

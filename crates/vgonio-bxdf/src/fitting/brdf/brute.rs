@@ -14,12 +14,12 @@ use crate::{
     distro::MicrofacetDistroKind,
 };
 
-use crate::fitting::brdf::AnalyticalFit2;
+use crate::fitting::brdf::AnalyticalFit;
 
 use super::BrdfFittingProxy;
 
 /// Compute the distance between a measured BRDF and a modelled BRDF.
-pub fn compute_distance_between_measured_and_modelled<Brdf: AnalyticalFit2>(
+pub fn compute_distance_between_measured_and_modelled<Brdf: AnalyticalFit>(
     measured: &BrdfFittingProxy<Brdf>,
     distro: MicrofacetDistroKind,
     metric: ErrorMetric,
@@ -53,7 +53,7 @@ pub fn compute_distance_between_measured_and_modelled<Brdf: AnalyticalFit2>(
 }
 
 /// Brute force fitting for isotropic microfacet BRDFs.
-pub fn brdf_fitting_brute_force_isotropic<F: AnalyticalFit2>(
+pub fn brdf_fitting_brute_force_isotropic<F: AnalyticalFit>(
     measured: &F,
     distro: MicrofacetDistroKind,
     metric: ErrorMetric,
@@ -91,7 +91,7 @@ pub fn brdf_fitting_brute_force_isotropic<F: AnalyticalFit2>(
 }
 
 /// Brute force fitting for anisotropic microfacet BRDFs.
-pub fn brdf_fitting_brute_force_anisotropic<F: AnalyticalFit2>(
+pub fn brdf_fitting_brute_force_anisotropic<F: AnalyticalFit>(
     measured: &F,
     distro: MicrofacetDistroKind,
     metric: ErrorMetric,

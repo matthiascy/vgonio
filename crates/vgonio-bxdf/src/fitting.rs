@@ -344,7 +344,7 @@ pub mod brdf {
     /// `AnalyticalFit` trait.
     pub struct BrdfFittingProxy<'a, Brdf>
     where
-        Brdf: AnalyticalFit2,
+        Brdf: AnalyticalFit,
     {
         /// Indicates if the proxy has NaN values.
         pub(crate) has_nan: bool,
@@ -371,7 +371,7 @@ pub mod brdf {
     }
 
     /// A trait for BRDFs that can be fitted with an analytical model.
-    pub trait AnalyticalFit2: Sync {
+    pub trait AnalyticalFit: Sync {
         /// Create a proxy for this BRDF.
         fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self>
         where
@@ -386,7 +386,7 @@ pub mod brdf {
 
     impl<Brdf> BrdfFittingProxy<'_, Brdf>
     where
-        Brdf: AnalyticalFit2,
+        Brdf: AnalyticalFit,
     {
         /// Returns the source of the proxy.
         pub fn source(&self) -> ProxySource { self.source }
@@ -433,7 +433,7 @@ pub mod brdf {
         }
 
         /// Checks if the two proxies have the same parameters.
-        fn same_params_p<O: AnalyticalFit2>(&self, other: &BrdfFittingProxy<O>) -> bool {
+        fn same_params_p<O: AnalyticalFit>(&self, other: &BrdfFittingProxy<O>) -> bool {
             self.i_thetas == other.i_thetas
                 && self.i_phis == other.i_phis
                 && self.o_dirs == other.o_dirs
@@ -443,7 +443,7 @@ pub mod brdf {
 
         /// Computes the distance between two BRDF poxies derived from the same
         /// BRDF.
-        fn distance<O: AnalyticalFit2>(
+        fn distance<O: AnalyticalFit>(
             &self,
             other: &BrdfFittingProxy<O>,
             metric: ErrorMetric,
@@ -551,7 +551,7 @@ pub mod brdf {
 
         /// Computes the distance between two BRDF poxies derived from the same
         /// BRDF with a filtered range of incident and outgoing angles.
-        fn distance_filtered<O: AnalyticalFit2 + Sync>(
+        fn distance_filtered<O: AnalyticalFit + Sync>(
             &self,
             other: &BrdfFittingProxy<O>,
             metric: ErrorMetric,
@@ -931,7 +931,7 @@ pub mod brdf {
         }
     }
 
-    impl<'a, Brdf: AnalyticalFit2> FittingProblem for BrdfFittingProxy<'a, Brdf> {
+    impl<'a, Brdf: AnalyticalFit> FittingProblem for BrdfFittingProxy<'a, Brdf> {
         type Model = Box<dyn Bxdf<Params = [f64; 2]>>;
 
         fn nllsq_fit(

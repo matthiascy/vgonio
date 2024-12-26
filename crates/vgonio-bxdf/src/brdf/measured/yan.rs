@@ -2,7 +2,7 @@ use crate::{
     brdf::measured::{
         BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
     },
-    fitting::brdf::{AnalyticalFit2, BrdfFittingProxy, ProxySource},
+    fitting::brdf::{AnalyticalFit, BrdfFittingProxy, ProxySource},
 };
 use base::{
     error::VgonioError,
@@ -521,7 +521,7 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, Yan2018BrdfParameterisation, 3> {
 }
 
 #[cfg(feature = "fitting")]
-impl AnalyticalFit2 for Yan2018Brdf {
+impl AnalyticalFit for Yan2018Brdf {
     fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> {
         let iors_i = iors
             .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())

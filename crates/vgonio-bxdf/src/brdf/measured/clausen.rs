@@ -2,7 +2,7 @@
 //! Rough Surfaces" by O. Clausen, Y. Chen, A. Fuhrmann and R. Marroquim.
 use crate::{
     brdf::measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
-    fitting::brdf::{AnalyticalFit2, BrdfFittingProxy, OutgoingDirs, ProxySource},
+    fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
 };
 #[cfg(feature = "fitting")]
 use base::optics::ior::IorRegistry;
@@ -357,7 +357,7 @@ impl ClausenBrdf {
 }
 
 #[cfg(feature = "fitting")]
-impl AnalyticalFit2 for ClausenBrdf {
+impl AnalyticalFit for ClausenBrdf {
     fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> {
         let iors_i = iors
             .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
