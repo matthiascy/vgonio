@@ -3,8 +3,10 @@ use crate::{
     distro::{MicrofacetDistribution, MicrofacetDistroKind},
 };
 use base::{range::StepRangeIncl, units::Radians, ErrorMetric, Isotropy, Weighting};
-use levenberg_marquardt::MinimizationReport;
+use levenberg_marquardt::{MinimizationReport, TerminationReason};
 use std::fmt::Debug;
+use nalgebra::RealField;
+use base::math::rcp_f64;
 
 /// Types of the fitting problem.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -77,22 +79,74 @@ impl FittedModel {
     }
 }
 
+/// Report of a minimisation process.
+#[derive(Debug)]
+pub struct MinimisationReport {
+    /// The number of data points used in the fitting process (excluding NaN
+    /// values) later used for computing the error metric.
+    pub n_data_points: usize,
+    /// Error metric used for the fitting.
+    pub error_metric: ErrorMetric,
+    /// The objective function value which is the same as the error metric value.
+    pub objective_fn: f64,
+    /// The number of iterations performed.
+    pub n_iteration: usize,
+    /// The reason for termination.
+    pub termination: TerminationReason,
+}
+
+impl MinimisationReport {
+    /// Creates a new minimisation report from the results of the levenberg
+    /// marquardt minimisation process.
+    pub fn from_lm_nllsq(
+        report: MinimizationReport<f64>,
+        n_data_points: usize,
+    ) -> Self
+    {
+        MinimisationReport {
+            n_data_points,
+            error_metric: ErrorMetric::Nllsq,
+            objective_fn: report.objective_function,
+            n_iteration: report.number_of_evaluations,
+            termination: report.termination,
+        }
+    }
+
+    /// Creates a new minimisation report from the results of the brute force
+    /// fitting process.
+    pub fn from_brute_force(
+        error_metric: ErrorMetric,
+        objective_fn: f64,
+        n_data_points: usize,
+        n_iteration: usize,
+    ) -> Self
+    {
+        MinimisationReport {
+            n_data_points,
+            error_metric,
+            objective_fn,
+            n_iteration,
+            termination: TerminationReason::User("Brute force fitting"),
+        }
+    }
+}
+
 /// Report of a fitting process.
 pub struct FittingReport<M> {
     /// Index of the best model found.
     best: Option<usize>,
     /// The reports of the fitting process. Includes the model and the
-    /// minimization report with different initial values.
-    pub reports: Box<[(M, MinimizationReport<f64>)]>,
+    /// minimisation report with different initial values.
+    pub reports: Box<[(M, MinimisationReport)]>,
 }
 
 impl<M> FittingReport<M> {
     /// Creates a new fitting report from the results of the fitting process.
-    pub fn new(results: Box<[(M, MinimizationReport<f64>)]>) -> Self {
+    pub fn new(results: Box<[(M, MinimisationReport)]>) -> Self {
         let mut reports = results;
         reports.sort_by(|(_, r1), (_, r2)| {
-            r1.objective_function
-                .partial_cmp(&r2.objective_function)
+            r1.objective_fn
+                .partial_cmp(&r2.objective_fn)
                 .unwrap()
         });
         if reports.is_empty() {
@@ -119,7 +173,7 @@ impl<M> FittingReport<M> {
     pub fn best_model(&self) -> Option<&M> { self.best.map(|i| &self.reports[i].0) }
 
     /// Returns the report of the best model found.
-    pub fn best_model_report(&self) -> Option<&(M, MinimizationReport<f64>)> {
+    pub fn best_model_report(&self) -> Option<&(M, MinimisationReport)> {
         self.best.map(|i| &self.reports[i])
     }
 
@@ -135,15 +189,37 @@ impl<M> FittingReport<M> {
         println!("Fitting reports (first {}):", n);
         for (m, r) in self.reports.iter().take(n) {
             println!(
-                "    - Model: {:?}, objective_function: {}",
-                m, r.objective_function
+                "    - Model: {:?}, Err: {:?}, ObjFn: {}",
+                m, r.error_metric, r.objective_fn
             );
         }
-        println!(
-            "  Best model: {:?}, Err: {}",
-            self.best_model(),
-            self.best_model_report().unwrap().1.objective_function
-        );
+        let best = self.best_model();
+        if best.is_none() {
+            println!("  No best model found");
+            return;
+        }
+        let best_report = self.best_model_report().unwrap();
+        // Check if the best model is user terminated
+        // Currently, the user termination is only used in the brute force fitting
+        if let TerminationReason::User(_) = best_report.1.termination {
+            println!(
+                "  Best model: {:?}, metric: {:?}, err: {}",
+                best.unwrap(),
+                best_report.1.error_metric,
+                best_report.1.objective_fn
+            );
+        } else {
+            // Compute the mse error for nllsq fitting
+            let rcp = rcp_f64(best_report.1.n_data_points as f64);
+            let mse = best_report.1.objective_fn * 2.0 * rcp;
+            println!(
+                "  Best model: {:?}, metric: {:?}, err: {}, mse: {}",
+                best.unwrap(),
+                best_report.1.error_metric,
+                best_report.1.objective_fn,
+                mse
+            );
+        }
     }
 }
 
@@ -223,7 +299,7 @@ pub mod brdf {
         Scattering,
     };
 
-    use super::{FittingProblem, FittingReport};
+    use super::{FittingProblem, FittingReport, MinimisationReport};
 
     /// The source of the proxy.
     ///
@@ -394,9 +470,44 @@ pub mod brdf {
         /// Returns the resampled BRDF data.
         pub fn samples(&self) -> &[f32] { self.resampled.as_slice() }
 
+        /// Returns the number of samples used for fitting.
+        ///
+        /// This excludes the samples that either are NaN values and the samples
+        /// that are filtered out.
+        pub fn n_filtered_samples(&self, max_theta_i: Option<Radians>, max_theta_o: Option<Radians>) -> usize {
+            let shape = self.filtered_shape(max_theta_i.unwrap_or(Radians::HALF_PI).as_f32(), max_theta_o.unwrap_or(Radians::HALF_PI).as_f32());
+            let total = shape.iter().product::<usize>();
+
+            if !self.has_nan {
+                return total;
+            }
+
+            let mut n_nan = 0;
+            for i in 0..shape[0] {
+                for j in 0..shape[1] {
+                    for k in 0..shape[2] {
+                        for l in 0..shape[3] {
+                            for m in 0..shape[4] {
+                                if self.resampled[[i, j, k, l, m]].is_nan() {
+                                    n_nan += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            total - n_nan
+        }
+
         /// Returns the shape of the resampled BRDF data after filtering.
-        /// Depends on the outgoing directns, the dimensions could be 4 or 5.
+        /// Depends on the outgoing directions, the dimensions could be 4 or 5.
         pub fn filtered_shape(&self, max_theta_i: f32, max_theta_o: f32) -> Box<[usize]> {
+            if max_theta_i >= std::f32::consts::FRAC_PI_2 && max_theta_o >= std::f32::consts::FRAC_PI_2 {
+                // Clone the shape as no filtering is needed
+                return self.resampled.shape().to_vec().into_boxed_slice();
+            }
+
             let old_shape = self.resampled.shape();
             let n_theta_i = self
                 .i_thetas
@@ -953,6 +1064,7 @@ pub mod brdf {
                 tasks_per_cpu,
                 cpu_count
             );
+            let n_filtered_samples = self.n_filtered_samples(max_theta_i, max_theta_o);
             let results = tasks
                 .par_chunks(tasks_per_cpu)
                 .flat_map(|models| {
@@ -973,7 +1085,7 @@ pub mod brdf {
                                         max_theta_o,
                                     );
                                     let (result, report) = solver.minimize(nllsq_proxy);
-                                    (result.model, report)
+                                    (result.model, MinimisationReport::from_lm_nllsq(report, n_filtered_samples))
                                 },
                                 Isotropy::Anisotropic => {
                                     let nllsq_proxy = NllsqBrdfFittingProxy::<
@@ -988,7 +1100,7 @@ pub mod brdf {
                                         max_theta_o,
                                     );
                                     let (result, report) = solver.minimize(nllsq_proxy);
-                                    (result.model, report)
+                                    (result.model, MinimisationReport::from_lm_nllsq(report, n_filtered_samples))
                                 },
                             };
 
@@ -1021,11 +1133,12 @@ pub mod brdf {
                 .values()
                 .collect::<Box<[f64]>>();
             let mut errs = vec![f64::NAN; 256].into_boxed_slice();
-            // The number of iterations as each iteration has two precision
+            // The number of iterations as each iteration has two digits of precision
             let n_times = (precision + 1) / 2;
+            let n_filtered_samples = self.n_filtered_samples(max_theta_i, max_theta_o);
             let mut records = Vec::with_capacity(n_times as usize * 256);
 
-            for _ in 0..n_times {
+            for i in 0..n_times {
                 let chunk_size = alphas.len().div_ceil(cpu_count);
                 alphas
                     .chunks(chunk_size)
@@ -1065,11 +1178,12 @@ pub mod brdf {
                     };
                     records.push((
                         m,
-                        MinimizationReport {
-                            termination: TerminationReason::User("brute force"),
-                            number_of_evaluations: 1,
-                            objective_function: *err,
-                        },
+                        MinimisationReport::from_brute_force(
+                            metric,
+                            *err,
+                            n_filtered_samples,
+                            i as usize
+                        ),
                     ));
                 });
                 // Find the range of the best fit

@@ -21,6 +21,7 @@ use levenberg_marquardt::{
 };
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use std::fmt::Display;
+use bxdf::fitting::MinimisationReport;
 
 /// Enum representing the measured microfacet distribution related data on which
 /// the fitting procedure is based.
@@ -83,7 +84,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
         let result: Box<
             [(
                 Box<dyn MicrofacetDistribution<Params = [f64; 2]>>,
-                MinimizationReport<f64>,
+                MinimisationReport,
             )],
         > = {
             match self.measured {
@@ -121,7 +122,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                                 report
                             );
                             match report.termination {
-                                TerminationReason::Converged { .. } => Some((model, report)),
+                                TerminationReason::Converged { .. } => Some((model, MinimisationReport::from_lm_nllsq(report, measured.samples.len()))),
                                 _ => None,
                             }
                         })
@@ -165,7 +166,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                         report
                     );
                     match report.termination {
-                        TerminationReason::Converged { .. } => Some((model, report)),
+                        TerminationReason::Converged { .. } => Some((model, MinimisationReport::from_lm_nllsq(report, measured.samples.len()))),
                         _ => None,
                     }
                 })

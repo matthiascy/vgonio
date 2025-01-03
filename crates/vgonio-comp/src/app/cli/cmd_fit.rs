@@ -18,7 +18,7 @@ use bxdf::{
     distro::MicrofacetDistroKind,
     fitting::{brdf::AnalyticalFit, FittingProblem},
 };
-use std::path::PathBuf;
+use std::{fmt::Debug, path::PathBuf};
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     println!(
@@ -203,7 +203,7 @@ fn brdf_fitting_brute_force<F: AnalyticalFit>(brdf: &F, opts: &FitOptions, iors:
         let mut alpha_error_pairs = report
             .reports
             .iter()
-            .map(|(m, r)| (m.params()[0], r.objective_function))
+            .map(|(m, r)| (m.params()[0], r.objective_fn))
             .collect::<Vec<_>>();
         // Sort the error by alpha value for later plotting
         alpha_error_pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
@@ -230,7 +230,11 @@ fn measured_brdf_fitting<F: AnalyticalFit>(
         opts.distro,
         opts.isotropy,
         opts.method,
-        opts.error_metric.unwrap_or(ErrorMetric::Mse),
+        if opts.method == FittingMethod::Brute {
+            opts.error_metric.unwrap_or(ErrorMetric::Mse)
+        } else {
+            ErrorMetric::Nllsq
+        },
         opts.weighting,
         limit.prettified()
     );
@@ -277,7 +281,7 @@ pub struct FitOptions {
     #[clap(long, short, help = "Input files to fit the measurement to.")]
     pub inputs: Vec<PathBuf>,
 
-    #[clap(long, help = "Kind of the measured BRDF data.")]
+    #[clap(long, short, help = "Kind of the measured BRDF data.")]
     pub kind: MeasuredBrdfKind,
 
     #[clap(
@@ -322,6 +326,7 @@ pub struct FitOptions {
 
     #[clap(
         long,
+        short,
         help = "Distribution to use for the microfacet model. If not specified, the default \
                 distribution will be used.",
         default_value = "beckmann",
@@ -330,8 +335,8 @@ pub struct FitOptions {
     pub distro: MicrofacetDistroKind,
 
     #[clap(
-        short,
         long,
+        short,
         help = "Level of the measured BRDF data to fit.",
         default_value = "l0"
     )]
@@ -341,15 +346,15 @@ pub struct FitOptions {
     pub theta_limit: Option<f32>,
 
     #[clap(
-        short,
         long,
+        short,
         help = "Method to use for the fitting.",
         default_value = "brute"
     )]
     pub method: FittingMethod,
 
     #[clap(
-        long = "bprecision",
+        long = "bprec",
         help = "Precision of the brute force fitting: number of digits after the decimal point.",
         default_value = "6"
     )]

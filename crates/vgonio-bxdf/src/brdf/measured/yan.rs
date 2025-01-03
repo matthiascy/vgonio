@@ -2,8 +2,10 @@ use crate::{
     brdf::measured::{
         BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
     },
-    fitting::brdf::{AnalyticalFit, BrdfFittingProxy, ProxySource},
+    fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
 };
+#[cfg(feature = "fitting")]
+use base::optics::ior::IorRegistry;
 use base::{
     error::VgonioError,
     impl_measured_data_trait,
@@ -12,11 +14,8 @@ use base::{
     units::{deg, rad, Nanometres},
     MeasuredBrdfKind, MeasuredData, MeasurementKind,
 };
-#[cfg(feature = "fitting")]
-use base::{optics::ior::IorRegistry};
 use jabr::array::{DyArr, DynArr};
 use std::{borrow::Cow, cmp::Ordering, fmt::Debug, path::Path, str::FromStr};
-use crate::fitting::brdf::OutgoingDirs;
 
 /// Parameterisation of the BRDF simulated from the paper "Rendering Specular
 /// Microgeometry with Wave Optics" by Yan et al. 2018.
@@ -88,7 +87,8 @@ impl Yan2018BrdfParameterisation {
 /// Inside the VGonio framework, the measured data is stored in the form of a
 /// 3D array, where the first dimension is the incident direction, the second
 /// dimension is the outgoing direction derived from the pixel coordinates, and
-/// the third dimension is the wavelength of the measured data: [n_wi, n_wo, n_spectrum].
+/// the third dimension is the wavelength of the measured data: [n_wi, n_wo,
+/// n_spectrum].
 ///
 /// Actual dimensions: [n_phi_i, n_theta_i, n_wo, n_spectrum]
 pub type Yan2018Brdf = MeasuredBrdf<Yan2018BrdfParameterisation, 3>;
@@ -322,12 +322,9 @@ impl Yan2018Brdf {
         // Extract the outgoing directions and the mapping from the pixel index
         // to the outgoing direction index.
         let mut mapping = vec![u32::MAX; h * w];
-        pixel_outgoing
-            .iter()
-            .enumerate()
-            .for_each(|(i, (idx, _))| {
-                mapping[*idx] = i as u32;
-            });
+        pixel_outgoing.iter().enumerate().for_each(|(i, (idx, _))| {
+            mapping[*idx] = i as u32;
+        });
         let outgoing: DyArr<Sph2> =
             DyArr::from_iterator([-1], pixel_outgoing.iter().map(|(_, sph)| *sph));
 
@@ -543,7 +540,7 @@ impl AnalyticalFit for Yan2018Brdf {
                 .take(n_theta_i)
                 .map(|sph| sph.theta.as_f32()),
         );
-        let i_phis : DyArr<f32, 1> = DyArr::from_iterator(
+        let i_phis: DyArr<f32, 1> = DyArr::from_iterator(
             [-1],
             self.params
                 .incoming
