@@ -157,7 +157,7 @@ where
 /// A macro to create a fixed-size array on the heap with type level fixed
 /// shape.
 pub macro darr($($n:expr),+ $(,)*; [$($x:expr),* $(,)*]) {{
-    crate::array::DArr::<_, s![$($n),*], { MemLayout::RowMajor }>::new([$($x),*])
+    crate::array::DArr::<_, $crate::array::shape::s![$($n),*], { MemLayout::RowMajor }>::new([$($x),*])
 }}
 
 #[cfg(test)]

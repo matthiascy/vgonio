@@ -258,6 +258,7 @@ mod const_shape {
 pub use const_shape::s;
 
 /// Computes the number of elements in an array with the given shape.
+#[track_caller]
 pub(crate) const fn compute_n_elems(shape: &[usize]) -> usize {
     let mut n_elems = 1;
     let mut i = 0;
@@ -270,6 +271,7 @@ pub(crate) const fn compute_n_elems(shape: &[usize]) -> usize {
 }
 
 /// Computes the strides of an array with the given shape and layout.
+#[track_caller]
 pub const fn compute_strides(shape: &[usize], strides: &mut [usize], layout: MemLayout) {
     let n = shape.len();
     let mut i = 0;
@@ -294,15 +296,30 @@ pub const fn compute_strides(shape: &[usize], strides: &mut [usize], layout: Mem
 
 /// Computes the index of an element in an array with the given strides.
 ///
+/// The computation is done in a way that from the leftmost dimension to the
+/// rightmost dimension, the index is computed as the sum of the product of the
+/// index of the current dimension and the stride of the current dimension.
+///
+/// Doesn't check if the index is within bounds. Make sure to check the index
+/// of each dimension against the stride of the corresponding dimension.
+///
+/// The length of strides should be equal or greater than the length of the
+/// index.
+///
 /// # Note
 ///
 /// The layout is provided implicitly by the order of the strides.
 /// - Row-major: the last stride is always 1.
 /// - Column-major: the first stride is always 1.
+#[track_caller]
 pub const fn compute_index_from_strides(index: &[usize], strides: &[usize]) -> usize {
     let mut idx = 0;
+    // Start from the leftmost dimension and compute the index.
     let mut i = 0;
-    let n = strides.len();
+    // The minimum of the length of the index and the length of the strides.
+    let a = index.len();
+    let b = strides.len();
+    let n = [a, b][(a > b) as usize]; // TODO: constify min
     while i < n {
         idx += index[i] * strides[i];
         i += 1;
@@ -339,5 +356,14 @@ mod test {
         let mut strides = [0; 4];
         compute_strides(&[2, 3, 4, 5], &mut strides, MemLayout::ColMajor);
         assert_eq!(strides, [1, 2, 6, 24]);
+    }
+
+    #[test]
+    fn test_index_from_strides() {
+        let strides = [12, 4, 1];
+        assert_eq!(compute_index_from_strides(&[1], &strides), 12);
+        assert_eq!(compute_index_from_strides(&[1, 2], &strides), 20);
+        assert_eq!(compute_index_from_strides(&[1, 2, 3], &strides), 23);
+        assert_eq!(compute_index_from_strides(&[2, 2, 3], &strides), 35);
     }
 }

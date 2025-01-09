@@ -1568,6 +1568,12 @@ pub fn measure_bsdf_rt(
                                 j
                             );
 
+                            // Print receiver number of patches
+                            println!(
+                                "Receiver number of patches: {}",
+                                receiver.patches.n_patches()
+                            );
+
                             // Collect the tracing data into raw bsdf snapshots.
                             receiver.collect(
                                 &single_result,

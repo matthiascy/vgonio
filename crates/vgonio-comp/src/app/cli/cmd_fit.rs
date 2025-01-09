@@ -319,8 +319,7 @@ pub struct FitOptions {
     #[clap(
         long,
         help = "Isotropy of the microfacet model. If not specified, the default isotropy will be \
-                used.",
-        default_value = "isotropic"
+                used."
     )]
     pub isotropy: Isotropy,
 
@@ -329,7 +328,6 @@ pub struct FitOptions {
         short,
         help = "Distribution to use for the microfacet model. If not specified, the default \
                 distribution will be used.",
-        default_value = "beckmann",
         required_if_eq("family", "microfacet")
     )]
     pub distro: MicrofacetDistroKind,
@@ -337,7 +335,8 @@ pub struct FitOptions {
     #[clap(
         long,
         short,
-        help = "Level of the measured BRDF data to fit.",
+        help = "Level of the measured BRDF data to fit. Only used for the Vgonio kind.",
+        required_if_eq("kind", "vgonio"),
         default_value = "l0"
     )]
     pub level: MeasuredBrdfLevel,
@@ -345,12 +344,7 @@ pub struct FitOptions {
     #[clap(long, help = "Theta limit for the fitting in degrees. Default to 90°.")]
     pub theta_limit: Option<f32>,
 
-    #[clap(
-        long,
-        short,
-        help = "Method to use for the fitting.",
-        default_value = "brute"
-    )]
+    #[clap(long, short, help = "Method to use for the fitting.")]
     pub method: FittingMethod,
 
     #[clap(

@@ -2,11 +2,10 @@ use crate::{
     brdf::{Bxdf, BxdfFamily},
     distro::{MicrofacetDistribution, MicrofacetDistroKind},
 };
-use base::{range::StepRangeIncl, units::Radians, ErrorMetric, Isotropy, Weighting};
+use base::{math::rcp_f64, range::StepRangeIncl, units::Radians, ErrorMetric, Isotropy, Weighting};
 use levenberg_marquardt::{MinimizationReport, TerminationReason};
-use std::fmt::Debug;
 use nalgebra::RealField;
-use base::math::rcp_f64;
+use std::fmt::Debug;
 
 /// Types of the fitting problem.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -87,7 +86,8 @@ pub struct MinimisationReport {
     pub n_data_points: usize,
     /// Error metric used for the fitting.
     pub error_metric: ErrorMetric,
-    /// The objective function value which is the same as the error metric value.
+    /// The objective function value which is the same as the error metric
+    /// value.
     pub objective_fn: f64,
     /// The number of iterations performed.
     pub n_iteration: usize,
@@ -98,11 +98,7 @@ pub struct MinimisationReport {
 impl MinimisationReport {
     /// Creates a new minimisation report from the results of the levenberg
     /// marquardt minimisation process.
-    pub fn from_lm_nllsq(
-        report: MinimizationReport<f64>,
-        n_data_points: usize,
-    ) -> Self
-    {
+    pub fn from_lm_nllsq(report: MinimizationReport<f64>, n_data_points: usize) -> Self {
         MinimisationReport {
             n_data_points,
             error_metric: ErrorMetric::Nllsq,
@@ -119,8 +115,7 @@ impl MinimisationReport {
         objective_fn: f64,
         n_data_points: usize,
         n_iteration: usize,
-    ) -> Self
-    {
+    ) -> Self {
         MinimisationReport {
             n_data_points,
             error_metric,
@@ -144,11 +139,7 @@ impl<M> FittingReport<M> {
     /// Creates a new fitting report from the results of the fitting process.
     pub fn new(results: Box<[(M, MinimisationReport)]>) -> Self {
         let mut reports = results;
-        reports.sort_by(|(_, r1), (_, r2)| {
-            r1.objective_fn
-                .partial_cmp(&r2.objective_fn)
-                .unwrap()
-        });
+        reports.sort_by(|(_, r1), (_, r2)| r1.objective_fn.partial_cmp(&r2.objective_fn).unwrap());
         if reports.is_empty() {
             return FittingReport {
                 best: None,
@@ -186,6 +177,15 @@ impl<M> FittingReport<M> {
     where
         M: Debug,
     {
+        if n == 0 {
+            return;
+        }
+
+        if self.reports.is_empty() {
+            println!("No fitting reports");
+            return;
+        }
+
         println!("Fitting reports (first {}):", n);
         for (m, r) in self.reports.iter().take(n) {
             println!(
@@ -474,8 +474,15 @@ pub mod brdf {
         ///
         /// This excludes the samples that either are NaN values and the samples
         /// that are filtered out.
-        pub fn n_filtered_samples(&self, max_theta_i: Option<Radians>, max_theta_o: Option<Radians>) -> usize {
-            let shape = self.filtered_shape(max_theta_i.unwrap_or(Radians::HALF_PI).as_f32(), max_theta_o.unwrap_or(Radians::HALF_PI).as_f32());
+        pub fn n_filtered_samples(
+            &self,
+            max_theta_i: Option<Radians>,
+            max_theta_o: Option<Radians>,
+        ) -> usize {
+            let shape = self.filtered_shape(
+                max_theta_i.unwrap_or(Radians::HALF_PI).as_f32(),
+                max_theta_o.unwrap_or(Radians::HALF_PI).as_f32(),
+            );
             let total = shape.iter().product::<usize>();
 
             if !self.has_nan {
@@ -503,7 +510,9 @@ pub mod brdf {
         /// Returns the shape of the resampled BRDF data after filtering.
         /// Depends on the outgoing directions, the dimensions could be 4 or 5.
         pub fn filtered_shape(&self, max_theta_i: f32, max_theta_o: f32) -> Box<[usize]> {
-            if max_theta_i >= std::f32::consts::FRAC_PI_2 && max_theta_o >= std::f32::consts::FRAC_PI_2 {
+            if max_theta_i >= std::f32::consts::FRAC_PI_2
+                && max_theta_o >= std::f32::consts::FRAC_PI_2
+            {
                 // Clone the shape as no filtering is needed
                 return self.resampled.shape().to_vec().into_boxed_slice();
             }
@@ -1085,7 +1094,13 @@ pub mod brdf {
                                         max_theta_o,
                                     );
                                     let (result, report) = solver.minimize(nllsq_proxy);
-                                    (result.model, MinimisationReport::from_lm_nllsq(report, n_filtered_samples))
+                                    (
+                                        result.model,
+                                        MinimisationReport::from_lm_nllsq(
+                                            report,
+                                            n_filtered_samples,
+                                        ),
+                                    )
                                 },
                                 Isotropy::Anisotropic => {
                                     let nllsq_proxy = NllsqBrdfFittingProxy::<
@@ -1100,14 +1115,27 @@ pub mod brdf {
                                         max_theta_o,
                                     );
                                     let (result, report) = solver.minimize(nllsq_proxy);
-                                    (result.model, MinimisationReport::from_lm_nllsq(report, n_filtered_samples))
+                                    (
+                                        result.model,
+                                        MinimisationReport::from_lm_nllsq(
+                                            report,
+                                            n_filtered_samples,
+                                        ),
+                                    )
                                 },
                             };
 
                             match report.termination {
                                 TerminationReason::Converged { .. }
                                 | TerminationReason::LostPatience => Some((fitted_model, report)),
-                                _ => None,
+                                _ => {
+                                    log::warn!(
+                                        "Fitting failed for model: {:?} with reason: {:?}",
+                                        model,
+                                        report.termination
+                                    );
+                                    None
+                                },
                             }
                         })
                         .collect::<Vec<_>>()
@@ -1182,7 +1210,7 @@ pub mod brdf {
                             metric,
                             *err,
                             n_filtered_samples,
-                            i as usize
+                            i as usize,
                         ),
                     ));
                 });
