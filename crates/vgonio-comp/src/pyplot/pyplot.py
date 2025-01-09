@@ -12,6 +12,7 @@ from scipy.stats import alpha
 # Use this to avoid GUI
 # mpl.use('Agg')
 
+# import matplotlib as mpl
 # mpl.use('qtagg')
 
 # Paired/tab10
@@ -868,6 +869,7 @@ def plot_brdf_fitting(
     fitted: Tuple[np.ndarray, np.ndarray],
     alphas: np.ndarray,
 ):
+    print("Plotting BRDF fitting")
     from matplotlib.widgets import Slider, CheckButtons
     import matplotlib as mpl
 

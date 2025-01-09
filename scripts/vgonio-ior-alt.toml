@@ -1,0 +1,5 @@
+triangulation = "top-left-to-bottom-right" # default
+# triangulation = "bottom-left-to-top-right"
+output_dir = "~/Documents/virtual-gonio/output"
+data_dir = "~/Documents/virtual-gonio/datafiles"
+excluded_ior_files = ["al_iors_[0.255-1.0]_Cheng2016.csv"]
