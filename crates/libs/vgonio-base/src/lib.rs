@@ -242,7 +242,7 @@ pub enum MeasuredBrdfKind {
 pub trait MeasuredData: Debug {
     /// Returns the kind of the measurement.
     fn kind(&self) -> MeasurementKind;
-    /// Returns whether the measurement data is a Clausen representation.
+    /// Returns the kind of the BRDF if it's a BRDF measurement.
     fn brdf_kind(&self) -> Option<MeasuredBrdfKind> { None }
     /// Casts the measurement data to a trait object for downcasting to the
     /// concrete type.

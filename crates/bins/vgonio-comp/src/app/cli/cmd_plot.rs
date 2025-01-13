@@ -1,21 +1,12 @@
-use crate::{
-    app::{cache::Cache, Config},
-    measure::{
-        bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
-        mfd::{MeasuredGafData, MeasuredNdfData},
-        params::SurfacePath,
-    },
-    pyplot::{
-        plot_brdf_3d, plot_brdf_fitting, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
-        plot_brdf_vgonio_clausen, plot_gaf, plot_ndf, plot_surfaces,
-    },
-};
-use base::{
-    error::VgonioError,
-    math::Sph2,
-    units::{Degs, Nanometres, Radians, Rads},
-    Symmetry, MeasurementKind,
-};
+use crate::{app::{cache::Cache, Config}, measure::{
+    bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
+    mfd::{MeasuredGafData, MeasuredNdfData},
+    params::SurfacePath,
+}, pyplot, pyplot::{
+    plot_brdf_3d, plot_brdf_fitting, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
+    plot_brdf_vgonio_clausen, plot_gaf, plot_ndf, plot_surfaces,
+}};
+use base::{error::VgonioError, math::Sph2, units::{Degs, Nanometres, Radians, Rads}, Symmetry, MeasurementKind, ErrorMetric};
 use bxdf::brdf::measured::ClausenBrdf;
 use std::path::PathBuf;
 use surf::{
@@ -50,9 +41,9 @@ pub enum PlotKind {
     /// Compare between VgonioBrdf and VgonioBrdf.
     #[clap(alias = "cmp-vv")]
     ComparisonVgonio,
-    /// Plot the residual map between the input BRDF and the fitted BRDF.
-    #[clap(name = "residual")]
-    BrdfResidual,
+    /// Plot the error-map between the input BRDF and the fitted BRDF.
+    #[clap(name = "error-map")]
+    BrdfErrorMap,
     /// Plot slices of the input BRDF.
     #[clap(name = "brdf-slice")]
     BrdfSlice,
@@ -96,6 +87,13 @@ pub struct PlotOptions {
         required_if_eq("kind", "brdf-fitting"),
     )]
     pub alpha: Vec<f64>,
+
+    #[arg(
+        long = "err",
+        help = "The error metric to use for plotting the error map.",
+        required_if_eq("kind", "error-map")
+    )]
+    pub error_metric: Option<ErrorMetric>,
 
     #[clap(
         long,
@@ -556,9 +554,26 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 plot_brdf_fitting(&measured, &alphas, &cache.iors).unwrap();
                 Ok(())
             },
-            PlotKind::BrdfResidual => {
+            PlotKind::BrdfErrorMap => {
+                if opts.inputs.len() != 1 {
+                    return Err(VgonioError::new(
+                        "Only one input file is allowed for plotting the BRDF error map.",
+                        None,
+                    ));
+                }
+                let hdl = cache.load_micro_surface_measurement(&config, path)?;
+                let measured = &cache.get_measurement(hdl).unwrap().measured;
+                if measured.kind() != MeasurementKind::Bsdf {
+                    return Err(VgonioError::new(
+                        "The input file is not a BSDF measurement.",
+                        None,
+                    ));
+                }
                 let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
-                todo!("Implement BRDF residual plot.")
+                let error_metric = opts.error_metric.unwrap_or(ErrorMetric::Mse);
+                let bsdf = measured.downcast_ref::<MeasuredBsdfData>().unwrap();
+                pyplot::plot_brdf_error_map(&bsdf, &alphas, error_metric, &cache.iors).unwrap();
+                Ok(())
             }
         }
     })

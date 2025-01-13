@@ -409,6 +409,8 @@ pub mod brdf {
         }
     }
 
+    // TODO: maybe rename the struct to decouple from the BRDF fitting as some of the methods like
+    // calculating the distances between two proxies useful for other purposes.
     /// A proxy for a BRDF that can be fitted analytically.
     ///
     /// This is useful when the stored raw BRDF data is in compressed form and
@@ -469,6 +471,9 @@ pub mod brdf {
 
         /// Returns the resampled BRDF data.
         pub fn samples(&self) -> &[f32] { self.resampled.as_slice() }
+
+        /// Returns the shape of the resampled BRDF data.
+        pub fn samples_shape(&self) -> &[usize] { self.resampled.shape() }
 
         /// Returns the number of samples used for fitting.
         ///
@@ -561,9 +566,9 @@ pub mod brdf {
                 && self.resampled.shape() == other.resampled.shape()
         }
 
-        /// Computes the distance between two BRDF poxies derived from the same
+        /// Computes the distance between two BRDF proxies derived from the same
         /// BRDF.
-        fn distance<O: AnalyticalFit>(
+        pub fn distance<O: AnalyticalFit>(
             &self,
             other: &BrdfFittingProxy<O>,
             metric: ErrorMetric,
@@ -626,7 +631,7 @@ pub mod brdf {
         /// the same BRDF(may generated from an analytical BRDF). Stores the
         /// individual residuals in a row-major array following the
         /// shape of the resampled data.
-        fn residuals(&self, other: &Self, weighting: Weighting, residuals: &mut [f64]) {
+        pub fn residuals(&self, other: &Self, weighting: Weighting, residuals: &mut [f64]) {
             assert!(
                 self.same_params_p(other),
                 "The two BRDFs must have the same parameters"
@@ -942,7 +947,7 @@ pub mod brdf {
         // filtered incident and outgoing angles
         /// Generate the data points following the same incident and outgoing
         /// angles for the given analytical BRDF.
-        fn generate_analytical(&self, model: &dyn Bxdf<Params = [f64; 2]>) -> Self {
+        pub fn generate_analytical(&self, model: &dyn Bxdf<Params = [f64; 2]>) -> Self {
             let n_spectrum = self.brdf.spectrum().len();
             let mut resampled = DynArr::zeros(self.resampled.shape());
             let i_thetas = self.i_thetas.as_slice();

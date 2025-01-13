@@ -4,13 +4,7 @@ use crate::measure::{
     params::NdfMeasurementMode,
     DataCarriedOnHemisphereSampler,
 };
-use base::{
-    math::Sph2,
-    optics::ior::IorRegistry,
-    range::{StepRangeExcl, StepRangeIncl},
-    units::{rad, Degrees, Nanometres, Radians, Rads},
-    MeasuredBrdfKind, MeasuredData,
-};
+use base::{math::Sph2, optics::ior::IorRegistry, range::{StepRangeExcl, StepRangeIncl}, units::{rad, Degrees, Nanometres, Radians, Rads}, ErrorMetric, MeasuredBrdfKind, MeasuredData, Weighting};
 use bxdf::{
     brdf::{
         analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
@@ -22,9 +16,10 @@ use exr::{
     image::{FlatImage, FlatSamples},
     prelude::Text,
 };
-use jabr::array::DyArr;
-use numpy::{PyArray1, PyArray2, PyArrayMethods};
+use jabr::array::{DyArr, DynArr};
+use numpy::{PyArray, PyArray1, PyArray2, PyArrayMethods};
 use pyo3::{ffi::c_str, prelude::*, types::PyList};
+use bxdf::fitting::brdf::AnalyticalFit;
 use surf::MicroSurface;
 
 pub fn plot_err(errs: &[f64], alpha: &[f64], n_digits: u32) -> PyResult<()> {
@@ -1418,10 +1413,68 @@ pub fn plot_brdf_fitting(
     })
 }
 
-pub fn plot_brdf_residual_map(
-    brdf: &Box<dyn MeasuredData>,
+pub fn plot_brdf_error_map(
+    measured: &MeasuredBsdfData,
     alphas: &[(f64, f64)],
+    metric: ErrorMetric,
+    weighting: Weighting,
     iors: &IorRegistry,
-) {
+) -> PyResult<()> {
+    log::info!("Plotting BRDF error map...");
+    // TODO: considering filtering some of the BRDF angles.
+    match measured.brdf_kind().unwrap() {
+        MeasuredBrdfKind::Vgonio => {
+            let brdf = measured.brdf_at(MeasuredBrdfLevel::L0).unwrap();
+            let iors_i = iors
+                .ior_of_spectrum(brdf.incident_medium, brdf.spectrum.as_ref())
+                .unwrap();
+            let iors_t = iors
+                .ior_of_spectrum(brdf.transmitted_medium, brdf.spectrum.as_ref())
+                .unwrap();
+            let proxy = brdf.proxy(iors);
+            Python::with_gil(|py| {
+                let fun: Py<PyAny> = PyModule::from_code(
+                    py,
+                    c_str!(include_str!("./pyplot/pyplot.py")),
+                    c_str!("pyplot.py"),
+                    c_str!("vgp"),
+                ).unwrap()
+                    .getattr("plot_brdf_error_map").unwrap().into();
 
+                for (ax, ay) in alphas {
+                    let bk = MicrofacetBrdfBK::new(*ax, *ay);
+                    let tr = MicrofacetBrdfTR::new(*ax, *ay);
+                    let modelled_bk = proxy.generate_analytical(&bk);
+                    let modelled_tr = proxy.generate_analytical(&tr);
+                    let shape = proxy.samples_shape();
+                    unsafe {
+                        let residuals_bk = unsafe { PyArray::zeros(py, shape, false) };
+                        proxy.residuals(&modelled_bk, weighting, residuals_bk.as_slice_mut().unwrap());
+                        let residuals_tr = unsafe { PyArray::zeros(py, shape, false) };
+                        proxy.residuals(&modelled_tr, weighting, residuals_tr.as_slice_mut().unwrap());
+                        fun.call1(
+                            py,
+                            (
+                                residuals_bk,
+                                residuals_tr,
+                                brdf.params.incoming.len(),
+                                brdf.params.outgoing.rings.len(),
+                                brdf.spectrum.len(),
+                                *ax,
+                                *ay,
+                            ),
+                        )?;
+                    }
+                }
+
+            })
+        }
+        _ => {
+            log::error!("The BRDF kind is unknown!");
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "The BRDF kind is unknown!",
+            ));
+        }
+    }
+    Ok(())
 }
