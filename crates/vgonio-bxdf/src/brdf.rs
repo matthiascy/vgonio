@@ -1,7 +1,7 @@
 use crate::distro::MicrofacetDistroKind;
 use base::{
     math::{Mat3, Sph2, Vec3},
-    Isotropy,
+    Symmetry,
 };
 use num_traits::Float;
 use std::fmt::Debug;
@@ -37,13 +37,13 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     /// Returns the kind of the microfacet distribution function.
     fn distro(&self) -> Option<MicrofacetDistroKind> { None }
     /// Tells whether the BRDF model is isotropic or not.
-    fn isotropic(&self) -> bool;
-    /// Returns the isotropy of the BRDF model.
-    fn isotropy(&self) -> Isotropy {
-        if self.isotropic() {
-            Isotropy::Isotropic
+    fn is_isotropic(&self) -> bool;
+    /// Returns the symmetry of the BRDF model.
+    fn symmetry(&self) -> Symmetry {
+        if self.is_isotropic() {
+            Symmetry::Isotropic
         } else {
-            Isotropy::Anisotropic
+            Symmetry::Anisotropic
         }
     }
 

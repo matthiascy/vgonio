@@ -3,7 +3,7 @@
 mod beckmann;
 mod trowbridge_reitz;
 
-use base::{math::Vec3, Isotropy};
+use base::{math::Vec3, Symmetry};
 pub use beckmann::*;
 use std::fmt::Debug;
 pub use trowbridge_reitz::*;
@@ -45,7 +45,7 @@ pub trait MicrofacetDistribution: Debug + Send + Sync {
     fn kind(&self) -> MicrofacetDistroKind;
 
     /// Returns whether the distribution is isotropic or anisotropic.
-    fn isotropy(&self) -> Isotropy;
+    fn symmetry(&self) -> Symmetry;
 
     /// Evaluates the lambda auxiliary function.
     fn eval_lambda(&self, w: Vec3) -> f64;

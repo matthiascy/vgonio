@@ -1,6 +1,6 @@
 use crate::app::gui::docking::{Dockable, WidgetKind};
 #[cfg(feature = "fitting")]
-use base::Isotropy;
+use base::Symmetry;
 use base::{partition::beckers, MeasurementKind};
 #[cfg(feature = "fitting")]
 use bxdf::{brdf::BxdfFamily, distro::MicrofacetDistroKind, fitting::FittingProblemKind};
@@ -351,7 +351,7 @@ impl PropertyInspector {
                                         kind: FittingProblemKind::Bxdf {
                                             family: BxdfFamily::Microfacet,
                                             distro: Some(MicrofacetDistroKind::Beckmann),
-                                            isotropy: Isotropy::Isotropic,
+                                            symmetry: Symmetry::Isotropic,
                                         },
                                         data: meas,
                                         scale: 1.0,
@@ -364,7 +364,7 @@ impl PropertyInspector {
                                         kind: FittingProblemKind::Bxdf {
                                             family: BxdfFamily::Microfacet,
                                             distro: Some(MicrofacetDistroKind::Beckmann),
-                                            isotropy: Isotropy::Anisotropic,
+                                            symmetry: Symmetry::Anisotropic,
                                         },
                                         data: meas,
                                         scale: 1.0,
@@ -377,7 +377,7 @@ impl PropertyInspector {
                                         kind: FittingProblemKind::Bxdf {
                                             family: BxdfFamily::Microfacet,
                                             distro: Some(MicrofacetDistroKind::TrowbridgeReitz),
-                                            isotropy: Isotropy::Isotropic,
+                                            symmetry: Symmetry::Isotropic,
                                         },
                                         data: meas,
                                         scale: 1.0,
@@ -390,7 +390,7 @@ impl PropertyInspector {
                                         kind: FittingProblemKind::Bxdf {
                                             family: BxdfFamily::Microfacet,
                                             distro: Some(MicrofacetDistroKind::TrowbridgeReitz),
-                                            isotropy: Isotropy::Isotropic,
+                                            symmetry: Symmetry::Isotropic,
                                         },
                                         data: meas,
                                         scale: 1.0,

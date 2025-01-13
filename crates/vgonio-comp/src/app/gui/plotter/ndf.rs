@@ -16,7 +16,7 @@ use crate::{
     measure::{mfd::MeasuredNdfData, Measurement},
 };
 #[cfg(feature = "fitting")]
-use base::Isotropy;
+use base::Symmetry;
 use base::{
     handle::Handle,
     range::StepRangeIncl,
@@ -149,7 +149,7 @@ impl VariantData for AreaDistributionExtra {
                     !self.fitted.iter().any(|(existing, existing_scale, _)| {
                         model.kind() == existing.kind()
                             && *scale == *existing_scale
-                            && model.isotropy() == existing.isotropy()
+                            && model.symmetry() == existing.symmetry()
                     })
                 },
             })
@@ -296,7 +296,7 @@ impl VariantData for AreaDistributionExtra {
                         event_loop.send_event(VgonioEvent::Fitting {
                             kind: FittingProblemKind::Mfd {
                                 model: self.selected.model,
-                                isotropy: Isotropy::Isotropic,
+                                symmetry: Symmetry::Isotropic,
                             },
                             data,
                             scale: self.scale_factor,
@@ -315,7 +315,7 @@ impl VariantData for AreaDistributionExtra {
                         event_loop.send_event(VgonioEvent::Fitting {
                             kind: FittingProblemKind::Mfd {
                                 model: self.selected.model,
-                                isotropy: Isotropy::Anisotropic,
+                                symmetry: Symmetry::Anisotropic,
                             },
                             data,
                             scale: 1.0,
@@ -338,7 +338,7 @@ impl VariantData for AreaDistributionExtra {
                                 model.params()[0],
                                 model.params()[1],
                                 scale,
-                                model.isotropy().to_string().to_lowercase()
+                                model.symmetry().to_string().to_lowercase()
                             )));
                         });
                     }

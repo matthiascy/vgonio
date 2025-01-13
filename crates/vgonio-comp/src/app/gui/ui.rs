@@ -239,7 +239,7 @@ impl VgonioGui {
                     FittingProblemKind::Bxdf {
                         family,
                         distro,
-                        isotropy,
+                        symmetry,
                     } => {
                         match family {
                             BxdfFamily::Microfacet => {
@@ -257,7 +257,7 @@ impl VgonioGui {
                                         .proxy(&cache.iors);
                                     proxy.nllsq_fit(
                                         distro.unwrap(),
-                                        *isotropy,
+                                        *symmetry,
                                         Weighting::None,
                                         StepRangeIncl::new(0.001, 1.0, 0.01),
                                         None,
@@ -270,10 +270,10 @@ impl VgonioGui {
                             _ => unimplemented!("Fitting BxDF family: {:?}", family),
                         }
                     },
-                    FittingProblemKind::Mfd { model, isotropy } => {
+                    FittingProblemKind::Mfd { model, symmetry} => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
-                        if fitted.contains(kind, Some(*scale), *isotropy) {
+                        if fitted.contains(kind, Some(*scale), *symmetry) {
                             log::debug!("Already fitted, skipping");
                             return EventResponse::Handled;
                         }
@@ -308,7 +308,7 @@ impl VgonioGui {
                                 MicrofacetDistributionFittingProblem::new(data, *model, *scale);
                             problem.nllsq_fit(
                                 *model,
-                                *isotropy,
+                                *symmetry,
                                 Weighting::None,
                                 StepRangeIncl::new(0.001, 2.0, 0.01),
                                 None,

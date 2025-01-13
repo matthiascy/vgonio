@@ -3,7 +3,7 @@ use crate::distro::{MicrofacetDistribution, MicrofacetDistroKind};
 use base::math::{cbr, sin_phi, tan_theta2};
 use base::{
     math::{cos_phi, rcp_f64, sqr, tan_theta, Vec3},
-    Isotropy,
+    Symmetry,
 };
 #[cfg(feature = "fitting")]
 use libm::{erf, sqrt};
@@ -65,11 +65,11 @@ impl MicrofacetDistribution for BeckmannDistribution {
 
     fn kind(&self) -> MicrofacetDistroKind { MicrofacetDistroKind::Beckmann }
 
-    fn isotropy(&self) -> Isotropy {
+    fn symmetry(&self) -> Symmetry {
         if self.is_isotropic() {
-            Isotropy::Isotropic
+            Symmetry::Isotropic
         } else {
-            Isotropy::Anisotropic
+            Symmetry::Anisotropic
         }
     }
 

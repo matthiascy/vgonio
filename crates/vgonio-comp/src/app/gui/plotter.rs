@@ -520,7 +520,7 @@ impl PlottingWidget for PlotInspector {
                             .stroke(egui::epaint::Stroke::new(2.0, LINE_COLORS[i]))
                             .name(format!(
                                 "{:?}{:?}#{}",
-                                model.isotropy(),
+                                model.symmetry(),
                                 model.kind(),
                                 &uuid.to_string().as_str()[..6]
                             )),
@@ -651,7 +651,7 @@ impl PlottingWidget for PlotInspector {
                                                     "{} (x {:.4}) {}",
                                                     model.kind().to_str(),
                                                     scale,
-                                                    model.isotropy().to_string().to_lowercase(),
+                                                    model.symmetry().to_string().to_lowercase(),
                                                 ),
                                             ),
                                         )

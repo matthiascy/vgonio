@@ -7,7 +7,7 @@ use base::{
     partition::{SphericalDomain, SphericalPartition},
     range::StepRangeIncl,
     units::Radians,
-    Isotropy, Weighting,
+    Symmetry, Weighting,
 };
 use bxdf::{
     distro::{
@@ -72,13 +72,13 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
     fn nllsq_fit(
         &self,
         target: MicrofacetDistroKind,
-        isotropy: Isotropy,
+        symmetry: Symmetry,
         weighting: Weighting,
         initial: StepRangeIncl<f64>,
         max_theta_i: Option<Radians>,
         max_theta_o: Option<Radians>,
     ) -> FittingReport<Self::Model> {
-        println!("Fitting MDF with isotropy: {:?}", isotropy);
+        println!("Fitting MDF with symmetry: {:?}", symmetry);
         use rayon::iter::{IntoParallelIterator, ParallelIterator};
         let solver = LevenbergMarquardt::new();
         let result: Box<
@@ -97,18 +97,18 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                                 model.params()[0],
                                 model.params()[1]
                             );
-                            let (model, report) = match isotropy {
-                                Isotropy::Isotropic => {
+                            let (model, report) = match symmetry {
+                                Symmetry::Isotropic => {
                                     let problem =
-                                        NdfFittingProblemProxy::<{ Isotropy::Isotropic }>::new(
+                                        NdfFittingProblemProxy::<{ Symmetry::Isotropic }>::new(
                                             self.scale, measured, model,
                                         );
                                     let (result, report) = solver.minimize(problem);
                                     (result.model, report)
                                 },
-                                Isotropy::Anisotropic => {
+                                Symmetry::Anisotropic => {
                                     let problem =
-                                        NdfFittingProblemProxy::<{ Isotropy::Anisotropic }>::new(
+                                        NdfFittingProblemProxy::<{ Symmetry::Anisotropic }>::new(
                                             self.scale, measured, model,
                                         );
                                     let (result, report) = solver.minimize(problem);
@@ -141,17 +141,17 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                         model.params()[0],
                         model.params()[1]
                     );
-                    let (model, report) = match isotropy {
-                        Isotropy::Isotropic => {
-                            let problem = MsfFittingProblemProxy::<{ Isotropy::Isotropic }> {
+                    let (model, report) = match symmetry {
+                        Symmetry::Isotropic => {
+                            let problem = MsfFittingProblemProxy::<{ Symmetry::Isotropic }> {
                                 measured,
                                 model,
                             };
                             let (result, report) = solver.minimize(problem);
                             (result.model, report)
                         },
-                        Isotropy::Anisotropic => {
-                            let problem = MsfFittingProblemProxy::<{ Isotropy::Anisotropic }> {
+                        Symmetry::Anisotropic => {
+                            let problem = MsfFittingProblemProxy::<{ Symmetry::Anisotropic }> {
                                 measured,
                                 model,
                             };
@@ -190,7 +190,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
 }
 
 /// Proxy for the NDF fitting problem.
-struct NdfFittingProblemProxy<'a, const I: Isotropy> {
+struct NdfFittingProblemProxy<'a, const I: Symmetry> {
     scale: f32,
     measured: &'a MeasuredNdfData,
     model: Box<dyn MicrofacetDistribution<Params = [f64; 2]>>,
@@ -199,7 +199,7 @@ struct NdfFittingProblemProxy<'a, const I: Isotropy> {
     partition: Option<SphericalPartition>,
 }
 
-impl<'a, const I: Isotropy> NdfFittingProblemProxy<'a, I> {
+impl<'a, const I: Symmetry> NdfFittingProblemProxy<'a, I> {
     pub fn new(
         scale: f32,
         measured: &'a MeasuredNdfData,
@@ -222,7 +222,7 @@ impl<'a, const I: Isotropy> NdfFittingProblemProxy<'a, I> {
 }
 
 /// Proxy for the MSF fitting problem.
-struct MsfFittingProblemProxy<'a, const I: Isotropy> {
+struct MsfFittingProblemProxy<'a, const I: Symmetry> {
     measured: &'a MeasuredGafData,
     model: Box<dyn MicrofacetDistribution<Params = [f64; 2]>>,
 }
@@ -330,7 +330,7 @@ fn eval_ndf_residuals<'a>(
 // TODO: maybe split this into two different structs for measured ADF in
 // different modes?
 impl<'a> LeastSquaresProblem<f64, Dyn, U2>
-    for NdfFittingProblemProxy<'a, { Isotropy::Anisotropic }>
+    for NdfFittingProblemProxy<'a, { Symmetry::Anisotropic }>
 {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U2>;
@@ -376,7 +376,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
     }
 }
 
-impl<'a> LeastSquaresProblem<f64, Dyn, U1> for NdfFittingProblemProxy<'a, { Isotropy::Isotropic }> {
+impl<'a> LeastSquaresProblem<f64, Dyn, U1> for NdfFittingProblemProxy<'a, { Symmetry::Isotropic }> {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U1>;
     type ParameterStorage = Owned<f64, U1, U1>;
@@ -417,7 +417,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for NdfFittingProblemProxy<'a, { Isot
 }
 
 impl<'a> LeastSquaresProblem<f64, Dyn, U2>
-    for MsfFittingProblemProxy<'a, { Isotropy::Anisotropic }>
+    for MsfFittingProblemProxy<'a, { Symmetry::Anisotropic }>
 {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U2>;
@@ -440,7 +440,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
     }
 }
 
-impl<'a> LeastSquaresProblem<f64, Dyn, U1> for MsfFittingProblemProxy<'a, { Isotropy::Isotropic }> {
+impl<'a> LeastSquaresProblem<f64, Dyn, U1> for MsfFittingProblemProxy<'a, { Symmetry::Isotropic }> {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U1>;
     type ParameterStorage = Owned<f64, U1, U1>;

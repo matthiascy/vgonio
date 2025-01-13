@@ -2,7 +2,7 @@ use crate::{
     brdf::{Bxdf, BxdfFamily},
     distro::{MicrofacetDistribution, MicrofacetDistroKind},
 };
-use base::{math::rcp_f64, range::StepRangeIncl, units::Radians, ErrorMetric, Isotropy, Weighting};
+use base::{math::rcp_f64, range::StepRangeIncl, units::Radians, ErrorMetric, Symmetry, Weighting};
 use levenberg_marquardt::{MinimizationReport, TerminationReason};
 use nalgebra::RealField;
 use std::fmt::Debug;
@@ -14,8 +14,8 @@ pub enum FittingProblemKind {
     Mfd {
         /// The target microfacet distribution model.
         model: MicrofacetDistroKind,
-        /// The isotropy of the model.
-        isotropy: Isotropy,
+        /// The symmetry of the model.
+        symmetry: Symmetry,
     },
     /// Fitting the bidirectional scattering distribution function.
     Bxdf {
@@ -24,8 +24,8 @@ pub enum FittingProblemKind {
         /// The target microfacet distribution model in case of microfacet-based
         /// BxDFs.
         distro: Option<MicrofacetDistroKind>,
-        /// The isotropy of the model.
-        isotropy: Isotropy,
+        /// The symmetry of the model.
+        symmetry: Symmetry,
     },
 }
 
@@ -42,11 +42,11 @@ pub enum FittedModel {
 }
 
 impl FittedModel {
-    /// Returns the isotropy of the model.
-    pub fn isotropy(&self) -> Isotropy {
+    /// Returns the symmetry of the model.
+    pub fn symmetry(&self) -> Symmetry {
         match self {
-            FittedModel::Bsdf(model) => model.isotropy(),
-            FittedModel::Msf(model) | FittedModel::Ndf(model, _) => model.isotropy(),
+            FittedModel::Bsdf(model) => model.symmetry(),
+            FittedModel::Msf(model) | FittedModel::Ndf(model, _) => model.symmetry(),
         }
     }
 
@@ -56,15 +56,15 @@ impl FittedModel {
             FittedModel::Bsdf(model) => FittingProblemKind::Bxdf {
                 family: model.family(),
                 distro: model.distro(),
-                isotropy: model.isotropy(),
+                symmetry: model.symmetry(),
             },
             FittedModel::Msf(model) => FittingProblemKind::Mfd {
                 model: model.kind(),
-                isotropy: model.isotropy(),
+                symmetry: model.symmetry(),
             },
             FittedModel::Ndf(model, _) => FittingProblemKind::Mfd {
                 model: model.kind(),
-                isotropy: model.isotropy(),
+                symmetry: model.symmetry(),
             },
         }
     }
@@ -232,7 +232,7 @@ pub trait FittingProblem {
     fn nllsq_fit(
         &self,
         target: MicrofacetDistroKind,
-        isotropy: Isotropy,
+        symmetry: Symmetry,
         weighting: Weighting,
         initial: StepRangeIncl<f64>,
         max_theta_i: Option<Radians>,
@@ -276,7 +276,7 @@ pub mod brdf {
         optics::ior::{Ior, IorRegistry},
         range::StepRangeIncl,
         units::{rad, Nanometres, Radians},
-        ErrorMetric, Isotropy, MeasuredBrdfKind, Weighting,
+        ErrorMetric, Symmetry, MeasuredBrdfKind, Weighting,
     };
     use brute::compute_distance_between_measured_and_modelled;
     use jabr::array::{
@@ -1057,7 +1057,7 @@ pub mod brdf {
         fn nllsq_fit(
             &self,
             target: MicrofacetDistroKind,
-            isotropy: Isotropy,
+            symmetry: Symmetry,
             weighting: Weighting,
             initial: StepRangeIncl<f64>,
             max_theta_i: Option<Radians>,
@@ -1065,7 +1065,7 @@ pub mod brdf {
         ) -> FittingReport<Self::Model> {
             let solver = LevenbergMarquardt::new();
             let cpu_count = (std::thread::available_parallelism().unwrap().get() / 2).max(1);
-            let tasks = init_microfacet_brdf_models(initial, target, isotropy);
+            let tasks = init_microfacet_brdf_models(initial, target, symmetry);
             let tasks_per_cpu = tasks.len().div_ceil(cpu_count);
             log::debug!(
                 "Solve {} models, {} per CPU, {} CPUs",
@@ -1080,12 +1080,12 @@ pub mod brdf {
                     models
                         .iter()
                         .filter_map(|model| {
-                            let (fitted_model, report) = match isotropy {
-                                Isotropy::Isotropic => {
+                            let (fitted_model, report) = match symmetry {
+                                Symmetry::Isotropic => {
                                     let nllsq_proxy = NllsqBrdfFittingProxy::<
                                         '_,
                                         _,
-                                        { Isotropy::Isotropic },
+                                        { Symmetry::Isotropic },
                                     >::new(
                                         &self,
                                         model.clone(),
@@ -1102,11 +1102,11 @@ pub mod brdf {
                                         ),
                                     )
                                 },
-                                Isotropy::Anisotropic => {
+                                Symmetry::Anisotropic => {
                                     let nllsq_proxy = NllsqBrdfFittingProxy::<
                                         '_,
                                         _,
-                                        { Isotropy::Anisotropic },
+                                        { Symmetry::Anisotropic },
                                     >::new(
                                         &self,
                                         model.clone(),

@@ -11,7 +11,7 @@ use base::{
     optics::ior::Ior,
     range::StepRangeIncl,
     units::{rad, Radians},
-    Isotropy, Weighting,
+    Symmetry, Weighting,
 };
 use jabr::array::{
     shape::{compute_index_from_strides, compute_strides},
@@ -28,15 +28,15 @@ use rayon::iter::{ParallelBridge, ParallelIterator};
 ///
 /// * `range` - The range of roughness parameters.
 /// * `target` - The target microfacet distribution kind.
-/// * `isotropy` - The isotropy of the microfacet distribution.
+/// * `symmetry` - The symmetry of the microfacet distribution.
 pub(crate) fn init_microfacet_brdf_models(
     range: StepRangeIncl<f64>,
     target: MicrofacetDistroKind,
-    isotropy: Isotropy,
+    symmetry: Symmetry,
 ) -> Box<[Box<dyn Bxdf<Params = [f64; 2]>>]> {
     let count = range.step_count();
-    match isotropy {
-        Isotropy::Isotropic => (0..count)
+    match symmetry {
+        Symmetry::Isotropic => (0..count)
             .map(|i| {
                 let alpha = range.start + range.step_size * i as f64;
                 match target {
@@ -49,7 +49,7 @@ pub(crate) fn init_microfacet_brdf_models(
                 }
             })
             .collect(),
-        Isotropy::Anisotropic => (0..count)
+        Symmetry::Anisotropic => (0..count)
             .flat_map(|i| {
                 let ax = range.start + range.step_size * i as f64;
                 (0..count).map(move |j| {
@@ -69,7 +69,7 @@ pub(crate) fn init_microfacet_brdf_models(
 }
 
 /// A proxy for the BRDF fitting problem using the NLLSQ algorithm.
-pub struct NllsqBrdfFittingProxy<'a, Brdf, const I: Isotropy>
+pub struct NllsqBrdfFittingProxy<'a, Brdf, const I: Symmetry>
 where
     Brdf: AnalyticalFit,
 {
@@ -89,7 +89,7 @@ where
     max_theta_o: Option<Radians>,
 }
 
-impl<'a, Brdf, const I: Isotropy> NllsqBrdfFittingProxy<'a, Brdf, I>
+impl<'a, Brdf, const I: Symmetry> NllsqBrdfFittingProxy<'a, Brdf, I>
 where
     Brdf: AnalyticalFit,
 {
@@ -148,7 +148,7 @@ where
 }
 
 /// Specialisation for the isotropic case.
-impl<'a, Brdf> NllsqBrdfFittingProxy<'a, Brdf, { Isotropy::Isotropic }>
+impl<'a, Brdf> NllsqBrdfFittingProxy<'a, Brdf, { Symmetry::Isotropic }>
 where
     Brdf: AnalyticalFit,
 {
@@ -338,7 +338,7 @@ where
 }
 
 /// Specialisation for the anisotropic case.
-impl<'a, Brdf> NllsqBrdfFittingProxy<'a, Brdf, { Isotropy::Anisotropic }>
+impl<'a, Brdf> NllsqBrdfFittingProxy<'a, Brdf, { Symmetry::Anisotropic }>
 where
     Brdf: AnalyticalFit,
 {
@@ -541,7 +541,7 @@ where
 }
 
 impl<'a, Brdf> LeastSquaresProblem<f64, Dyn, U1>
-    for NllsqBrdfFittingProxy<'a, Brdf, { Isotropy::Isotropic }>
+    for NllsqBrdfFittingProxy<'a, Brdf, { Symmetry::Isotropic }>
 where
     Brdf: AnalyticalFit,
 {
@@ -575,7 +575,7 @@ where
 }
 
 impl<'a, Brdf> LeastSquaresProblem<f64, Dyn, U2>
-    for NllsqBrdfFittingProxy<'a, Brdf, { Isotropy::Anisotropic }>
+    for NllsqBrdfFittingProxy<'a, Brdf, { Symmetry::Anisotropic }>
 where
     Brdf: AnalyticalFit,
 {

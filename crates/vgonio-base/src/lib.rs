@@ -43,7 +43,7 @@ pub mod partition;
 /// Indicates whether something is uniform in all directions or not.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[derive(Debug, Copy, Clone, ConstParamTy)]
-pub enum Isotropy {
+pub enum Symmetry {
     /// Uniformity in all directions.
     #[cfg_attr(feature = "cli", clap(alias = "iso"))]
     Isotropic,
@@ -52,46 +52,46 @@ pub enum Isotropy {
     Anisotropic,
 }
 
-impl Isotropy {
-    /// Returns whether the isotropy is isotropic.
+impl Symmetry {
+    /// Returns whether it's isotropic.
     pub const fn is_isotropic(&self) -> bool { matches!(self, Self::Isotropic) }
 
-    /// Returns whether the isotropy is anisotropic.
+    /// Returns whether it's anisotropic.
     pub const fn is_anisotropic(&self) -> bool { matches!(self, Self::Anisotropic) }
 }
 
-impl Display for Isotropy {
+impl Display for Symmetry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                Isotropy::Isotropic => "Isotropic",
-                Isotropy::Anisotropic => "Anisotropic",
+                Symmetry::Isotropic => "Isotropic",
+                Symmetry::Anisotropic => "Anisotropic",
             }
         )
     }
 }
 
-impl StructuralPartialEq for Isotropy {}
+impl StructuralPartialEq for Symmetry {}
 
-impl Eq for Isotropy {}
+impl Eq for Symmetry {}
 
-impl PartialEq<Self> for Isotropy {
+impl PartialEq<Self> for Symmetry {
     fn eq(&self, other: &Self) -> bool {
         matches!(
             (self, other),
-            (Isotropy::Isotropic, Isotropy::Isotropic)
-                | (Isotropy::Anisotropic, Isotropy::Anisotropic)
+            (Symmetry::Isotropic, Symmetry::Isotropic)
+                | (Symmetry::Anisotropic, Symmetry::Anisotropic)
         )
     }
 }
 
-impl Hash for Isotropy {
+impl Hash for Symmetry {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
-            Isotropy::Isotropic => 0.hash(state),
-            Isotropy::Anisotropic => 1.hash(state),
+            Symmetry::Isotropic => 0.hash(state),
+            Symmetry::Anisotropic => 1.hash(state),
         }
     }
 }

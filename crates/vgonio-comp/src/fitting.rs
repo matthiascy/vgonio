@@ -30,7 +30,7 @@ mod mfd;
 use bxdf::fitting::{FittedModel, FittingProblemKind};
 pub use mfd::*;
 
-use base::Isotropy;
+use base::Symmetry;
 use std::fmt::Debug;
 
 /// A collection of fitted models without repetition.
@@ -39,16 +39,16 @@ pub struct FittedModels(Vec<FittedModel>);
 
 impl FittedModels {
     /// Checks if the collection already contains a model with the same kind and
-    /// isotropy.
+    /// symmetry.
     pub fn contains(
         &self,
         kind: &FittingProblemKind,
         scale: Option<f32>,
-        isotropy: Isotropy,
+        symmetry: Symmetry,
     ) -> bool {
         self.0
             .iter()
-            .any(|f| f.kind() == *kind && f.scale() == scale && f.isotropy() == isotropy)
+            .any(|f| f.kind() == *kind && f.scale() == scale && f.symmetry() == symmetry)
     }
 
     /// Push a new model to the collection.

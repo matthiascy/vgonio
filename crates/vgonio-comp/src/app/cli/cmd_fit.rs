@@ -8,7 +8,7 @@ use base::{
     optics::ior::IorRegistry,
     range::StepRangeIncl,
     units::{Radians, Rads},
-    ErrorMetric, Isotropy, MeasuredBrdfKind, Weighting,
+    ErrorMetric, Symmetry, MeasuredBrdfKind, Weighting,
 };
 use bxdf::{
     brdf::{
@@ -222,13 +222,13 @@ fn measured_brdf_fitting<F: AnalyticalFit>(
 ) {
     let limit = theta_limit.unwrap_or(Radians::HALF_PI);
     println!(
-        "    {} Fitting ({:?}) to model: {:?}, distro: {:?}, isotropy: {}, method: {:?}, error \
+        "    {} Fitting ({:?}) to model: {:?}, distro: {:?}, symmetry: {}, method: {:?}, error \
          metric: {:?}, weighting: {:?}, θ < {}",
         ansi::YELLOW_GT,
         brdf.kind(),
         opts.family,
         opts.distro,
-        opts.isotropy,
+        opts.symmetry,
         opts.method,
         if opts.method == FittingMethod::Brute {
             opts.error_metric.unwrap_or(ErrorMetric::Mse)
@@ -245,8 +245,8 @@ fn measured_brdf_fitting<F: AnalyticalFit>(
             let proxy = brdf.proxy(iors);
 
             // Adjust the alpha range only if the model is isotropic
-            let alpha = match opts.isotropy {
-                Isotropy::Isotropic => {
+            let alpha = match opts.symmetry {
+                Symmetry::Isotropic => {
                     let report = brdf.proxy(iors).brute_fit(
                         opts.distro,
                         opts.error_metric.unwrap_or(ErrorMetric::Mse),
@@ -258,12 +258,12 @@ fn measured_brdf_fitting<F: AnalyticalFit>(
                     let mid = report.best_model().unwrap().params()[0];
                     StepRangeIncl::new(mid - 0.01, mid + 0.1, 0.001)
                 },
-                Isotropy::Anisotropic => StepRangeIncl::new(0.0, 1.0, 0.01),
+                Symmetry::Anisotropic => StepRangeIncl::new(0.0, 1.0, 0.01),
             };
 
             let report = proxy.nllsq_fit(
                 opts.distro,
-                opts.isotropy,
+                opts.symmetry,
                 opts.weighting,
                 alpha,
                 opts.theta_limit.map(|t| Radians::from_degrees(t)),
@@ -318,10 +318,9 @@ pub struct FitOptions {
 
     #[clap(
         long,
-        help = "Isotropy of the microfacet model. If not specified, the default isotropy will be \
-                used."
+        help = "Symmetry of the microfacet model."
     )]
-    pub isotropy: Isotropy,
+    pub symmetry: Symmetry,
 
     #[clap(
         long,

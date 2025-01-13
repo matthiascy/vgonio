@@ -3,7 +3,7 @@ use crate::distro::{MicrofacetDistribution, MicrofacetDistroKind};
 use base::math::{cbr, sin_phi, tan_theta2};
 use base::{
     math::{cos_phi, cos_theta2, rcp_f64, sqr, Vec3},
-    Isotropy,
+    Symmetry,
 };
 use std::fmt::Debug;
 
@@ -71,11 +71,11 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
 
     fn kind(&self) -> MicrofacetDistroKind { MicrofacetDistroKind::TrowbridgeReitz }
 
-    fn isotropy(&self) -> Isotropy {
+    fn symmetry(&self) -> Symmetry {
         if self.is_isotropic() {
-            Isotropy::Isotropic
+            Symmetry::Isotropic
         } else {
-            Isotropy::Anisotropic
+            Symmetry::Anisotropic
         }
     }
 

@@ -14,7 +14,7 @@ use base::{
     error::VgonioError,
     math::Sph2,
     units::{Degs, Nanometres, Radians, Rads},
-    Isotropy, MeasurementKind,
+    Symmetry, MeasurementKind,
 };
 use bxdf::brdf::measured::ClausenBrdf;
 use std::path::PathBuf;
@@ -99,11 +99,11 @@ pub struct PlotOptions {
 
     #[clap(
         long,
-        help = "The isotropy of the model which decides how the roughness parameters been \
+        help = "The symmetry of the model which decides how the roughness parameters been \
                 interpreted",
         default_value = "iso"
     )]
-    pub isotropy: Isotropy,
+    pub symmetry: Symmetry,
 
     #[clap(
         long = "subdiv_kind",
@@ -552,12 +552,12 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         None,
                     ));
                 }
-                let alphas = extract_alphas(&opts.alpha, opts.isotropy)?;
+                let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
                 plot_brdf_fitting(&measured, &alphas, &cache.iors).unwrap();
                 Ok(())
             },
             PlotKind::BrdfResidual => {
-                let alphas = extract_alphas(&opts.alpha, opts.isotropy)?;
+                let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
                 todo!("Implement BRDF residual plot.")
             }
         }
@@ -570,13 +570,13 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
 /// # Arguments
 ///
 /// * `alphas` - The roughness parameters provided by the user.
-/// * `isotropy` - The symmetry of the surface.
+/// * `symmetry` - The symmetry of the surface.
 ///
 /// # Returns
 ///
 /// An array of roughness parameters as pairs of `f64` values sorted by the roughness parameter.
-fn extract_alphas(alphas: &[f64], isotropy: Isotropy) -> Result<Box<[(f64, f64)]>, VgonioError> {
-    let mut processed = if isotropy.is_isotropic() {
+fn extract_alphas(alphas: &[f64], symmetry: Symmetry) -> Result<Box<[(f64, f64)]>, VgonioError> {
+    let mut processed = if symmetry.is_isotropic() {
         alphas.iter().map(|&a| (a, a)).collect::<Box<_>>()
     } else {
         if alphas.len() % 2 != 0 {

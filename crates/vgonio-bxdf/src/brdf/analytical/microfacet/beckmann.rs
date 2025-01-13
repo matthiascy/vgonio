@@ -28,7 +28,7 @@ impl Bxdf for MicrofacetBrdfBK {
 
     fn distro(&self) -> Option<MicrofacetDistroKind> { Some(MicrofacetDistroKind::Beckmann) }
 
-    fn isotropic(&self) -> bool { self.distro.is_isotropic() }
+    fn is_isotropic(&self) -> bool { self.distro.is_isotropic() }
 
     fn params(&self) -> Self::Params { self.distro.params() }
 
