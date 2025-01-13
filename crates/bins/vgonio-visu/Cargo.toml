@@ -14,8 +14,8 @@ clap.workspace = true
 rand.workspace = true
 rayon.workspace = true
 image.workspace = true
-jabr = { package = "vgonio-jabr", path = "../vgonio-jabr" }
-gxtk = { package = "vgonio-gxtk", path = "../vgonio-gxtk" }
+jabr = { package = "vgonio-jabr", path = "../../libs/vgonio-jabr" }
+gxtk = { package = "vgonio-gxtk", path = "../../libs/vgonio-gxtk" }
 pollster.workspace = true
 winit.workspace = true
 wgpu.workspace = true

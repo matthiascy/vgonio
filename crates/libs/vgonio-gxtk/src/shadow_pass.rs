@@ -88,12 +88,13 @@ impl ShadowPass {
                 bind_group_layouts: &[&bind_group_layout],
                 push_constant_ranges: &[],
             });
+        // TODO: move shader to separate file
         let shader_module = ctx
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("shadow_pass_shader_module"),
                 source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../../vgonio-comp/src/app/gui/assets/shaders/wgsl/shadow_pass.wgsl")
+                    include_str!("../../../bins/vgonio-comp/src/app/gui/assets/shaders/wgsl/shadow_pass.wgsl")
                         .into(),
                 ),
             });

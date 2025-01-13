@@ -1,7 +1,7 @@
 //! Fresnel equations and related functions.
 //!
 //! # Reflection
-#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../misc/imgs/reflect.svg"))]
+#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../misc/imgs/reflect.svg"))]
 //!
 //! See [`reflect`] and [`reflect_cos_abs`] for computing the reflection of a
 //! vector with respect to a surface normal.
@@ -19,7 +19,7 @@
 //! surface at the point of reflection.
 //!
 //! # Refraction
-#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../misc/imgs/refract.svg"))]
+#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../misc/imgs/refract.svg"))]
 //!
 //! See [`refract`] for computing the refraction of a vector with respect to a
 //! surface normal without knowing if the ray is located outside the surface.

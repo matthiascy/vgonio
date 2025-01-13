@@ -610,7 +610,7 @@ impl MicroSurface {
     ///
     /// The generated vertices are aligned to the xy plane of the right-handed,
     /// Z-up coordinate system.
-    #[doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../misc/imgs/heightfield.svg"))]
+    #[doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../misc/imgs/heightfield.svg"))]
     pub fn generate_vertices(&self, height_offset: f32) -> (Box<[Vec3]>, Aabb) {
         log::info!(
             "Generating height field vertices with {} rows and {} cols",

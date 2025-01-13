@@ -54,19 +54,19 @@ toml.workspace = true
 type-map.workspace = true
 winit.workspace = true
 wgpu.workspace = true
-surf = { package = "vgonio-surf", path = "../vgonio-surf", features = ["exr"] }
-base = { package = "vgonio-base", path = "../vgonio-base", features = [
+surf = { package = "vgonio-surf", path = "../../libs/vgonio-surf", features = ["exr"] }
+base = { package = "vgonio-base", path = "../../libs/vgonio-base", features = [
     "cli",
     "winit",
     "io",
 ] }
-bxdf = { package = "vgonio-bxdf", path = "../vgonio-bxdf", features = [
+bxdf = { package = "vgonio-bxdf", path = "../../libs/vgonio-bxdf", features = [
     "cli",
     "exr",
 ] }
-jabr = { package = "vgonio-jabr", path = "../vgonio-jabr" }
-gxtk = { package = "vgonio-gxtk", path = "../vgonio-gxtk" }
-uxtk = { package = "vgonio-uxtk", path = "../vgonio-uxtk" }
+jabr = { package = "vgonio-jabr", path = "../../libs/vgonio-jabr" }
+gxtk = { package = "vgonio-gxtk", path = "../../libs/vgonio-gxtk" }
+uxtk = { package = "vgonio-uxtk", path = "../../libs/vgonio-uxtk" }
 
 [lints]
 workspace = true

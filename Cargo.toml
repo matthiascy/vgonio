@@ -1,17 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/vgonio",
-    "crates/vgonio-base",
-    "crates/vgonio-bxdf",
-    "crates/vgonio-jabr",
-    "crates/vgonio-surf",
-    "crates/vgonio-visu",
-    "crates/vgonio-gxtk",
-    "crates/vgonio-uxtk",
-    "crates/vgonio-view",
-    "crates/vgonio-comp",
-    "crates/vgonio-powitacq",
+    "crates/bins/*",
+    "crates/libs/*",
 ]
 
 [workspace.package]

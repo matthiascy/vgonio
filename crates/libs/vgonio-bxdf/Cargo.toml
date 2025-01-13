@@ -23,6 +23,6 @@ num-traits.workspace = true
 rayon = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 serde-pickle = { workspace = true, optional = true }
-base = { package = "vgonio-base", path = "../vgonio-base" }
-jabr = { package = "vgonio-jabr", path = "../vgonio-jabr" }
-powitacq = { package = "vgonio-powitacq", path = "../vgonio-powitacq" }
+base = { package = "vgonio-base", path = "../../libs/vgonio-base" }
+jabr = { package = "vgonio-jabr", path = "../../libs/vgonio-jabr" }
+powitacq = { package = "vgonio-powitacq", path = "../../libs/vgonio-powitacq" }

@@ -339,7 +339,7 @@ impl Cell for CoarseCell {
 /// The top-left corner is used as the origin of the grid, for the reason that
 /// vertices of the triangle mesh are generated following the order from left
 /// to right, top to bottom.
-#[doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../misc/imgs/grid.svg"))]
+#[doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../misc/imgs/grid.svg"))]
 ///
 /// The blue dots are the micro-surface samples, and the orange dots are the
 /// grid cells.
