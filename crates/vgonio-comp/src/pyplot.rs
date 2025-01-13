@@ -1417,3 +1417,11 @@ pub fn plot_brdf_fitting(
         Ok(())
     })
 }
+
+pub fn plot_brdf_residual_map(
+    brdf: &Box<dyn MeasuredData>,
+    alphas: &[(f64, f64)],
+    iors: &IorRegistry,
+) {
+
+}

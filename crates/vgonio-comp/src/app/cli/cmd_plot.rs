@@ -50,6 +50,9 @@ pub enum PlotKind {
     /// Compare between VgonioBrdf and VgonioBrdf.
     #[clap(alias = "cmp-vv")]
     ComparisonVgonio,
+    /// Plot the residual map between the input BRDF and the fitted BRDF.
+    #[clap(name = "residual")]
+    BrdfResidual,
     /// Plot slices of the input BRDF.
     #[clap(name = "brdf-slice")]
     BrdfSlice,
@@ -549,28 +552,48 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         None,
                     ));
                 }
-                let mut alphas = if opts.isotropy == Isotropy::Isotropic {
-                    opts.alpha.iter().map(|&a| (a, a)).collect::<Box<_>>()
-                } else {
-                    if opts.alpha.len() % 2 != 0 {
-                        return Err(VgonioError::new(
-                            "Two roughness parameters are needed for anisotropic fitting. If you \
-                             wish to provide multiple roughness parameters, please supply them in \
-                             pairs.",
-                            None,
-                        ));
-                    }
-                    opts.alpha
-                        .iter()
-                        .map_windows(|alpha: &[_; 2]| (*alpha[0], *alpha[1]))
-                        .collect::<Box<_>>()
-                };
-                alphas.sort_by(|(a1, a2), (b1, b2)|
-                    // Sort first by the first element, then by the second element
-                    a1.partial_cmp(b1).unwrap().then_with(|| a2.partial_cmp(b2).unwrap()));
+                let alphas = extract_alphas(&opts.alpha, opts.isotropy)?;
                 plot_brdf_fitting(&measured, &alphas, &cache.iors).unwrap();
                 Ok(())
             },
+            PlotKind::BrdfResidual => {
+                let alphas = extract_alphas(&opts.alpha, opts.isotropy)?;
+                todo!("Implement BRDF residual plot.")
+            }
         }
     })
+}
+
+/// Extracts alpha values from the command-line arguments as a vector of `f64` pairs,
+/// duplicating values for isotropic surfaces or pairing them as provided for anisotropic surfaces.
+///
+/// # Arguments
+///
+/// * `alphas` - The roughness parameters provided by the user.
+/// * `isotropy` - The symmetry of the surface.
+///
+/// # Returns
+///
+/// An array of roughness parameters as pairs of `f64` values sorted by the roughness parameter.
+fn extract_alphas(alphas: &[f64], isotropy: Isotropy) -> Result<Box<[(f64, f64)]>, VgonioError> {
+    let mut processed = if isotropy.is_isotropic() {
+        alphas.iter().map(|&a| (a, a)).collect::<Box<_>>()
+    } else {
+        if alphas.len() % 2 != 0 {
+            return Err(VgonioError::new(
+                "Two roughness parameters are needed for providing anisotropic roughness. \
+                             If you wish to provide multiple roughness parameters, please supply \
+                             them in pairs.",
+                None,
+            ));
+        }
+       alphas
+            .iter()
+            .map_windows(|alpha: &[_; 2]| (*alpha[0], *alpha[1]))
+            .collect::<Box<_>>()
+    };
+    processed.sort_by(|(a1, a2), (b1, b2)|
+        // Sort first by the first element, then by the second element
+        a1.partial_cmp(b1).unwrap().then_with(|| a2.partial_cmp(b2).unwrap()));
+    Ok(processed)
 }

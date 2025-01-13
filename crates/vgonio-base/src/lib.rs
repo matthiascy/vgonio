@@ -52,6 +52,14 @@ pub enum Isotropy {
     Anisotropic,
 }
 
+impl Isotropy {
+    /// Returns whether the isotropy is isotropic.
+    pub const fn is_isotropic(&self) -> bool { matches!(self, Self::Isotropic) }
+
+    /// Returns whether the isotropy is anisotropic.
+    pub const fn is_anisotropic(&self) -> bool { matches!(self, Self::Anisotropic) }
+}
+
 impl Display for Isotropy {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
