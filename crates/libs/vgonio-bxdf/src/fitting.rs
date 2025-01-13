@@ -4,7 +4,6 @@ use crate::{
 };
 use base::{math::rcp_f64, range::StepRangeIncl, units::Radians, ErrorMetric, Symmetry, Weighting};
 use levenberg_marquardt::{MinimizationReport, TerminationReason};
-use nalgebra::RealField;
 use std::fmt::Debug;
 
 /// Types of the fitting problem.
@@ -271,13 +270,7 @@ pub mod brdf {
 
     use std::borrow::Cow;
 
-    use base::{
-        math::{self, Sph2},
-        optics::ior::{Ior, IorRegistry},
-        range::StepRangeIncl,
-        units::{rad, Nanometres, Radians},
-        ErrorMetric, Symmetry, MeasuredBrdfKind, Weighting,
-    };
+    use base::{math::{self, Sph2}, optics::ior::{Ior, IorRegistry}, range::StepRangeIncl, units::{rad, Nanometres, Radians}, ErrorMetric, MeasuredBrdfData, MeasuredBrdfKind, Symmetry, Weighting};
     use brute::compute_distance_between_measured_and_modelled;
     use jabr::array::{
         shape::{compute_index_from_strides, compute_strides},
@@ -409,8 +402,9 @@ pub mod brdf {
         }
     }
 
-    // TODO: maybe rename the struct to decouple from the BRDF fitting as some of the methods like
-    // calculating the distances between two proxies useful for other purposes.
+    // TODO: maybe rename the struct to decouple from the BRDF fitting as some of
+    // the methods like calculating the distances between two proxies useful for
+    // other purposes.
     /// A proxy for a BRDF that can be fitted analytically.
     ///
     /// This is useful when the stored raw BRDF data is in compressed form and
@@ -420,16 +414,13 @@ pub mod brdf {
     /// The proxy cannot be constructed directly, but must be created by calling
     /// the `proxy` method on the measured BRDF that implements the
     /// `AnalyticalFit` trait.
-    pub struct BrdfFittingProxy<'a, Brdf>
-    where
-        Brdf: AnalyticalFit,
-    {
+    pub struct BrdfFittingProxy<'a> {
         /// Indicates if the proxy has NaN values.
         pub(crate) has_nan: bool,
         /// The source of the proxy.
         pub(crate) source: ProxySource,
         /// The raw BRDF data that the proxy is associated with.
-        pub(crate) brdf: &'a Brdf,
+        pub(crate) brdf: &'a dyn AnalyticalFit,
         /// Incident angles (polar angle) in radians of the resampled BRDF data.
         pub(crate) i_thetas: Cow<'a, DyArr<f32>>,
         /// Incident angles (azimuthal angle) in radians of the resampled BRDF
@@ -449,23 +440,12 @@ pub mod brdf {
     }
 
     /// A trait for BRDFs that can be fitted with an analytical model.
-    pub trait AnalyticalFit: Sync {
+    pub trait AnalyticalFit: MeasuredBrdfData + Sync {
         /// Create a proxy for this BRDF.
-        fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self>
-        where
-            Self: Sized;
-
-        /// Returns the wavelengths at which the BRDF is measured.
-        fn spectrum(&self) -> &[Nanometres];
-
-        /// Returns the kind of the measured BRDF.
-        fn kind(&self) -> MeasuredBrdfKind;
+        fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy;
     }
 
-    impl<Brdf> BrdfFittingProxy<'_, Brdf>
-    where
-        Brdf: AnalyticalFit,
-    {
+    impl<'a> BrdfFittingProxy<'a> {
         /// Returns the source of the proxy.
         pub fn source(&self) -> ProxySource { self.source }
 
@@ -558,7 +538,7 @@ pub mod brdf {
         }
 
         /// Checks if the two proxies have the same parameters.
-        fn same_params_p<O: AnalyticalFit>(&self, other: &BrdfFittingProxy<O>) -> bool {
+        fn same_params_p(&self, other: &BrdfFittingProxy) -> bool {
             self.i_thetas == other.i_thetas
                 && self.i_phis == other.i_phis
                 && self.o_dirs == other.o_dirs
@@ -568,9 +548,9 @@ pub mod brdf {
 
         /// Computes the distance between two BRDF proxies derived from the same
         /// BRDF.
-        pub fn distance<O: AnalyticalFit>(
+        pub fn distance(
             &self,
-            other: &BrdfFittingProxy<O>,
+            other: &BrdfFittingProxy,
             metric: ErrorMetric,
             weighting: Weighting,
         ) -> f64 {
@@ -676,9 +656,9 @@ pub mod brdf {
 
         /// Computes the distance between two BRDF poxies derived from the same
         /// BRDF with a filtered range of incident and outgoing angles.
-        fn distance_filtered<O: AnalyticalFit + Sync>(
+        fn distance_filtered(
             &self,
-            other: &BrdfFittingProxy<O>,
+            other: &BrdfFittingProxy,
             metric: ErrorMetric,
             weighting: Weighting,
             max_theta_i: f32,
@@ -1056,7 +1036,7 @@ pub mod brdf {
         }
     }
 
-    impl<'a, Brdf: AnalyticalFit> FittingProblem for BrdfFittingProxy<'a, Brdf> {
+    impl<'a> FittingProblem for BrdfFittingProxy<'a> {
         type Model = Box<dyn Bxdf<Params = [f64; 2]>>;
 
         fn nllsq_fit(
@@ -1087,17 +1067,14 @@ pub mod brdf {
                         .filter_map(|model| {
                             let (fitted_model, report) = match symmetry {
                                 Symmetry::Isotropic => {
-                                    let nllsq_proxy = NllsqBrdfFittingProxy::<
-                                        '_,
-                                        _,
-                                        { Symmetry::Isotropic },
-                                    >::new(
-                                        &self,
-                                        model.clone(),
-                                        weighting,
-                                        max_theta_i,
-                                        max_theta_o,
-                                    );
+                                    let nllsq_proxy =
+                                        NllsqBrdfFittingProxy::<'_, { Symmetry::Isotropic }>::new(
+                                            &self,
+                                            model.clone(),
+                                            weighting,
+                                            max_theta_i,
+                                            max_theta_o,
+                                        );
                                     let (result, report) = solver.minimize(nllsq_proxy);
                                     (
                                         result.model,
@@ -1110,7 +1087,6 @@ pub mod brdf {
                                 Symmetry::Anisotropic => {
                                     let nllsq_proxy = NllsqBrdfFittingProxy::<
                                         '_,
-                                        _,
                                         { Symmetry::Anisotropic },
                                     >::new(
                                         &self,

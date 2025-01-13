@@ -6,14 +6,7 @@ use crate::{
 };
 #[cfg(feature = "fitting")]
 use base::optics::ior::IorRegistry;
-use base::{
-    error::VgonioError,
-    impl_measured_data_trait,
-    math::{compute_bicubic_spline_coefficients, Sph2, Vec2, Vec3},
-    medium::Medium,
-    units::{deg, rad, Nanometres},
-    MeasuredBrdfKind, MeasuredData, MeasurementKind,
-};
+use base::{error::VgonioError, impl_measured_data_trait, math::{compute_bicubic_spline_coefficients, Sph2, Vec2, Vec3}, medium::Medium, units::{deg, rad, Nanometres}, MeasuredBrdfKind, MeasuredData, MeasurementKind, MeasuredBrdfData, impl_measured_brdf_data_trait};
 use jabr::array::{DyArr, DynArr};
 use std::{borrow::Cow, cmp::Ordering, fmt::Debug, path::Path, str::FromStr};
 
@@ -96,7 +89,8 @@ pub type Yan2018Brdf = MeasuredBrdf<Yan2018BrdfParameterisation, 3>;
 unsafe impl Send for Yan2018Brdf {}
 unsafe impl Sync for Yan2018Brdf {}
 
-impl_measured_data_trait!(Yan2018Brdf, Bsdf, Some(MeasuredBrdfKind::Yan2018));
+impl_measured_data_trait!(@brdf Yan2018Brdf, Bsdf, Some(MeasuredBrdfKind::Yan2018));
+impl_measured_brdf_data_trait!(Yan2018Brdf, Yan2018);
 
 impl Yan2018Brdf {
     /// Creates a new BRDF from the given measured data.
@@ -519,7 +513,7 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, Yan2018BrdfParameterisation, 3> {
 
 #[cfg(feature = "fitting")]
 impl AnalyticalFit for Yan2018Brdf {
-    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> {
+    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
         let iors_i = iors
             .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
             .unwrap()
@@ -604,8 +598,4 @@ impl AnalyticalFit for Yan2018Brdf {
             iors_t: Cow::Owned(iors_t),
         }
     }
-
-    fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
-
-    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Yan2018 }
 }

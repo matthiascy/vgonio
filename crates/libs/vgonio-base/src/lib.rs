@@ -22,6 +22,7 @@ use std::{
     hash::Hash,
     marker::{ConstParamTy, StructuralPartialEq},
 };
+use units::Nanometres;
 
 mod asset;
 pub mod error;
@@ -31,6 +32,7 @@ pub mod math;
 pub mod units;
 
 pub use asset::*;
+use crate::medium::Medium;
 
 #[cfg(feature = "winit")]
 pub mod input;
@@ -232,6 +234,37 @@ pub enum MeasuredBrdfKind {
     Unknown,
 }
 
+/// Common interface for measured BxDFs.
+pub trait MeasuredBrdfData {
+    /// Returns the kind of the measured BxDF.
+    fn kind(&self) -> MeasuredBrdfKind;
+
+    /// Returns the wavelengths at which the BxDF is measured.
+    fn spectrum(&self) -> &[Nanometres];
+
+    /// Returns the transmitted medium.
+    fn transmitted_medium(&self) -> Medium;
+
+    /// Returns the incident medium.
+    fn incident_medium(&self) -> Medium;
+}
+
+/// Boilerplate macro for implementing the `MeasuredBrdfData` trait for a type.
+#[macro_export]
+macro_rules! impl_measured_brdf_data_trait {
+    ($t:ty, $kind:ident) => {
+        impl MeasuredBrdfData for $t {
+            fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::$kind }
+
+            fn spectrum(&self) -> &[Nanometres] { &self.spectrum.as_ref() }
+
+            fn transmitted_medium(&self) -> Medium { self.transmitted_medium }
+
+            fn incident_medium(&self) -> Medium { self.incident_medium }
+        }
+    };
+}
+
 /// Trait for the different kinds of measurement data.
 ///
 /// Measurement data can be of different kinds, such as
@@ -242,6 +275,7 @@ pub enum MeasuredBrdfKind {
 pub trait MeasuredData: Debug {
     /// Returns the kind of the measurement.
     fn kind(&self) -> MeasurementKind;
+    // TODO: considering removing this method.
     /// Returns the kind of the BRDF if it's a BRDF measurement.
     fn brdf_kind(&self) -> Option<MeasuredBrdfKind> { None }
     /// Casts the measurement data to a trait object for downcasting to the
@@ -250,6 +284,8 @@ pub trait MeasuredData: Debug {
     /// Casts the measurement data to a mutable trait object for downcasting to
     /// the concrete type.
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+    /// Casts the measurement data to a MeasuredBrdf trait object.
+    fn as_brdf_data(&self) -> Option<&dyn MeasuredBrdfData> { None }
 }
 
 impl dyn MeasuredData {
@@ -288,6 +324,25 @@ macro_rules! impl_measured_data_trait {
             fn as_any(&self) -> &dyn std::any::Any { self }
 
             fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
+        }
+    };
+    (@brdf $t:ty, $kind:ident, $brdf_kind:expr) => {
+        impl MeasuredData for $t {
+            fn kind(&self) -> MeasurementKind { MeasurementKind::$kind }
+
+            fn brdf_kind(&self) -> Option<MeasuredBrdfKind> {
+                if $brdf_kind.is_some() {
+                    $brdf_kind
+                } else {
+                    None
+                }
+            }
+
+            fn as_any(&self) -> &dyn std::any::Any { self }
+
+            fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
+
+            fn as_brdf_data(&self) -> Option<&dyn MeasuredBrdfData> { Some(self) }
         }
     };
 }

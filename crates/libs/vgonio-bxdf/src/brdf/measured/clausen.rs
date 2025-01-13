@@ -12,7 +12,7 @@ use base::{
     math::Sph2,
     medium::Medium,
     units::{nm, Nanometres, Radians},
-    MeasuredBrdfKind, MeasuredData, MeasurementKind,
+    MeasuredBrdfData, MeasuredBrdfKind, MeasuredData, MeasurementKind,
 };
 use core::f32;
 use jabr::array::{DyArr, DynArr};
@@ -94,7 +94,21 @@ pub type ClausenBrdf = MeasuredBrdf<ClausenBrdfParameterisation, 3>;
 unsafe impl Send for ClausenBrdf {}
 unsafe impl Sync for ClausenBrdf {}
 
-impl_measured_data_trait!(ClausenBrdf, Bsdf, Some(MeasuredBrdfKind::Clausen));
+impl_measured_data_trait!(@brdf ClausenBrdf, Bsdf, Some(MeasuredBrdfKind::Clausen));
+
+impl MeasuredBrdfData for ClausenBrdf {
+    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Clausen }
+
+    fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
+
+    fn transmitted_medium(&self) -> Medium {
+        todo!()
+    }
+
+    fn incident_medium(&self) -> Medium {
+        todo!()
+    }
+}
 
 impl ClausenBrdf {
     /// Creates a new Clausen BRDF. The BRDF is parameterised in the incident
@@ -358,7 +372,7 @@ impl ClausenBrdf {
 
 #[cfg(feature = "fitting")]
 impl AnalyticalFit for ClausenBrdf {
-    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> {
+    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
         let iors_i = iors
             .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
             .unwrap()
@@ -434,8 +448,4 @@ impl AnalyticalFit for ClausenBrdf {
             iors_t: Cow::Owned(iors_t),
         }
     }
-
-    fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
-
-    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Clausen }
 }

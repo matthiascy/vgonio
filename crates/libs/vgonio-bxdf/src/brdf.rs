@@ -1,7 +1,8 @@
 use crate::distro::MicrofacetDistroKind;
 use base::{
     math::{Mat3, Sph2, Vec3},
-    Symmetry,
+    units::Nanometres,
+    MeasuredBrdfKind, Symmetry,
 };
 use num_traits::Float;
 use std::fmt::Debug;

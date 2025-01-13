@@ -69,12 +69,10 @@ pub(crate) fn init_microfacet_brdf_models(
 }
 
 /// A proxy for the BRDF fitting problem using the NLLSQ algorithm.
-pub struct NllsqBrdfFittingProxy<'a, Brdf, const I: Symmetry>
-where
-    Brdf: AnalyticalFit,
+pub struct NllsqBrdfFittingProxy<'a, const I: Symmetry>
 {
     /// The proxy for the BRDF data.
-    proxy: &'a BrdfFittingProxy<'a, Brdf>,
+    proxy: &'a BrdfFittingProxy<'a>,
     /// Cached IORs for the incident medium.
     iors_i: &'a [Ior],
     /// Cached IORs for the transmitted medium.
@@ -89,14 +87,11 @@ where
     max_theta_o: Option<Radians>,
 }
 
-impl<'a, Brdf, const I: Symmetry> NllsqBrdfFittingProxy<'a, Brdf, I>
-where
-    Brdf: AnalyticalFit,
-{
+impl<'a, const I: Symmetry> NllsqBrdfFittingProxy<'a, I> {
     /// Creates a new proxy for the BRDF fitting problem using the NLLSQ
     /// algorithm.
     pub fn new(
-        proxy: &'a BrdfFittingProxy<'a, Brdf>,
+        proxy: &'a BrdfFittingProxy,
         model: Box<dyn Bxdf<Params = [f64; 2]>>,
         weighting: Weighting,
         max_theta_i: Option<Radians>,
@@ -148,10 +143,7 @@ where
 }
 
 /// Specialisation for the isotropic case.
-impl<'a, Brdf> NllsqBrdfFittingProxy<'a, Brdf, { Symmetry::Isotropic }>
-where
-    Brdf: AnalyticalFit,
-{
+impl<'a> NllsqBrdfFittingProxy<'a, { Symmetry::Isotropic }> {
     /// Computes the Jacobian matrix for the isotropic case.
     fn jacobian(&self) -> Matrix<f64, Dyn, U1, Owned<f64, Dyn, U1>> {
         let mut jacobian =
@@ -338,10 +330,7 @@ where
 }
 
 /// Specialisation for the anisotropic case.
-impl<'a, Brdf> NllsqBrdfFittingProxy<'a, Brdf, { Symmetry::Anisotropic }>
-where
-    Brdf: AnalyticalFit,
-{
+impl<'a> NllsqBrdfFittingProxy<'a, { Symmetry::Anisotropic }> {
     /// Computes the Jacobian matrix for the anisotropic case.
     fn jacobian(&self) -> Matrix<f64, Dyn, U2, Owned<f64, Dyn, U2>> {
         let shape = self.proxy.resampled.shape();
@@ -540,11 +529,8 @@ where
     }
 }
 
-impl<'a, Brdf> LeastSquaresProblem<f64, Dyn, U1>
-    for NllsqBrdfFittingProxy<'a, Brdf, { Symmetry::Isotropic }>
-where
-    Brdf: AnalyticalFit,
-{
+impl<'a> LeastSquaresProblem<f64, Dyn, U1>
+    for NllsqBrdfFittingProxy<'a, { Symmetry::Isotropic }> {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
 
     type JacobianStorage = Owned<f64, Dyn, U1>;
@@ -574,11 +560,8 @@ where
     }
 }
 
-impl<'a, Brdf> LeastSquaresProblem<f64, Dyn, U2>
-    for NllsqBrdfFittingProxy<'a, Brdf, { Symmetry::Anisotropic }>
-where
-    Brdf: AnalyticalFit,
-{
+impl<'a> LeastSquaresProblem<f64, Dyn, U2>
+    for NllsqBrdfFittingProxy<'a, { Symmetry::Anisotropic }> {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
 
     type JacobianStorage = Owned<f64, Dyn, U2>;

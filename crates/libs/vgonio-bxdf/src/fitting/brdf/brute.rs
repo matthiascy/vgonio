@@ -19,8 +19,8 @@ use crate::fitting::brdf::AnalyticalFit;
 use super::BrdfFittingProxy;
 
 /// Compute the distance between a measured BRDF and a modelled BRDF.
-pub fn compute_distance_between_measured_and_modelled<Brdf: AnalyticalFit>(
-    measured: &BrdfFittingProxy<Brdf>,
+pub fn compute_distance_between_measured_and_modelled(
+    measured: &BrdfFittingProxy,
     distro: MicrofacetDistroKind,
     metric: ErrorMetric,
     weighting: Weighting,

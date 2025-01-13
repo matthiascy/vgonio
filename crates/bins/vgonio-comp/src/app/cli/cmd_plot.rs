@@ -1,12 +1,22 @@
-use crate::{app::{cache::Cache, Config}, measure::{
-    bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
-    mfd::{MeasuredGafData, MeasuredNdfData},
-    params::SurfacePath,
-}, pyplot, pyplot::{
-    plot_brdf_3d, plot_brdf_fitting, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
-    plot_brdf_vgonio_clausen, plot_gaf, plot_ndf, plot_surfaces,
-}};
-use base::{error::VgonioError, math::Sph2, units::{Degs, Nanometres, Radians, Rads}, Symmetry, MeasurementKind, ErrorMetric};
+use crate::{
+    app::{cache::Cache, Config},
+    measure::{
+        bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
+        mfd::{MeasuredGafData, MeasuredNdfData},
+        params::SurfacePath,
+    },
+    pyplot,
+    pyplot::{
+        plot_brdf_3d, plot_brdf_fitting, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
+        plot_brdf_vgonio_clausen, plot_gaf, plot_ndf, plot_surfaces,
+    },
+};
+use base::{
+    error::VgonioError,
+    math::Sph2,
+    units::{Degs, Nanometres, Radians, Rads},
+    ErrorMetric, MeasurementKind, Symmetry, Weighting,
+};
 use bxdf::brdf::measured::ClausenBrdf;
 use std::path::PathBuf;
 use surf::{
@@ -78,7 +88,7 @@ pub struct PlotOptions {
     #[clap(short, long, help = "The kind of plot to generate.")]
     pub kind: PlotKind,
 
-    #[arg(
+    #[clap(
         short,
         long,
         value_delimiter = ' ',
@@ -88,12 +98,19 @@ pub struct PlotOptions {
     )]
     pub alpha: Vec<f64>,
 
-    #[arg(
+    #[clap(
         long = "err",
         help = "The error metric to use for plotting the error map.",
         required_if_eq("kind", "error-map")
     )]
     pub error_metric: Option<ErrorMetric>,
+
+    #[clap(
+        long,
+        help = "The weighting function to use for plotting the error map.",
+        required_if_eq("kind", "error-map")
+    )]
+    pub weighting: Weighting,
 
     #[clap(
         long,
@@ -561,7 +578,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         None,
                     ));
                 }
-                let hdl = cache.load_micro_surface_measurement(&config, path)?;
+                let hdl = cache.load_micro_surface_measurement(&config, &opts.inputs[0])?;
                 let measured = &cache.get_measurement(hdl).unwrap().measured;
                 if measured.kind() != MeasurementKind::Bsdf {
                     return Err(VgonioError::new(
@@ -571,16 +588,23 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 }
                 let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
                 let error_metric = opts.error_metric.unwrap_or(ErrorMetric::Mse);
-                let bsdf = measured.downcast_ref::<MeasuredBsdfData>().unwrap();
-                pyplot::plot_brdf_error_map(&bsdf, &alphas, error_metric, &cache.iors).unwrap();
+                pyplot::plot_brdf_error_map(
+                    &measured,
+                    &alphas,
+                    error_metric,
+                    opts.weighting,
+                    &cache.iors,
+                )
+                .unwrap();
                 Ok(())
-            }
+            },
         }
     })
 }
 
-/// Extracts alpha values from the command-line arguments as a vector of `f64` pairs,
-/// duplicating values for isotropic surfaces or pairing them as provided for anisotropic surfaces.
+/// Extracts alpha values from the command-line arguments as a vector of `f64`
+/// pairs, duplicating values for isotropic surfaces or pairing them as provided
+/// for anisotropic surfaces.
 ///
 /// # Arguments
 ///
@@ -589,20 +613,20 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
 ///
 /// # Returns
 ///
-/// An array of roughness parameters as pairs of `f64` values sorted by the roughness parameter.
+/// An array of roughness parameters as pairs of `f64` values sorted by the
+/// roughness parameter.
 fn extract_alphas(alphas: &[f64], symmetry: Symmetry) -> Result<Box<[(f64, f64)]>, VgonioError> {
     let mut processed = if symmetry.is_isotropic() {
         alphas.iter().map(|&a| (a, a)).collect::<Box<_>>()
     } else {
         if alphas.len() % 2 != 0 {
             return Err(VgonioError::new(
-                "Two roughness parameters are needed for providing anisotropic roughness. \
-                             If you wish to provide multiple roughness parameters, please supply \
-                             them in pairs.",
+                "Two roughness parameters are needed for providing anisotropic roughness. If you \
+                 wish to provide multiple roughness parameters, please supply them in pairs.",
                 None,
             ));
         }
-       alphas
+        alphas
             .iter()
             .map_windows(|alpha: &[_; 2]| (*alpha[0], *alpha[1]))
             .collect::<Box<_>>()

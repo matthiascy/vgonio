@@ -9,14 +9,7 @@ use crate::{
 #[cfg(feature = "fitting")]
 use base::optics::ior::IorRegistry;
 
-use base::{
-    error::VgonioError,
-    math::{Sph2, Vec3},
-    medium::Medium,
-    partition::SphericalPartition,
-    units::Nanometres,
-    MeasuredBrdfKind,
-};
+use base::{error::VgonioError, impl_measured_brdf_data_trait, impl_measured_data_trait, math::{Sph2, Vec3}, medium::Medium, partition::SphericalPartition, units::Nanometres, MeasuredBrdfData, MeasuredBrdfKind, MeasuredData, MeasurementKind};
 #[cfg(feature = "exr")]
 use chrono::{DateTime, Local};
 
@@ -89,6 +82,9 @@ pub type VgonioBrdf = MeasuredBrdf<VgonioBrdfParameterisation, 3>;
 
 unsafe impl Send for VgonioBrdf {}
 unsafe impl Sync for VgonioBrdf {}
+
+impl_measured_data_trait!(@brdf VgonioBrdf, Bsdf, Some(MeasuredBrdfKind::Vgonio));
+impl_measured_brdf_data_trait!(VgonioBrdf, Vgonio);
 
 // TODO: extract the common code to save data carried on the hemisphere to exr.
 
@@ -267,7 +263,7 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, VgonioBrdfParameterisation, 3> {
 
 #[cfg(feature = "fitting")]
 impl AnalyticalFit for VgonioBrdf {
-    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> {
+    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
         let iors_i = iors
             .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
             .unwrap()
@@ -354,8 +350,4 @@ impl AnalyticalFit for VgonioBrdf {
             iors_t: Cow::Owned(iors_t),
         }
     }
-
-    fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
-
-    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Vgonio }
 }

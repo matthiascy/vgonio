@@ -1,27 +1,19 @@
 use crate::{
-    brdf::{
-        measured::{
-            BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
-        },
+    brdf::measured::{
+        BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
     },
     fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
 };
-use base::{
-    impl_measured_data_trait,
-    math::{Sph2, Vec3},
-    medium::Medium,
-    optics::ior::IorRegistry,
-    range::StepRangeIncl,
-    units::{deg, rad, Nanometres},
-    MeasuredBrdfKind, MeasuredData, MeasurementKind,
-};
+use base::{impl_measured_data_trait, math::{Sph2, Vec3}, medium::Medium, optics::ior::IorRegistry, range::StepRangeIncl, units::{deg, rad, Nanometres}, MeasuredBrdfKind, MeasuredData, MeasurementKind, MeasuredBrdfData, impl_measured_brdf_data_trait};
 use jabr::array::{DyArr, DynArr};
 use std::{borrow::Cow, path::Path};
+use std::any::Any;
 
 /// Parametrisation of the BRDF measured in RGL (https://rgl.epfl.ch/pages/lab/material-database) at EPFL by Jonathan Dupuy and Wenzel Jakob.
 pub type RglBrdf = MeasuredBrdf<RglBrdfParameterisation, 3>;
 
-impl_measured_data_trait!(RglBrdf, Bsdf, Some(MeasuredBrdfKind::Rgl));
+impl_measured_data_trait!(@brdf RglBrdf, Bsdf, Some(MeasuredBrdfKind::Rgl));
+impl_measured_brdf_data_trait!(RglBrdf, Rgl);
 
 unsafe impl Send for RglBrdf {}
 unsafe impl Sync for RglBrdf {}
@@ -208,7 +200,7 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, RglBrdfParameterisation, 3> {
 
 #[cfg(feature = "fitting")]
 impl AnalyticalFit for RglBrdf {
-    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> {
+    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
         let iors_i = iors
             .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
             .unwrap()
@@ -297,8 +289,4 @@ impl AnalyticalFit for RglBrdf {
             iors_t: Cow::Owned(iors_t),
         }
     }
-
-    fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
-
-    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Rgl }
 }

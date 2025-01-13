@@ -7,13 +7,7 @@ use crate::{
 };
 #[cfg(feature = "io")]
 use base::error::VgonioError;
-use base::{
-    impl_measured_data_trait,
-    math::Sph2,
-    optics::ior::IorRegistry,
-    units::{nm, Nanometres, Radians},
-    MeasuredBrdfKind, MeasuredData, MeasurementKind,
-};
+use base::{impl_measured_data_trait, medium::Medium, math::Sph2, optics::ior::IorRegistry, units::{nm, Nanometres, Radians}, MeasuredBrdfKind, MeasuredData, MeasurementKind, MeasuredBrdfData, impl_measured_brdf_data_trait};
 use jabr::array::{s, DArr, DyArr, DynArr};
 use std::borrow::Cow;
 #[cfg(feature = "io")]
@@ -92,10 +86,11 @@ impl BrdfParam for MerlBrdfParam {
 /// 700 nm, respectively.
 pub type MerlBrdf = MeasuredBrdf<MerlBrdfParam, 4>;
 
-impl_measured_data_trait!(MerlBrdf, Bsdf, Some(MeasuredBrdfKind::Merl));
-
 unsafe impl Send for MerlBrdf {}
 unsafe impl Sync for MerlBrdf {}
+
+impl_measured_data_trait!(@brdf MerlBrdf, Bsdf, Some(MeasuredBrdfKind::Merl));
+impl_measured_brdf_data_trait!(MerlBrdf, Merl);
 
 impl MerlBrdf {
     /// Lookup the index of the azimuthal angle for the difference vector.
@@ -279,7 +274,7 @@ impl MerlBrdf {
 
 #[cfg(feature = "fitting")]
 impl AnalyticalFit for MerlBrdf {
-    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy<Self> {
+    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
         let iors_i = Cow::Owned(
             iors.ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
                 .unwrap()
@@ -345,8 +340,4 @@ impl AnalyticalFit for MerlBrdf {
             iors_t,
         }
     }
-
-    fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
-
-    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
 }
