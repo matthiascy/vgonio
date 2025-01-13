@@ -4517,6 +4517,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "vgonio-fit"
+version = "0.3.2"
+
+[[package]]
 name = "vgonio-gxtk"
 version = "0.3.2"
 dependencies = [
@@ -4541,12 +4545,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "vgonio-measure"
+version = "0.3.2"
+
+[[package]]
+name = "vgonio-plot"
+version = "0.3.2"
+
+[[package]]
 name = "vgonio-powitacq"
 version = "0.0.1"
 dependencies = [
  "cxx",
  "cxx-build",
 ]
+
+[[package]]
+name = "vgonio-serve"
+version = "0.3.2"
 
 [[package]]
 name = "vgonio-surf"
