@@ -1,7 +1,7 @@
 mod beckmann;
 mod trowbridge_reitz;
 
-use crate::distro::{MicrofacetDistribution, MicrofacetDistroKind};
+use crate::bxdf::distro::{MicrofacetDistribution, MicrofacetDistroKind};
 pub use beckmann::*;
 use std::fmt::Debug;
 pub use trowbridge_reitz::*;

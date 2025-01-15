@@ -6,7 +6,7 @@ use crate::{
     },
     measure::Measurement,
 };
-use base::handle::Handle;
+use base::utils::handle::Handle;
 use egui::WidgetText;
 use std::sync::{Arc, RwLock};
 use surf::{

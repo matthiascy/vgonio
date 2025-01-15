@@ -27,7 +27,7 @@ macro_rules! impl_least_squares_problem_common_methods {
 
 mod mfd;
 
-use bxdf::fitting::{FittedModel, FittingProblemKind};
+use base::bxdf::fitting::{FittedModel, FittingProblemKind};
 pub use mfd::*;
 
 use base::Symmetry;

@@ -11,6 +11,9 @@ use_f64 = []
 cli = ["dep:clap"]
 io = ["dep:csv", "dep:exr"]
 winit = ["dep:winit"]
+bxdf = []
+bxdf_io = ["dep:serde_json", "dep:serde-pickle"]
+bxdf_fit = ["dep:rayon", "dep:levenberg-marquardt", "dep:nalgebra"]
 
 
 [dependencies]
@@ -29,6 +32,17 @@ paste.workspace = true
 serde.workspace = true
 uuid.workspace = true
 winit = { workspace = true, optional = true }
+
+# dependencies required by bxdf or bxdf_fit
+levenberg-marquardt = { workspace = true, optional = true }
+nalgebra = { workspace = true, optional = true }
+libm.workspace = true
+rayon = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+serde-pickle = { workspace = true, optional = true }
+jabr = { package = "vgonio-jabr", path = "../../libs/vgonio-jabr" }
+powitacq = { package = "vgonio-powitacq", path = "../../libs/vgonio-powitacq" }
+
 
 [dev-dependencies]
 proptest.workspace = true

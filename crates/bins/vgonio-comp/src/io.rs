@@ -31,19 +31,21 @@ pub mod vgmo {
         },
     };
     use base::{
+        bxdf::brdf::measured::{Origin, VgonioBrdf, VgonioBrdfParameterisation},
         io,
         io::{
             CompressionScheme, FileEncoding, Header, HeaderExt, ReadFileErrorKind,
             VgonioFileVariant, WriteFileErrorKind,
         },
         math::Sph2,
-        medium::Medium,
-        partition::{PartitionScheme, Ring, SphericalDomain, SphericalPartition},
-        range::StepRangeIncl,
         units::{rad, Nanometres, Radians},
+        utils::{
+            medium::Medium,
+            partition::{PartitionScheme, Ring, SphericalDomain, SphericalPartition},
+            range::StepRangeIncl,
+        },
         MeasuredData, MeasurementKind, Version,
     };
-    use bxdf::brdf::measured::{Origin, VgonioBrdf, VgonioBrdfParameterisation};
     use jabr::array::DyArr;
     use std::{
         collections::HashMap,

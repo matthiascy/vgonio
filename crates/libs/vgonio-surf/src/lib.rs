@@ -26,9 +26,9 @@ use base::{
         WriteFileErrorKind,
     },
     math::{pairwise_sum, rcp_f32, sqr, Aabb, Vec3},
-    range::CountRangeIncl,
     units::LengthUnit,
-    Asset, Version,
+    utils::{range::CountRangeIncl, Asset},
+    Version,
 };
 use glam::Vec2;
 use rayon::prelude::*;

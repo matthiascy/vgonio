@@ -1,4 +1,4 @@
-use base::{input::InputState, math::Vec3};
+use base::{math::Vec3, utils::input::InputState};
 use gxtk::camera::{
     Camera, CameraController, CameraUniform, OrbitControls, Projection, ProjectionKind,
 };

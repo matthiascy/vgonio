@@ -4,11 +4,10 @@ use crate::{
 };
 use base::{
     error::VgonioError,
-    handle::Handle,
     impl_measured_data_trait, math,
     math::{Mat4, Vec3},
-    range::StepRangeIncl,
     units::Radians,
+    utils::{handle::Handle, range::StepRangeIncl},
     MeasuredBrdfKind, MeasurementKind,
 };
 use bytemuck::{Pod, Zeroable};
@@ -1411,12 +1410,7 @@ impl MeasuredGafData {
     /// Returns the measurement range of the azimuthal and zenith angles.
     /// The azimuthal angle is in the range 0 ~ 2π, and the zenith angle is in
     /// the range 0 ~ π/2.
-    pub fn measurement_range(
-        &self,
-    ) -> (
-        StepRangeIncl<Radians>,
-        StepRangeIncl<Radians>,
-    ) {
+    pub fn measurement_range(&self) -> (StepRangeIncl<Radians>, StepRangeIncl<Radians>) {
         (self.params.azimuth, self.params.zenith)
     }
 

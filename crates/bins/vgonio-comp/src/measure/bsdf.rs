@@ -19,17 +19,15 @@ use crate::{
     },
 };
 use base::{
+    bxdf::brdf::measured::{
+        ClausenBrdf, ClausenBrdfParameterisation, Origin, VgonioBrdf, VgonioBrdfParameterisation,
+    },
     error::VgonioError,
-    handle::Handle,
     impl_measured_data_trait,
     math::{rcp_f64, Sph2, Vec3},
-    medium::Medium,
-    partition::SphericalPartition,
     units::{Degs, Nanometres, Radians, Rads},
+    utils::{handle::Handle, medium::Medium, partition::SphericalPartition},
     MeasuredBrdfKind, MeasurementKind,
-};
-use bxdf::brdf::measured::{
-    ClausenBrdf, ClausenBrdfParameterisation, Origin, VgonioBrdf, VgonioBrdfParameterisation,
 };
 use chrono::{DateTime, Local};
 use jabr::array::DyArr;
@@ -626,12 +624,14 @@ mod tests {
                 }),
                 spectrum: spectrum.clone(),
                 samples: DyArr::ones([1, n_wo, 4]),
+                kind: MeasuredBrdfKind::Vgonio,
             },
         );
         let measured = MeasuredBsdfData {
             params: BsdfMeasurementParams {
                 emitter: EmitterParams {
                     num_rays: 0,
+                    num_sectors: 1,
                     max_bounces: 0,
                     zenith: StepRangeIncl::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
                     azimuth: StepRangeIncl::new(Rads::ZERO, Rads::ZERO, Rads::ZERO),
@@ -639,7 +639,7 @@ mod tests {
                 },
                 receivers: vec![ReceiverParams {
                     domain: SphericalDomain::Upper,
-                    precision: precision,
+                    precision,
                     scheme: PartitionScheme::Beckers,
                 }],
                 kind: BsdfKind::Brdf,

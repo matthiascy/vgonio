@@ -1,14 +1,16 @@
 use crate::{
-    brdf::{analytical::microfacet::MicrofacetBrdf, Bxdf, BxdfFamily},
-    distro::{BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind},
+    bxdf::{
+        brdf::{analytical::microfacet::MicrofacetBrdf, Bxdf, BxdfFamily},
+        distro::{BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind},
+    },
+    math::{cart_to_sph, cos_theta, Vec3},
 };
-use base::math::{cart_to_sph, cos_theta, Vec3};
-#[cfg(feature = "fitting")]
-use base::{
+#[cfg(feature = "bxdf_fit")]
+use crate::{
     math::{cbr, rcp_f64, sqr},
     optics::{fresnel, ior::Ior},
 };
-#[cfg(feature = "fitting")]
+#[cfg(feature = "bxdf_fit")]
 use libm::erf;
 
 /// Microfacet BRDF model based on Beckmann distribution.
@@ -64,7 +66,7 @@ impl Bxdf for MicrofacetBrdfBK {
 
     fn pdf(&self, i: &Vec3, o: &Vec3) -> f64 { todo!() }
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     fn pds(&self, i: &[Vec3], o: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]> {
         let mut result = Box::new_uninit_slice(i.len() * o.len() * 2);
         // TODO: test medium type
@@ -78,7 +80,7 @@ impl Bxdf for MicrofacetBrdfBK {
         unsafe { result.assume_init() }
     }
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     fn pd(&self, i: &Vec3, o: &Vec3, ior_i: &Ior, ior_t: &Ior) -> [f64; 2] {
         debug_assert!(i.is_normalized(), "incident direction is not normalized");
         debug_assert!(o.is_normalized(), "outgoing direction is not normalized");
@@ -231,7 +233,7 @@ impl Bxdf for MicrofacetBrdfBK {
         [dfr_dalpha_x, dfr_dalpha_y]
     }
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     fn pds_iso(&self, vi: &[Vec3], vo: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]> {
         debug_assert!(self.distro.is_isotropic());
         let mut result = Box::new_uninit_slice(vi.len() * vo.len());
@@ -243,7 +245,7 @@ impl Bxdf for MicrofacetBrdfBK {
         unsafe { result.assume_init() }
     }
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     fn pd_iso(&self, i: &Vec3, o: &Vec3, ior_i: &Ior, ior_t: &Ior) -> f64 {
         debug_assert!(i.is_normalized(), "incident direction is not normalized");
         debug_assert!(o.is_normalized(), "outgoing direction is not normalized");

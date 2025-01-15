@@ -1,13 +1,19 @@
 use crate::{
-    brdf::measured::{
-        BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
+    bxdf::{
+        brdf::measured::{
+            BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
+        },
+        fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
     },
-    fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
+    impl_measured_brdf_data_trait, impl_measured_data_trait,
+    math::{Sph2, Vec3},
+    optics::ior::IorRegistry,
+    units::{deg, rad, Nanometres},
+    utils::{medium::Medium, range::StepRangeIncl},
+    MeasuredBrdfData, MeasuredBrdfKind, MeasuredData, MeasurementKind,
 };
-use base::{impl_measured_data_trait, math::{Sph2, Vec3}, medium::Medium, optics::ior::IorRegistry, range::StepRangeIncl, units::{deg, rad, Nanometres}, MeasuredBrdfKind, MeasuredData, MeasurementKind, MeasuredBrdfData, impl_measured_brdf_data_trait};
 use jabr::array::{DyArr, DynArr};
 use std::{borrow::Cow, path::Path};
-use std::any::Any;
 
 /// Parametrisation of the BRDF measured in RGL (https://rgl.epfl.ch/pages/lab/material-database) at EPFL by Jonathan Dupuy and Wenzel Jakob.
 pub type RglBrdf = MeasuredBrdf<RglBrdfParameterisation, 3>;
@@ -78,6 +84,7 @@ impl RglBrdfParameterisation {
 impl RglBrdf {
     // TODO: check other BRDFs decide if we need to load the BRDFs in the
     // constructor.
+    #[cfg(feature = "bxdf_io")]
     pub fn load(path: &Path, transmitted_medium: Medium) -> Self {
         let brdf = powitacq::BrdfData::new(path);
         let spectrum = {
@@ -198,7 +205,7 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, RglBrdfParameterisation, 3> {
     }
 }
 
-#[cfg(feature = "fitting")]
+#[cfg(feature = "bxdf_fit")]
 impl AnalyticalFit for RglBrdf {
     fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
         let iors_i = iors

@@ -20,16 +20,15 @@ use crate::{
         Measurement,
     },
 };
+#[cfg(feature = "fitting")]
+use base::bxdf::fitting::FittedModel;
 use base::{
-    handle::Handle,
+    bxdf::distro::{BeckmannDistribution, MicrofacetDistribution, TrowbridgeReitzDistribution},
     math,
-    range::StepRangeIncl,
     units::{deg, rad, Radians},
+    utils::{handle::Handle, range::StepRangeIncl},
     MeasurementKind,
 };
-use bxdf::distro::{BeckmannDistribution, MicrofacetDistribution, TrowbridgeReitzDistribution};
-#[cfg(feature = "fitting")]
-use bxdf::fitting::FittedModel;
 use egui::{Context, Response, Ui, WidgetText};
 use egui_plot::*;
 use std::{
@@ -97,7 +96,7 @@ pub trait VariantData {
 
     #[cfg(feature = "fitting")]
     /// Updates the fitted curves according to the given fitted models.
-    fn update_fitted_curves(&mut self, fitted: &[bxdf::fitting::FittedModel]);
+    fn update_fitted_curves(&mut self, fitted: &[FittedModel]);
 
     fn as_any(&self) -> &dyn Any;
 

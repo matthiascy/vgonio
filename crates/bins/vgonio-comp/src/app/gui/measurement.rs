@@ -23,9 +23,11 @@ use crate::{
     measure::{bsdf::receiver::ReceiverParams, params::MeasurementParams},
 };
 use base::{
-    handle::Handle,
     io::{CompressionScheme, FileEncoding},
-    partition::{PartitionScheme, SphericalDomain},
+    utils::{
+        handle::Handle,
+        partition::{PartitionScheme, SphericalDomain},
+    },
     MeasurementKind,
 };
 use egui::Widget;

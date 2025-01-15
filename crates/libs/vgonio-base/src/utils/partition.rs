@@ -1,8 +1,8 @@
 //! Spherical partitioning.
 use crate::{
     math::{Sph2, Vec3},
-    range::StepRangeIncl,
     units::{rad, Radians, Rads, SolidAngle},
+    utils::range::StepRangeIncl,
 };
 use num_traits::Euclid;
 use serde::{Deserialize, Serialize};
@@ -141,10 +141,8 @@ impl PartitionScheme {
                     precision.theta > Radians::ZERO && precision.phi > Radians::ZERO,
                     "theta/phi precision must be greater than zero"
                 );
-                let azimuth =
-                    StepRangeIncl::new(Radians::ZERO, Radians::TWO_PI, precision.phi);
-                let zenith =
-                    StepRangeIncl::new(Radians::ZERO, Radians::HALF_PI, precision.theta);
+                let azimuth = StepRangeIncl::new(Radians::ZERO, Radians::TWO_PI, precision.phi);
+                let zenith = StepRangeIncl::new(Radians::ZERO, Radians::HALF_PI, precision.theta);
                 azimuth.step_count_wrapped() * zenith.step_count_wrapped()
             },
         }
@@ -240,8 +238,7 @@ impl SphericalPartition {
         // Put the measurement point at the center of the angle intervals.
         let num_rings = (Radians::HALF_PI / precision.theta).round() as usize + 1;
         let num_patches_per_ring =
-            StepRangeIncl::new(Radians::ZERO, Radians::TWO_PI, precision.phi)
-                .step_count_wrapped();
+            StepRangeIncl::new(Radians::ZERO, Radians::TWO_PI, precision.phi).step_count_wrapped();
         let mut rings = Vec::with_capacity(num_rings);
         let mut patches = Vec::with_capacity(num_rings * num_patches_per_ring);
         let half_theta = precision.theta * 0.5;

@@ -12,12 +12,12 @@ use crate::{
     },
 };
 use base::{
+    bxdf::brdf::measured::ClausenBrdf,
     error::VgonioError,
     math::Sph2,
     units::{Degs, Nanometres, Radians, Rads},
     ErrorMetric, MeasurementKind, Symmetry, Weighting,
 };
-use bxdf::brdf::measured::ClausenBrdf;
 use std::path::PathBuf;
 use surf::{
     subdivision::{Subdivision, SubdivisionKind},

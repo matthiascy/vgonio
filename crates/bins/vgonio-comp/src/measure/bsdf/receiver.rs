@@ -14,9 +14,11 @@ use crate::{
 use base::{
     math::Sph2,
     optics::ior::Ior,
-    partition::{PartitionScheme, SphericalDomain, SphericalPartition},
-    range::StepRangeIncl,
     units::{Nanometres, Radians},
+    utils::{
+        partition::{PartitionScheme, SphericalDomain, SphericalPartition},
+        range::StepRangeIncl,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::sync::{atomic, atomic::AtomicU64};
@@ -44,17 +46,14 @@ impl ReceiverParams {
         let num_patches_hemi = match self.scheme {
             PartitionScheme::Beckers => {
                 let num_rings = (Radians::HALF_PI / self.precision.theta).round() as u32;
-                let ks = base::partition::beckers::compute_ks(1, num_rings);
+                let ks = base::utils::partition::beckers::compute_ks(1, num_rings);
                 ks[num_rings as usize - 1] as usize
             },
             PartitionScheme::EqualAngle => {
                 let num_rings = (Radians::HALF_PI / self.precision.theta).round() as usize + 1;
-                let num_patches_per_ring = StepRangeIncl::new(
-                    Radians::ZERO,
-                    Radians::TWO_PI,
-                    self.precision.phi,
-                )
-                .step_count_wrapped();
+                let num_patches_per_ring =
+                    StepRangeIncl::new(Radians::ZERO, Radians::TWO_PI, self.precision.phi)
+                        .step_count_wrapped();
                 num_rings * num_patches_per_ring
             },
         };

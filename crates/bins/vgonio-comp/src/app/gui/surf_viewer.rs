@@ -10,9 +10,8 @@ use crate::app::{
     },
 };
 use base::{
-    handle::Handle,
-    input::InputState,
     math::{Mat4, Vec4},
+    utils::{handle::Handle, input::InputState},
 };
 use egui::{Ui, WidgetText};
 use gxtk::{

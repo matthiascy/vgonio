@@ -1,4 +1,4 @@
-//! # vgonio-core
+//! # vgonio-base
 //! Core library for vgonio.
 //! Contains all the basic types and functions for the vgonio project.
 
@@ -15,6 +15,8 @@
 #![warn(missing_docs)]
 // TODO: Enable this feature when it is stable to use const generics in the
 // whole project. #![feature(effects)]
+#![cfg(feature = "bxdf")]
+#![feature(associated_type_defaults)]
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -24,23 +26,16 @@ use std::{
 };
 use units::Nanometres;
 
-mod asset;
 pub mod error;
-pub mod handle;
 pub mod io;
 pub mod math;
 pub mod units;
+pub mod utils;
 
-pub use asset::*;
-use crate::medium::Medium;
-
-#[cfg(feature = "winit")]
-pub mod input;
-pub mod medium;
 pub mod optics;
-pub mod range;
 
-pub mod partition;
+#[cfg(feature = "bxdf")]
+pub mod bxdf;
 
 /// Indicates whether something is uniform in all directions or not.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
@@ -143,33 +138,6 @@ impl Display for Version {
     }
 }
 
-/// Utility functions.
-pub mod utils {
-    use chrono::{DateTime, Local};
-
-    /// Returns the current time as an ISO 8601 (RFC 3339) timestamp.
-    pub fn iso_timestamp() -> String {
-        chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false)
-    }
-
-    /// Returns the current time as an ISO 8601 (RFC 3339) timestamp without the
-    /// timezone and the colon in the time field.
-    pub fn iso_timestamp_short(datetime: DateTime<Local>) -> String {
-        datetime.format("%Y-%m-%dT%H-%M-%S").to_string()
-    }
-
-    /// Converts a date time to an ISO 8601 (RFC 3339) timestamp.
-    pub fn iso_timestamp_from_datetime(dt: &chrono::DateTime<chrono::Local>) -> String {
-        dt.to_rfc3339_opts(chrono::SecondsFormat::Micros, false)
-    }
-
-    /// Converts a date time to an ISO 8601 (RFC 3339) timestamp without the
-    /// timezone and with the colon in the time field.
-    pub fn iso_timestamp_display(dt: &chrono::DateTime<chrono::Local>) -> String {
-        dt.format("%Y-%m-%d %H:%M:%S").to_string()
-    }
-}
-
 /// Metrics to use for the error/distance computation.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -233,6 +201,8 @@ pub enum MeasuredBrdfKind {
     /// Unknown.
     Unknown,
 }
+
+use utils::medium::Medium;
 
 /// Common interface for measured BxDFs.
 pub trait MeasuredBrdfData {

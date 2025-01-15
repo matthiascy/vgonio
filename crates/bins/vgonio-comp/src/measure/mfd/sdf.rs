@@ -4,11 +4,10 @@ use crate::{
 };
 use base::{
     error::VgonioError,
-    handle::Handle,
     impl_measured_data_trait, math,
     math::{IVec2, Vec2},
-    range::StepRangeIncl,
     units::{rad, Radians},
+    utils::{handle::Handle, range::StepRangeIncl},
     MeasuredBrdfKind, MeasurementKind,
 };
 use std::{borrow::Cow, path::Path};
@@ -210,8 +209,7 @@ impl MeasuredSdfData {
     /// * `zen_bin_width` - The width of each zenith bin (in angles).
     pub fn pmf(&self, azi_bin_width: Radians, zen_bin_width: Radians) -> SdfPmf {
         let azi_range = StepRangeIncl::new(Radians::ZERO, Radians::TAU, azi_bin_width);
-        let zen_range =
-            StepRangeIncl::new(Radians::ZERO, Radians::HALF_PI, zen_bin_width);
+        let zen_range = StepRangeIncl::new(Radians::ZERO, Radians::HALF_PI, zen_bin_width);
         let azi_bin_count = azi_range.step_count_wrapped();
         let zen_bin_count = zen_range.step_count_wrapped();
         // Bins are stored in the order of zenith first then azimuth, i.e. the

@@ -1,6 +1,5 @@
 #![feature(decl_macro)]
 #![feature(adt_const_params)]
-#![feature(associated_type_defaults)]
 #![feature(downcast_unchecked)]
 #![feature(stdarch_x86_avx512)]
 extern crate core;
@@ -8,11 +7,11 @@ extern crate core;
 pub mod brdf;
 pub mod distro;
 
-#[cfg(feature = "fitting")]
+#[cfg(feature = "bxdf_fit")]
 pub mod fitting;
 
-use crate::brdf::Bxdf;
-use base::{
+use crate::{
+    bxdf::brdf::Bxdf,
     math::{cos_theta, Vec3},
     optics::{fresnel, ior::Ior},
 };

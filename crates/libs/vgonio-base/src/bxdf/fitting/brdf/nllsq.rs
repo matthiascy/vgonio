@@ -1,16 +1,16 @@
 use crate::{
-    brdf::{
-        analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-        Bxdf,
+    bxdf::{
+        brdf::{
+            analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
+            Bxdf,
+        },
+        distro::MicrofacetDistroKind,
+        fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs},
     },
-    distro::MicrofacetDistroKind,
-    fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs},
-};
-use base::{
     math::Sph2,
     optics::ior::Ior,
-    range::StepRangeIncl,
     units::{rad, Radians},
+    utils::range::StepRangeIncl,
     Symmetry, Weighting,
 };
 use jabr::array::{
@@ -69,8 +69,7 @@ pub(crate) fn init_microfacet_brdf_models(
 }
 
 /// A proxy for the BRDF fitting problem using the NLLSQ algorithm.
-pub struct NllsqBrdfFittingProxy<'a, const I: Symmetry>
-{
+pub struct NllsqBrdfFittingProxy<'a, const I: Symmetry> {
     /// The proxy for the BRDF data.
     proxy: &'a BrdfFittingProxy<'a>,
     /// Cached IORs for the incident medium.
@@ -529,8 +528,7 @@ impl<'a> NllsqBrdfFittingProxy<'a, { Symmetry::Anisotropic }> {
     }
 }
 
-impl<'a> LeastSquaresProblem<f64, Dyn, U1>
-    for NllsqBrdfFittingProxy<'a, { Symmetry::Isotropic }> {
+impl<'a> LeastSquaresProblem<f64, Dyn, U1> for NllsqBrdfFittingProxy<'a, { Symmetry::Isotropic }> {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
 
     type JacobianStorage = Owned<f64, Dyn, U1>;
@@ -561,7 +559,8 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1>
 }
 
 impl<'a> LeastSquaresProblem<f64, Dyn, U2>
-    for NllsqBrdfFittingProxy<'a, { Symmetry::Anisotropic }> {
+    for NllsqBrdfFittingProxy<'a, { Symmetry::Anisotropic }>
+{
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
 
     type JacobianStorage = Owned<f64, Dyn, U2>;

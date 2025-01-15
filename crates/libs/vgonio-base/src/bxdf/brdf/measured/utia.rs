@@ -1,4 +1,4 @@
-use crate::brdf::measured::{BrdfParam, BrdfParamKind, MeasuredBrdf};
+use crate::bxdf::brdf::measured::{BrdfParam, BrdfParamKind, MeasuredBrdf};
 
 /// Represent the BRDF parameterisation from UTIA: <http://btf.utia.cas.cz/>
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

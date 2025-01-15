@@ -1,6 +1,6 @@
 use egui::DragValue;
 
-use base::range::{CountRangeIncl, StepRangeIncl};
+use base::utils::range::{CountRangeIncl, StepRangeIncl};
 
 pub fn drag_angle<'a, A: AngleUnit>(angle: &'a mut Angle<A>, prefix: &str) -> DragValue<'a> {
     DragValue::new(angle.value_mut())

@@ -1,7 +1,5 @@
 #[cfg(feature = "fitting")]
 use crate::app::gui::event::VgonioEvent;
-#[cfg(feature = "fitting")]
-use bxdf::fitting::FittedModel;
 
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;
@@ -18,12 +16,12 @@ use crate::{
 #[cfg(feature = "fitting")]
 use base::Symmetry;
 use base::{
-    handle::Handle,
-    range::StepRangeIncl,
+    bxdf::fitting::FittedModel,
     units::{rad, Radians},
+    utils::{handle::Handle, range::StepRangeIncl},
 };
 
-use bxdf::{
+use base::bxdf::{
     distro::{MicrofacetDistribution, MicrofacetDistroKind},
     fitting::FittingProblemKind,
 };

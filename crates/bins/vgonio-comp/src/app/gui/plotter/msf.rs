@@ -10,16 +10,13 @@ use crate::{
     },
     measure::{mfd::MeasuredGafData, Measurement},
 };
+#[cfg(feature = "fitting")]
+use base::bxdf::{distro::MicrofacetDistribution, fitting::FittedModel};
 use base::{
-    handle::Handle,
-    range::StepRangeIncl,
     units::{rad, Radians},
+    utils::{handle::Handle, range::StepRangeIncl},
     MeasurementKind,
 };
-#[cfg(feature = "fitting")]
-use bxdf::distro::MicrofacetDistribution;
-#[cfg(feature = "fitting")]
-use bxdf::fitting::FittedModel;
 use egui::{Align, Ui};
 use std::any::Any;
 

@@ -13,7 +13,7 @@ wgpu = ["dep:gxtk"]
 [dependencies]
 bytemuck.workspace = true
 egui.workspace = true
-base = { package = "vgonio-base", path = "../../libs/vgonio-base" }
+base = { package = "vgonio-base", path = "../vgonio-base" }
 gxtk = { package = "vgonio-gxtk", path = "../../libs/vgonio-gxtk", optional = true }
 surf = { package = "vgonio-surf", path = "../../libs/vgonio-surf" }
 log.workspace = true

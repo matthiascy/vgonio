@@ -1,11 +1,4 @@
 use super::{docking::DockSpace, event::EventResponse};
-#[cfg(feature = "fitting")]
-use crate::fitting::{MfdFittingData, MicrofacetDistributionFittingProblem};
-#[cfg(feature = "fitting")]
-use crate::measure::{
-    bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
-    mfd::{MeasuredGafData, MeasuredNdfData},
-};
 use crate::{
     app::{
         cache::Cache,
@@ -27,16 +20,22 @@ use crate::{
     measure::Measurement,
 };
 #[cfg(feature = "fitting")]
-use base::range::StepRangeIncl;
-use base::{
-    handle::Handle,
-    io::{CompressionScheme, FileEncoding},
-    MeasurementKind, Weighting,
+use crate::{
+    fitting::{MfdFittingData, MicrofacetDistributionFittingProblem},
+    measure::{
+        bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
+        mfd::{MeasuredGafData, MeasuredNdfData},
+    },
 };
 #[cfg(feature = "fitting")]
-use bxdf::brdf::BxdfFamily;
-use bxdf::fitting::{
-    brdf::AnalyticalFit, FittedModel, FittingProblem, FittingProblemKind, FittingReport,
+use base::{bxdf::brdf::BxdfFamily, utils::range::StepRangeIncl};
+use base::{
+    bxdf::fitting::{
+        brdf::AnalyticalFit, FittedModel, FittingProblem, FittingProblemKind, FittingReport,
+    },
+    io::{CompressionScheme, FileEncoding},
+    utils::handle::Handle,
+    MeasurementKind, Weighting,
 };
 use egui_file_dialog::{DialogMode, FileDialog};
 use gxtk::{context::GpuContext, mesh::RenderableMesh};
@@ -270,7 +269,7 @@ impl VgonioGui {
                             _ => unimplemented!("Fitting BxDF family: {:?}", family),
                         }
                     },
-                    FittingProblemKind::Mfd { model, symmetry} => {
+                    FittingProblemKind::Mfd { model, symmetry } => {
                         let mut prop = self.properties.write().unwrap();
                         let fitted = &mut prop.measured.get_mut(data).unwrap().fitted;
                         if fitted.contains(kind, Some(*scale), *symmetry) {

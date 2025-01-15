@@ -1,8 +1,13 @@
 use crate::{
-    brdf::{Bxdf, BxdfFamily},
-    distro::{MicrofacetDistribution, MicrofacetDistroKind},
+    bxdf::{
+        brdf::{Bxdf, BxdfFamily},
+        distro::{MicrofacetDistribution, MicrofacetDistroKind},
+    },
+    math::rcp_f64,
+    units::Radians,
+    utils::range::StepRangeIncl,
+    ErrorMetric, Symmetry, Weighting,
 };
-use base::{math::rcp_f64, range::StepRangeIncl, units::Radians, ErrorMetric, Symmetry, Weighting};
 use levenberg_marquardt::{MinimizationReport, TerminationReason};
 use std::fmt::Debug;
 
@@ -270,7 +275,13 @@ pub mod brdf {
 
     use std::borrow::Cow;
 
-    use base::{math::{self, Sph2}, optics::ior::{Ior, IorRegistry}, range::StepRangeIncl, units::{rad, Nanometres, Radians}, ErrorMetric, MeasuredBrdfData, MeasuredBrdfKind, Symmetry, Weighting};
+    use crate::{
+        math::{self, Sph2},
+        optics::ior::{Ior, IorRegistry},
+        units::{rad, Nanometres, Radians},
+        utils::range::StepRangeIncl,
+        ErrorMetric, MeasuredBrdfData, MeasuredBrdfKind, Symmetry, Weighting,
+    };
     use brute::compute_distance_between_measured_and_modelled;
     use jabr::array::{
         shape::{compute_index_from_strides, compute_strides},
@@ -283,7 +294,7 @@ pub mod brdf {
         slice::ParallelSlice,
     };
 
-    use crate::{
+    use crate::bxdf::{
         brdf::{
             analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
             Bxdf,

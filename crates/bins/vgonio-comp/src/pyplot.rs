@@ -5,20 +5,22 @@ use crate::measure::{
     DataCarriedOnHemisphereSampler,
 };
 use base::{
+    bxdf::{
+        brdf::{
+            analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
+            measured::{
+                rgl::RglBrdf, ClausenBrdf, MerlBrdf, MerlBrdfParam, VgonioBrdf, Yan2018Brdf,
+            },
+            Bxdf,
+        },
+        fitting::brdf::AnalyticalFit,
+        Scattering,
+    },
     math::Sph2,
     optics::ior::IorRegistry,
-    range::{StepRangeExcl, StepRangeIncl},
     units::{rad, Degrees, Nanometres, Radians, Rads},
+    utils::range::{StepRangeExcl, StepRangeIncl},
     ErrorMetric, MeasuredBrdfKind, MeasuredData, MeasurementKind, Weighting,
-};
-use bxdf::{
-    brdf::{
-        analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-        measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, MerlBrdfParam, VgonioBrdf, Yan2018Brdf},
-        Bxdf,
-    },
-    fitting::brdf::AnalyticalFit,
-    Scattering,
 };
 use exr::{
     image::{FlatImage, FlatSamples},
@@ -1478,7 +1480,7 @@ pub fn plot_brdf_error_map(
         MeasuredBrdfKind::Vgonio => {
             let brdf = measured.downcast_ref::<MeasuredBsdfData>().unwrap();
             let l0_brdf = brdf.brdf_at(MeasuredBrdfLevel::L0).unwrap();
-        AnalyticalFit::proxy(l0_brdf, iors)
+            AnalyticalFit::proxy(l0_brdf, iors)
         },
         MeasuredBrdfKind::Yan2018 => {
             todo!()

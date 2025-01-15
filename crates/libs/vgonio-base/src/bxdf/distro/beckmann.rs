@@ -1,11 +1,11 @@
-use crate::distro::{MicrofacetDistribution, MicrofacetDistroKind};
-#[cfg(feature = "fitting")]
-use base::math::{cbr, sin_phi, tan_theta2};
-use base::{
+#[cfg(feature = "bxdf_fit")]
+use crate::math::{cbr, sin_phi, tan_theta2};
+use crate::{
+    bxdf::distro::{MicrofacetDistribution, MicrofacetDistroKind},
     math::{cos_phi, rcp_f64, sqr, tan_theta, Vec3},
     Symmetry,
 };
-#[cfg(feature = "fitting")]
+#[cfg(feature = "bxdf_fit")]
 use libm::{erf, sqrt};
 use std::fmt::Debug;
 
@@ -127,7 +127,7 @@ impl MicrofacetDistribution for BeckmannDistribution {
         Box::new(*self)
     }
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     fn pd_ndf(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Box<[f64]> {
         debug_assert!(
             cos_thetas.len() == cos_phis.len(),
@@ -167,7 +167,7 @@ impl MicrofacetDistribution for BeckmannDistribution {
             .collect::<Box<_>>()
     }
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     fn pd_ndf_iso(&self, cos_thetas: &[f64]) -> Box<[f64]> {
         let mut results = Box::new_uninit_slice(cos_thetas.len());
         let alpha2 = sqr(self.alpha_x);
@@ -194,7 +194,7 @@ impl MicrofacetDistribution for BeckmannDistribution {
         unsafe { results.assume_init() }
     }
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     fn pd_msf1(&self, wms: &[Vec3], ws: &[Vec3]) -> Box<[f64]> {
         let (count, idx_mul) = if self.is_isotropic() {
             (wms.len() * ws.len(), 1)

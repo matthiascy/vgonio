@@ -1,6 +1,6 @@
 use base::{
-    input::InputState,
     math::{Mat3, Mat4, Vec3, Vec4, Vec4Swizzles},
+    utils::input::InputState,
 };
 use std::cmp::Ordering::Equal;
 use winit::{event::MouseButton, keyboard::KeyCode};
@@ -165,7 +165,7 @@ pub struct ViewProjUniform {
 }
 
 impl ViewProjUniform {
-    pub const SIZE_IN_BYTES: usize = std::mem::size_of::<Self>();
+    pub const SIZE_IN_BYTES: usize = size_of::<Self>();
 }
 
 #[repr(C)]

@@ -11,13 +11,12 @@ use crate::{
     },
     measure::{mfd::MeasuredSdfData, Measurement},
 };
-use base::{
-    handle::Handle,
-    range::StepRangeIncl,
-    units::{deg, rad, Radians},
-};
 #[cfg(feature = "fitting")]
-use bxdf::fitting::FittedModel;
+use base::bxdf::fitting::FittedModel;
+use base::{
+    units::{deg, rad, Radians},
+    utils::{handle::Handle, range::StepRangeIncl},
+};
 use egui::{Align, Ui};
 use std::any::Any;
 

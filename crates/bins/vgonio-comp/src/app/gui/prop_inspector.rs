@@ -1,9 +1,10 @@
 use crate::app::gui::docking::{Dockable, WidgetKind};
 #[cfg(feature = "fitting")]
-use base::Symmetry;
-use base::{partition::beckers, MeasurementKind};
-#[cfg(feature = "fitting")]
-use bxdf::{brdf::BxdfFamily, distro::MicrofacetDistroKind, fitting::FittingProblemKind};
+use base::{
+    bxdf::{brdf::BxdfFamily, distro::MicrofacetDistroKind, fitting::FittingProblemKind},
+    Symmetry,
+};
+use base::{utils::partition::beckers, MeasurementKind};
 use std::sync::{Arc, RwLock};
 use surf::subdivision::SubdivisionKind;
 use uuid::Uuid;

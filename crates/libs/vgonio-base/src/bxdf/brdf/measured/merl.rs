@@ -1,16 +1,23 @@
+#[cfg(feature = "bxdf_io")]
+use crate::error::VgonioError;
 use crate::{
-    brdf::{
-        io2hd_sph,
-        measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
+    bxdf::{
+        brdf::{
+            io2hd_sph,
+            measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
+        },
+        fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
     },
-    fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
+    impl_measured_brdf_data_trait, impl_measured_data_trait,
+    math::Sph2,
+    optics::ior::IorRegistry,
+    units::{nm, Nanometres, Radians},
+    utils::medium::Medium,
+    MeasuredBrdfData, MeasuredBrdfKind, MeasuredData, MeasurementKind,
 };
-#[cfg(feature = "io")]
-use base::error::VgonioError;
-use base::{impl_measured_data_trait, medium::Medium, math::Sph2, optics::ior::IorRegistry, units::{nm, Nanometres, Radians}, MeasuredBrdfKind, MeasuredData, MeasurementKind, MeasuredBrdfData, impl_measured_brdf_data_trait};
 use jabr::array::{s, DArr, DyArr, DynArr};
 use std::borrow::Cow;
-#[cfg(feature = "io")]
+#[cfg(feature = "bxdf_io")]
 use std::path::Path;
 
 /// Parameterisation for a measured BRDF from the MERL database: <http://www.merl.com/brdf/>
@@ -144,12 +151,11 @@ impl MerlBrdf {
         sample
     }
 
-    #[cfg(feature = "io")]
-    #[cfg(feature = "io")]
+    #[cfg(feature = "bxdf_io")]
     pub fn load<P: AsRef<Path>>(filepath: P) -> Result<Self, VgonioError> {
         use std::{fs::File, io::Read};
 
-        use base::medium::Medium;
+        use crate::utils::medium::Medium;
 
         if !filepath.as_ref().exists() {
             return Err(VgonioError::new(
@@ -272,7 +278,7 @@ impl MerlBrdf {
     pub fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
 }
 
-#[cfg(feature = "fitting")]
+#[cfg(feature = "bxdf_fit")]
 impl AnalyticalFit for MerlBrdf {
     fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
         let iors_i = Cow::Owned(

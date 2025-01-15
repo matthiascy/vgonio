@@ -7,13 +7,15 @@ use crate::{
 };
 use base::{
     error::VgonioError,
-    handle::Handle,
     impl_measured_data_trait, math,
     math::{theta, Sph2, Vec3Swizzles},
-    partition::{DataCarriedOnHemisphereImageWriter, SphericalDomain, SphericalPartition},
-    range::StepRangeIncl,
     units,
     units::{rad, Radians},
+    utils::{
+        handle::Handle,
+        partition::{DataCarriedOnHemisphereImageWriter, SphericalDomain, SphericalPartition},
+        range::StepRangeIncl,
+    },
     MeasuredBrdfKind, MeasurementKind,
 };
 use std::path::Path;
@@ -104,10 +106,8 @@ impl MeasuredNdfData {
                     zenith.step_size > rad!(0.0) && azimuth.step_size > rad!(0.0),
                     "The step size of zenith and azimuth must be greater than 0."
                 );
-                let n_theta = StepRangeIncl::zero_to_half_pi(zenith.step_size)
-                    .step_count_wrapped();
-                let n_phi =
-                    StepRangeIncl::zero_to_tau(azimuth.step_size).step_count_wrapped();
+                let n_theta = StepRangeIncl::zero_to_half_pi(zenith.step_size).step_count_wrapped();
+                let n_phi = StepRangeIncl::zero_to_tau(azimuth.step_size).step_count_wrapped();
                 // NDF samples in ByPoints mode are stored by azimuth first, then by zenith.
                 // We need to rearrange the data to match the patch order, which is by zenith
                 // first, then by azimuth.
@@ -142,12 +142,7 @@ impl MeasuredNdfData {
     /// Returns the measurement range of the azimuthal and zenith angles.
     /// The azimuthal angle is in the range [0, 2π] and the zenith angle is in
     /// the range [0, π/2].
-    pub fn measurement_range(
-        &self,
-    ) -> Option<(
-        StepRangeIncl<Radians>,
-        StepRangeIncl<Radians>,
-    )> {
+    pub fn measurement_range(&self) -> Option<(StepRangeIncl<Radians>, StepRangeIncl<Radians>)> {
         match self.params.mode {
             NdfMeasurementMode::ByPoints { zenith, azimuth } => Some((azimuth, zenith)),
             NdfMeasurementMode::ByPartition { .. } => {
@@ -541,8 +536,7 @@ fn classify_normal_by_zenith(
 #[test]
 fn test_normal_classification_by_zenith() {
     use base::units::deg;
-    let range =
-        StepRangeIncl::new(Radians::ZERO, Radians::HALF_PI, deg!(30.0).to_radians());
+    let range = StepRangeIncl::new(Radians::ZERO, Radians::HALF_PI, deg!(30.0).to_radians());
     assert_eq!(
         classify_normal_by_zenith(deg!(0.0).to_radians(), range, 1.0),
         [0, 0xff]

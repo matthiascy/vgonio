@@ -4,19 +4,19 @@ use crate::{
     pyplot::plot_err,
 };
 use base::{
+    bxdf::{
+        brdf::{
+            measured::{merl::MerlBrdf, rgl::RglBrdf, yan::Yan2018Brdf, ClausenBrdf},
+            BxdfFamily,
+        },
+        distro::MicrofacetDistroKind,
+        fitting::{brdf::AnalyticalFit, FittingProblem},
+    },
     error::VgonioError,
     optics::ior::IorRegistry,
-    range::StepRangeIncl,
     units::{Radians, Rads},
-    ErrorMetric, Symmetry, MeasuredBrdfKind, Weighting,
-};
-use bxdf::{
-    brdf::{
-        measured::{merl::MerlBrdf, rgl::RglBrdf, yan::Yan2018Brdf, ClausenBrdf},
-        BxdfFamily,
-    },
-    distro::MicrofacetDistroKind,
-    fitting::{brdf::AnalyticalFit, FittingProblem},
+    utils::range::StepRangeIncl,
+    ErrorMetric, MeasuredBrdfKind, Symmetry, Weighting,
 };
 use std::{fmt::Debug, path::PathBuf};
 
@@ -316,10 +316,7 @@ pub struct FitOptions {
     )]
     pub family: BxdfFamily,
 
-    #[clap(
-        long,
-        help = "Symmetry of the microfacet model."
-    )]
+    #[clap(long, help = "Symmetry of the microfacet model.")]
     pub symmetry: Symmetry,
 
     #[clap(

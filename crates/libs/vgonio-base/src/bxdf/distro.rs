@@ -3,7 +3,7 @@
 mod beckmann;
 mod trowbridge_reitz;
 
-use base::{math::Vec3, Symmetry};
+use crate::{math::Vec3, Symmetry};
 pub use beckmann::*;
 use std::fmt::Debug;
 pub use trowbridge_reitz::*;
@@ -91,7 +91,7 @@ pub trait MicrofacetDistribution: Debug + Send + Sync {
     fn clone_box(&self) -> Box<dyn MicrofacetDistribution<Params = Self::Params>>;
 
     // TODO: do not need provide full pair of directions
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     /// Computes the partial derivatives of the microfacet area distribution
     /// function with respect to the roughness parameters of the distribution
     /// model. The derivatives are evaluated with the Microfacet Area
@@ -126,14 +126,14 @@ pub trait MicrofacetDistribution: Debug + Send + Sync {
     /// if you want to use them in the fitting process.
     fn pd_ndf(&self, cos_thetas: &[f64], cos_phis: &[f64]) -> Box<[f64]>;
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     /// Computes the partial derivatives of the NDF with respect to the
     /// roughness parameters of the distribution model, evaluated with the
     /// isotropic distribution model. For derivatives evaluated with the
     /// anisotropic distribution model, see `pd_ndf`.
     fn pd_ndf_iso(&self, cos_thetas: &[f64]) -> Box<[f64]>;
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     /// Computes the partial derivatives of the masking-shadowing function G1
     /// term with respect to the roughness parameters of the distribution
     /// model. For derivatives evaluated with the Microfacet Area

@@ -1,8 +1,8 @@
-use base::{math::Sph2, medium::Medium, units::Nanometres, MeasuredBrdfKind};
+use crate::{math::Sph2, units::Nanometres, utils::medium::Medium, MeasuredBrdfKind};
 use jabr::array::DyArr;
 use std::{fmt::Debug, ops::Index};
 
-#[cfg(feature = "fitting")]
+#[cfg(feature = "bxdf_fit")]
 macro_rules! impl_analytical_fit_trait {
     ($self:ident) => {
         #[inline]
@@ -71,8 +71,8 @@ pub trait BrdfParam: PartialEq {
     fn kind() -> BrdfParamKind;
 }
 
-#[cfg(feature = "fitting")]
-use crate::brdf::Bxdf;
+#[cfg(feature = "bxdf_fit")]
+use crate::bxdf::brdf::Bxdf;
 
 pub use clausen::*;
 pub use merl::*;

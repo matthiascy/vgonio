@@ -1,13 +1,13 @@
-use base::math::{cart_to_sph, cos_theta, Vec3};
+use crate::math::{cart_to_sph, cos_theta, Vec3};
 use std::fmt::Debug;
 
-#[cfg(feature = "fitting")]
-use base::{
+#[cfg(feature = "bxdf_fit")]
+use crate::{
     math::{rcp_f64, sqr},
     optics::{fresnel, ior::Ior},
 };
 
-use crate::{
+use crate::bxdf::{
     brdf::{analytical::microfacet::MicrofacetBrdf, Bxdf, BxdfFamily},
     distro::{MicrofacetDistribution, MicrofacetDistroKind, TrowbridgeReitzDistribution},
 };
@@ -65,7 +65,7 @@ impl Bxdf for MicrofacetBrdfTR {
 
     fn pdf(&self, i: &Vec3, o: &Vec3) -> f64 { todo!() }
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     fn pds(&self, i: &[Vec3], o: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]> {
         let mut result = Box::new_uninit_slice(i.len() * o.len() * 2);
         for j in 0..i.len() {
@@ -78,7 +78,7 @@ impl Bxdf for MicrofacetBrdfTR {
         unsafe { result.assume_init() }
     }
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     fn pd(&self, i: &Vec3, o: &Vec3, ior_i: &Ior, ior_t: &Ior) -> [f64; 2] {
         debug_assert!(i.is_normalized(), "Incident direction is not normalized");
         debug_assert!(o.is_normalized(), "Outgoing direction is not normalized");
@@ -185,7 +185,7 @@ impl Bxdf for MicrofacetBrdfTR {
         [dfr_dalpha_x, dfr_dalpha_y]
     }
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     fn pds_iso(&self, i: &[Vec3], o: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]> {
         debug_assert!(self.distro.is_isotropic());
         let mut result = Box::new_uninit_slice(i.len() * o.len());
@@ -199,7 +199,7 @@ impl Bxdf for MicrofacetBrdfTR {
         unsafe { result.assume_init() }
     }
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     fn pd_iso(&self, i: &Vec3, o: &Vec3, ior_i: &Ior, ior_t: &Ior) -> f64 {
         debug_assert!(i.is_normalized(), "Incident direction is not normalized");
         debug_assert!(o.is_normalized(), "Outgoing direction is not normalized");

@@ -5,10 +5,12 @@ use crate::{
 use base::{
     error::VgonioError,
     math::Sph2,
-    medium::Medium,
-    partition::{PartitionScheme, SphericalDomain},
-    range::StepRangeIncl,
     units::{deg, nm, rad},
+    utils::{
+        medium::Medium,
+        partition::{PartitionScheme, SphericalDomain},
+        range::StepRangeIncl,
+    },
 };
 use serde::{Deserialize, Serialize};
 

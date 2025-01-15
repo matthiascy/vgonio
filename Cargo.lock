@@ -4437,34 +4437,22 @@ dependencies = [
  "exr",
  "flate2",
  "glam 0.28.0",
- "log",
- "num-traits",
- "paste",
- "proptest",
- "serde",
- "serde_yaml",
- "uuid",
- "winit",
-]
-
-[[package]]
-name = "vgonio-bxdf"
-version = "0.3.2"
-dependencies = [
- "chrono",
- "clap",
- "exr",
  "levenberg-marquardt",
  "libm",
  "log",
  "nalgebra",
  "num-traits",
+ "paste",
+ "proptest",
  "rayon",
+ "serde",
  "serde-pickle",
  "serde_json",
- "vgonio-base",
+ "serde_yaml",
+ "uuid",
  "vgonio-jabr",
  "vgonio-powitacq",
+ "winit",
 ]
 
 [[package]]
@@ -4507,7 +4495,6 @@ dependencies = [
  "type-map",
  "uuid",
  "vgonio-base",
- "vgonio-bxdf",
  "vgonio-gxtk",
  "vgonio-jabr",
  "vgonio-surf",

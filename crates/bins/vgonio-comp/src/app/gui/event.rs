@@ -11,15 +11,14 @@ use crate::{
         Measurement,
     },
 };
+#[cfg(feature = "fitting")]
+use base::bxdf::fitting::FittingProblemKind;
 use base::{
-    handle::Handle,
     math::{IVec2, Sph2},
-    partition::SphericalPartition,
     units::Degrees,
+    utils::{handle::Handle, partition::SphericalPartition},
     MeasurementKind,
 };
-#[cfg(feature = "fitting")]
-use bxdf::fitting::FittingProblemKind;
 use std::path::PathBuf;
 use surf::{subdivision::Subdivision, MicroSurface, MicroSurfaceMesh};
 use uuid::Uuid;

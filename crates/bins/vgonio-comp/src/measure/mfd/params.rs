@@ -2,9 +2,8 @@ use crate::error::RuntimeError;
 use base::{
     error::VgonioError,
     math::Sph2,
-    partition::PartitionScheme,
-    range::StepRangeIncl,
     units::{deg, rad, Radians},
+    utils::{partition::PartitionScheme, range::StepRangeIncl},
 };
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -109,12 +108,7 @@ impl NdfMeasurementMode {
     ///
     /// - `Some((azimuth, zenith))` if the measurement mode is `ByPoints`.
     /// - `None` if the measurement mode is `ByPartition`.
-    pub fn as_mode_by_points(
-        &self,
-    ) -> Option<(
-        StepRangeIncl<Radians>,
-        StepRangeIncl<Radians>,
-    )> {
+    pub fn as_mode_by_points(&self) -> Option<(StepRangeIncl<Radians>, StepRangeIncl<Radians>)> {
         match self {
             NdfMeasurementMode::ByPoints { azimuth, zenith } => Some((*azimuth, *zenith)),
             NdfMeasurementMode::ByPartition { .. } => None,

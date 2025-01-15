@@ -1,6 +1,6 @@
 //! Strongly typed handle referencing loaded assets.
 
-use crate::Asset;
+use crate::utils::Asset;
 use std::{
     any::TypeId,
     fmt::{Debug, Display, Formatter},

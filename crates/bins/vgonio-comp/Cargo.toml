@@ -10,7 +10,7 @@ default = ["dep:embree"]
 embree = ["dep:embree", "surf/embree"]
 optix = []
 bench = ["surf/bench"]
-fitting = ["bxdf/fitting"]
+fitting = ["base/bxdf_fit"]
 surf-obj = ["surf/surf-obj"]
 surf-gen = ["surf/surf-gen"]
 vdbg = []
@@ -59,10 +59,8 @@ base = { package = "vgonio-base", path = "../../libs/vgonio-base", features = [
     "cli",
     "winit",
     "io",
-] }
-bxdf = { package = "vgonio-bxdf", path = "../../libs/vgonio-bxdf", features = [
-    "cli",
-    "exr",
+    "bxdf",
+    "bxdf_io"
 ] }
 jabr = { package = "vgonio-jabr", path = "../../libs/vgonio-jabr" }
 gxtk = { package = "vgonio-gxtk", path = "../../libs/vgonio-gxtk" }

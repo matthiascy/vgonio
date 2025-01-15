@@ -6,8 +6,8 @@ use crate::{
 };
 use base::{
     math::{Sph2, Vec3},
-    range::StepRangeIncl,
     units::{deg, nm, rad, Nanometres, Radians, Rads},
+    utils::range::StepRangeIncl,
 };
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -51,16 +51,8 @@ impl Default for EmitterParams {
             num_rays: 2 ^ 20,
             num_sectors: 1,
             max_bounces: 8,
-            zenith: StepRangeIncl::new(
-                rad!(0.0),
-                Radians::HALF_PI,
-                deg!(2.0).to_radians(),
-            ),
-            azimuth: StepRangeIncl::new(
-                rad!(0.0),
-                Radians::TWO_PI,
-                deg!(5.0).to_radians(),
-            ),
+            zenith: StepRangeIncl::new(rad!(0.0), Radians::HALF_PI, deg!(2.0).to_radians()),
+            azimuth: StepRangeIncl::new(rad!(0.0), Radians::TWO_PI, deg!(5.0).to_radians()),
             spectrum: StepRangeIncl::new(nm!(400.0), nm!(700.0), nm!(100.0)),
         }
     }

@@ -11,7 +11,9 @@ use crate::{
     measure::{params::SurfacePath, Measurement},
 };
 use base::{
-    error::VgonioError, handle::Handle, medium::Medium, optics::ior::IorRegistry,
+    error::VgonioError,
+    optics::ior::IorRegistry,
+    utils::{handle::Handle, medium::Medium},
 };
 use gxtk::{context::GpuContext, mesh::RenderableMesh};
 use surf::{
@@ -509,11 +511,7 @@ impl RawCache {
     // TODO: move to RefractiveIndexRegistry
     /// Load the refractive index database from the given path.
     /// Returns the number of files loaded.
-    fn load_refractive_indices(
-        iors: &mut IorRegistry,
-        path: &Path,
-        excluded: &[String],
-    ) -> u32 {
+    fn load_refractive_indices(iors: &mut IorRegistry, path: &Path, excluded: &[String]) -> u32 {
         let mut n_files = 0;
         if path.is_file() {
             log::debug!("Loading refractive index database from {:?}", path);

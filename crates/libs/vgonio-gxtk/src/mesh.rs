@@ -1,7 +1,7 @@
 use crate::{context::GpuContext, vertex::VertexLayout};
 use base::{
     math::{Aabb, Vec3},
-    Asset,
+    utils::Asset,
 };
 use surf::{
     subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern,

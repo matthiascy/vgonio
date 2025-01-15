@@ -1,8 +1,8 @@
 //! Index of refraction.
 use crate::{
     math,
-    medium::{MaterialKind, Medium},
     units::{nanometres, Length, LengthMeasurement, Nanometres},
+    utils::medium::{MaterialKind, Medium},
 };
 use std::{
     cmp::Ordering,

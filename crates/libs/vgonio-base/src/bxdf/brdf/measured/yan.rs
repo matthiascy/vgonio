@@ -1,14 +1,22 @@
+#[cfg(feature = "bxdf_fit")]
+use crate::optics::ior::IorRegistry;
 use crate::{
-    brdf::measured::{
-        BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
+    bxdf::{
+        brdf::measured::{
+            BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
+        },
+        fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
     },
-    fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
+    impl_measured_brdf_data_trait, impl_measured_data_trait,
+    math::{compute_bicubic_spline_coefficients, Sph2, Vec3},
+    units::{rad, Nanometres},
+    utils::medium::Medium,
+    MeasuredBrdfData, MeasuredBrdfKind, MeasuredData, MeasurementKind,
 };
-#[cfg(feature = "fitting")]
-use base::optics::ior::IorRegistry;
-use base::{error::VgonioError, impl_measured_data_trait, math::{compute_bicubic_spline_coefficients, Sph2, Vec2, Vec3}, medium::Medium, units::{deg, rad, Nanometres}, MeasuredBrdfKind, MeasuredData, MeasurementKind, MeasuredBrdfData, impl_measured_brdf_data_trait};
 use jabr::array::{DyArr, DynArr};
-use std::{borrow::Cow, cmp::Ordering, fmt::Debug, path::Path, str::FromStr};
+#[cfg(feature = "bxdf_io")]
+use std::path::Path;
+use std::{borrow::Cow, fmt::Debug};
 
 /// Parameterisation of the BRDF simulated from the paper "Rendering Specular
 /// Microgeometry with Wave Optics" by Yan et al. 2018.
@@ -211,12 +219,15 @@ impl Yan2018Brdf {
     }
 
     /// Loads the BRDF from an EXR file.
-    #[cfg(feature = "exr")]
+    #[cfg(feature = "bxdf_io")]
     pub fn load_from_exr<P: AsRef<Path>>(
         filepath: P,
         incident_medium: Medium,
         transmitted_medium: Medium,
-    ) -> Result<Self, VgonioError> {
+    ) -> Result<Self, crate::error::VgonioError> {
+        use crate::{error::VgonioError, math::Vec2, units::deg};
+        use std::{cmp::Ordering, str::FromStr};
+
         if !filepath.as_ref().exists() {
             return Err(VgonioError::new(
                 format!(
@@ -511,7 +522,7 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, Yan2018BrdfParameterisation, 3> {
     }
 }
 
-#[cfg(feature = "fitting")]
+#[cfg(feature = "bxdf_fit")]
 impl AnalyticalFit for Yan2018Brdf {
     fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
         let iors_i = iors

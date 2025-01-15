@@ -17,18 +17,21 @@ use crate::{
     },
 };
 use base::{
+    bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan2018Brdf},
     error::VgonioError,
-    handle::Handle,
     io::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
     },
     math::{self, Mat3, Sph2, Sph3, Vec3},
-    medium::Medium,
-    partition::{SphericalDomain, SphericalPartition},
     units::{rad, Radians},
-    Asset, MeasuredData, MeasurementKind, Version,
+    utils::{
+        handle::Handle,
+        medium::Medium,
+        partition::{SphericalDomain, SphericalPartition},
+        Asset,
+    },
+    MeasuredData, MeasurementKind, Version,
 };
-use bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan2018Brdf};
 use chrono::{DateTime, Local};
 use rand::{
     distributions::{Distribution, Uniform},

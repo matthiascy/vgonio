@@ -1,20 +1,28 @@
 //! BRDF from the VGonio simulator.
-use crate::{
+use crate::bxdf::{
     brdf::measured::{
         BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
     },
     fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
 };
 
-#[cfg(feature = "fitting")]
-use base::optics::ior::IorRegistry;
+#[cfg(feature = "bxdf_fit")]
+use crate::optics::ior::IorRegistry;
 
-use base::{error::VgonioError, impl_measured_brdf_data_trait, impl_measured_data_trait, math::{Sph2, Vec3}, medium::Medium, partition::SphericalPartition, units::Nanometres, MeasuredBrdfData, MeasuredBrdfKind, MeasuredData, MeasurementKind};
-#[cfg(feature = "exr")]
+use crate::{
+    impl_measured_brdf_data_trait, impl_measured_data_trait,
+    math::{Sph2, Vec3},
+    units::Nanometres,
+    utils::{medium::Medium, partition::SphericalPartition},
+    MeasuredBrdfData, MeasuredBrdfKind, MeasuredData, MeasurementKind,
+};
+
+#[cfg(feature = "bxdf_io")]
 use chrono::{DateTime, Local};
-
 use jabr::array::{DyArr, DynArr};
-use std::{borrow::Cow, collections::HashMap, path::Path};
+use std::borrow::Cow;
+#[cfg(feature = "bxdf_io")]
+use std::path::Path;
 
 /// Parameterisation of the VGonio BRDF.
 #[derive(Clone, PartialEq, Debug)]
@@ -143,13 +151,13 @@ impl VgonioBrdf {
         }
     }
 
-    #[cfg(feature = "exr")]
+    #[cfg(feature = "bxdf_io")]
     pub fn write_as_exr(
         &self,
         filepath: &Path,
         timestamp: &DateTime<Local>,
         resolution: u32,
-    ) -> Result<(), VgonioError> {
+    ) -> Result<(), crate::error::VgonioError> {
         use exr::prelude::*;
         let n_wi = self.params.incoming.len();
         let n_spectrum = self.spectrum.len();
@@ -191,11 +199,12 @@ impl VgonioBrdf {
             let phi = format!("{:4.2}", snapshot.wi.phi.in_degrees().as_f32()).replace(".", "_");
             let layer_attrib = LayerAttributes {
                 owner: Text::new_or_none("vgonio"),
-                capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
+                capture_date: Text::new_or_none(crate::utils::iso_timestamp_from_datetime(
                     timestamp,
                 )),
                 software_name: Text::new_or_none("vgonio"),
-                other: HashMap::new(), // TODO: encode more info: self.params.to_exr_extra_info(),
+                other: std::collections::HashMap::new(), /* TODO: encode more info:
+                                                          * self.params.to_exr_extra_info(), */
                 layer_name: Some(Text::new_or_panic(format!("θ{}.φ{}", theta, phi))),
                 ..LayerAttributes::default()
             };
@@ -229,7 +238,7 @@ impl VgonioBrdf {
         let img_attrib = ImageAttributes::new(IntegerBounds::new((0, 0), (w, h)));
         let image = Image::from_layers(img_attrib, layers);
         image.write().to_file(filepath).map_err(|err| {
-            VgonioError::new(
+            crate::error::VgonioError::new(
                 format!(
                     "Failed to write BSDF measurement data to image file: {}",
                     err
@@ -261,7 +270,7 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, VgonioBrdfParameterisation, 3> {
     }
 }
 
-#[cfg(feature = "fitting")]
+#[cfg(feature = "bxdf_fit")]
 impl AnalyticalFit for VgonioBrdf {
     fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
         let iors_i = iors

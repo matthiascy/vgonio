@@ -1,23 +1,23 @@
 //! BRDF measured in the paper "Investigation and Simulation of Diffraction on
 //! Rough Surfaces" by O. Clausen, Y. Chen, A. Fuhrmann and R. Marroquim.
+#[cfg(feature = "bxdf_fit")]
+use crate::optics::ior::IorRegistry;
 use crate::{
-    brdf::measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
-    fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
-};
-#[cfg(feature = "fitting")]
-use base::optics::ior::IorRegistry;
-use base::{
+    bxdf::{
+        brdf::measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
+        fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
+    },
     error::VgonioError,
     impl_measured_data_trait,
     math::Sph2,
-    medium::Medium,
     units::{nm, Nanometres, Radians},
+    utils::medium::Medium,
     MeasuredBrdfData, MeasuredBrdfKind, MeasuredData, MeasurementKind,
 };
-use core::f32;
 use jabr::array::{DyArr, DynArr};
 use std::{
     borrow::Cow,
+    f32,
     fs::File,
     io::{BufRead, BufReader},
     path::Path,
@@ -101,13 +101,9 @@ impl MeasuredBrdfData for ClausenBrdf {
 
     fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
 
-    fn transmitted_medium(&self) -> Medium {
-        todo!()
-    }
+    fn transmitted_medium(&self) -> Medium { todo!() }
 
-    fn incident_medium(&self) -> Medium {
-        todo!()
-    }
+    fn incident_medium(&self) -> Medium { todo!() }
 }
 
 impl ClausenBrdf {
@@ -157,7 +153,7 @@ impl ClausenBrdf {
     }
 
     /// Loads the BRDF from a file.
-    #[cfg(feature = "io")]
+    #[cfg(feature = "bxdf_io")]
     pub fn load<P: AsRef<Path>>(filepath: P) -> Result<Self, VgonioError> {
         if !filepath.as_ref().exists() {
             return Err(VgonioError::new(
@@ -189,9 +185,9 @@ impl ClausenBrdf {
     }
 
     /// Loads the BRDF from a reader.
-    #[cfg(feature = "io")]
+    #[cfg(feature = "bxdf_io")]
     pub fn load_from_reader<R: BufRead>(reader: R) -> Result<Self, VgonioError> {
-        use base::units::Rads;
+        use crate::units::Rads;
         use serde_json::Value;
 
         // TODO: auto detect medium from file
@@ -370,7 +366,7 @@ impl ClausenBrdf {
     }
 }
 
-#[cfg(feature = "fitting")]
+#[cfg(feature = "bxdf_fit")]
 impl AnalyticalFit for ClausenBrdf {
     fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
         let iors_i = iors

@@ -1,5 +1,5 @@
-use crate::distro::MicrofacetDistroKind;
-use base::{
+use crate::{
+    bxdf::distro::MicrofacetDistroKind,
     math::{Mat3, Sph2, Vec3},
     units::Nanometres,
     MeasuredBrdfKind, Symmetry,
@@ -11,7 +11,8 @@ pub mod analytical;
 pub mod lambert;
 pub mod measured;
 
-#[cfg(feature = "fitting")]
+use crate::optics::ior::Ior;
+#[cfg(feature = "brdf_fit")]
 use base::optics::ior::Ior;
 
 /// Different kinds of BRDFs.
@@ -114,7 +115,7 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     /// Evaluates the PDF of a sample.
     fn pdf(&self, vi: &Vec3, vo: &Vec3) -> f64;
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     /// Computes the partial derivatives of the BRDF model with respect to the
     /// roughness parameters of the model.
     ///
@@ -139,10 +140,10 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     /// Computes the partial derivatives of the BRDF model with respect to the
     /// roughness parameters of the model for a single incident and outgoing
     /// direction pair.
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     fn pd(&self, vi: &Vec3, vo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> [f64; 2];
 
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     /// Computes the partial derivatives of the BRDF model with respect to the
     /// roughness parameters of the model for isotropic materials.
     ///
@@ -168,7 +169,7 @@ pub trait Bxdf: Send + Sync + Debug + 'static {
     /// Computes the partial derivatives of the BRDF model with respect to the
     /// roughness parameters of the model for a single incident and outgoing
     /// direction pair for isotropic materials.
-    #[cfg(feature = "fitting")]
+    #[cfg(feature = "bxdf_fit")]
     fn pd_iso(&self, vi: &Vec3, vo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> f64;
 
     /// Enables cloning the BRDF model from a Boxed trait object.

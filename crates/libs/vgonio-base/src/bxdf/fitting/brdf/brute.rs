@@ -1,20 +1,19 @@
-use base::{
-    optics::ior::IorRegistry, range::StepRangeIncl, units::Radians, ErrorMetric, Weighting,
+use crate::{
+    optics::ior::IorRegistry, units::Radians, utils::range::StepRangeIncl, ErrorMetric, Weighting,
 };
 use rayon::{
     iter::{IndexedParallelIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
 
-use crate::{
+use crate::bxdf::{
     brdf::{
         analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
         Bxdf,
     },
     distro::MicrofacetDistroKind,
+    fitting::brdf::AnalyticalFit,
 };
-
-use crate::fitting::brdf::AnalyticalFit;
 
 use super::BrdfFittingProxy;
 

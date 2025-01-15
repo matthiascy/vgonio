@@ -14,9 +14,8 @@ use crate::{
     },
 };
 use base::{
-    handle::Handle,
     math::{Mat4, Sph2, Vec3},
-    partition::SphericalPartition,
+    utils::{handle::Handle, partition::SphericalPartition},
 };
 use gxtk::{context::GpuContext, render_pass::RenderPass, vertex::VertexLayout};
 use std::sync::Arc;
