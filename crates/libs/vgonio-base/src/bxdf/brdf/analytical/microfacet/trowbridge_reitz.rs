@@ -8,7 +8,7 @@ use crate::{
 };
 
 use crate::bxdf::{
-    brdf::{analytical::microfacet::MicrofacetBrdf, Bxdf, BxdfFamily},
+    brdf::{analytical::microfacet::MicrofacetBrdf, AnalyticalBrdf, BrdfFamily},
     distro::{MicrofacetDistribution, MicrofacetDistroKind, TrowbridgeReitzDistribution},
 };
 
@@ -22,10 +22,10 @@ impl MicrofacetBrdfTR {
     }
 }
 
-impl Bxdf for MicrofacetBrdfTR {
+impl AnalyticalBrdf for MicrofacetBrdfTR {
     type Params = <TrowbridgeReitzDistribution as MicrofacetDistribution>::Params;
 
-    fn family(&self) -> BxdfFamily { BxdfFamily::Microfacet }
+    fn family(&self) -> BrdfFamily { BrdfFamily::Microfacet }
 
     fn distro(&self) -> Option<MicrofacetDistroKind> { Some(MicrofacetDistroKind::TrowbridgeReitz) }
 
@@ -255,7 +255,7 @@ impl Bxdf for MicrofacetBrdfTR {
         part_one * nominator * rcp_f64(denominator)
     }
 
-    fn clone_box(&self) -> Box<dyn Bxdf<Params = Self::Params>> { Box::new(self.clone()) }
+    fn clone_box(&self) -> Box<dyn AnalyticalBrdf<Params = Self::Params>> { Box::new(self.clone()) }
 }
 
 /// Trowbridge-Reitz (GGX) microfacet BRDF model.

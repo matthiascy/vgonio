@@ -19,6 +19,12 @@
 - Enable excluding ior files in configuration
 - New fitting interface
 - Remove `alpha_start`, `alpha_stop`, `alpha_step` from CLI
+- Rearrange the crates in the workspace into /bins and /libs
+- Merge `vgonio-bxdf` into `vgonio-base`
+- Rename `MeasuredData` trait to `AnyMeasured`
+- Rename `MeasuredBrdfLevel` to `BrdfLevel`
+- Remove `AnalyticalFit` trait
+- New `AnyMeasuredBrdf` trait
 
 ## 0.3.2 - 2024-08-16
 

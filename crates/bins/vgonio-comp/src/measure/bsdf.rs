@@ -15,19 +15,19 @@ use crate::{
             rtc::RtcMethod,
         },
         params::SimulationKind,
-        MeasuredData, Measurement, MeasurementSource,
+        AnyMeasured, Measurement, MeasurementSource,
     },
 };
 use base::{
     bxdf::brdf::measured::{
-        ClausenBrdf, ClausenBrdfParameterisation, Origin, VgonioBrdf, VgonioBrdfParameterisation,
+        ClausenBrdf, ClausenBrdfParameterisation, MeasuredBrdfKind, Origin, VgonioBrdf,
+        VgonioBrdfParameterisation,
     },
     error::VgonioError,
-    impl_measured_data_trait,
     math::{rcp_f64, Sph2, Vec3},
     units::{Degs, Nanometres, Radians, Rads},
     utils::{handle::Handle, medium::Medium, partition::SphericalPartition},
-    MeasuredBrdfKind, MeasurementKind,
+    AnyMeasuredBrdf, BrdfLevel, MeasurementKind,
 };
 use chrono::{DateTime, Local};
 use jabr::array::DyArr;
@@ -36,7 +36,6 @@ use std::{
     collections::HashMap,
     fmt::{Debug, Display, Formatter},
     path::Path,
-    str::FromStr,
 };
 use surf::{MicroSurface, MicroSurfaceMesh};
 
@@ -158,7 +157,7 @@ impl RawMeasuredBsdfData {
         &self,
         medium_i: Medium,
         medium_t: Medium,
-    ) -> HashMap<MeasuredBrdfLevel, VgonioBrdf> {
+    ) -> HashMap<BrdfLevel, VgonioBrdf> {
         let n_wi = self.n_wi();
         let n_wo = self.n_wo();
         let n_spectrum = self.n_spectrum();
@@ -231,7 +230,7 @@ impl RawMeasuredBsdfData {
             }
             if any_energy {
                 bsdfs.insert(
-                    MeasuredBrdfLevel::from(b),
+                    BrdfLevel::from(b),
                     VgonioBrdf::new(
                         Origin::Simulated,
                         medium_i,
@@ -248,7 +247,7 @@ impl RawMeasuredBsdfData {
             }
         }
         bsdfs.insert(
-            MeasuredBrdfLevel::L1PLUS,
+            BrdfLevel::L1Plus,
             VgonioBrdf::new(
                 Origin::Simulated,
                 medium_i,
@@ -266,138 +265,6 @@ impl RawMeasuredBsdfData {
     }
 }
 
-/// The level of the measured BRDF.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct MeasuredBrdfLevel(u32);
-
-impl MeasuredBrdfLevel {
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// bounces greater than 1.
-    pub const L1PLUS: MeasuredBrdfLevel = MeasuredBrdfLevel(u32::MAX);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// all bounces.
-    pub const L0: MeasuredBrdfLevel = MeasuredBrdfLevel(0);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the first bounce.
-    pub const L1: MeasuredBrdfLevel = MeasuredBrdfLevel(1);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the second bounce.
-    pub const L2: MeasuredBrdfLevel = MeasuredBrdfLevel(2);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the third bounce.
-    pub const L3: MeasuredBrdfLevel = MeasuredBrdfLevel(3);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the fourth bounce.
-    pub const L4: MeasuredBrdfLevel = MeasuredBrdfLevel(4);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the fifth bounce.
-    pub const L5: MeasuredBrdfLevel = MeasuredBrdfLevel(5);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the sixth bounce.
-    pub const L6: MeasuredBrdfLevel = MeasuredBrdfLevel(6);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the seventh bounce.
-    pub const L7: MeasuredBrdfLevel = MeasuredBrdfLevel(7);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the eighth bounce.
-    pub const L8: MeasuredBrdfLevel = MeasuredBrdfLevel(8);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the ninth bounce.
-    pub const L9: MeasuredBrdfLevel = MeasuredBrdfLevel(9);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the tenth bounce.
-    pub const L10: MeasuredBrdfLevel = MeasuredBrdfLevel(10);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the eleventh bounce.
-    pub const L11: MeasuredBrdfLevel = MeasuredBrdfLevel(11);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the twelfth bounce.
-    pub const L12: MeasuredBrdfLevel = MeasuredBrdfLevel(12);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the thirteenth bounce.
-    pub const L13: MeasuredBrdfLevel = MeasuredBrdfLevel(13);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the fourteenth bounce.
-    pub const L14: MeasuredBrdfLevel = MeasuredBrdfLevel(14);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the fifteenth bounce.
-    pub const L15: MeasuredBrdfLevel = MeasuredBrdfLevel(15);
-
-    /// The level of the measured BRDF that includes the energy of rays at
-    /// the sixteenth bounce.
-    pub const L16: MeasuredBrdfLevel = MeasuredBrdfLevel(16);
-
-    /// Returns the u32 representation of the level.
-    pub const fn as_u32(&self) -> u32 { self.0 }
-}
-
-impl From<usize> for MeasuredBrdfLevel {
-    fn from(n: usize) -> Self { MeasuredBrdfLevel(n as u32) }
-}
-
-impl From<u32> for MeasuredBrdfLevel {
-    fn from(n: u32) -> Self { MeasuredBrdfLevel(n) }
-}
-
-impl FromStr for MeasuredBrdfLevel {
-    type Err = VgonioError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let val = s.to_lowercase();
-        let val = val.trim();
-        if val.len() > 3 {
-            return Err(VgonioError::new(
-                "Invalid BRDF level. The level must be between l0 and l16 or l1+.",
-                None,
-            ));
-        }
-        match val {
-            "l1+" => Ok(MeasuredBrdfLevel::L1PLUS),
-            _ => {
-                let level = s.strip_prefix('l').ok_or_else(|| {
-                    VgonioError::new(
-                        "Invalid BRDF level. The level must be between l0 and l16",
-                        None,
-                    )
-                })?;
-                Ok(MeasuredBrdfLevel::from(level.parse::<u32>().map_err(
-                    |err| {
-                        VgonioError::new(
-                            format!("Invalid BRDF level. {}", err),
-                            Some(Box::new(err)),
-                        )
-                    },
-                )?))
-            },
-        }
-    }
-}
-
-impl Display for MeasuredBrdfLevel {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self.0 {
-            u32::MAX => f.write_str("l1+"),
-            _ => write!(f, "l{}", self.0),
-        }
-    }
-}
-
 // TODO: save multiple Receiver data into one file
 /// BSDF measurement data.
 ///
@@ -407,26 +274,39 @@ impl Display for MeasuredBrdfLevel {
 /// At each emitter's position, each emitted ray carries an initial energy
 /// equals to 1.
 #[derive(Debug, Clone, PartialEq)]
-pub struct MeasuredBsdfData {
+pub struct BsdfMeasurement {
     /// Parameters of the measurement.
     pub params: BsdfMeasurementParams,
     /// Raw data of the measurement.
     pub raw: RawMeasuredBsdfData,
     /// Collected BSDF data.
-    pub bsdfs: HashMap<MeasuredBrdfLevel, VgonioBrdf>,
+    pub bsdfs: HashMap<BrdfLevel, VgonioBrdf>,
 }
 
-impl_measured_data_trait!(MeasuredBsdfData, Bsdf, Some(MeasuredBrdfKind::Vgonio));
+impl AnyMeasured for BsdfMeasurement {
+    fn has_multiple_levels(&self) -> bool { true }
 
-impl MeasuredBsdfData {
+    fn kind(&self) -> MeasurementKind { MeasurementKind::Bsdf }
+
+    fn as_any(&self) -> &dyn std::any::Any { self }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
+
+    fn as_any_brdf(&self, level: BrdfLevel) -> Option<&dyn AnyMeasuredBrdf> {
+        assert!(level.is_valid(), "Invalid BRDF level!");
+        self.bsdfs
+            .get(&level)
+            .map(|bsdf| bsdf as &dyn AnyMeasuredBrdf)
+    }
+}
+
+impl BsdfMeasurement {
     /// Returns the number of wavelengths.
     #[inline]
     pub fn n_spectrum(&self) -> usize { self.raw.n_spectrum() }
 
     /// Returns the brdf at the given level.
-    pub fn brdf_at(&self, level: MeasuredBrdfLevel) -> Option<&VgonioBrdf> {
-        self.bsdfs.get(&level)
-    }
+    pub fn brdf_at(&self, level: BrdfLevel) -> Option<&VgonioBrdf> { self.bsdfs.get(&level) }
 
     /// Writes the BSDF data to images in exr format.
     ///
@@ -459,7 +339,7 @@ impl MeasuredBsdfData {
     pub fn resample(
         &self,
         params: &ClausenBrdfParameterisation,
-        level: MeasuredBrdfLevel,
+        level: BrdfLevel,
         dense: bool,
         phi_offset: Radians,
     ) -> ClausenBrdf {
@@ -587,15 +467,18 @@ impl MeasuredBsdfData {
 
 #[cfg(test)]
 mod tests {
+    use base::{
+        units::nm,
+        utils::{
+            partition::{PartitionScheme, SphericalDomain},
+            range::StepRangeIncl,
+        },
+        BrdfLevel,
+    };
+
     use super::*;
     use crate::measure::bsdf::{
         emitter::EmitterParams, receiver::ReceiverParams, rtc::RtcMethod::Grid,
-    };
-    use base::{
-        medium::Medium,
-        partition::{PartitionScheme, SphericalDomain},
-        range::StepRangeIncl,
-        units::nm,
     };
 
     #[test]
@@ -612,7 +495,7 @@ mod tests {
         let n_spectrum = spectrum.len();
         let mut bsdfs = HashMap::new();
         bsdfs.insert(
-            MeasuredBrdfLevel(0),
+            BrdfLevel(0),
             VgonioBrdf {
                 origin: Origin::RealWorld,
                 incident_medium: Medium::Vacuum,
@@ -627,7 +510,7 @@ mod tests {
                 kind: MeasuredBrdfKind::Vgonio,
             },
         );
-        let measured = MeasuredBsdfData {
+        let measured = BsdfMeasurement {
             params: BsdfMeasurementParams {
                 emitter: EmitterParams {
                     num_rays: 0,
@@ -1643,7 +1526,7 @@ pub fn measure_bsdf_rt(
                         name: surf.file_stem().unwrap().to_owned(),
                         source: MeasurementSource::Measured(Handle::with_id(surf.uuid)),
                         timestamp: Local::now(),
-                        measured: Box::new(MeasuredBsdfData { params, raw, bsdfs }),
+                        measured: Box::new(BsdfMeasurement { params, raw, bsdfs }),
                     });
                 }
             },

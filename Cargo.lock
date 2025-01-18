@@ -4449,6 +4449,7 @@ dependencies = [
  "serde-pickle",
  "serde_json",
  "serde_yaml",
+ "static_assertions",
  "uuid",
  "vgonio-jabr",
  "vgonio-powitacq",

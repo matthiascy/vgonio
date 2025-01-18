@@ -1,6 +1,6 @@
 use crate::{
     bxdf::{
-        brdf::{analytical::microfacet::MicrofacetBrdf, Bxdf, BxdfFamily},
+        brdf::{analytical::microfacet::MicrofacetBrdf, AnalyticalBrdf, BrdfFamily},
         distro::{BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind},
     },
     math::{cart_to_sph, cos_theta, Vec3},
@@ -23,10 +23,10 @@ impl MicrofacetBrdfBK {
     }
 }
 
-impl Bxdf for MicrofacetBrdfBK {
+impl AnalyticalBrdf for MicrofacetBrdfBK {
     type Params = <BeckmannDistribution as MicrofacetDistribution>::Params;
 
-    fn family(&self) -> BxdfFamily { BxdfFamily::Microfacet }
+    fn family(&self) -> BrdfFamily { BrdfFamily::Microfacet }
 
     fn distro(&self) -> Option<MicrofacetDistroKind> { Some(MicrofacetDistroKind::Beckmann) }
 
@@ -291,5 +291,5 @@ impl Bxdf for MicrofacetBrdfBK {
         nominator * rcp_f64(denominator)
     }
 
-    fn clone_box(&self) -> Box<dyn Bxdf<Params = Self::Params>> { Box::new(self.clone()) }
+    fn clone_box(&self) -> Box<dyn AnalyticalBrdf<Params = Self::Params>> { Box::new(self.clone()) }
 }

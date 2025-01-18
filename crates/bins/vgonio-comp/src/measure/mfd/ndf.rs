@@ -2,12 +2,12 @@ use crate::{
     app::cache::RawCache,
     measure::{
         params::{NdfMeasurementMode, NdfMeasurementParams},
-        MeasuredData, Measurement, MeasurementSource,
+        Measurement, MeasurementSource,
     },
 };
 use base::{
     error::VgonioError,
-    impl_measured_data_trait, math,
+    impl_any_measured_trait, math,
     math::{theta, Sph2, Vec3Swizzles},
     units,
     units::{rad, Radians},
@@ -16,7 +16,7 @@ use base::{
         partition::{DataCarriedOnHemisphereImageWriter, SphericalDomain, SphericalPartition},
         range::StepRangeIncl,
     },
-    MeasuredBrdfKind, MeasurementKind,
+    AnyMeasured, MeasurementKind,
 };
 use std::path::Path;
 use surf::{MicroSurface, MicroSurfaceMesh};
@@ -43,7 +43,7 @@ pub struct MeasuredNdfData {
     pub samples: Box<[f32]>,
 }
 
-impl_measured_data_trait!(MeasuredNdfData, Ndf, None::<MeasuredBrdfKind>);
+impl_any_measured_trait!(MeasuredNdfData, Ndf);
 
 impl MeasuredNdfData {
     /// Returns the Area Distribution Function data slice for the given

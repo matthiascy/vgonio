@@ -5,13 +5,13 @@ use crate::{
         brdf::measured::{
             BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
         },
-        fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
+        BrdfProxy, OutgoingDirs, ProxySource,
     },
-    impl_measured_brdf_data_trait, impl_measured_data_trait,
+    impl_any_measured_trait,
     math::{compute_bicubic_spline_coefficients, Sph2, Vec3},
     units::{rad, Nanometres},
     utils::medium::Medium,
-    MeasuredBrdfData, MeasuredBrdfKind, MeasuredData, MeasurementKind,
+    AnyMeasured, AnyMeasuredBrdf, BrdfLevel, MeasuredBrdfKind, MeasurementKind,
 };
 use jabr::array::{DyArr, DynArr};
 #[cfg(feature = "bxdf_io")]
@@ -21,7 +21,7 @@ use std::{borrow::Cow, fmt::Debug};
 /// Parameterisation of the BRDF simulated from the paper "Rendering Specular
 /// Microgeometry with Wave Optics" by Yan et al. 2018.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Yan2018BrdfParameterisation {
+pub struct Yan18BrdfParameterisation {
     /// Number of incident directions along the polar angle.
     pub n_zenith_i: usize,
     /// The incident directions of the BRDF. The directions are stored in
@@ -49,11 +49,11 @@ pub struct Yan2018BrdfParameterisation {
     pub height: u32,
 }
 
-impl BrdfParam for Yan2018BrdfParameterisation {
+impl BrdfParam for Yan18BrdfParameterisation {
     fn kind() -> BrdfParamKind { BrdfParamKind::InOutDirs }
 }
 
-impl Yan2018BrdfParameterisation {
+impl Yan18BrdfParameterisation {
     /// Returns the incoming directions in cartesian coordinates.
     pub fn incoming_cartesian(&self) -> DyArr<Vec3> {
         DyArr::from_iterator([-1], self.incoming.iter().map(|sph| sph.to_cartesian()))
@@ -92,20 +92,19 @@ impl Yan2018BrdfParameterisation {
 /// n_spectrum].
 ///
 /// Actual dimensions: [n_phi_i, n_theta_i, n_wo, n_spectrum]
-pub type Yan2018Brdf = MeasuredBrdf<Yan2018BrdfParameterisation, 3>;
+pub type Yan18Brdf = MeasuredBrdf<Yan18BrdfParameterisation, 3>;
 
-unsafe impl Send for Yan2018Brdf {}
-unsafe impl Sync for Yan2018Brdf {}
+unsafe impl Send for Yan18Brdf {}
+unsafe impl Sync for Yan18Brdf {}
 
-impl_measured_data_trait!(@brdf Yan2018Brdf, Bsdf, Some(MeasuredBrdfKind::Yan2018));
-impl_measured_brdf_data_trait!(Yan2018Brdf, Yan2018);
+impl_any_measured_trait!(@single_level_brdf Yan18Brdf);
 
-impl Yan2018Brdf {
+impl Yan18Brdf {
     /// Creates a new BRDF from the given measured data.
     pub fn new(
         incident_medium: Medium,
         transmitted_medium: Medium,
-        params: Yan2018BrdfParameterisation,
+        params: Yan18BrdfParameterisation,
         spectrum: DyArr<Nanometres>,
         samples: DyArr<f32, 3>,
     ) -> Self {
@@ -120,7 +119,7 @@ impl Yan2018Brdf {
         }
     }
 
-    pub fn snapshots(&self) -> BrdfSnapshotIterator<'_, Yan2018BrdfParameterisation, 3> {
+    pub fn snapshots(&self) -> BrdfSnapshotIterator<'_, Yan18BrdfParameterisation, 3> {
         BrdfSnapshotIterator {
             brdf: self,
             n_spectrum: self.spectrum.len(),
@@ -384,7 +383,7 @@ impl Yan2018Brdf {
         Ok(Self::new(
             incident_medium,
             transmitted_medium,
-            Yan2018BrdfParameterisation {
+            Yan18BrdfParameterisation {
                 n_zenith_i: incoming
                     .iter()
                     .skip(1)
@@ -503,7 +502,7 @@ impl Yan2018Brdf {
     }
 }
 
-impl<'a> Iterator for BrdfSnapshotIterator<'a, Yan2018BrdfParameterisation, 3> {
+impl<'a> Iterator for BrdfSnapshotIterator<'a, Yan18BrdfParameterisation, 3> {
     type Item = BrdfSnapshot<'a, f32>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -522,9 +521,10 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, Yan2018BrdfParameterisation, 3> {
     }
 }
 
-#[cfg(feature = "bxdf_fit")]
-impl AnalyticalFit for Yan2018Brdf {
-    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
+impl AnyMeasuredBrdf for Yan18Brdf {
+    crate::any_measured_brdf_trait_common_impl!(Yan2018Brdf, Yan2018);
+
+    fn proxy(&self, iors: &IorRegistry) -> BrdfProxy {
         let iors_i = iors
             .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
             .unwrap()
@@ -597,7 +597,7 @@ impl AnalyticalFit for Yan2018Brdf {
             }
         }
 
-        BrdfFittingProxy {
+        BrdfProxy {
             has_nan: false,
             source: ProxySource::Measured,
             brdf: self,

@@ -6,14 +6,14 @@ use crate::{
             io2hd_sph,
             measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
         },
-        fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
+        BrdfProxy, OutgoingDirs, ProxySource,
     },
-    impl_measured_brdf_data_trait, impl_measured_data_trait,
+    impl_any_measured_trait,
     math::Sph2,
     optics::ior::IorRegistry,
     units::{nm, Nanometres, Radians},
     utils::medium::Medium,
-    MeasuredBrdfData, MeasuredBrdfKind, MeasuredData, MeasurementKind,
+    AnyMeasured, AnyMeasuredBrdf, BrdfLevel, MeasuredBrdfKind, MeasurementKind,
 };
 use jabr::array::{s, DArr, DyArr, DynArr};
 use std::borrow::Cow;
@@ -96,8 +96,7 @@ pub type MerlBrdf = MeasuredBrdf<MerlBrdfParam, 4>;
 unsafe impl Send for MerlBrdf {}
 unsafe impl Sync for MerlBrdf {}
 
-impl_measured_data_trait!(@brdf MerlBrdf, Bsdf, Some(MeasuredBrdfKind::Merl));
-impl_measured_brdf_data_trait!(MerlBrdf, Merl);
+impl_any_measured_trait!(@single_level_brdf MerlBrdf);
 
 impl MerlBrdf {
     /// Lookup the index of the azimuthal angle for the difference vector.
@@ -278,9 +277,10 @@ impl MerlBrdf {
     pub fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
 }
 
-#[cfg(feature = "bxdf_fit")]
-impl AnalyticalFit for MerlBrdf {
-    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
+impl AnyMeasuredBrdf for MerlBrdf {
+    crate::any_measured_brdf_trait_common_impl!(MerlBrdf, Merl);
+
+    fn proxy(&self, iors: &IorRegistry) -> BrdfProxy {
         let iors_i = Cow::Owned(
             iors.ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
                 .unwrap()
@@ -334,7 +334,7 @@ impl AnalyticalFit for MerlBrdf {
 
         let o_dirs = OutgoingDirs::new_grid(o_thetas, o_phis);
 
-        BrdfFittingProxy {
+        BrdfProxy {
             has_nan: false,
             source: ProxySource::Measured,
             brdf: self,

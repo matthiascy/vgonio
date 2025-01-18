@@ -1,3 +1,5 @@
+//! Utility functions and types temporarily stored here.
+
 mod asset;
 pub use asset::Asset;
 pub mod handle;

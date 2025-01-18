@@ -1,7 +1,7 @@
 use crate::{
     app::{cache::Cache, Config},
     measure::{
-        bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
+        bsdf::BsdfMeasurement,
         mfd::{MeasuredGafData, MeasuredNdfData},
         params::SurfacePath,
     },
@@ -16,7 +16,7 @@ use base::{
     error::VgonioError,
     math::Sph2,
     units::{Degs, Nanometres, Radians, Rads},
-    ErrorMetric, MeasurementKind, Symmetry, Weighting,
+    BrdfLevel, ErrorMetric, MeasurementKind, Symmetry, Weighting,
 };
 use std::path::PathBuf;
 use surf::{
@@ -110,7 +110,7 @@ pub struct PlotOptions {
         help = "The weighting function to use for plotting the error map.",
         required_if_eq("kind", "error-map")
     )]
-    pub weighting: Weighting,
+    pub weighting: Option<Weighting>,
 
     #[clap(
         long,
@@ -241,7 +241,7 @@ pub struct PlotOptions {
     pub dense: bool,
 
     #[clap(short, long, help = "The level of BRDF to plot.", default_value = "l0")]
-    pub level: MeasuredBrdfLevel,
+    pub level: BrdfLevel,
 
     #[clap(long, help = "The colormap to use.")]
     pub cmap: Option<String>,
@@ -307,7 +307,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         .get_measurement(simulated_hdl)
                         .unwrap()
                         .measured
-                        .downcast_ref::<MeasuredBsdfData>()
+                        .downcast_ref::<BsdfMeasurement>()
                         .unwrap();
                     let meas = cache
                         .get_measurement(measured_hdl)
@@ -357,7 +357,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                                 .get_measurement(hdl)
                                 .unwrap()
                                 .measured
-                                .downcast_ref::<MeasuredBsdfData>()
+                                .downcast_ref::<BsdfMeasurement>()
                                 .and_then(|meas| meas.brdf_at(opts.level).map(|brdf| (brdf, label)))
                         })
                         .collect::<Vec<_>>();
@@ -379,7 +379,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                                 .get_measurement(hdl)
                                 .unwrap()
                                 .measured
-                                .downcast_ref::<MeasuredBsdfData>()
+                                .downcast_ref::<BsdfMeasurement>()
                                 .and_then(|meas| meas.brdf_at(opts.level))
                         })
                         .collect::<Vec<_>>();
@@ -487,7 +487,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                             .get_measurement(hdl)
                             .unwrap()
                             .measured
-                            .downcast_ref::<MeasuredBsdfData>()
+                            .downcast_ref::<BsdfMeasurement>()
                             .and_then(|meas| meas.brdf_at(opts.level))
                     })
                     .collect::<Vec<_>>();
@@ -568,7 +568,8 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     ));
                 }
                 let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
-                plot_brdf_fitting(&measured, &alphas, &cache.iors).unwrap();
+                let brdf = measured.as_any_brdf(opts.level).unwrap();
+                plot_brdf_fitting(brdf, &alphas, &cache.iors).unwrap();
                 Ok(())
             },
             PlotKind::BrdfErrorMap => {
@@ -592,7 +593,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     &measured,
                     &alphas,
                     error_metric,
-                    opts.weighting,
+                    opts.weighting.unwrap(),
                     &cache.iors,
                 )
                 .unwrap();

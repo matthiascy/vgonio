@@ -3,18 +3,18 @@ use crate::bxdf::{
     brdf::measured::{
         BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
     },
-    fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
+    BrdfProxy, OutgoingDirs, ProxySource,
 };
 
 #[cfg(feature = "bxdf_fit")]
 use crate::optics::ior::IorRegistry;
 
 use crate::{
-    impl_measured_brdf_data_trait, impl_measured_data_trait,
+    impl_any_measured_trait,
     math::{Sph2, Vec3},
     units::Nanometres,
     utils::{medium::Medium, partition::SphericalPartition},
-    MeasuredBrdfData, MeasuredBrdfKind, MeasuredData, MeasurementKind,
+    AnyMeasured, AnyMeasuredBrdf, BrdfLevel, MeasuredBrdfKind, MeasurementKind,
 };
 
 #[cfg(feature = "bxdf_io")]
@@ -91,8 +91,7 @@ pub type VgonioBrdf = MeasuredBrdf<VgonioBrdfParameterisation, 3>;
 unsafe impl Send for VgonioBrdf {}
 unsafe impl Sync for VgonioBrdf {}
 
-impl_measured_data_trait!(@brdf VgonioBrdf, Bsdf, Some(MeasuredBrdfKind::Vgonio));
-impl_measured_brdf_data_trait!(VgonioBrdf, Vgonio);
+impl_any_measured_trait!(@single_level_brdf VgonioBrdf);
 
 // TODO: extract the common code to save data carried on the hemisphere to exr.
 
@@ -270,9 +269,10 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, VgonioBrdfParameterisation, 3> {
     }
 }
 
-#[cfg(feature = "bxdf_fit")]
-impl AnalyticalFit for VgonioBrdf {
-    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
+impl AnyMeasuredBrdf for VgonioBrdf {
+    crate::any_measured_brdf_trait_common_impl!(VgonioBrdf, Vgonio);
+
+    fn proxy(&self, iors: &IorRegistry) -> BrdfProxy {
         let iors_i = iors
             .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
             .unwrap()
@@ -347,7 +347,7 @@ impl AnalyticalFit for VgonioBrdf {
                     .copy_from_slice(&org_slice[org_offset..org_offset + n_wo * n_spectrum]);
             }
         }
-        BrdfFittingProxy {
+        BrdfProxy {
             has_nan: false,
             source: ProxySource::Measured,
             brdf: self,

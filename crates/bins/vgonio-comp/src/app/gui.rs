@@ -624,13 +624,13 @@ impl VgonioGuiApp {
 
                                 #[cfg(feature = "vdbg")]
                                 {
-                                    use crate::measure::bsdf::MeasuredBsdfData;
+                                    use crate::measure::bsdf::BsdfMeasurement;
                                     let measured = self.cache.read(|cache| {
                                         measure::bsdf::measure_bsdf_rt(params, &surfaces, cache)
                                     });
                                     let bsdf = measured[0]
                                         .measured
-                                        .downcast_ref::<MeasuredBsdfData>()
+                                        .downcast_ref::<BsdfMeasurement>()
                                         .unwrap();
                                     self.dbg_drawing_state.update_ray_trajectories(
                                         &self.gpu_ctx,

@@ -1,7 +1,7 @@
 use crate::app::gui::docking::{Dockable, WidgetKind};
 #[cfg(feature = "fitting")]
 use base::{
-    bxdf::{brdf::BxdfFamily, distro::MicrofacetDistroKind, fitting::FittingProblemKind},
+    bxdf::{brdf::BrdfFamily, distro::MicrofacetDistroKind, fitting::FittingProblemKind},
     Symmetry,
 };
 use base::{utils::partition::beckers, MeasurementKind};
@@ -350,7 +350,7 @@ impl PropertyInspector {
                                 if ui.button("Fit Beckmann(iso)").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Fitting {
                                         kind: FittingProblemKind::Bxdf {
-                                            family: BxdfFamily::Microfacet,
+                                            family: BrdfFamily::Microfacet,
                                             distro: Some(MicrofacetDistroKind::Beckmann),
                                             symmetry: Symmetry::Isotropic,
                                         },
@@ -363,7 +363,7 @@ impl PropertyInspector {
                                 if ui.button("Fit Beckmann(aniso)").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Fitting {
                                         kind: FittingProblemKind::Bxdf {
-                                            family: BxdfFamily::Microfacet,
+                                            family: BrdfFamily::Microfacet,
                                             distro: Some(MicrofacetDistroKind::Beckmann),
                                             symmetry: Symmetry::Anisotropic,
                                         },
@@ -376,7 +376,7 @@ impl PropertyInspector {
                                 if ui.button("Fit GGX(iso)").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Fitting {
                                         kind: FittingProblemKind::Bxdf {
-                                            family: BxdfFamily::Microfacet,
+                                            family: BrdfFamily::Microfacet,
                                             distro: Some(MicrofacetDistroKind::TrowbridgeReitz),
                                             symmetry: Symmetry::Isotropic,
                                         },
@@ -389,7 +389,7 @@ impl PropertyInspector {
                                 if ui.button("Fit GGX(aniso)").clicked() {
                                     self.event_loop.send_event(VgonioEvent::Fitting {
                                         kind: FittingProblemKind::Bxdf {
-                                            family: BxdfFamily::Microfacet,
+                                            family: BrdfFamily::Microfacet,
                                             distro: Some(MicrofacetDistroKind::TrowbridgeReitz),
                                             symmetry: Symmetry::Isotropic,
                                         },

@@ -1,5 +1,6 @@
 use crate::{
-    optics::ior::IorRegistry, units::Radians, utils::range::StepRangeIncl, ErrorMetric, Weighting,
+    bxdf::fitting::brdf::BrdfProxy, optics::ior::IorRegistry, units::Radians,
+    utils::range::StepRangeIncl, AnyMeasuredBrdf, ErrorMetric, Weighting,
 };
 use rayon::{
     iter::{IndexedParallelIterator, ParallelIterator},
@@ -9,17 +10,14 @@ use rayon::{
 use crate::bxdf::{
     brdf::{
         analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-        Bxdf,
+        AnalyticalBrdf,
     },
     distro::MicrofacetDistroKind,
-    fitting::brdf::AnalyticalFit,
 };
-
-use super::BrdfFittingProxy;
 
 /// Compute the distance between a measured BRDF and a modelled BRDF.
 pub fn compute_distance_between_measured_and_modelled(
-    measured: &BrdfFittingProxy,
+    measured: &BrdfProxy,
     distro: MicrofacetDistroKind,
     metric: ErrorMetric,
     weighting: Weighting,
@@ -29,12 +27,10 @@ pub fn compute_distance_between_measured_and_modelled(
     max_theta_o: Radians,
 ) -> f64 {
     let m = match distro {
-        MicrofacetDistroKind::Beckmann => {
-            Box::new(MicrofacetBrdfBK::new(alphax, alphay)) as Box<dyn Bxdf<Params = [f64; 2]>>
-        },
-        MicrofacetDistroKind::TrowbridgeReitz => {
-            Box::new(MicrofacetBrdfTR::new(alphax, alphay)) as Box<dyn Bxdf<Params = [f64; 2]>>
-        },
+        MicrofacetDistroKind::Beckmann => Box::new(MicrofacetBrdfBK::new(alphax, alphay))
+            as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
+        MicrofacetDistroKind::TrowbridgeReitz => Box::new(MicrofacetBrdfTR::new(alphax, alphay))
+            as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
     };
     let modelled = measured.generate_analytical(&*m);
     let filtering = !(max_theta_i >= Radians::HALF_PI && max_theta_o >= Radians::HALF_PI);
@@ -52,7 +48,7 @@ pub fn compute_distance_between_measured_and_modelled(
 }
 
 /// Brute force fitting for isotropic microfacet BRDFs.
-pub fn brdf_fitting_brute_force_isotropic<F: AnalyticalFit>(
+pub fn brdf_fitting_brute_force_isotropic<F: AnyMeasuredBrdf>(
     measured: &F,
     distro: MicrofacetDistroKind,
     metric: ErrorMetric,
@@ -90,7 +86,7 @@ pub fn brdf_fitting_brute_force_isotropic<F: AnalyticalFit>(
 }
 
 /// Brute force fitting for anisotropic microfacet BRDFs.
-pub fn brdf_fitting_brute_force_anisotropic<F: AnalyticalFit>(
+pub fn brdf_fitting_brute_force_anisotropic<F: AnyMeasuredBrdf>(
     measured: &F,
     distro: MicrofacetDistroKind,
     metric: ErrorMetric,

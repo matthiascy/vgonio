@@ -1,14 +1,14 @@
 use crate::{
     app::cache::RawCache,
-    measure::{params::SdfMeasurementParams, MeasuredData, Measurement, MeasurementSource},
+    measure::{params::SdfMeasurementParams, Measurement, MeasurementSource},
 };
 use base::{
     error::VgonioError,
-    impl_measured_data_trait, math,
+    impl_any_measured_trait, math,
     math::{IVec2, Vec2},
     units::{rad, Radians},
     utils::{handle::Handle, range::StepRangeIncl},
-    MeasuredBrdfKind, MeasurementKind,
+    AnyMeasured, MeasurementKind,
 };
 use std::{borrow::Cow, path::Path};
 use surf::MicroSurface;
@@ -26,7 +26,7 @@ pub struct MeasuredSdfData {
     pub slopes: Box<[Slope2]>,
 }
 
-impl_measured_data_trait!(MeasuredSdfData, Sdf, None::<MeasuredBrdfKind>);
+impl_any_measured_trait!(MeasuredSdfData, Sdf);
 
 /// Data of the slope distribution function (SDF) of a microsurface.
 pub struct SdfPmf {

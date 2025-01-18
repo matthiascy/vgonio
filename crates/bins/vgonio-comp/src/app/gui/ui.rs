@@ -23,19 +23,17 @@ use crate::{
 use crate::{
     fitting::{MfdFittingData, MicrofacetDistributionFittingProblem},
     measure::{
-        bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
+        bsdf::BsdfMeasurement,
         mfd::{MeasuredGafData, MeasuredNdfData},
     },
 };
 #[cfg(feature = "fitting")]
-use base::{bxdf::brdf::BxdfFamily, utils::range::StepRangeIncl};
+use base::{bxdf::brdf::BrdfFamily, utils::range::StepRangeIncl, AnyMeasuredBrdf};
 use base::{
-    bxdf::fitting::{
-        brdf::AnalyticalFit, FittedModel, FittingProblem, FittingProblemKind, FittingReport,
-    },
+    bxdf::fitting::{FittedModel, FittingProblem, FittingProblemKind, FittingReport},
     io::{CompressionScheme, FileEncoding},
     utils::handle::Handle,
-    MeasurementKind, Weighting,
+    BrdfLevel, MeasurementKind, Weighting,
 };
 use egui_file_dialog::{DialogMode, FileDialog};
 use gxtk::{context::GpuContext, mesh::RenderableMesh};
@@ -241,17 +239,17 @@ impl VgonioGui {
                         symmetry,
                     } => {
                         match family {
-                            BxdfFamily::Microfacet => {
+                            BrdfFamily::Microfacet => {
                                 let report = self.cache.read(|cache| {
                                     let measured_brdf_data = cache
                                         .get_measurement(*data)
                                         .unwrap()
                                         .measured
-                                        .downcast_ref::<MeasuredBsdfData>()
+                                        .downcast_ref::<BsdfMeasurement>()
                                         .unwrap();
                                     // TODO: add ui to select the theta limit
                                     let proxy = measured_brdf_data
-                                        .brdf_at(MeasuredBrdfLevel::L0)
+                                        .brdf_at(BrdfLevel::L0)
                                         .unwrap()
                                         .proxy(&cache.iors);
                                     proxy.nllsq_fit(

@@ -5,14 +5,14 @@ use crate::optics::ior::IorRegistry;
 use crate::{
     bxdf::{
         brdf::measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
-        fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
+        BrdfProxy, OutgoingDirs, ProxySource,
     },
     error::VgonioError,
-    impl_measured_data_trait,
+    impl_any_measured_trait,
     math::Sph2,
     units::{nm, Nanometres, Radians},
     utils::medium::Medium,
-    MeasuredBrdfData, MeasuredBrdfKind, MeasuredData, MeasurementKind,
+    AnyMeasured, AnyMeasuredBrdf, BrdfLevel, MeasuredBrdfKind, MeasurementKind,
 };
 use jabr::array::{DyArr, DynArr};
 use std::{
@@ -94,17 +94,7 @@ pub type ClausenBrdf = MeasuredBrdf<ClausenBrdfParameterisation, 3>;
 unsafe impl Send for ClausenBrdf {}
 unsafe impl Sync for ClausenBrdf {}
 
-impl_measured_data_trait!(@brdf ClausenBrdf, Bsdf, Some(MeasuredBrdfKind::Clausen));
-
-impl MeasuredBrdfData for ClausenBrdf {
-    fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Clausen }
-
-    fn spectrum(&self) -> &[Nanometres] { self.spectrum.as_slice() }
-
-    fn transmitted_medium(&self) -> Medium { todo!() }
-
-    fn incident_medium(&self) -> Medium { todo!() }
-}
+impl_any_measured_trait!(@single_level_brdf ClausenBrdf);
 
 impl ClausenBrdf {
     /// Creates a new Clausen BRDF. The BRDF is parameterised in the incident
@@ -366,9 +356,10 @@ impl ClausenBrdf {
     }
 }
 
-#[cfg(feature = "bxdf_fit")]
-impl AnalyticalFit for ClausenBrdf {
-    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
+impl AnyMeasuredBrdf for ClausenBrdf {
+    crate::any_measured_brdf_trait_common_impl!(ClausenBrdf, Clausen);
+
+    fn proxy(&self, iors: &IorRegistry) -> BrdfProxy {
         let iors_i = iors
             .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
             .unwrap()
@@ -432,7 +423,7 @@ impl AnalyticalFit for ClausenBrdf {
             }
         });
 
-        BrdfFittingProxy {
+        BrdfProxy {
             has_nan: true,
             source: ProxySource::Measured,
             brdf: self,

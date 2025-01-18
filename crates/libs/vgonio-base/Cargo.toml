@@ -12,7 +12,7 @@ cli = ["dep:clap"]
 io = ["dep:csv", "dep:exr"]
 winit = ["dep:winit"]
 bxdf = []
-bxdf_io = ["dep:serde_json", "dep:serde-pickle"]
+bxdf_io = ["dep:serde_json", "dep:serde-pickle", "dep:exr"]
 bxdf_fit = ["dep:rayon", "dep:levenberg-marquardt", "dep:nalgebra"]
 
 
@@ -30,6 +30,7 @@ log.workspace = true
 num-traits.workspace = true
 paste.workspace = true
 serde.workspace = true
+static_assertions.workspace = true
 uuid.workspace = true
 winit = { workspace = true, optional = true }
 

@@ -1,22 +1,24 @@
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
-    measure::bsdf::{MeasuredBrdfLevel, MeasuredBsdfData},
+    measure::bsdf::BsdfMeasurement,
     pyplot::plot_err,
 };
 use base::{
     bxdf::{
         brdf::{
-            measured::{merl::MerlBrdf, rgl::RglBrdf, yan::Yan2018Brdf, ClausenBrdf},
-            BxdfFamily,
+            measured::{
+                merl::MerlBrdf, rgl::RglBrdf, yan::Yan18Brdf, ClausenBrdf, MeasuredBrdfKind,
+            },
+            BrdfFamily,
         },
         distro::MicrofacetDistroKind,
-        fitting::{brdf::AnalyticalFit, FittingProblem},
+        fitting::FittingProblem,
     },
     error::VgonioError,
     optics::ior::IorRegistry,
     units::{Radians, Rads},
     utils::range::StepRangeIncl,
-    ErrorMetric, MeasuredBrdfKind, Symmetry, Weighting,
+    AnyMeasuredBrdf, BrdfLevel, ErrorMetric, Symmetry, Weighting,
 };
 use std::{fmt::Debug, path::PathBuf};
 
@@ -55,12 +57,12 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         .iter()
                         .map(|h| &cache.get_measurement(*h).unwrap().measured)
                         .collect::<Vec<_>>();
-                    if loaded
+                    if loaded.iter().all(|m| {
+                        let brdf = m.as_any_brdf(BrdfLevel::L0).unwrap();
+                        brdf.kind() == MeasuredBrdfKind::Clausen
+                    }) || loaded
                         .iter()
-                        .all(|m| m.brdf_kind() == Some(MeasuredBrdfKind::Clausen))
-                        || loaded
-                            .iter()
-                            .all(|m| m.brdf_kind() != Some(MeasuredBrdfKind::Clausen))
+                        .all(|m| m.as_any_brdf(BrdfLevel::L0).is_none())
                     {
                         return Err(VgonioError::new(
                             "The input files should be in pairs of measured data and \
@@ -69,14 +71,16 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                         ));
                     }
                     let simulated_brdf_index =
-                        if loaded[0].brdf_kind() == Some(MeasuredBrdfKind::Clausen) {
+                        if loaded[0].as_any_brdf(BrdfLevel::L0).unwrap().kind()
+                            == MeasuredBrdfKind::Clausen
+                        {
                             1
                         } else {
                             0
                         };
                     let clausen_brdf_index = simulated_brdf_index ^ 1;
                     let simulated_brdf = loaded[simulated_brdf_index]
-                        .downcast_ref::<MeasuredBsdfData>()
+                        .downcast_ref::<BsdfMeasurement>()
                         .unwrap();
                     let clausen_brdf = loaded[clausen_brdf_index]
                         .downcast_ref::<ClausenBrdf>()
@@ -135,11 +139,9 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             .get_measurement(measurement)
                             .unwrap()
                             .measured
-                            .downcast_ref::<MeasuredBsdfData>()
+                            .downcast_ref::<BsdfMeasurement>()
                         {
-                            let brdf = measured
-                                .brdf_at(MeasuredBrdfLevel::from(opts.level))
-                                .unwrap();
+                            let brdf = measured.brdf_at(BrdfLevel::from(opts.level)).unwrap();
                             measured_brdf_fitting(&opts, brdf, &cache.iors, theta_limit);
                         }
                     }
@@ -153,7 +155,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                             .get_measurement(measurement)
                             .unwrap()
                             .measured
-                            .downcast_ref::<Yan2018Brdf>()
+                            .downcast_ref::<Yan18Brdf>()
                         {
                             measured_brdf_fitting(&opts, brdf, &cache.iors, theta_limit);
                         }
@@ -184,7 +186,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     })
 }
 
-fn brdf_fitting_brute_force<F: AnalyticalFit>(brdf: &F, opts: &FitOptions, iors: &IorRegistry) {
+fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, iors: &IorRegistry) {
     let start = std::time::Instant::now();
     let report = brdf.proxy(iors).brute_fit(
         opts.distro,
@@ -214,7 +216,7 @@ fn brdf_fitting_brute_force<F: AnalyticalFit>(brdf: &F, opts: &FitOptions, iors:
     }
 }
 
-fn measured_brdf_fitting<F: AnalyticalFit>(
+fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
     opts: &FitOptions,
     brdf: &F,
     iors: &IorRegistry,
@@ -314,7 +316,7 @@ pub struct FitOptions {
         short,
         help = "Model to fit the measurement to. If not specified, the default model will be used."
     )]
-    pub family: BxdfFamily,
+    pub family: BrdfFamily,
 
     #[clap(long, help = "Symmetry of the microfacet model.")]
     pub symmetry: Symmetry,
@@ -335,7 +337,7 @@ pub struct FitOptions {
         required_if_eq("kind", "vgonio"),
         default_value = "l0"
     )]
-    pub level: MeasuredBrdfLevel,
+    pub level: BrdfLevel,
 
     #[clap(long, help = "Theta limit for the fitting in degrees. Default to 90°.")]
     pub theta_limit: Option<f32>,

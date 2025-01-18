@@ -3,14 +3,14 @@ use crate::{
         brdf::measured::{
             BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
         },
-        fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs, ProxySource},
+        BrdfProxy, OutgoingDirs, ProxySource,
     },
-    impl_measured_brdf_data_trait, impl_measured_data_trait,
+    impl_any_measured_trait,
     math::{Sph2, Vec3},
     optics::ior::IorRegistry,
     units::{deg, rad, Nanometres},
     utils::{medium::Medium, range::StepRangeIncl},
-    MeasuredBrdfData, MeasuredBrdfKind, MeasuredData, MeasurementKind,
+    AnyMeasured, AnyMeasuredBrdf, BrdfLevel, MeasuredBrdfKind, MeasurementKind,
 };
 use jabr::array::{DyArr, DynArr};
 use std::{borrow::Cow, path::Path};
@@ -18,8 +18,7 @@ use std::{borrow::Cow, path::Path};
 /// Parametrisation of the BRDF measured in RGL (https://rgl.epfl.ch/pages/lab/material-database) at EPFL by Jonathan Dupuy and Wenzel Jakob.
 pub type RglBrdf = MeasuredBrdf<RglBrdfParameterisation, 3>;
 
-impl_measured_data_trait!(@brdf RglBrdf, Bsdf, Some(MeasuredBrdfKind::Rgl));
-impl_measured_brdf_data_trait!(RglBrdf, Rgl);
+impl_any_measured_trait!(@single_level_brdf RglBrdf);
 
 unsafe impl Send for RglBrdf {}
 unsafe impl Sync for RglBrdf {}
@@ -205,9 +204,10 @@ impl<'a> Iterator for BrdfSnapshotIterator<'a, RglBrdfParameterisation, 3> {
     }
 }
 
-#[cfg(feature = "bxdf_fit")]
-impl AnalyticalFit for RglBrdf {
-    fn proxy(&self, iors: &IorRegistry) -> BrdfFittingProxy {
+impl AnyMeasuredBrdf for RglBrdf {
+    crate::any_measured_brdf_trait_common_impl!(RglBrdf, Rgl);
+
+    fn proxy(&self, iors: &IorRegistry) -> BrdfProxy {
         let iors_i = iors
             .ior_of_spectrum(self.incident_medium, self.spectrum.as_slice())
             .unwrap()
@@ -284,7 +284,7 @@ impl AnalyticalFit for RglBrdf {
         }
 
         let o_dirs = OutgoingDirs::new_grid(Cow::Owned(o_thetas), Cow::Owned(o_phis));
-        BrdfFittingProxy {
+        BrdfProxy {
             has_nan: false,
             brdf: self,
             source: ProxySource::Measured,

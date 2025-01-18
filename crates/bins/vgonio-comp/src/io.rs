@@ -1,7 +1,7 @@
 use crate::{
     app::{cache::Cache, cli::ansi, Config},
     measure::{
-        bsdf::MeasuredBsdfData,
+        bsdf::BsdfMeasurement,
         mfd::{MeasuredGafData, MeasuredNdfData},
         Measurement,
     },
@@ -22,7 +22,7 @@ pub mod vgmo {
         bsdf::{
             emitter::EmitterParams,
             receiver::{BounceAndEnergy, ReceiverParams},
-            BsdfKind, MeasuredBrdfLevel, RawMeasuredBsdfData, SingleBsdfMeasurementStats,
+            BsdfKind, RawMeasuredBsdfData, SingleBsdfMeasurementStats,
         },
         mfd::MeasuredSdfData,
         params::{
@@ -44,7 +44,7 @@ pub mod vgmo {
             partition::{PartitionScheme, Ring, SphericalDomain, SphericalPartition},
             range::StepRangeIncl,
         },
-        MeasuredData, MeasurementKind, Version,
+        AnyMeasured, BrdfLevel, MeasurementKind, Version,
     };
     use jabr::array::DyArr;
     use std::{
@@ -66,10 +66,10 @@ pub mod vgmo {
 
     /// Returns the corresponding [`VgmoHeaderExt`] variant for the given
     /// measurement data.
-    pub fn vgmo_header_ext_from_data(data: &(dyn MeasuredData + 'static)) -> VgmoHeaderExt {
+    pub fn vgmo_header_ext_from_data(data: &(dyn AnyMeasured + 'static)) -> VgmoHeaderExt {
         match data.kind() {
             MeasurementKind::Bsdf => {
-                let bsdf = data.downcast_ref::<MeasuredBsdfData>().unwrap();
+                let bsdf = data.downcast_ref::<BsdfMeasurement>().unwrap();
                 VgmoHeaderExt::Bsdf {
                     params: bsdf.params.clone(),
                 }
@@ -188,7 +188,7 @@ pub mod vgmo {
     pub fn read<R: Read>(
         reader: &mut BufReader<R>,
         header: &Header<VgmoHeaderExt>,
-    ) -> Result<Box<dyn MeasuredData>, ReadFileErrorKind> {
+    ) -> Result<Box<dyn AnyMeasured>, ReadFileErrorKind> {
         // TODO: Handle multiple receivers
         match &header.extra {
             VgmoHeaderExt::Bsdf { params } => {
@@ -197,7 +197,7 @@ pub mod vgmo {
                     params.emitter.measurement_points_count(),
                     params.samples_count(0).unwrap()
                 );
-                Ok(Box::new(MeasuredBsdfData::read_from_vgmo(
+                Ok(Box::new(BsdfMeasurement::read_from_vgmo(
                     reader,
                     params,
                     header.meta.encoding,
@@ -267,7 +267,7 @@ pub mod vgmo {
     pub fn write<W: Write + Seek>(
         writer: &mut BufWriter<W>,
         header: Header<VgmoHeaderExt>,
-        measured: &(dyn MeasuredData + 'static),
+        measured: &(dyn AnyMeasured + 'static),
     ) -> Result<(), WriteFileErrorKind> {
         let init_size = writer.stream_len().unwrap();
         log::debug!("Writing VGMO file with writer at position {}", init_size);
@@ -312,7 +312,7 @@ pub mod vgmo {
                 .map_err(WriteFileErrorKind::Write)?;
             },
             MeasurementKind::Bsdf => {
-                let bsdf = measured.downcast_ref::<MeasuredBsdfData>().unwrap();
+                let bsdf = measured.downcast_ref::<BsdfMeasurement>().unwrap();
                 bsdf.write_to_vgmo(writer, header.meta.encoding, header.meta.compression)?;
             },
             MeasurementKind::Sdf => {
@@ -1231,10 +1231,10 @@ pub mod vgmo {
         }
     }
 
-    impl MeasuredBsdfData {
+    impl BsdfMeasurement {
         pub(crate) fn write_vgonio_brdf<W: Write>(
             writer: &mut W,
-            level: MeasuredBrdfLevel,
+            level: BrdfLevel,
             brdf: &VgonioBrdf,
         ) -> Result<(), std::io::Error> {
             writer.write_all(&level.as_u32().to_le_bytes())?;
@@ -1247,11 +1247,11 @@ pub mod vgmo {
             n_wo: usize,
             n_spectrum: usize,
             brdf: *mut VgonioBrdf,
-        ) -> Result<MeasuredBrdfLevel, ReadFileErrorKind> {
+        ) -> Result<BrdfLevel, ReadFileErrorKind> {
             let level = {
                 let mut buf = [0u8; 4];
                 reader.read_exact(&mut buf)?;
-                MeasuredBrdfLevel::from(u32::from_le_bytes(buf))
+                BrdfLevel::from(u32::from_le_bytes(buf))
             };
             let mut samples = DyArr::<f32, 3>::zeros([n_wi, n_wo, n_spectrum]);
             io::read_binary_samples(reader, samples.len(), samples.as_mut_slice())
@@ -1266,7 +1266,7 @@ pub mod vgmo {
         pub(crate) fn write_measured_bsdf_data<
             'a,
             W: Write,
-            F: Iterator<Item = (&'a MeasuredBrdfLevel, &'a VgonioBrdf)>,
+            F: Iterator<Item = (&'a BrdfLevel, &'a VgonioBrdf)>,
         >(
             writer: &'a mut W,
             brdfs: F,
@@ -1282,7 +1282,7 @@ pub mod vgmo {
             n_wi: usize,
             n_wo: usize,
             n_spectrum: usize,
-        ) -> Result<HashMap<MeasuredBrdfLevel, MaybeUninit<VgonioBrdf>>, std::io::Error> {
+        ) -> Result<HashMap<BrdfLevel, MaybeUninit<VgonioBrdf>>, std::io::Error> {
             let mut brdfs = HashMap::new();
             loop {
                 let mut brdf = MaybeUninit::<VgonioBrdf>::uninit();
@@ -1431,8 +1431,8 @@ pub mod vgmo {
                         raw,
                         bsdfs: unsafe {
                             mem::transmute::<
-                                HashMap<MeasuredBrdfLevel, MaybeUninit<VgonioBrdf>>,
-                                HashMap<MeasuredBrdfLevel, VgonioBrdf>,
+                                HashMap<BrdfLevel, MaybeUninit<VgonioBrdf>>,
+                                HashMap<BrdfLevel, VgonioBrdf>,
                             >(bsdfs)
                         },
                     })
@@ -1484,8 +1484,7 @@ mod tests {
         bsdf::{
             emitter::EmitterParams,
             receiver::{BounceAndEnergy, ReceiverParams},
-            BsdfKind, MeasuredBrdfLevel, MeasuredBsdfData, RawMeasuredBsdfData,
-            SingleBsdfMeasurementStats,
+            BrdfLevel, BsdfKind, BsdfMeasurement, RawMeasuredBsdfData, SingleBsdfMeasurementStats,
         },
         params::{BsdfMeasurementParams, SimulationKind},
     };
@@ -1671,11 +1670,11 @@ mod tests {
         };
 
         let mut writer = BufWriter::new(vec![]);
-        MeasuredBsdfData::write_raw_measured_data(&mut writer, &raw).unwrap();
+        BsdfMeasurement::write_raw_measured_data(&mut writer, &raw).unwrap();
         let buf = writer.into_inner().unwrap();
 
         let mut reader = BufReader::new(Cursor::new(buf));
-        let data2 = MeasuredBsdfData::read_raw_measured_data(
+        let data2 = BsdfMeasurement::read_raw_measured_data(
             &mut reader,
             n_wi,
             n_wo,
@@ -1712,13 +1711,12 @@ mod tests {
         };
 
         let mut writer = BufWriter::new(vec![]);
-        MeasuredBsdfData::write_vgonio_brdf(&mut writer, MeasuredBrdfLevel::from(0u32), &brdf)
-            .unwrap();
+        BsdfMeasurement::write_vgonio_brdf(&mut writer, BrdfLevel::from(0u32), &brdf).unwrap();
         let buf = writer.into_inner().unwrap();
 
         let mut reader = BufReader::new(Cursor::new(buf));
         let mut brdf2 = MaybeUninit::<VgonioBrdf>::uninit();
-        MeasuredBsdfData::read_vgonio_brdf(&mut reader, 4, 8, 4, brdf2.as_mut_ptr()).unwrap();
+        BsdfMeasurement::read_vgonio_brdf(&mut reader, 4, 8, 4, brdf2.as_mut_ptr()).unwrap();
         assert_eq!(brdf.samples, unsafe {
             std::ptr::addr_of!((*brdf2.as_mut_ptr()).samples).read()
         });
@@ -1752,7 +1750,7 @@ mod tests {
 
         let mut bsdfs = HashMap::new();
         bsdfs.insert(
-            MeasuredBrdfLevel::from(0u32),
+            BrdfLevel::from(0u32),
             VgonioBrdf {
                 origin: Origin::Simulated,
                 incident_medium: Medium::Vacuum,
@@ -1767,7 +1765,7 @@ mod tests {
             },
         );
 
-        let measured = MeasuredBsdfData {
+        let measured = BsdfMeasurement {
             params: BsdfMeasurementParams {
                 kind: BsdfKind::Brdf,
                 sim_kind: SimulationKind::WaveOptics,
@@ -1848,7 +1846,7 @@ mod tests {
             let buf = writer.into_inner().unwrap();
 
             let mut reader = BufReader::new(Cursor::new(buf));
-            let data2 = MeasuredBsdfData::read_from_vgmo(
+            let data2 = BsdfMeasurement::read_from_vgmo(
                 &mut reader,
                 &measured.params,
                 FileEncoding::Binary,

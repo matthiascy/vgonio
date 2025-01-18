@@ -1,14 +1,14 @@
 use crate::{
     app::cache::RawCache,
-    measure::{params::GafMeasurementParams, MeasuredData, Measurement, MeasurementSource},
+    measure::{params::GafMeasurementParams, AnyMeasured, Measurement, MeasurementSource},
 };
 use base::{
     error::VgonioError,
-    impl_measured_data_trait, math,
+    impl_any_measured_trait, math,
     math::{Mat4, Vec3},
     units::Radians,
     utils::{handle::Handle, range::StepRangeIncl},
-    MeasuredBrdfKind, MeasurementKind,
+    MeasurementKind,
 };
 use bytemuck::{Pod, Zeroable};
 use gxtk::{
@@ -1403,7 +1403,7 @@ pub struct MeasuredGafData {
     pub samples: Box<[f32]>,
 }
 
-impl_measured_data_trait!(MeasuredGafData, Gaf, None::<MeasuredBrdfKind>);
+impl_any_measured_trait!(MeasuredGafData, Gaf);
 
 impl MeasuredGafData {
     // TODO: review the necessity of this method.

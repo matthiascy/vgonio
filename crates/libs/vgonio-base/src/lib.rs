@@ -18,11 +18,15 @@
 #![cfg(feature = "bxdf")]
 #![feature(associated_type_defaults)]
 
+use bxdf::{brdf::measured::MeasuredBrdfKind, BrdfProxy};
+use error::VgonioError;
+use optics::ior::IorRegistry;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
     hash::Hash,
     marker::{ConstParamTy, StructuralPartialEq},
+    str::FromStr,
 };
 use units::Nanometres;
 
@@ -175,64 +179,152 @@ pub enum Weighting {
     LnCos,
 }
 
-/// The kind of the measured BRDF.
-#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MeasuredBrdfKind {
-    #[cfg_attr(feature = "cli", clap(name = "clausen"))]
-    /// The measured BRDF by Clausen.
-    Clausen,
-    #[cfg_attr(feature = "cli", clap(name = "merl"))]
-    /// The MERL BRDF dataset.
-    Merl,
-    #[cfg_attr(feature = "cli", clap(name = "utia"))]
-    /// The measured BRDF by UTIA at Czech Technical University.
-    Utia,
-    #[cfg_attr(feature = "cli", clap(name = "rgl"))]
-    /// The measured BRDF by Dupuy and Jakob in RGL at EPFL.
-    Rgl,
-    #[cfg_attr(feature = "cli", clap(name = "vgonio"))]
-    /// The simulated BRDF by vgonio.
-    Vgonio,
-    #[cfg_attr(feature = "cli", clap(name = "yan2018"))]
-    /// The BRDF model by Yan et al. 2018.
-    Yan2018,
-    #[cfg_attr(feature = "cli", clap(name = "unknown"))]
-    /// Unknown.
-    Unknown,
-}
-
 use utils::medium::Medium;
 
-/// Common interface for measured BxDFs.
-pub trait MeasuredBrdfData {
-    /// Returns the kind of the measured BxDF.
-    fn kind(&self) -> MeasuredBrdfKind;
-
-    /// Returns the wavelengths at which the BxDF is measured.
-    fn spectrum(&self) -> &[Nanometres];
-
-    /// Returns the transmitted medium.
-    fn transmitted_medium(&self) -> Medium;
-
-    /// Returns the incident medium.
-    fn incident_medium(&self) -> Medium;
+/// The level of the measured BRDF.
+///
+/// This is used to indicate the level of the measured BRDF that includes the
+/// energy of rays at the given bounce.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
+pub enum BrdfLevel {
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// all bounces.
+    #[default]
+    L0 = 0,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the first bounce.
+    L1 = 1,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the second bounce.
+    L2 = 2,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the third bounce.
+    L3 = 3,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the fourth bounce.
+    L4 = 4,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the fifth bounce.
+    L5 = 5,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the sixth bounce.
+    L6 = 6,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the seventh bounce.
+    L7 = 7,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the eighth bounce.
+    L8 = 8,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the ninth bounce.
+    L9 = 9,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the tenth bounce.
+    L10 = 10,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the eleventh bounce.
+    L11 = 11,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the twelfth bounce.
+    L12 = 12,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the thirteenth bounce.
+    L13 = 13,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the fourteenth bounce.
+    L14 = 14,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the fifteenth bounce.
+    L15 = 15,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// the sixteenth bounce.
+    L16 = 16,
+    /// The level of the measured BRDF that includes the energy of rays at
+    /// bounces greater than 1.
+    L1Plus = 17,
+    /// Non-existent level.
+    None = 18,
 }
 
-/// Boilerplate macro for implementing the `MeasuredBrdfData` trait for a type.
-#[macro_export]
-macro_rules! impl_measured_brdf_data_trait {
-    ($t:ty, $kind:ident) => {
-        impl MeasuredBrdfData for $t {
-            fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::$kind }
+static_assertions::assert_eq_size!(BrdfLevel, u32);
+// Make sure that the niche optimisation happens.
+static_assertions::assert_eq_size!(Option<BrdfLevel>, u32);
 
-            fn spectrum(&self) -> &[Nanometres] { &self.spectrum.as_ref() }
+impl BrdfLevel {
+    /// Returns the level as a u32.
+    pub const fn as_u32(&self) -> u32 { *self as u32 }
 
-            fn transmitted_medium(&self) -> Medium { self.transmitted_medium }
+    /// Returns whether the level is valid.
+    pub const fn is_valid(&self) -> bool { *self as u32 != BrdfLevel::None as u32 }
+}
 
-            fn incident_medium(&self) -> Medium { self.incident_medium }
+impl From<usize> for BrdfLevel {
+    fn from(n: usize) -> Self {
+        match n as u32 {
+            0 => BrdfLevel::L0,
+            1 => BrdfLevel::L1,
+            2 => BrdfLevel::L2,
+            3 => BrdfLevel::L3,
+            4 => BrdfLevel::L4,
+            5 => BrdfLevel::L5,
+            6 => BrdfLevel::L6,
+            7 => BrdfLevel::L7,
+            8 => BrdfLevel::L8,
+            9 => BrdfLevel::L9,
+            10 => BrdfLevel::L10,
+            11 => BrdfLevel::L11,
+            12 => BrdfLevel::L12,
+            13 => BrdfLevel::L13,
+            14 => BrdfLevel::L14,
+            15 => BrdfLevel::L15,
+            16 => BrdfLevel::L16,
+            17 => BrdfLevel::L1Plus,
+            _ => BrdfLevel::None,
         }
-    };
+    }
+}
+
+impl From<u32> for BrdfLevel {
+    fn from(n: u32) -> Self { BrdfLevel::from(n as usize) }
+}
+
+impl FromStr for BrdfLevel {
+    type Err = VgonioError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let val = s.to_lowercase();
+        let val = val.trim();
+        if val.len() > 3 {
+            return Err(VgonioError::new(
+                "Invalid BRDF level. The level must be between l0 and l16 or l1+.",
+                None,
+            ));
+        }
+        match val {
+            "l1+" => Ok(BrdfLevel::L1Plus),
+            _ => {
+                let level = s.strip_prefix('l').ok_or_else(|| {
+                    VgonioError::new(
+                        "Invalid BRDF level. The level must be between l0 and l16",
+                        None,
+                    )
+                })?;
+                Ok(BrdfLevel::from(level.parse::<u32>().map_err(|err| {
+                    VgonioError::new(format!("Invalid BRDF level. {}", err), Some(Box::new(err)))
+                })?))
+            },
+        }
+    }
+}
+
+impl Display for BrdfLevel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BrdfLevel::L1Plus => f.write_str("l1+"),
+            _ => write!(f, "l{}", self.as_u32()),
+        }
+    }
 }
 
 /// Trait for the different kinds of measurement data.
@@ -242,27 +334,32 @@ macro_rules! impl_measured_brdf_data_trait {
 /// - Masking Shadowing Function (MSF)
 /// - Slope Distribution Function (SDF)
 /// - Bidirectional Scattering Distribution Function (BSDF)
-pub trait MeasuredData: Debug {
+pub trait AnyMeasured: Debug {
     /// Returns the kind of the measurement.
     fn kind(&self) -> MeasurementKind;
-    // TODO: considering removing this method.
-    /// Returns the kind of the BRDF if it's a BRDF measurement.
-    fn brdf_kind(&self) -> Option<MeasuredBrdfKind> { None }
+
+    /// Returns true if the measurement contains multiple levels of BRDF data.
+    fn has_multiple_levels(&self) -> bool { false }
+
     /// Casts the measurement data to a trait object for downcasting to the
     /// concrete type.
     fn as_any(&self) -> &dyn std::any::Any;
+
     /// Casts the measurement data to a mutable trait object for downcasting to
     /// the concrete type.
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
-    /// Casts the measurement data to a MeasuredBrdf trait object.
-    fn as_brdf_data(&self) -> Option<&dyn MeasuredBrdfData> { None }
+
+    /// Returns the BRDF data at the given level if the measurement data
+    /// contains multiple levels of BRDF data.
+    #[allow(unused)]
+    fn as_any_brdf(&self, level: BrdfLevel) -> Option<&dyn AnyMeasuredBrdf> { None }
 }
 
-impl dyn MeasuredData {
+impl dyn AnyMeasured {
     /// Downcasts the measurement data to the concrete type.
     pub fn downcast_ref<T>(&self) -> Option<&T>
     where
-        T: MeasuredData + 'static,
+        T: AnyMeasured + 'static,
     {
         self.as_any().downcast_ref()
     }
@@ -270,49 +367,44 @@ impl dyn MeasuredData {
     /// Downcasts the measurement data to the mutable concrete type.
     pub fn downcast_mut<T>(&mut self) -> Option<&mut T>
     where
-        T: MeasuredData + 'static,
+        T: AnyMeasured + 'static,
     {
         self.as_any_mut().downcast_mut()
     }
 }
 
 #[macro_export]
-/// Boilerplate macro for implementing the `MeasuredData` trait for a type.
-macro_rules! impl_measured_data_trait {
-    ($t:ty, $kind:ident, $brdf_kind:expr) => {
-        impl MeasuredData for $t {
+/// Boilerplate macro for implementing the `AnyMeasured` trait for a type.
+///
+/// This macro is used to implement the `AnyMeasured` trait for a type.
+///
+/// The macro takes two arguments:
+/// - `$t`: The type to implement the `AnyMeasured` trait for.
+/// - `$kind`: The kind of the measurement.
+///
+/// NOTE: The macro doesn't cover the case where the type has multiple levels of
+/// BRDF data. Please implement the `AnyMeasured` trait manually for such types.
+macro_rules! impl_any_measured_trait {
+    // Non-BRDF types.
+    ($t:ty, $kind:ident) => {
+        impl AnyMeasured for $t {
             fn kind(&self) -> MeasurementKind { MeasurementKind::$kind }
-
-            fn brdf_kind(&self) -> Option<MeasuredBrdfKind> {
-                if $brdf_kind.is_some() {
-                    $brdf_kind
-                } else {
-                    None
-                }
-            }
 
             fn as_any(&self) -> &dyn std::any::Any { self }
 
             fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
         }
     };
-    (@brdf $t:ty, $kind:ident, $brdf_kind:expr) => {
-        impl MeasuredData for $t {
-            fn kind(&self) -> MeasurementKind { MeasurementKind::$kind }
-
-            fn brdf_kind(&self) -> Option<MeasuredBrdfKind> {
-                if $brdf_kind.is_some() {
-                    $brdf_kind
-                } else {
-                    None
-                }
-            }
+    // Single-level BRDF types.
+    (@single_level_brdf $t:ty) => {
+        impl AnyMeasured for $t {
+            fn kind(&self) -> MeasurementKind { MeasurementKind::Bsdf }
 
             fn as_any(&self) -> &dyn std::any::Any { self }
 
             fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
 
-            fn as_brdf_data(&self) -> Option<&dyn MeasuredBrdfData> { Some(self) }
+            fn as_any_brdf(&self, _level: BrdfLevel) -> Option<&dyn AnyMeasuredBrdf> { Some(self) }
         }
     };
 }
@@ -373,4 +465,46 @@ impl MeasurementKind {
             MeasurementKind::Sdf => "sdf",
         }
     }
+}
+
+/// Common interface for measured BRDFs.
+pub trait AnyMeasuredBrdf: Sync + Send {
+    /// Returns the kind of the measured BxDF.
+    fn kind(&self) -> MeasuredBrdfKind;
+
+    /// Returns the wavelengths at which the BxDF is measured.
+    fn spectrum(&self) -> &[Nanometres];
+
+    /// Returns the transmitted medium.
+    fn transmitted_medium(&self) -> Medium;
+
+    /// Returns the incident medium.
+    fn incident_medium(&self) -> Medium;
+
+    /// Returns a proxy for the measured BRDF.
+    fn proxy(&self, iors: &IorRegistry) -> BrdfProxy;
+
+    /// Casts the measured BRDF to any type for later downcasting.
+    fn as_any(&self) -> &dyn std::any::Any;
+
+    /// Casts the measured BRDF to any mutable type for later downcasting.
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+}
+
+/// Boilerplate macro for implementing the `AnyMeasuredBrdf` trait for a type.
+#[macro_export]
+macro_rules! any_measured_brdf_trait_common_impl {
+    ($t:ty, $kind:ident) => {
+        fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::$kind }
+
+        fn spectrum(&self) -> &[Nanometres] { &self.spectrum.as_ref() }
+
+        fn transmitted_medium(&self) -> Medium { self.transmitted_medium }
+
+        fn incident_medium(&self) -> Medium { self.incident_medium }
+
+        fn as_any(&self) -> &dyn std::any::Any { self }
+
+        fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
+    };
 }

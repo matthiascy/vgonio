@@ -11,13 +11,13 @@ use crate::{
         OutputFileFormatOption,
     },
     measure::{
-        bsdf::MeasuredBsdfData,
+        bsdf::BsdfMeasurement,
         mfd::{MeasuredNdfData, MeasuredSdfData},
         params::NdfMeasurementMode,
     },
 };
 use base::{
-    bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan2018Brdf},
+    bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan18Brdf},
     error::VgonioError,
     io::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
@@ -30,7 +30,7 @@ use base::{
         partition::{SphericalDomain, SphericalPartition},
         Asset,
     },
-    MeasuredData, MeasurementKind, Version,
+    AnyMeasured, MeasurementKind, Version,
 };
 use chrono::{DateTime, Local};
 use rand::{
@@ -90,7 +90,7 @@ pub struct Measurement {
     /// Timestamp of the measurement.
     pub timestamp: DateTime<Local>,
     /// Measurement data.
-    pub measured: Box<dyn MeasuredData>,
+    pub measured: Box<dyn AnyMeasured>,
 }
 
 unsafe impl Send for Measurement {}
@@ -167,7 +167,7 @@ impl Measurement {
             },
             OutputFileFormatOption::Exr { resolution } => match self.measured.kind() {
                 MeasurementKind::Bsdf => {
-                    let bsdf = self.measured.downcast_ref::<MeasuredBsdfData>().unwrap();
+                    let bsdf = self.measured.downcast_ref::<BsdfMeasurement>().unwrap();
                     bsdf.write_as_exr(filepath, &self.timestamp, *resolution)?
                 },
                 MeasurementKind::Ndf => {
@@ -250,7 +250,7 @@ impl Measurement {
             }
 
             if extension == OsStr::new("exr") {
-                return Yan2018Brdf::load_from_exr(&filepath, Medium::Air, Medium::Aluminium).map(
+                return Yan18Brdf::load_from_exr(&filepath, Medium::Air, Medium::Aluminium).map(
                     |brdf| Measurement {
                         name: format!(
                             "yan2018_{}",

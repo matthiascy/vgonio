@@ -2,10 +2,10 @@ use crate::{
     bxdf::{
         brdf::{
             analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-            Bxdf,
+            AnalyticalBrdf,
         },
         distro::MicrofacetDistroKind,
-        fitting::brdf::{AnalyticalFit, BrdfFittingProxy, OutgoingDirs},
+        BrdfProxy, OutgoingDirs,
     },
     math::Sph2,
     optics::ior::Ior,
@@ -33,7 +33,7 @@ pub(crate) fn init_microfacet_brdf_models(
     range: StepRangeIncl<f64>,
     target: MicrofacetDistroKind,
     symmetry: Symmetry,
-) -> Box<[Box<dyn Bxdf<Params = [f64; 2]>>]> {
+) -> Box<[Box<dyn AnalyticalBrdf<Params = [f64; 2]>>]> {
     let count = range.step_count();
     match symmetry {
         Symmetry::Isotropic => (0..count)
@@ -71,13 +71,13 @@ pub(crate) fn init_microfacet_brdf_models(
 /// A proxy for the BRDF fitting problem using the NLLSQ algorithm.
 pub struct NllsqBrdfFittingProxy<'a, const I: Symmetry> {
     /// The proxy for the BRDF data.
-    proxy: &'a BrdfFittingProxy<'a>,
+    proxy: &'a BrdfProxy<'a>,
     /// Cached IORs for the incident medium.
     iors_i: &'a [Ior],
     /// Cached IORs for the transmitted medium.
     iors_t: &'a [Ior],
     /// The target model being fitted to the measured data.
-    pub(crate) model: Box<dyn Bxdf<Params = [f64; 2]>>,
+    pub(crate) model: Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
     /// The weighting function.
     weighting: Weighting,
     /// The maximum incident angle.
@@ -90,8 +90,8 @@ impl<'a, const I: Symmetry> NllsqBrdfFittingProxy<'a, I> {
     /// Creates a new proxy for the BRDF fitting problem using the NLLSQ
     /// algorithm.
     pub fn new(
-        proxy: &'a BrdfFittingProxy,
-        model: Box<dyn Bxdf<Params = [f64; 2]>>,
+        proxy: &'a BrdfProxy,
+        model: Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
         weighting: Weighting,
         max_theta_i: Option<Radians>,
         max_theta_o: Option<Radians>,
@@ -113,7 +113,7 @@ impl<'a, const I: Symmetry> NllsqBrdfFittingProxy<'a, I> {
     pub fn filtered(&self) -> bool { self.max_theta_i.is_some() || self.max_theta_o.is_some() }
 
     /// Returns the fitted model.
-    pub fn fitted_model(&self) -> &Box<dyn Bxdf<Params = [f64; 2]>> { &self.model }
+    pub fn fitted_model(&self) -> &Box<dyn AnalyticalBrdf<Params = [f64; 2]>> { &self.model }
 
     /// Computes the residuals between the measured and modelled BRDF data.
     fn residuals(&self) -> Vector<f64, Dyn, VecStorage<f64, Dyn, U1>> {
