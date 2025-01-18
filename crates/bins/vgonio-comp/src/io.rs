@@ -1484,24 +1484,26 @@ mod tests {
         bsdf::{
             emitter::EmitterParams,
             receiver::{BounceAndEnergy, ReceiverParams},
-            BrdfLevel, BsdfKind, BsdfMeasurement, RawMeasuredBsdfData, SingleBsdfMeasurementStats,
+            BsdfKind, BsdfMeasurement, RawMeasuredBsdfData, SingleBsdfMeasurementStats,
         },
         params::{BsdfMeasurementParams, SimulationKind},
     };
     use base::{
+        bxdf::brdf::measured::{MeasuredBrdfKind, Origin, VgonioBrdf, VgonioBrdfParameterisation},
         io::{CompressionScheme, FileEncoding},
         math::Sph2,
-        medium::Medium,
-        partition::{PartitionScheme, SphericalDomain, SphericalPartition},
-        range::StepRangeIncl,
         units::{nm, rad, Rads},
-        Version,
+        utils::{
+            medium::Medium,
+            partition::{PartitionScheme, SphericalDomain, SphericalPartition},
+            range::StepRangeIncl,
+        },
+        BrdfLevel, Version,
     };
-    use bxdf::brdf::measured::{Origin, VgonioBrdf, VgonioBrdfParameterisation};
     use jabr::array::DyArr;
     use std::{
         collections::HashMap,
-        io::{BufReader, BufWriter, Cursor, Write},
+        io::{BufReader, BufWriter, Cursor},
         mem::MaybeUninit,
     };
 
@@ -1670,7 +1672,7 @@ mod tests {
         };
 
         let mut writer = BufWriter::new(vec![]);
-        BsdfMeasurement::write_raw_measured_data(&mut writer, &raw).unwrap();
+        BsdfMeasurement::write_raw_measured_data(&mut writer, &raw, false).unwrap();
         let buf = writer.into_inner().unwrap();
 
         let mut reader = BufReader::new(Cursor::new(buf));
@@ -1679,9 +1681,11 @@ mod tests {
             n_wi,
             n_wo,
             n_spectrum,
+            raw.n_zenith_in,
             raw.spectrum.as_slice(),
             raw.incoming.as_slice(),
             raw.outgoing.clone(),
+            false,
         )
         .unwrap();
         assert_eq!(raw, data2);
@@ -1697,6 +1701,7 @@ mod tests {
             incident_medium: Medium::Vacuum,
             transmitted_medium: Medium::Vacuum,
             params: Box::new(VgonioBrdfParameterisation {
+                n_zenith_i: 4,
                 incoming: DyArr::splat(Sph2::zero(), [4]),
                 outgoing: SphericalPartition::new_beckers(
                     SphericalDomain::Upper,
@@ -1707,7 +1712,8 @@ mod tests {
                 [4],
                 vec![nm!(400.0), nm!(500.0), nm!(600.0), nm!(700.0)],
             ),
-            samples: DyArr::splat(1.1, [4, 8, 4]),
+            samples: DyArr::splat(1.1, [n_wi, n_wo, n_spectrum]),
+            kind: MeasuredBrdfKind::Vgonio,
         };
 
         let mut writer = BufWriter::new(vec![]);
@@ -1716,7 +1722,8 @@ mod tests {
 
         let mut reader = BufReader::new(Cursor::new(buf));
         let mut brdf2 = MaybeUninit::<VgonioBrdf>::uninit();
-        BsdfMeasurement::read_vgonio_brdf(&mut reader, 4, 8, 4, brdf2.as_mut_ptr()).unwrap();
+        BsdfMeasurement::read_vgonio_brdf(&mut reader, n_wi, n_wo, n_spectrum, brdf2.as_mut_ptr())
+            .unwrap();
         assert_eq!(brdf.samples, unsafe {
             std::ptr::addr_of!((*brdf2.as_mut_ptr()).samples).read()
         });
@@ -1752,6 +1759,7 @@ mod tests {
         bsdfs.insert(
             BrdfLevel::from(0u32),
             VgonioBrdf {
+                kind: MeasuredBrdfKind::Vgonio,
                 origin: Origin::Simulated,
                 incident_medium: Medium::Vacuum,
                 transmitted_medium: Medium::Aluminium,
@@ -1783,6 +1791,7 @@ mod tests {
                 fresnel: false,
             },
             raw: RawMeasuredBsdfData {
+                n_zenith_in: 4,
                 spectrum,
                 incoming,
                 outgoing: partition,

@@ -1,3 +1,4 @@
+//! BRDF data from the MERL database.
 #[cfg(feature = "bxdf_io")]
 use crate::error::VgonioError;
 use crate::{
@@ -150,6 +151,11 @@ impl MerlBrdf {
         sample
     }
 
+    /// Loads the MERL BRDF from the given path.
+    ///
+    /// # Arguments
+    ///
+    /// * `filepath` - The path to the MERL BRDF data.
     #[cfg(feature = "bxdf_io")]
     pub fn load<P: AsRef<Path>>(filepath: P) -> Result<Self, VgonioError> {
         use std::{fs::File, io::Read};
@@ -274,6 +280,7 @@ impl MerlBrdf {
         })
     }
 
+    /// Returns the kind of the BRDF.
     pub fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
 }
 

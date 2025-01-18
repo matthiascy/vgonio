@@ -1,3 +1,4 @@
+//! Microfacet BRDF models.
 mod beckmann;
 mod trowbridge_reitz;
 

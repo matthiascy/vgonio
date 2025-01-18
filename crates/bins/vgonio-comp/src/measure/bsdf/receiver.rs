@@ -88,7 +88,7 @@ impl ReceiverParams {
 #[derive(Debug, Clone)]
 pub struct Receiver {
     /// The parameters of the receiver.
-    params: ReceiverParams,
+    pub params: ReceiverParams,
     /// Wavelengths of the measurement.
     pub spectrum: Box<[Nanometres]>,
     /// Incident medium's refractive indices.
@@ -105,6 +105,7 @@ pub struct Receiver {
 #[cfg(feature = "vdbg")]
 #[derive(Debug, Clone)]
 struct OutgoingRay {
+    #[allow(unused)]
     /// Index of the ray in the trajectory.
     pub ray_idx: u32,
     /// The final direction of the ray.
@@ -397,10 +398,8 @@ impl Receiver {
                 },
             }
 
-            unsafe {
-                out_trajs.extend_from_slice(&result.trajectories);
-                out_hpnts.extend_from_slice(&hit_points);
-            }
+            out_trajs.extend_from_slice(&result.trajectories);
+            out_hpnts.extend_from_slice(&hit_points);
         }
 
         #[cfg(not(feature = "vdbg"))]

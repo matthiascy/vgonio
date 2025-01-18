@@ -14,17 +14,17 @@ use crate::{
     measure::{mfd::MeasuredNdfData, Measurement},
 };
 #[cfg(feature = "fitting")]
-use base::Symmetry;
 use base::{
-    bxdf::fitting::FittedModel,
+    bxdf::fitting::{FittedModel, FittingProblemKind},
+    Symmetry,
+};
+
+use base::{
+    bxdf::distro::{MicrofacetDistribution, MicrofacetDistroKind},
     units::{rad, Radians},
     utils::{handle::Handle, range::StepRangeIncl},
 };
 
-use base::bxdf::{
-    distro::{MicrofacetDistribution, MicrofacetDistroKind},
-    fitting::FittingProblemKind,
-};
 use egui::{Align, Ui};
 use std::any::Any;
 

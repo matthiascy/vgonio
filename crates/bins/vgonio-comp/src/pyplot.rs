@@ -1,5 +1,4 @@
 use crate::measure::{
-    bsdf::BsdfMeasurement,
     mfd::{MeasuredGafData, MeasuredNdfData},
     params::NdfMeasurementMode,
     DataCarriedOnHemisphereSampler,
@@ -27,7 +26,7 @@ use exr::{
     prelude::Text,
 };
 use jabr::array::{DyArr, DynArr};
-use numpy::{PyArray, PyArray1, PyArray2, PyArrayMethods};
+use numpy::{PyArray1, PyArray2, PyArrayMethods};
 use pyo3::{ffi::c_str, prelude::*, types::PyList};
 use surf::MicroSurface;
 

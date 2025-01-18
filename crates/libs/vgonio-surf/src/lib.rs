@@ -1271,7 +1271,7 @@ impl TriangleUVSubdivision {
 }
 
 /// Origin of the micro-geometry height field.
-#[cfg_attr(feature = "pybind", pyo3::pyclass)]
+#[cfg_attr(feature = "pybind", pyo3::pyclass(eq, eq_int))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MicroSurfaceOrigin {
     /// Micro-geometry height field from the paper

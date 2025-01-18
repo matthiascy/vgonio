@@ -71,10 +71,23 @@ pub enum OutgoingDirs<'a> {
 }
 
 impl<'a> OutgoingDirs<'a> {
+    /// Creates a new outgoing directions grid.
+    ///
+    /// # Arguments
+    ///
+    /// * `o_thetas` - Outgoing polar angles in radians.
+    /// * `o_phis` - Outgoing azimuthal angles in radians.
     pub fn new_grid(o_thetas: Cow<'a, DyArr<f32>>, o_phis: Cow<'a, DyArr<f32>>) -> Self {
         Self::Grid { o_thetas, o_phis }
     }
 
+    /// Creates a new outgoing directions list.
+    ///
+    /// # Arguments
+    ///
+    /// * `o_thetas` - Outgoing polar angles in radians.
+    /// * `o_phis` - Outgoing azimuthal angles in radians.
+    /// * `offsets` - Offsets into phi_o array for each theta_o band.
     pub fn new_list(
         o_thetas: Cow<'a, DyArr<f32>>,
         o_phis: Cow<'a, DyArr<f32>>,

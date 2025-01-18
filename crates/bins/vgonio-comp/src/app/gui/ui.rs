@@ -28,9 +28,13 @@ use crate::{
     },
 };
 #[cfg(feature = "fitting")]
-use base::{bxdf::brdf::BrdfFamily, utils::range::StepRangeIncl, AnyMeasuredBrdf};
 use base::{
+    bxdf::brdf::BrdfFamily,
     bxdf::fitting::{FittedModel, FittingProblem, FittingProblemKind, FittingReport},
+    utils::range::StepRangeIncl,
+    AnyMeasuredBrdf,
+};
+use base::{
     io::{CompressionScheme, FileEncoding},
     utils::handle::Handle,
     BrdfLevel, MeasurementKind, Weighting,

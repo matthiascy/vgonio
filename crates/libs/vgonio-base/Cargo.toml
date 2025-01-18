@@ -11,9 +11,9 @@ use_f64 = []
 cli = ["dep:clap"]
 io = ["dep:csv", "dep:exr"]
 winit = ["dep:winit"]
-bxdf = []
+bxdf = ["dep:rayon"]
 bxdf_io = ["dep:serde_json", "dep:serde-pickle", "dep:exr"]
-bxdf_fit = ["dep:rayon", "dep:levenberg-marquardt", "dep:nalgebra"]
+bxdf_fit = ["dep:levenberg-marquardt", "dep:nalgebra"]
 
 
 [dependencies]

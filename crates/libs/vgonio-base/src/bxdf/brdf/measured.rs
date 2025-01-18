@@ -1,40 +1,7 @@
+//! Measured BRDF models.
 use crate::{math::Sph2, units::Nanometres, utils::medium::Medium};
 use jabr::array::DyArr;
 use std::{fmt::Debug, ops::Index};
-
-#[cfg(feature = "bxdf_fit")]
-macro_rules! impl_analytical_fit_trait {
-    ($self:ident) => {
-        #[inline]
-        fn spectrum(&$self) -> &[Nanometres] { $self.spectrum.as_ref() }
-
-        #[inline]
-        fn samples(&$self) -> &[f32] { $self.samples.as_ref() }
-
-        #[inline]
-        fn params(&$self) -> &Self::Params { &$self.params }
-
-        #[inline]
-        fn incident_medium(&$self) -> Medium {
-            $self.incident_medium
-        }
-
-        #[inline]
-        fn transmitted_medium(&$self) -> Medium {
-            $self.transmitted_medium
-        }
-
-        #[inline]
-        fn as_any(&$self) -> &dyn std::any::Any {
-            $self
-        }
-
-        #[inline]
-        fn as_any_mut(&mut $self) -> &mut dyn std::any::Any {
-            $self
-        }
-    };
-}
 
 pub mod clausen;
 pub mod merl;

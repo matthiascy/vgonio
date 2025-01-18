@@ -33,8 +33,11 @@ use std::{
 /// the same.
 #[derive(Clone, PartialEq, Debug)]
 pub struct ClausenBrdfParameterisation {
+    /// Polar angles of the incident directions.
     pub i_thetas: DyArr<f32>,
+    /// Polar angles of the outgoing directions.
     pub o_thetas: DyArr<f32>,
+    /// Azimuthal angles of the incident and outgoing directions.
     pub phis: DyArr<f32>,
     /// The incident directions of the BRDF in [theta, phi] format. Values are
     /// in always sorted. Increases first by phi, then by theta.

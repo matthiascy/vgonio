@@ -981,6 +981,7 @@ impl DepthAttachment {
     }
 
     /// Number of layers in total.
+    #[allow(unused)]
     pub fn layers(&self) -> u32 { self.layers }
 
     /// Returns the texture view of the specified layer of the whole attachment.
@@ -1190,6 +1191,7 @@ impl ColorAttachment {
     pub fn layer_size_in_bytes(&self) -> u64 { self.textures[0].layer_size_in_bytes }
 
     /// Returns the texture index of the specified layer.
+    #[allow(unused)]
     pub fn texture_index(&self, layer: u32) -> u32 {
         assert!(layer < self.layers, "Layer index out of range");
         layer / self.layers_per_texture

@@ -1,5 +1,4 @@
-#[cfg(feature = "bxdf_fit")]
-use crate::optics::ior::IorRegistry;
+//! BRDF data measured by Yan et al. 2018.
 use crate::{
     bxdf::{
         brdf::measured::{
@@ -9,6 +8,7 @@ use crate::{
     },
     impl_any_measured_trait,
     math::{compute_bicubic_spline_coefficients, Sph2, Vec3},
+    optics::ior::IorRegistry,
     units::{rad, Nanometres},
     utils::medium::Medium,
     AnyMeasured, AnyMeasuredBrdf, BrdfLevel, MeasuredBrdfKind, MeasurementKind,
@@ -119,6 +119,7 @@ impl Yan18Brdf {
         }
     }
 
+    /// Returns the iterator over the BRDF snapshots.
     pub fn snapshots(&self) -> BrdfSnapshotIterator<'_, Yan18BrdfParameterisation, 3> {
         BrdfSnapshotIterator {
             brdf: self,

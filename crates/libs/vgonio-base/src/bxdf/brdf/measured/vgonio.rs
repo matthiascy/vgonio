@@ -6,7 +6,6 @@ use crate::bxdf::{
     BrdfProxy, OutgoingDirs, ProxySource,
 };
 
-#[cfg(feature = "bxdf_fit")]
 use crate::optics::ior::IorRegistry;
 
 use crate::{
@@ -150,6 +149,7 @@ impl VgonioBrdf {
         }
     }
 
+    /// Writes the BRDF data to an EXR file.
     #[cfg(feature = "bxdf_io")]
     pub fn write_as_exr(
         &self,

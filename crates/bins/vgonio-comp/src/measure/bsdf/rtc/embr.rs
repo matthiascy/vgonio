@@ -15,7 +15,7 @@ use crate::{
 #[cfg(not(feature = "vdbg"))]
 use base::optics::ior::Ior;
 use base::{
-    math::{Sph2, Vec3, Vec3A},
+    math::{Sph2, Vec3A},
     optics::fresnel,
 };
 use embree::{
@@ -30,6 +30,7 @@ use surf::MicroSurfaceMesh;
 /// SoA ray stream data for the whole ray stream.
 #[derive(Debug, Clone)]
 struct SoARayStreams<'g> {
+    #[allow(unused)]
     /// The total number of rays in the stream.
     pub n_ray: usize,
     /// The number of sub-streams, each with a maximum size of
@@ -125,6 +126,7 @@ unsafe impl Send for SoARayStreamsIterMut<'_> {}
 
 struct SoARayStreamMut<'a> {
     idx: usize,
+    #[allow(unused)]
     size: usize,
     msurf: Arc<Geometry<'a>>,
     last_hit: &'a mut [HitInfo],
@@ -569,8 +571,8 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
                 bounces,
                 active_rays,
                 validities,
-                data.trajectory,
-                data.trajectory.len(),
+                ctx.ext.trajectory,
+                ctx.ext.trajectory.len(),
             );
         });
 
@@ -585,6 +587,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
 
     #[cfg(not(feature = "vdbg"))]
     {
+        use base::math::{Vec3, Vec3A};
         use jabr::array::DyArr;
         // Unpack the stream data into a single result.
         let dirs = stream_data

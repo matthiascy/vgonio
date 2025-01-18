@@ -1,3 +1,4 @@
+//! BRDF data measured by UTIA at Czech Technical University.
 use crate::bxdf::brdf::measured::{BrdfParam, BrdfParamKind, MeasuredBrdf};
 
 /// Represent the BRDF parameterisation from UTIA: <http://btf.utia.cas.cz/>

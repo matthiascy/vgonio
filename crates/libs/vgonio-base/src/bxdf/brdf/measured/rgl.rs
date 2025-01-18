@@ -1,3 +1,4 @@
+//! BRDF data measured by Jonathan Dupuy and Wenzel Jakob in RGL at EPFL.
 use crate::{
     bxdf::{
         brdf::measured::{
@@ -59,32 +60,46 @@ impl BrdfParam for RglBrdfParameterisation {
 }
 
 impl RglBrdfParameterisation {
+    /// Returns the incoming directions in cartesian coordinates.
     pub fn incoming_cartesian(&self) -> DyArr<Vec3> {
         DyArr::from_iterator([-1], self.incoming.iter().map(Sph2::to_cartesian))
     }
 
+    /// Returns the outgoing directions in cartesian coordinates.
     pub fn outgoing_cartesian(&self) -> DyArr<Vec3> {
         DyArr::from_iterator([-1], self.outgoing.iter().map(Sph2::to_cartesian))
     }
 
+    /// Returns the number of outgoing directions.
     pub fn n_wo(&self) -> usize { self.outgoing.len() }
 
+    /// Returns the number of incident directions.
     pub fn n_wi(&self) -> usize { self.incoming.len() }
 
+    /// Returns the number of incident directions along the polar angle.
     pub fn n_wi_zenith(&self) -> usize { self.n_zenith_i }
 
+    /// Returns the number of incident directions along the azimuthal angle.
     pub fn n_wi_azimuth(&self) -> usize { self.incoming.len() / self.n_zenith_i }
 
+    /// Returns the number of outgoing directions along the polar angle.
     pub fn n_wo_zenith(&self) -> usize { self.n_zenith_o }
 
+    /// Returns the number of outgoing directions along the azimuthal angle.
     pub fn n_wo_azimuth(&self) -> usize { self.outgoing.len() / self.n_zenith_o }
 }
 
 impl RglBrdf {
     // TODO: check other BRDFs decide if we need to load the BRDFs in the
     // constructor.
+    /// Loads the RGL BRDF from the given path.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to the RGL BRDF data.
+    /// * `medium` - The medium of matter.
     #[cfg(feature = "bxdf_io")]
-    pub fn load(path: &Path, transmitted_medium: Medium) -> Self {
+    pub fn load(path: &Path, medium: Medium) -> Self {
         let brdf = powitacq::BrdfData::new(path);
         let spectrum = {
             let spectrum = brdf.wavelengths();
@@ -165,15 +180,17 @@ impl RglBrdf {
             kind: MeasuredBrdfKind::Rgl,
             origin: Origin::RealWorld,
             incident_medium: Medium::Vacuum,
-            transmitted_medium,
+            transmitted_medium: medium,
             params: Box::new(parameterisation),
             spectrum,
             samples,
         }
     }
 
+    /// Returns the kind of the BRDF.
     pub fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Rgl }
 
+    /// Returns the iterator over the BRDF snapshots.
     pub fn snapshots(&self) -> BrdfSnapshotIterator<'_, RglBrdfParameterisation, 3> {
         BrdfSnapshotIterator {
             brdf: self,
