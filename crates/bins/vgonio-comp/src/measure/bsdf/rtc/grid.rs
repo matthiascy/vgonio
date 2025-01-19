@@ -22,7 +22,6 @@ use base::{
     math,
     math::{IVec2, UVec2, Vec2, Vec3, Vec3Swizzles},
 };
-use jabr::array::DyArr;
 use rayon::prelude::*;
 use std::time::Instant;
 use surf::{MicroSurface, MicroSurfaceMesh};
@@ -1240,6 +1239,7 @@ mod tests {
         let mesh = surf.as_micro_surface_mesh(
             HeightOffset::None,
             TriangulationPattern::BottomLeftToTopRight,
+            None,
         );
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         assert_eq!(grid.level(), 2);
@@ -1296,7 +1296,11 @@ mod tests {
             None,
             None
         );
-        let mesh = surf.as_micro_surface_mesh(HeightOffset::None, TriangulationPattern::BottomLeftToTopRight);
+        let mesh = surf.as_micro_surface_mesh(
+            HeightOffset::None,
+            TriangulationPattern::BottomLeftToTopRight,
+            None,
+        );
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         let base = grid.base();
         assert_eq!(grid.level(), 2);
@@ -1389,6 +1393,7 @@ mod tests {
         let mesh = surf.as_micro_surface_mesh(
             HeightOffset::None,
             TriangulationPattern::BottomLeftToTopRight,
+            None,
         );
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         let base = grid.base();
@@ -1554,6 +1559,7 @@ mod tests {
         let mesh = surf.as_micro_surface_mesh(
             HeightOffset::None,
             TriangulationPattern::BottomLeftToTopRight,
+            None,
         );
         let grid = MultilevelGrid::new(&surf, &mesh, 2);
         let base = grid.base();
