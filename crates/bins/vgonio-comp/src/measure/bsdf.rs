@@ -48,7 +48,7 @@ pub mod rtc;
 
 /// Raw data of the BSDF measurement.
 #[derive(Debug, Clone, PartialEq)]
-pub struct RawMeasuredBsdfData {
+pub struct RawBsdfMeasurement {
     /// The number of incident directions along the zenith.
     pub n_zenith_in: usize,
     /// The spectrum of the emitter.
@@ -73,7 +73,7 @@ pub struct RawMeasuredBsdfData {
 /// A snapshot of the raw measured BSDF data at a given incident direction of
 /// the emitter.
 pub struct RawBsdfSnapshotIterator<'a> {
-    data: &'a RawMeasuredBsdfData,
+    data: &'a RawBsdfMeasurement,
     idx: usize,
 }
 
@@ -125,7 +125,7 @@ impl ExactSizeIterator for RawBsdfSnapshotIterator<'_> {
     fn len(&self) -> usize { self.data.incoming.len() - self.idx }
 }
 
-impl RawMeasuredBsdfData {
+impl RawBsdfMeasurement {
     /// Returns the iterator over the snapshots of the raw measured BSDF data.
     pub fn snapshots(&self) -> RawBsdfSnapshotIterator {
         RawBsdfSnapshotIterator { data: self, idx: 0 }
@@ -278,7 +278,7 @@ pub struct BsdfMeasurement {
     /// Parameters of the measurement.
     pub params: BsdfMeasurementParams,
     /// Raw data of the measurement.
-    pub raw: RawMeasuredBsdfData,
+    pub raw: RawBsdfMeasurement,
     /// Collected BSDF data.
     pub bsdfs: HashMap<BrdfLevel, VgonioBrdf>,
 }
@@ -1356,7 +1356,7 @@ pub fn measure_bsdf_rt(
                             Box<[SingleBsdfMeasurementStats]>,
                         >(stats)
                     };
-                    let raw = RawMeasuredBsdfData {
+                    let raw = RawBsdfMeasurement {
                         n_zenith_in: emitter.params.zenith.step_count_wrapped(),
                         spectrum: spectrum.clone(),
                         incoming: incoming.clone(),

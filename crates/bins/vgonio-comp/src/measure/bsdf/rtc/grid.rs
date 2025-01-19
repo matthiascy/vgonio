@@ -22,6 +22,8 @@ use base::{
     math,
     math::{IVec2, UVec2, Vec2, Vec3, Vec3Swizzles},
 };
+#[cfg(not(feature = "vdbg"))]
+use jabr::array::DyArr;
 use rayon::prelude::*;
 use std::time::Instant;
 use surf::{MicroSurface, MicroSurfaceMesh};

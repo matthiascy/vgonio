@@ -22,7 +22,7 @@ pub mod vgmo {
         bsdf::{
             emitter::EmitterParams,
             receiver::{BounceAndEnergy, ReceiverParams},
-            BsdfKind, RawMeasuredBsdfData, SingleBsdfMeasurementStats,
+            BsdfKind, RawBsdfMeasurement, SingleBsdfMeasurementStats,
         },
         mfd::MeasuredSdfData,
         params::{
@@ -1300,7 +1300,7 @@ pub mod vgmo {
 
         pub(crate) fn write_raw_measured_data<W: Write>(
             writer: &mut W,
-            raw: &RawMeasuredBsdfData,
+            raw: &RawBsdfMeasurement,
             nrays64: bool,
         ) -> Result<(), std::io::Error> {
             let mut writer = BufWriter::new(writer);
@@ -1326,7 +1326,7 @@ pub mod vgmo {
             incoming: &[Sph2],
             partition: SphericalPartition,
             nrays64: bool,
-        ) -> Result<RawMeasuredBsdfData, std::io::Error> {
+        ) -> Result<RawBsdfMeasurement, std::io::Error> {
             debug_assert_eq!(n_spectrum, spectrum.len(), "Spectrum size mismatch");
             let mut records = vec![None; n_wi * n_wo * n_spectrum];
             for record in records.iter_mut() {
@@ -1341,7 +1341,7 @@ pub mod vgmo {
             }
 
             Ok(unsafe {
-                RawMeasuredBsdfData {
+                RawBsdfMeasurement {
                     n_zenith_in,
                     spectrum: DyArr::from_slice_1d(spectrum),
                     incoming: DyArr::from_slice_1d(incoming),
@@ -1484,7 +1484,7 @@ mod tests {
         bsdf::{
             emitter::EmitterParams,
             receiver::{BounceAndEnergy, ReceiverParams},
-            BsdfKind, BsdfMeasurement, RawMeasuredBsdfData, SingleBsdfMeasurementStats,
+            BsdfKind, BsdfMeasurement, RawBsdfMeasurement, SingleBsdfMeasurementStats,
         },
         params::{BsdfMeasurementParams, SimulationKind},
     };
@@ -1617,7 +1617,7 @@ mod tests {
         let partition =
             SphericalPartition::new_beckers(SphericalDomain::Upper, Rads::from_degrees(45.0));
         let n_wo = partition.n_patches(); // 8
-        let raw = RawMeasuredBsdfData {
+        let raw = RawBsdfMeasurement {
             n_zenith_in: 4,
             spectrum: DyArr::from_iterator(
                 [n_spectrum as isize],
@@ -1790,7 +1790,7 @@ mod tests {
                 }],
                 fresnel: false,
             },
-            raw: RawMeasuredBsdfData {
+            raw: RawBsdfMeasurement {
                 n_zenith_in: 4,
                 spectrum,
                 incoming,
