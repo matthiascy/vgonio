@@ -102,6 +102,13 @@ impl<T, const L: MemLayout> DynArr<T, L> {
         ))
     }
 
+    pub fn fill(&mut self, value: T)
+    where
+        T: Clone,
+    {
+        self.0.data.as_mut_slice().fill(value);
+    }
+
     pub fn iter(&self) -> Iter<T> { self.0.data.as_slice().iter() }
 
     pub fn iter_mut(&mut self) -> IterMut<T> { self.0.data.as_mut_slice().iter_mut() }
@@ -118,7 +125,9 @@ impl<T, const N: usize, const L: MemLayout> Index<[usize; N]> for DynArr<T, L> {
     fn index(&self, index: [usize; N]) -> &Self::Output {
         assert!(
             compute_n_elems(&index) <= self.0.data.len(),
-            "Index out of bounds"
+            "Index out of bounds, shape: {:?}, index: {:?}",
+            self.shape(),
+            index
         );
         &self.0[index]
     }
@@ -129,7 +138,9 @@ impl<T, const N: usize, const L: MemLayout> IndexMut<[usize; N]> for DynArr<T, L
     fn index_mut(&mut self, index: [usize; N]) -> &mut Self::Output {
         assert!(
             compute_n_elems(&index) <= self.0.data.len(),
-            "Index out of bounds"
+            "Index out of bounds, shape: {:?}, index: {:?}",
+            self.shape(),
+            index
         );
         &mut self.0[index]
     }

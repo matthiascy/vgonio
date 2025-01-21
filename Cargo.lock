@@ -4444,6 +4444,7 @@ dependencies = [
  "num-traits",
  "paste",
  "proptest",
+ "pyo3",
  "rayon",
  "serde",
  "serde-pickle",

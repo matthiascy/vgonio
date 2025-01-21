@@ -292,4 +292,6 @@ impl AnalyticalBrdf for MicrofacetBrdfBK {
     }
 
     fn clone_box(&self) -> Box<dyn AnalyticalBrdf<Params = Self::Params>> { Box::new(self.clone()) }
+
+    fn name(&self) -> &str { "Microfacet@Beckmann" }
 }

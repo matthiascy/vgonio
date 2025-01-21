@@ -8,6 +8,7 @@ version.workspace = true
 [features]
 default = []
 use_f64 = []
+pybind = ["dep:pyo3"]
 cli = ["dep:clap"]
 io = ["dep:csv", "dep:exr"]
 winit = ["dep:winit"]
@@ -33,6 +34,7 @@ serde.workspace = true
 static_assertions.workspace = true
 uuid.workspace = true
 winit = { workspace = true, optional = true }
+pyo3 = { workspace = true, optional = true, features = ["extension-module"] }
 
 # dependencies required by bxdf or bxdf_fit
 levenberg-marquardt = { workspace = true, optional = true }

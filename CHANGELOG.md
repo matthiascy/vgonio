@@ -25,7 +25,7 @@
 - Rename `MeasuredBrdfLevel` to `BrdfLevel`
 - Remove `AnalyticalFit` trait
 - New `AnyMeasuredBrdf` trait
-- Rename `MeasuredBsdfData` to `BsdfMeasurement`
+- Rename `RawMeasuredBsdfData` to `RawBsdfMeasurement`
 
 ## 0.3.2 - 2024-08-16
 

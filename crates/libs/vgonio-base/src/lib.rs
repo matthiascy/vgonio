@@ -162,6 +162,18 @@ pub enum ErrorMetric {
     Nllsq,
 }
 
+impl Display for ErrorMetric {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorMetric::L1 => write!(f, "l1"),
+            ErrorMetric::L2 => write!(f, "l2"),
+            ErrorMetric::Mse => write!(f, "mse"),
+            ErrorMetric::Rmse => write!(f, "rmse"),
+            ErrorMetric::Nllsq => write!(f, "nllsq"),
+        }
+    }
+}
+
 /// Weighting function to apply to the observed data and predicted model values.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -507,4 +519,18 @@ macro_rules! any_measured_brdf_trait_common_impl {
 
         fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_metric() {
+        assert_eq!(ErrorMetric::L1.to_string(), "l1");
+        assert_eq!(ErrorMetric::L2.to_string(), "l2");
+        assert_eq!(ErrorMetric::Mse.to_string(), "mse");
+        assert_eq!(ErrorMetric::Rmse.to_string(), "rmse");
+        assert_eq!(ErrorMetric::Nllsq.to_string(), "nllsq");
+    }
 }

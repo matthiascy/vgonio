@@ -32,6 +32,9 @@ pub trait AnalyticalBrdf: Send + Sync + Debug + 'static {
     /// The type of the parameters of the BRDF model.
     type Params;
 
+    /// The name of the BRDF model.
+    fn name(&self) -> &str;
+
     /// Returns the kind of the BRDF.
     fn family(&self) -> BrdfFamily;
     /// Returns the kind of the microfacet distribution function.

@@ -158,12 +158,12 @@ pub struct BrdfProxy<'a> {
     /// The raw BRDF data that the proxy is associated with.
     pub(crate) brdf: &'a dyn AnyMeasuredBrdf,
     /// Incident angles (polar angle) in radians of the resampled BRDF data.
-    pub(crate) i_thetas: Cow<'a, DyArr<f32>>,
+    pub i_thetas: Cow<'a, DyArr<f32>>,
     /// Incident angles (azimuthal angle) in radians of the resampled BRDF
     /// data.
-    pub(crate) i_phis: Cow<'a, DyArr<f32>>,
+    pub i_phis: Cow<'a, DyArr<f32>>,
     /// Outgoing directions of the resampled BRDF data.
-    pub(crate) o_dirs: OutgoingDirs<'a>,
+    pub o_dirs: OutgoingDirs<'a>,
     /// The resampled BRDF data that can be used for fitting. Depends on the
     /// outgoing directions. The shape of the array could be
     /// - [Nθ_i, Nφ_i, Nθ_o, Nφ_o, Nλ] in row-major order

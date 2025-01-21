@@ -256,6 +256,8 @@ impl AnalyticalBrdf for MicrofacetBrdfTR {
     }
 
     fn clone_box(&self) -> Box<dyn AnalyticalBrdf<Params = Self::Params>> { Box::new(self.clone()) }
+
+    fn name(&self) -> &str { "Microfacet@TrowbridgeReitz" }
 }
 
 /// Trowbridge-Reitz (GGX) microfacet BRDF model.
@@ -270,6 +272,7 @@ pub struct TrowbridgeReitzBrdfModel {
 }
 
 impl TrowbridgeReitzBrdfModel {
+    /// Creates a new Trowbridge-Reitz (GGX) microfacet BRDF model.
     pub fn new(alpha_x: f64, alpha_y: f64) -> Self {
         TrowbridgeReitzBrdfModel {
             alpha_x: alpha_x.max(1.0e-6),

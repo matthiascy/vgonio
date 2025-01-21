@@ -95,6 +95,7 @@ pub struct PlotOptions {
         num_args = 1..,
         help = "The roughness parameter along the x-axis and y-axis. Can be multiple values.",
         required_if_eq("kind", "brdf-fitting"),
+        required_if_eq("kind", "error-map"),
     )]
     pub alpha: Vec<f64>,
 
@@ -285,6 +286,9 @@ pub struct PlotOptions {
 
     #[clap(long, help = "The file to save the plot.")]
     pub save: Option<String>,
+
+    #[clap(long, help = "Whether to run the plot in parallel.")]
+    pub parallel: bool,
 }
 
 pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
@@ -595,8 +599,14 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     error_metric,
                     opts.weighting.unwrap(),
                     &cache.iors,
+                    opts.parallel,
                 )
-                .unwrap();
+                .map_err(|pyerr| {
+                    VgonioError::new(
+                        format!("Failed to plot the BRDF error map: {}", pyerr),
+                        Some(Box::new(pyerr)),
+                    )
+                })?;
                 Ok(())
             },
         }

@@ -1,3 +1,5 @@
+use core::f64;
+
 use crate::measure::{
     mfd::{MeasuredGafData, MeasuredNdfData},
     params::NdfMeasurementMode,
@@ -13,7 +15,7 @@ use base::{
             },
             AnalyticalBrdf,
         },
-        Scattering,
+        OutgoingDirs, Scattering,
     },
     math::Sph2,
     optics::ior::IorRegistry,
@@ -25,8 +27,8 @@ use exr::{
     image::{FlatImage, FlatSamples},
     prelude::Text,
 };
-use jabr::array::{DyArr, DynArr};
-use numpy::{PyArray1, PyArray2, PyArrayMethods};
+use jabr::array::{shape, DyArr, DynArr};
+use numpy::{PyArray, PyArray1, PyArray2, PyArrayMethods};
 use pyo3::{ffi::c_str, prelude::*, types::PyList};
 use surf::MicroSurface;
 
@@ -1393,6 +1395,7 @@ pub fn plot_brdf_error_map(
     metric: ErrorMetric,
     weighting: Weighting,
     iors: &IorRegistry,
+    parallel: bool,
 ) -> PyResult<()> {
     assert_eq!(
         measured.kind(),
@@ -1403,9 +1406,9 @@ pub fn plot_brdf_error_map(
     let func: Py<PyAny> = Python::with_gil(|py| {
         PyModule::from_code(
             py,
-            c_str!(include_str!("./pyplot/pyplot.py")),
-            c_str!("pyplot.py"),
-            c_str!("vgp"),
+            c_str!(include_str!("./pyplot/brdf_error_map.py")),
+            c_str!("brdf_error_map.py"),
+            c_str!("vgplot"),
         )?
         .getattr("plot_brdf_error_map")
         .map(|x| x.into())
@@ -1422,77 +1425,101 @@ pub fn plot_brdf_error_map(
         })
         .collect();
     let brdf = measured.as_any_brdf(BrdfLevel::L0).unwrap();
-    let iors_i = iors
-        .ior_of_spectrum(brdf.incident_medium(), brdf.spectrum())
-        .unwrap();
-    let iors_t = iors
-        .ior_of_spectrum(brdf.transmitted_medium(), brdf.spectrum())
-        .unwrap();
     let proxy = brdf.proxy(iors);
-    let residuals: DynArr<f64> = DynArr::zeros(proxy.samples_shape());
-    todo!();
+    let shape = proxy.samples_shape();
 
-    // for model in models.iter() {
-    // }
-    //
-    // let residuals =
-    // let brdf = measured.brdf_at(MeasuredBrdfLevel::L0).unwrap();
-    //
-    // let proxy = measured.proxy(iors);
-    // Python::with_gil(|py| {
-    //     for (ax, ay) in alphas {
-    //         let bk = MicrofacetBrdfBK::new(*ax, *ay);
-    //         let tr = MicrofacetBrdfTR::new(*ax, *ay);
-    //         let modelled_bk = proxy.generate_analytical(&bk);
-    //         let modelled_tr = proxy.generate_analytical(&tr);
-    //         let shape = proxy.samples_shape();
-    //         unsafe {
-    //             let residuals_bk = PyArray::zeros(py, shape, false);
-    //             proxy.residuals(
-    //                 &modelled_bk,
-    //                 weighting,
-    //                 residuals_bk.as_slice_mut().unwrap(),
-    //             );
-    //             let residuals_tr = PyArray::zeros(py, shape, false);
-    //             proxy.residuals(
-    //                 &modelled_tr,
-    //                 weighting,
-    //                 residuals_tr.as_slice_mut().unwrap(),
-    //             );
-    //             fun.call1(
-    //                 py,
-    //                 (
-    //                     residuals_bk,
-    //                     residuals_tr,
-    //                     brdf.params.incoming.len(),
-    //                     brdf.params.outgoing.rings.len(),
-    //                     brdf.spectrum.len(),
-    //                     *ax,
-    //                     *ay,
-    //                 ),
-    //             )
-    //                 .unwrap();
-    //         }
-    //     }
-    // })
-    // // TODO: considering filtering some of the BRDF angles.
-    // match measured.brdf_kind().unwrap() {
-    //     MeasuredBrdfKind::Vgonio => {
-    //         let brdf = measured.brdf_at(MeasuredBrdfLevel::L0).unwrap();
-    //         let iors_i = iors
-    //             .ior_of_spectrum(brdf.incident_medium, brdf.spectrum.as_ref())
-    //             .unwrap();
-    //         let iors_t = iors
-    //             .ior_of_spectrum(brdf.transmitted_medium, brdf.spectrum.as_ref())
-    //             .unwrap();
-    //         let proxy = brdf.proxy(iors);
-    //     },
-    //     _ => {
-    //         log::error!("The BRDF kind is unknown!");
-    //         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-    //             "The BRDF kind is unknown!",
-    //         ));
-    //     },
-    // }
-    Ok(())
+    Python::with_gil(|py| {
+        let i_thetas = PyArray::from_slice(py, &proxy.i_thetas.as_slice());
+        let i_phis = PyArray::from_slice(py, &proxy.i_phis.as_slice());
+        let i_count = proxy.i_thetas.len() * proxy.i_phis.len();
+        let (o_thetas, o_phis, offsets, o_count, is_grid) = match &proxy.o_dirs {
+            OutgoingDirs::List {
+                o_thetas,
+                o_phis,
+                offsets,
+            } => (
+                PyArray::from_slice(py, &o_thetas.as_slice()),
+                PyArray::from_slice(py, &o_phis.as_slice()),
+                Some(PyArray::from_slice(py, &offsets.as_slice())),
+                o_phis.len(),
+                false,
+            ),
+            OutgoingDirs::Grid { o_thetas, o_phis } => (
+                PyArray::from_slice(py, &o_thetas.as_slice()),
+                PyArray::from_slice(py, &o_phis.as_slice()),
+                None,
+                o_thetas.len() * o_phis.len(),
+                true,
+            ),
+        };
+        let spectrum = PyArray::from_slice(py, {
+            unsafe { std::mem::transmute::<&[Nanometres], &[f32]>(brdf.spectrum()) }
+        });
+
+        let mut residuals = DynArr::<f64>::splat(f64::NAN, shape);
+        let n_spectrum = brdf.spectrum().len();
+        let n_theta_i = proxy.i_thetas.len();
+        let n_phi_i = proxy.i_phis.len();
+        let mut maps = DynArr::<f64>::zeros(&[n_spectrum, i_count, o_count]);
+
+        for model in models.iter() {
+            let modelled = proxy.generate_analytical(model.as_ref());
+            proxy.residuals(&modelled, weighting, residuals.as_mut_slice());
+
+            // Rearrange the residuals to the shape of the residual maps per wavelength
+            // In case of the grid: ϑi, ϕi, ϑo, ϕo, λ -> λ, (ϑi, ϕi), (ϑo, ϕo)
+            // In case of the list: ϑi, ϕi, ωo, λ -> λ, (ϑi, ϕi), ωo
+            if is_grid {
+                let n_theta_o = o_thetas.len().unwrap();
+                let n_phi_o = o_phis.len().unwrap();
+                for i in 0..n_spectrum {
+                    for j in 0..n_theta_i {
+                        for k in 0..n_phi_i {
+                            for l in 0..n_theta_o {
+                                for m in 0..n_phi_o {
+                                    maps[[i, j * n_phi_i + k, l * n_phi_o + m]] =
+                                        residuals[[j, k, l, m, i]];
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                for i in 0..n_spectrum {
+                    for j in 0..n_theta_i {
+                        for k in 0..n_phi_i {
+                            for l in 0..o_count {
+                                maps[[i, j * n_phi_i + k, l]] = residuals[[j, k, l, i]];
+                            }
+                        }
+                    }
+                }
+            }
+
+            let rs = PyArray::from_slice(py, residuals.as_slice());
+            let rs = rs.reshape(shape).unwrap();
+
+            let pymaps = PyArray::from_slice(py, maps.as_slice());
+            let pymaps = pymaps.reshape(maps.shape()).unwrap();
+            func.call1(
+                py,
+                (
+                    metric.to_string(),
+                    model.name(),
+                    rs,
+                    pymaps,
+                    &i_thetas,
+                    &i_phis,
+                    &o_thetas,
+                    &o_phis,
+                    offsets.as_ref(),
+                    &spectrum,
+                    parallel,
+                ),
+            )
+            .unwrap();
+            residuals.fill(f64::NAN);
+        }
+        Ok(())
+    })
 }
