@@ -1389,7 +1389,18 @@ pub fn plot_brdf_fitting(
 }
 
 /// Plot the BRDF error map.
+///
+/// # Arguments
+///
+/// * `name` - The name of the measured BRDF.
+/// * `measured` - The measured BRDF.
+/// * `alphas` - The alphas of the BRDF models.
+/// * `metric` - The metric used to compute the residuals.
+/// * `weighting` - The weighting used to compute the residuals.
+/// * `iors` - The IOR registry.
+/// * `parallel` - Whether to plot the BRDF error map in parallel.
 pub fn plot_brdf_error_map(
+    name: &str,
     measured: &Box<dyn AnyMeasured>,
     alphas: &[(f64, f64)],
     metric: ErrorMetric,
@@ -1504,10 +1515,11 @@ pub fn plot_brdf_error_map(
             func.call1(
                 py,
                 (
-                    metric.to_string(),
-                    model.name(),
+                    name,
                     rs,
                     pymaps,
+                    model.name(),
+                    metric.to_string(),
                     &i_thetas,
                     &i_phis,
                     &o_thetas,

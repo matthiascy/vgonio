@@ -135,7 +135,7 @@ def annotate_errormap(im, data=None, valfmt="{x:.2f}", textcolors=["black", "whi
 
 MAX_DIM_PER_SUBPLOT = 64
 
-def plot_brdf_error_map_single(i, model_name, metric, x_labels, y_labels, maps, spectrum, vmin, vmax, cbarlabel='residual'):
+def plot_brdf_error_map_single(i, name, model_name, metric, x_labels, y_labels, maps, spectrum, vmin, vmax, cbarlabel='residual'):
     """
     Plot a single brdf error map.
 
@@ -143,6 +143,8 @@ def plot_brdf_error_map_single(i, model_name, metric, x_labels, y_labels, maps, 
     ----------
     i : int
         Index of the wavelength to plot
+    name : str
+        Name of the measured BRDF; used as the title of the plot and the filename of the plot
     model_name : str
         Name of the model
     metric : str
@@ -162,7 +164,7 @@ def plot_brdf_error_map_single(i, model_name, metric, x_labels, y_labels, maps, 
     if imgw > MAX_DIM_PER_SUBPLOT or imgh > MAX_DIM_PER_SUBPLOT:
         n_rows = math.ceil(imgw / MAX_DIM_PER_SUBPLOT)
         n_cols = math.ceil(imgh / MAX_DIM_PER_SUBPLOT)
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(12 * n_cols, 12 * n_rows)) 
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(16 * n_cols, 16 * n_rows)) 
         axes = axes.reshape(n_rows, n_cols)
 
         for i in range(n_rows):
@@ -176,16 +178,14 @@ def plot_brdf_error_map_single(i, model_name, metric, x_labels, y_labels, maps, 
                 y_labels_sub = y_labels[y_start:y_end]
                 im, cbar, _ = plot_brdf_error_map_subplot(data, x_labels_sub, y_labels_sub, axes[i, j], i * n_cols + j + 1, n_rows * n_cols, enable_annotate=False, enable_cbar=False, vmin=vmin, vmax=vmax)
 
-        cbar = fig.colorbar(im, ax=axes.ravel().tolist(), location='right')
+        cbar = fig.colorbar(im, ax=axes.ravel()[-1], location='right')
         cbar.set_label(cbarlabel, rotation=-90, va='bottom')
     else:
-        fig, axes = plt.subplots(figsize=(12, 12)) 
+        fig, axes = plt.subplots(figsize=(16, 16)) 
         plot_brdf_error_map_subplot(maps[i], x_labels, y_labels, axes, 1, 1, enable_annotate=True, enable_cbar=True, cbarlabel=cbarlabel, vmin=vmin, vmax=vmax)
-
-    fig.suptitle(fr'{model_name} {metric} $\lambda = {spectrum[i]:.2f}$ nm') 
-    fig.tight_layout()
-    fig.savefig(f"{model_name}_{metric}_{spectrum[i]:.2f}nm.png", 
-                bbox_inches='tight')
+    
+    fig.suptitle(fr'{name} $\lambda = {spectrum[i]:.2f}$ nm') 
+    fig.savefig(f"{name}_{model_name}_{metric}_{spectrum[i]:.2f}nm.png", bbox_inches='tight')
     plt.close()
 
 def plot_brdf_error_map_subplot(data, x_labels, y_labels, ax, part_idx=1, total_parts=1, enable_annotate=True, enable_cbar=True, cbarlabel='residual', vmin=None, vmax=None, **kwargs):
@@ -206,7 +206,7 @@ def plot_brdf_error_map_subplot(data, x_labels, y_labels, ax, part_idx=1, total_
     
     return im, cbar, texts
 
-def task(progress, tid, base_idx, count, model_name, metric, x_labels, y_labels, maps, spectrum, vmin, vmax):
+def task(progress, tid, base_idx, count, name, model_name, metric, x_labels, y_labels, maps, spectrum, vmin, vmax):
     """
     Task to plot the brdf error map in parallel.
 
@@ -233,19 +233,17 @@ def task(progress, tid, base_idx, count, model_name, metric, x_labels, y_labels,
     """
     for i in range(base_idx, base_idx + count):
         time.sleep(0.05)
-        plot_brdf_error_map_single(i, model_name + str(i), metric, x_labels, y_labels, maps, spectrum, vmin, vmax)
+        plot_brdf_error_map_single(i, name, model_name + str(i), metric, x_labels, y_labels, maps, spectrum, vmin, vmax)
         progress[tid] = { "progress": i - base_idx + 1, "total": count }
 
-def plot_brdf_error_map(metric, model_name, residuals, maps, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
+def plot_brdf_error_map(name, residuals, maps, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
     """
-    Plot the brdf error map.
+    Plot the brdf error map. Entry point for the brdf error map plot in Rust. 
 
     Parameters
     ----------
-    metric : str
-        Metric used to compute the residuals
-    model_name : str
-        Name of the brdf model
+    name : str
+        Name of the measured BRDF; used as the title of the plot and the filename of the plot
     residuals : ndarray
         Residuals between the measured data and the model. The shape of residuals could be either 
             - ϑi, ϕi, ϑo, ϕo, λ - grid  
@@ -258,6 +256,10 @@ def plot_brdf_error_map(metric, model_name, residuals, maps, i_thetas, i_phis, o
         directions could be either a grid or a list; if it is a grid, Nωo = Nθo * Nφo, where Nθo and Nφo are the 
         number of outgoing directions in the theta (inclination) and phi (azimuth) directions. 
         If it is a list, Nωo is the length of the `o_phis` list.
+    metric : str
+        Metric used to compute the residuals
+    model_name : str
+        Name of the brdf model
     i_thetas : ndarray
         Incident directions in the theta (inclination) direction
     i_phis : ndarray
@@ -360,7 +362,7 @@ def plot_brdf_error_map(metric, model_name, residuals, maps, i_thetas, i_phis, o
                     for chunk_idx in range(0, n_lambda, 16):
                         chunk_size = min(16, n_lambda - chunk_idx)
                         tid = progress.add_task(f"  Processing {chunk_idx+1} ~ {chunk_idx+chunk_size}", visible=False)
-                        futures.append(executor.submit(task, status, tid, chunk_idx, chunk_size, model_name, metric, x_labels, y_labels, maps, spectrum, vmin, vmax))
+                        futures.append(executor.submit(task, status, tid, chunk_idx, chunk_size, name, model_name, metric, x_labels, y_labels, maps, spectrum, vmin, vmax))
 
                     n_to_be_finished = len(futures)
 
@@ -392,4 +394,4 @@ def plot_brdf_error_map(metric, model_name, residuals, maps, i_thetas, i_phis, o
             TimeRemainingColumn(),
         ) as progress:
             for i in progress.track(range(n_lambda)):
-                plot_brdf_error_map_single(i, model_name, metric, x_labels, y_labels, maps, spectrum, vmin, vmax) 
+                plot_brdf_error_map_single(i, name, model_name, metric, x_labels, y_labels, maps, spectrum, vmin, vmax) 

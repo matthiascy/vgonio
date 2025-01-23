@@ -51,9 +51,6 @@ pub enum PlotKind {
     /// Compare between VgonioBrdf and VgonioBrdf.
     #[clap(alias = "cmp-vv")]
     ComparisonVgonio,
-    /// Plot the error-map between the input BRDF and the fitted BRDF.
-    #[clap(name = "error-map")]
-    BrdfErrorMap,
     /// Plot slices of the input BRDF.
     #[clap(name = "brdf-slice")]
     BrdfSlice,
@@ -66,8 +63,13 @@ pub enum PlotKind {
     /// Plot the BRDF from saved *.vgmo file in 3D
     #[clap(name = "brdf-3d")]
     Brdf3D,
+
     #[clap(name = "brdf-fitting")]
     BrdfFitting,
+    /// Plot the error-map between the input BRDF and the fitted BRDF.
+    #[clap(name = "error-map")]
+    BrdfErrorMap,
+
     /// Plot the NDF from saved *.vgmo file
     #[clap(name = "ndf")]
     Ndf,
@@ -591,9 +593,11 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         None,
                     ));
                 }
+                let name = opts.inputs[0].file_name().unwrap().to_str().unwrap();
                 let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
                 let error_metric = opts.error_metric.unwrap_or(ErrorMetric::Mse);
                 pyplot::plot_brdf_error_map(
+                    name,
                     &measured,
                     &alphas,
                     error_metric,
