@@ -63,13 +63,9 @@ pub enum PlotKind {
     /// Plot the BRDF from saved *.vgmo file in 3D
     #[clap(name = "brdf-3d")]
     Brdf3D,
-
+    /// Plot everything related to the fitting process.
     #[clap(name = "brdf-fitting")]
     BrdfFitting,
-    /// Plot the error-map between the input BRDF and the fitted BRDF.
-    #[clap(name = "error-map")]
-    BrdfErrorMap,
-
     /// Plot the NDF from saved *.vgmo file
     #[clap(name = "ndf")]
     Ndf,
@@ -84,7 +80,7 @@ pub enum PlotKind {
 /// Options for the `plot` command.
 #[derive(clap::Args, Debug, Clone)]
 pub struct PlotOptions {
-    #[clap(short, long, num_args = 1.., value_delimiter = ' ', help = "Input files to plot.")]
+    #[clap(num_args = 1.., value_delimiter = ' ', help = "Input files to plot.")]
     pub inputs: Vec<PathBuf>,
 
     #[clap(short, long, help = "The kind of plot to generate.")]
@@ -291,6 +287,14 @@ pub struct PlotOptions {
 
     #[clap(long, help = "Whether to run the plot in parallel.")]
     pub parallel: bool,
+
+    #[clap(
+        short,
+        long,
+        help = "Whether to run the plot in interactive mode.",
+        default_value = "false"
+    )]
+    pub interactive: bool,
 }
 
 pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
@@ -559,58 +563,58 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 Ok(())
             },
             PlotKind::BrdfFitting => {
-                if opts.inputs.len() != 1 {
-                    return Err(VgonioError::new(
-                        "Only one input file is allowed for plotting the BRDF fitting.",
-                        None,
-                    ));
-                }
-                let hdl = cache.load_micro_surface_measurement(&config, &opts.inputs[0])?;
-                let measured = &cache.get_measurement(hdl).unwrap().measured;
-                if measured.kind() != MeasurementKind::Bsdf {
-                    return Err(VgonioError::new(
-                        "The input file is not a BSDF measurement.",
-                        None,
-                    ));
-                }
-                let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
-                let brdf = measured.as_any_brdf(opts.level).unwrap();
-                plot_brdf_fitting(brdf, &alphas, &cache.iors).unwrap();
-                Ok(())
-            },
-            PlotKind::BrdfErrorMap => {
-                if opts.inputs.len() != 1 {
-                    return Err(VgonioError::new(
-                        "Only one input file is allowed for plotting the BRDF error map.",
-                        None,
-                    ));
-                }
-                let hdl = cache.load_micro_surface_measurement(&config, &opts.inputs[0])?;
-                let measured = &cache.get_measurement(hdl).unwrap().measured;
-                if measured.kind() != MeasurementKind::Bsdf {
-                    return Err(VgonioError::new(
-                        "The input file is not a BSDF measurement.",
-                        None,
-                    ));
-                }
-                let name = opts.inputs[0].file_name().unwrap().to_str().unwrap();
-                let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
-                let error_metric = opts.error_metric.unwrap_or(ErrorMetric::Mse);
-                pyplot::plot_brdf_error_map(
-                    name,
-                    &measured,
-                    &alphas,
-                    error_metric,
-                    opts.weighting.unwrap(),
-                    &cache.iors,
-                    opts.parallel,
-                )
-                .map_err(|pyerr| {
-                    VgonioError::new(
-                        format!("Failed to plot the BRDF error map: {}", pyerr),
-                        Some(Box::new(pyerr)),
+                if opts.interactive {
+                    if opts.inputs.len() != 1 {
+                        return Err(VgonioError::new(
+                            "Only one input file is allowed for plotting the BRDF fitting.",
+                            None,
+                        ));
+                    }
+                    let hdl = cache.load_micro_surface_measurement(&config, &opts.inputs[0])?;
+                    let measured = &cache.get_measurement(hdl).unwrap().measured;
+                    if measured.kind() != MeasurementKind::Bsdf {
+                        return Err(VgonioError::new(
+                            "The input file is not a BSDF measurement.",
+                            None,
+                        ));
+                    }
+                    let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
+                    let brdf = measured.as_any_brdf(opts.level).unwrap();
+                    plot_brdf_fitting(brdf, &alphas, &cache.iors).unwrap();
+                } else {
+                    if opts.inputs.len() != 1 {
+                        return Err(VgonioError::new(
+                            "Only one input file is allowed for plotting the BRDF error map.",
+                            None,
+                        ));
+                    }
+                    let hdl = cache.load_micro_surface_measurement(&config, &opts.inputs[0])?;
+                    let measured = &cache.get_measurement(hdl).unwrap().measured;
+                    if measured.kind() != MeasurementKind::Bsdf {
+                        return Err(VgonioError::new(
+                            "The input file is not a BSDF measurement.",
+                            None,
+                        ));
+                    }
+                    let name = opts.inputs[0].file_name().unwrap().to_str().unwrap();
+                    let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
+                    let error_metric = opts.error_metric.unwrap_or(ErrorMetric::Mse);
+                    pyplot::plot_brdf_error_map(
+                        name,
+                        &measured,
+                        &alphas,
+                        error_metric,
+                        opts.weighting.unwrap(),
+                        &cache.iors,
+                        opts.parallel,
                     )
-                })?;
+                    .map_err(|pyerr| {
+                        VgonioError::new(
+                            format!("Failed to plot the BRDF error map: {}", pyerr),
+                            Some(Box::new(pyerr)),
+                        )
+                    })?;
+                }
                 Ok(())
             },
         }

@@ -1,5 +1,4 @@
 from typing import Tuple
-
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from matplotlib.tri import Triangulation
@@ -7,7 +6,6 @@ from matplotlib.widgets import Button, TextBox
 import numpy as np
 import seaborn as sns
 from pandas.core.common import is_full_slice
-from scipy.stats import alpha
 
 # Use this to avoid GUI
 # mpl.use('Agg')
