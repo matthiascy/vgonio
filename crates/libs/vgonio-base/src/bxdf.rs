@@ -186,10 +186,7 @@ impl<'a> BrdfProxy<'a> {
     pub fn source(&self) -> ProxySource { self.source }
 
     /// Returns the resampled BRDF data.
-    pub fn samples(&self) -> &[f32] { self.resampled.as_slice() }
-
-    /// Returns the shape of the resampled BRDF data.
-    pub fn samples_shape(&self) -> &[usize] { self.resampled.shape() }
+    pub fn samples(&self) -> &DynArr<f32> { &self.resampled }
 
     /// Returns the number of samples used for fitting.
     ///

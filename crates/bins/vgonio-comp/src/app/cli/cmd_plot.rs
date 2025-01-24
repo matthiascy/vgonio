@@ -7,8 +7,8 @@ use crate::{
     },
     pyplot,
     pyplot::{
-        plot_brdf_3d, plot_brdf_fitting, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
-        plot_brdf_vgonio_clausen, plot_gaf, plot_ndf, plot_surfaces,
+        plot_brdf_3d, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
+        plot_brdf_vgonio_clausen, plot_gaf, plot_ndf, plot_surfaces, BrdfFittingPlotter,
     },
 };
 use base::{
@@ -580,7 +580,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     }
                     let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
                     let brdf = measured.as_any_brdf(opts.level).unwrap();
-                    plot_brdf_fitting(brdf, &alphas, &cache.iors).unwrap();
+                    BrdfFittingPlotter::plot_interactive(brdf, &alphas, &cache.iors).unwrap();
                 } else {
                     if opts.inputs.len() != 1 {
                         return Err(VgonioError::new(
@@ -599,7 +599,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     let name = opts.inputs[0].file_name().unwrap().to_str().unwrap();
                     let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
                     let error_metric = opts.error_metric.unwrap_or(ErrorMetric::Mse);
-                    pyplot::plot_brdf_error_map(
+                    BrdfFittingPlotter::plot_non_interactive(
                         name,
                         &measured,
                         &alphas,
