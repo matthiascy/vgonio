@@ -173,6 +173,8 @@ def plot_brdf_error_map_single(idx, name, figtype, model_name, metric, x_label, 
         (_, h, w) = maps.shape # nlambda, nwi, nwo
     else:
         (_, w, h) = maps.shape # 1, nlambda, nomega_i
+
+    model_name = model_name.lower()
  
     if h > maxh or w > maxw:
         n_rows = math.ceil(h / maxh)
@@ -208,10 +210,10 @@ def plot_brdf_error_map_single(idx, name, figtype, model_name, metric, x_label, 
     
     if is_residuals:
         fig.suptitle(fr'{name} $\lambda = {spectrum[idx]:.2f}$ nm') 
-        fig.savefig(f"{name}_{figtype}_{model_name}_{metric}_{spectrum[idx]:.2f}nm.png", bbox_inches='tight')
+        fig.savefig(f"{name}_{figtype}_{model_name}_{spectrum[idx]:.2f}nm.png", bbox_inches='tight')
     else:
         fig.suptitle(fr'{name}')
-        fig.savefig(f"{name}_{figtype}_{model_name}_{metric}.png", bbox_inches='tight')
+        fig.savefig(f"{name}_{figtype}_{model_name}.png", bbox_inches='tight')
 
     plt.close()
 
@@ -266,7 +268,7 @@ def task_plot_rs(progress, tid, base_idx, count, name, model_name, metric, x_lab
     """
     for i in range(base_idx, base_idx + count):
         time.sleep(0.05)
-        plot_brdf_error_map_single(i, name, 'residuals', model_name + str(i), metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax)
+        plot_brdf_error_map_single(i, name, 'residuals', model_name, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax)
         progress[tid] = { "progress": i - base_idx + 1, "total": count }
 
 def plot_brdf_fitting_residuals(name, residuals, rmaps, is_grid, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
@@ -455,7 +457,7 @@ def plot_brdf_fitting_mse_per_incident_angle(name, residuals, mmaps, metric, mod
     else:
         sequential_plot(1, name, 'mse', model_name, metric, x_label, y_label, xticks_labels, yticks_labels, mmaps, spectrum, vmin, vmax, "MSE")
 
-def plot_brdf_fitting_errors(name, data, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
+def plot_brdf_fitting_errors(name, data, model_name, metric, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
     """
     Plot the BRDF error map. Entry point for the non-interactive BRDF fitting plot in Rust. This function will generate
     two types of plots:

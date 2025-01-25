@@ -284,7 +284,7 @@ fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
 #[derive(clap::Args, Debug, Clone)]
 #[clap(about = "Fits a micro-surface related measurement to a given model.")]
 pub struct FitOptions {
-    #[clap(long, short, help = "Input files to fit the measurement to.")]
+    #[clap(num_args = 1.., value_delimiter = ' ', help = "Input files to fit the measurement to.")]
     pub inputs: Vec<PathBuf>,
 
     #[clap(long, short, help = "Kind of the measured BRDF data.")]

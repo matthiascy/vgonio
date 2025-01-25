@@ -5,7 +5,6 @@ use crate::{
         mfd::{MeasuredGafData, MeasuredNdfData},
         params::SurfacePath,
     },
-    pyplot,
     pyplot::{
         plot_brdf_3d, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
         plot_brdf_vgonio_clausen, plot_gaf, plot_ndf, plot_surfaces, BrdfFittingPlotter,
