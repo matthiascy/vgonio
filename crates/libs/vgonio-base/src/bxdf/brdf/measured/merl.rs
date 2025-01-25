@@ -46,7 +46,7 @@ impl MerlBrdfParam {
     /// The total number of sample90s.
     pub const RES_TOTAL: u32 = Self::RES_THETA_H * Self::RES_THETA_D * Self::RES_PHI_D;
     /// The scale factor for the Red channel.
-    pub const R_SCALE: f64 = 1.0 / 901500.0;
+    pub const R_SCALE: f64 = 1.0 / 1500.0;
     /// The scale factor for the Green channel.
     pub const G_SCALE: f64 = 1.15 / 1500.0;
     /// The scale factor for the Blue channel.
@@ -138,6 +138,19 @@ impl MerlBrdf {
 
     /// Lookup the sample of the BRDF at the given incident and outgoing
     /// directions.
+    ///
+    /// The sample is returned as a 3-element array, where each element is the
+    /// value of the BRDF at the given incident and outgoing directions.
+    ///
+    /// # Arguments
+    ///
+    /// * `wi` - The incident direction.
+    /// * `wo` - The outgoing direction.
+    ///
+    /// # Returns
+    ///
+    /// A 3-element array containing the value of the BRDF at the given incident
+    /// and outgoing directions.
     pub fn sample_at(&self, wi: Sph2, wo: Sph2) -> [f32; 3] {
         let (wh, wd) = io2hd_sph(&wi, &wo);
         let theta_h_index = self.theta_h_index(wh.theta);
@@ -205,9 +218,9 @@ impl MerlBrdf {
 
         log::info!("Reading MERL BRDF dismensions...");
         for _ in 0..3 {
-            file.read_exact(&mut buf)
-                .map_err(|err| VgonioError::from_io_error(err, "Can't read MERL BRDF dimensions!"))
-                .unwrap();
+            file.read_exact(&mut buf).map_err(|err| {
+                VgonioError::from_io_error(err, "Can't read MERL BRDF dimensions!")
+            })?;
             let n = u32::from_le_bytes(buf);
             count *= n;
         }

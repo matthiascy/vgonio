@@ -394,6 +394,7 @@ pub mod brdf {
             max_theta_o: Option<Radians>,
             precision: u32,
         ) -> FittingReport<Self::Model> {
+            log::debug!("start brute force fitting");
             let cpu_count = ((std::thread::available_parallelism().unwrap().get()) / 2).max(1);
             let mut step_size = 0.01;
             let mut alphas = StepRangeIncl::new(0.0, 1.0, step_size)
@@ -402,16 +403,44 @@ pub mod brdf {
             let mut errs = vec![f64::NAN; 256].into_boxed_slice();
             // The number of iterations as each iteration has two digits of precision
             let n_times = (precision + 1) / 2;
+            log::debug!("Brute force fitting for {} times", n_times);
             let n_filtered_samples = self.n_filtered_samples(max_theta_i, max_theta_o);
             let mut records = Vec::with_capacity(n_times as usize * 256);
 
             for i in 0..n_times {
                 let chunk_size = alphas.len().div_ceil(cpu_count);
+                log::debug!(
+                    "--- iteration: {}, chunk_size: {}, \n - {:?}",
+                    i,
+                    chunk_size,
+                    alphas
+                );
+
+                use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+
+                let multi_pb = indicatif::MultiProgress::new();
+                let pbs = (0..alphas.len() / chunk_size)
+                    .map(|_| {
+                        let pb = multi_pb.add(ProgressBar::new(chunk_size as u64));
+                        pb.set_style(
+                            indicatif::ProgressStyle::default_bar()
+                                .template(
+                                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] \
+                                     {pos}/{len} ({eta})",
+                                )
+                                .unwrap()
+                                .progress_chars("#>-"),
+                        );
+                        pb.set_position(0);
+                        pb
+                    })
+                    .collect::<Vec<_>>();
                 alphas
                     .chunks(chunk_size)
                     .zip(errs.chunks_mut(chunk_size))
+                    .zip(pbs.iter())
                     .par_bridge()
-                    .for_each(|(alpha_chunks, err_chunks)| {
+                    .for_each(|((alpha_chunks, err_chunks), pb)| {
                         err_chunks
                             .iter_mut()
                             .zip(alpha_chunks.iter())
@@ -426,6 +455,7 @@ pub mod brdf {
                                     max_theta_i.unwrap_or(Radians::HALF_PI),
                                     max_theta_o.unwrap_or(Radians::HALF_PI),
                                 );
+                                pb.inc(1);
                             });
                     });
                 // Record the error and alpha
@@ -453,10 +483,17 @@ pub mod brdf {
                         ),
                     ));
                 });
+                log::debug!("- errs: {:?}", errs);
                 // Find the range of the best fit
                 let min_err = errs.iter().fold(f64::INFINITY, |acc, &x| acc.min(x));
                 let min_err_idx = errs.iter().position(|&x| x == min_err).unwrap();
                 let min_err_alpha = alphas[min_err_idx];
+                log::debug!(
+                    "min err: {}, alpha: {}, min_index: {}",
+                    min_err,
+                    min_err_alpha,
+                    min_err_idx
+                );
                 // Refine the range of the best fit
                 alphas = StepRangeIncl::new(
                     (min_err_alpha - step_size).max(0.0),

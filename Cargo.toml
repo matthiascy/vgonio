@@ -67,6 +67,7 @@ flate2 = { version = "~1.0", features = [
 futures-intrusive = "0.5"
 glam = { version = "~0.28", features = ["serde", "bytemuck"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
+indicatif = { version = "0.17", features = ["rayon"] }
 levenberg-marquardt = "0.14"
 nalgebra = "0.33"
 libm = "0.2"

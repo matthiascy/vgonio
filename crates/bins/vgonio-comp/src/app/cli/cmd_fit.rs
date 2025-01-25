@@ -187,6 +187,10 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
 }
 
 fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, iors: &IorRegistry) {
+    println!(
+        "      {} Fitting using brute force method...",
+        ansi::YELLOW_GT
+    );
     let start = std::time::Instant::now();
     let report = brdf.proxy(iors).brute_fit(
         opts.distro,

@@ -27,7 +27,7 @@ use exr::{
     image::{FlatImage, FlatSamples},
     prelude::Text,
 };
-use jabr::array::{DyArr, DynArr};
+use jabr::array::{shape, DyArr, DynArr};
 use numpy::{PyArray, PyArray1, PyArray2, PyArrayMethods};
 use pyo3::{ffi::c_str, prelude::*, types::PyList};
 use std::{ffi::CString, fs::File, io::Read, path::Path};
@@ -1316,13 +1316,13 @@ impl BrdfFittingPlotter {
                         .ior_of_spectrum(merl_brdf.transmitted_medium, merl_brdf.spectrum.as_ref())
                         .unwrap();
                     let n_spectrum = merl_brdf.n_spectrum();
-                    let theta_res = MerlBrdfParam::RES_THETA_H as usize / 2;
-                    let phi_res = MerlBrdfParam::RES_PHI_D as usize / 4;
-                    let i_thetas = (0..theta_res)
-                        .map(|i| (i as f32).to_radians())
+                    let i_thetas = StepRangeIncl::new(0.0f32, 89.0, 1.0)
+                        .values()
+                        .map(|x| x.to_radians())
                         .collect::<Vec<_>>();
-                    let i_phis = (0..phi_res)
-                        .map(|i| (i as f32).to_radians())
+                    let i_phis = StepRangeIncl::new(0.0f32, 360.0, 30.0)
+                        .values()
+                        .map(|x| x.to_radians())
                         .collect::<Vec<_>>();
                     let o_thetas = i_thetas.clone();
                     let o_phis = i_phis.clone();
@@ -1347,23 +1347,35 @@ impl BrdfFittingPlotter {
                         [n_models * n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum],
                         false,
                     );
+                    let strides = [
+                        n_phi_i * n_phi_o * n_theta_o * n_spectrum,
+                        n_phi_o * n_theta_o * n_spectrum,
+                        n_theta_o * n_spectrum,
+                        n_spectrum,
+                    ];
+                    let model_strides = [
+                        n_theta_i * n_phi_i * n_phi_o * n_theta_o * n_spectrum,
+                        n_phi_i * n_phi_o * n_theta_o * n_spectrum,
+                        n_phi_o * n_theta_o * n_spectrum,
+                        n_theta_o * n_spectrum,
+                        n_spectrum,
+                    ];
                     // Fill the samples and fitted data
                     for (i, t_i) in i_thetas.iter().enumerate() {
                         for (j, p_i) in i_phis.iter().enumerate() {
-                            for (k, t_o) in o_thetas.iter().enumerate() {
-                                for (l, p_o) in o_phis.iter().enumerate() {
+                            for (k, p_o) in o_phis.iter().enumerate() {
+                                for (l, t_o) in o_thetas.iter().enumerate() {
                                     let wi = Sph2::new(rad!(*t_i), rad!(*p_i));
                                     let wo = Sph2::new(rad!(*t_o), rad!(*p_o));
-                                    let resampled = merl_brdf.sample_at(wi, wo);
-                                    let offset = i * n_phi_i * n_phi_o * n_theta_o * n_spectrum
-                                        + j * n_phi_o * n_theta_o * n_spectrum
-                                        + l * n_theta_o * n_spectrum
-                                        + k * n_spectrum;
+                                    let rgb = merl_brdf.sample_at(wi, wo);
+                                    let offset =
+                                        shape::compute_index_from_strides(&[i, j, k, l], &strides);
                                     unsafe {
                                         samples.as_slice_mut().unwrap()
                                             [offset..offset + n_spectrum]
-                                            .copy_from_slice(&resampled);
+                                            .copy_from_slice(&rgb);
                                     }
+
                                     for (m, (bk, tr)) in
                                         bk_models.iter().zip(tr_models.iter()).enumerate()
                                     {
@@ -1381,16 +1393,10 @@ impl BrdfFittingPlotter {
                                             &iors_i,
                                             &iors_t,
                                         );
-                                        let offset = m
-                                            * n_theta_i
-                                            * n_phi_i
-                                            * n_phi_o
-                                            * n_theta_o
-                                            * n_spectrum
-                                            + i * n_phi_i * n_phi_o * n_theta_o * n_spectrum
-                                            + j * n_phi_o * n_theta_o * n_spectrum
-                                            + l * n_theta_o * n_spectrum
-                                            + k * n_spectrum;
+                                        let offset = shape::compute_index_from_strides(
+                                            &[m, i, j, k, l],
+                                            &model_strides,
+                                        );
                                         unsafe {
                                             fitted_bk.as_slice_mut().unwrap()
                                                 [offset..offset + n_spectrum]
