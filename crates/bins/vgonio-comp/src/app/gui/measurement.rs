@@ -22,7 +22,7 @@ use crate::{
     io::{OutputFileFormatOption, OutputOptions},
     measure::{bsdf::receiver::ReceiverParams, params::MeasurementParams},
 };
-use base::{
+use vgcore::{
     io::{CompressionScheme, FileEncoding},
     utils::{
         handle::Handle,

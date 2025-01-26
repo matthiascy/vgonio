@@ -1,6 +1,6 @@
 use egui::DragValue;
 
-use base::utils::range::{CountRangeIncl, StepRangeIncl};
+use vgcore::utils::range::{CountRangeIncl, StepRangeIncl};
 
 pub fn drag_angle<'a, A: AngleUnit>(angle: &'a mut Angle<A>, prefix: &str) -> DragValue<'a> {
     DragValue::new(angle.value_mut())
@@ -79,7 +79,7 @@ pub fn range_step_size_inclusive_length_ui<L: LengthMeasurement>(
     .response
 }
 
-use base::{
+use vgcore::{
     math::Vec3,
     units::{Angle, AngleUnit, Length, LengthMeasurement},
 };

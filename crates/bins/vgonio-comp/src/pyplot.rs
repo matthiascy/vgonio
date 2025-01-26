@@ -5,7 +5,7 @@ use crate::measure::{
     params::NdfMeasurementMode,
     DataCarriedOnHemisphereSampler,
 };
-use base::{
+use vgcore::{
     bxdf::{
         brdf::{
             analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},

@@ -1,5 +1,5 @@
 use crate::app::Config;
-use base::error::VgonioError;
+use vgcore::error::VgonioError;
 use std::{borrow::Cow, path::PathBuf};
 
 /// Options for the `diff` subcommand.

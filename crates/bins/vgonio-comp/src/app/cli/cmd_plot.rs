@@ -10,17 +10,17 @@ use crate::{
         plot_brdf_vgonio_clausen, plot_gaf, plot_ndf, plot_surfaces, BrdfFittingPlotter,
     },
 };
-use base::{
+use std::path::PathBuf;
+use surf::{
+    subdivision::{Subdivision, SubdivisionKind},
+    TriangulationPattern,
+};
+use vgcore::{
     bxdf::brdf::measured::ClausenBrdf,
     error::VgonioError,
     math::Sph2,
     units::{Degs, Nanometres, Radians, Rads},
     BrdfLevel, ErrorMetric, MeasurementKind, Symmetry, Weighting,
-};
-use std::path::PathBuf;
-use surf::{
-    subdivision::{Subdivision, SubdivisionKind},
-    TriangulationPattern,
 };
 
 #[rustfmt::skip]

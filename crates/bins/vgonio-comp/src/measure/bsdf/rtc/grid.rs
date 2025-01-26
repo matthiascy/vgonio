@@ -17,8 +17,8 @@ use crate::{
     },
 };
 #[cfg(feature = "vdbg")]
-use base::optics::fresnel;
-use base::{
+use vgcore::optics::fresnel;
+use vgcore::{
     math,
     math::{IVec2, UVec2, Vec2, Vec3, Vec3Swizzles},
 };
@@ -1221,7 +1221,7 @@ impl<'ms> MultilevelGrid<'ms> {
 #[cfg(test)]
 mod tests {
     use crate::measure::bsdf::rtc::{grid::MultilevelGrid, Hit, Ray};
-    use base::{
+    use vgcore::{
         math::{ulp_eq, IVec2, UVec2, Vec3, Vec3Swizzles},
         units::LengthUnit,
     };

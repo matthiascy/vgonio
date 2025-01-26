@@ -6,7 +6,8 @@ license.workspace = true
 license-file.workspace = true
 version.workspace = true
 
-[dependencies]
-
 [lints]
 workspace = true
+
+[dependencies]
+clap.workspace = true

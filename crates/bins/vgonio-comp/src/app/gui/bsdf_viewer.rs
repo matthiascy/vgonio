@@ -1,5 +1,5 @@
 use crate::app::gui::event::EventLoopProxy;
-use base::{
+use vgcore::{
     math,
     math::{Mat4, Vec3},
 };

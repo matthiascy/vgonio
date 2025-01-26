@@ -3,7 +3,7 @@
 #![warn(missing_docs)]
 
 #[cfg(feature = "surf-obj")]
-use base::math::Axis;
+use vgcore::math::Axis;
 #[cfg(feature = "surf-gen")]
 mod gen;
 #[cfg(feature = "surf-gen")]
@@ -19,17 +19,6 @@ use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
 use crate::dcel::HalfEdgeMesh;
 
 use crate::subdivision::{curved, wiggle, Subdivision};
-use base::{
-    error::VgonioError,
-    io::{
-        CompressionScheme, FileEncoding, Header, HeaderMeta, ReadFileError, WriteFileError,
-        WriteFileErrorKind,
-    },
-    math::{pairwise_sum, rcp_f32, sqr, Aabb, Vec3},
-    units::LengthUnit,
-    utils::{range::CountRangeIncl, Asset},
-    Version,
-};
 use glam::Vec2;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -39,6 +28,17 @@ use std::{
     io::{BufReader, BufWriter, Read, Seek, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU32, Ordering},
+};
+use vgcore::{
+    error::VgonioError,
+    io::{
+        CompressionScheme, FileEncoding, Header, HeaderMeta, ReadFileError, WriteFileError,
+        WriteFileErrorKind,
+    },
+    math::{pairwise_sum, rcp_f32, sqr, Aabb, Vec3},
+    units::LengthUnit,
+    utils::{range::CountRangeIncl, Asset},
+    Version,
 };
 
 /// Static counter used to generate height field names.
@@ -139,7 +139,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use base::units::LengthUnit;
+    /// # use vgcore::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let height_field = MicroSurface::new(10, 10, 0.11, 0.11, 0.12, LengthUnit::UM);
     /// assert_eq!(height_field.samples_count(), 100);
@@ -180,7 +180,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use base::units::LengthUnit;
+    /// # use vgcore::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let msurf = MicroSurface::new_by(4, 4, 0.1, 0.1, LengthUnit::UM, |row, col| {
     ///     (row + col) as f32
@@ -251,7 +251,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use base::units::LengthUnit;
+    /// # use vgcore::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let height_field =
@@ -317,7 +317,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use base::units::LengthUnit;
+    /// # use vgcore::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let msurf = MicroSurface::new(100, 100, 0.1, 0.1, 0.1, LengthUnit::UM);
     /// assert_eq!(msurf.dimension(), (10.0, 10.0));
@@ -331,7 +331,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use base::units::LengthUnit;
+    /// # use vgcore::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, (0.2, 0.2), LengthUnit::UM, samples, None, None);
@@ -344,7 +344,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use base::units::LengthUnit;
+    /// # use vgcore::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, (0.2, 0.2), LengthUnit::UM, samples, None, None);
@@ -368,7 +368,7 @@ impl MicroSurface {
     /// # Examples
     ///
     /// ```
-    /// # use base::units::LengthUnit;
+    /// # use vgcore::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, (0.2, 0.2), LengthUnit::MM, samples, None, None);
@@ -376,7 +376,7 @@ impl MicroSurface {
     /// ```
     ///
     /// ```should_panic
-    /// # use base::units::LengthUnit;
+    /// # use vgcore::units::LengthUnit;
     /// # use vgonio_surf::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, (0.2, 0.3), LengthUnit::MM, samples, None, None);
@@ -1427,7 +1427,7 @@ impl MicroSurface {
 
         let timestamp = {
             let mut timestamp = [0_u8; 32];
-            timestamp.copy_from_slice(base::utils::iso_timestamp().as_bytes());
+            timestamp.copy_from_slice(vgcore::utils::iso_timestamp().as_bytes());
             timestamp
         };
         let header = Header {

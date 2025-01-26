@@ -1,5 +1,4 @@
 use crate::error::RuntimeError;
-use base::error::VgonioError;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
@@ -7,6 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use surf::TriangulationPattern;
+use vgcore::error::VgonioError;
 
 /// Vgonio configuration.
 #[derive(Debug)]

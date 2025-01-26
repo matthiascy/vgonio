@@ -1,4 +1,4 @@
-use base::{
+use vgcore::{
     math::{Mat3, Mat4, Vec3, Vec4, Vec4Swizzles},
     utils::input::InputState,
 };

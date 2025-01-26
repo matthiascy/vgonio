@@ -4,7 +4,7 @@ use crate::{
     app::cache::RawCache,
     measure::{Measurement, MeasurementSource},
 };
-use base::{units::LengthUnit, utils::handle::Handle, MeasurementKind};
+use vgcore::{units::LengthUnit, utils::handle::Handle, MeasurementKind};
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
 use surf::{

@@ -1,5 +1,5 @@
 use crate::{context::GpuContext, vertex::VertexLayout};
-use base::{
+use vgcore::{
     math::{Aabb, Vec3},
     utils::Asset,
 };

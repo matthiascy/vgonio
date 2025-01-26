@@ -1,5 +1,5 @@
 [package]
-name = "vgonio-base"
+name = "vgonio-core"
 description = "Core types, traits, and functionalities for vgonio"
 authors.workspace = true
 edition.workspace = true

@@ -11,8 +11,8 @@ use crate::{
     measure::{mfd::MeasuredGafData, Measurement},
 };
 #[cfg(feature = "fitting")]
-use base::bxdf::{distro::MicrofacetDistribution, fitting::FittedModel};
-use base::{
+use vgcore::bxdf::{distro::MicrofacetDistribution, fitting::FittedModel};
+use vgcore::{
     units::{rad, Radians},
     utils::{handle::Handle, range::StepRangeIncl},
     MeasurementKind,

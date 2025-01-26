@@ -1,5 +1,5 @@
 use crate::measure::bsdf::rtc::{Ray, RayTriIsect};
-use base::{
+use vgcore::{
     math,
     math::{gamma, Vec3},
 };

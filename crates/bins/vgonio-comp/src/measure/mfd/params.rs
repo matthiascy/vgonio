@@ -1,5 +1,5 @@
 use crate::error::RuntimeError;
-use base::{
+use vgcore::{
     error::VgonioError,
     math::Sph2,
     units::{deg, rad, Radians},

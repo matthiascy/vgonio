@@ -1,8 +1,8 @@
 //! Smooth surface triangulation taken from "Curved PN Triangles" by A. Vlachos,
 //! J. Peters, C. Boyd, and J. Mitchell
 
-use base::math::cbr;
 use glam::{DVec3, Vec2, Vec3};
+use vgcore::math::cbr;
 
 /// Queries the sub-triangulated points of a triangle using the PN triangle
 /// algorithm.

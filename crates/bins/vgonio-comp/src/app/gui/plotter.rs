@@ -21,8 +21,8 @@ use crate::{
     },
 };
 #[cfg(feature = "fitting")]
-use base::bxdf::fitting::FittedModel;
-use base::{
+use vgcore::bxdf::fitting::FittedModel;
+use vgcore::{
     bxdf::distro::{BeckmannDistribution, MicrofacetDistribution, TrowbridgeReitzDistribution},
     math,
     units::{deg, rad, Radians},

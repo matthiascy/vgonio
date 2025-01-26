@@ -12,8 +12,8 @@ use crate::{
     measure::{mfd::MeasuredSdfData, Measurement},
 };
 #[cfg(feature = "fitting")]
-use base::bxdf::fitting::FittedModel;
-use base::{
+use vgcore::bxdf::fitting::FittedModel;
+use vgcore::{
     units::{deg, rad, Radians},
     utils::{handle::Handle, range::StepRangeIncl},
 };

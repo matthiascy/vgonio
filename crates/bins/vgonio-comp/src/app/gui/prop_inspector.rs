@@ -1,13 +1,13 @@
 use crate::app::gui::docking::{Dockable, WidgetKind};
-#[cfg(feature = "fitting")]
-use base::{
-    bxdf::{brdf::BrdfFamily, distro::MicrofacetDistroKind, fitting::FittingProblemKind},
-    Symmetry,
-};
-use base::{utils::partition::beckers, MeasurementKind};
 use std::sync::{Arc, RwLock};
 use surf::subdivision::SubdivisionKind;
 use uuid::Uuid;
+#[cfg(feature = "fitting")]
+use vgcore::{
+    bxdf::{brdf::BrdfFamily, distro::MicrofacetDistroKind, fitting::FittingProblemKind},
+    Symmetry,
+};
+use vgcore::{utils::partition::beckers, MeasurementKind};
 
 use crate::{
     app::{
@@ -193,7 +193,7 @@ impl PropertyInspector {
                                 ui.end_row();
 
                                 ui.add(egui::Label::new("Timestamp:"));
-                                ui.add(egui::Label::new(base::utils::iso_timestamp_display(
+                                ui.add(egui::Label::new(vgcore::utils::iso_timestamp_display(
                                     &state.timestamp,
                                 )));
                                 ui.end_row();

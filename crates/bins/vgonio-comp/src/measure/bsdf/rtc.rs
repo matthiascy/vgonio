@@ -1,7 +1,7 @@
 //! Ray tracing measurement module.
 
 use approx::RelativeEq;
-use base::math::{Aabb, Vec3, Vec3A};
+use vgcore::math::{Aabb, Vec3, Vec3A};
 use std::{
     fmt::Debug,
     ops::{Add, Mul},
@@ -22,7 +22,7 @@ pub mod optix;
 pub mod grid;
 
 mod triangle;
-use base::math;
+use vgcore::math;
 pub use triangle::*;
 
 // TODO: ray packet and associated wavelengths
@@ -380,7 +380,7 @@ pub fn ray_aabb_intersection(ray: &Ray, bbox: &Aabb) -> Option<RayAabbIsect> {
 #[cfg(test)]
 mod tests {
     use crate::measure::bsdf::rtc::{ray_aabb_intersection, ray_aabb_intersects, Ray};
-    use base::math::{Aabb, Vec3};
+    use vgcore::math::{Aabb, Vec3};
 
     #[test]
     fn aabb_ray_intersection() {

@@ -13,8 +13,8 @@ use crate::{
     },
 };
 #[cfg(not(feature = "vdbg"))]
-use base::optics::ior::Ior;
-use base::{
+use vgcore::optics::ior::Ior;
+use vgcore::{
     math::{Sph2, Vec3A},
     optics::fresnel,
 };
@@ -587,7 +587,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
 
     #[cfg(not(feature = "vdbg"))]
     {
-        use base::math::{Vec3, Vec3A};
+        use vgcore::math::{Vec3, Vec3A};
         use jabr::array::DyArr;
         // Unpack the stream data into a single result.
         let dirs = stream_data

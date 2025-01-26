@@ -1,10 +1,10 @@
-use base::utils::handle::Handle;
 use egui::Color32;
 use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
 };
 use surf::MicroSurface;
+use vgcore::utils::handle::Handle;
 
 /// The selection mode for surfaces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

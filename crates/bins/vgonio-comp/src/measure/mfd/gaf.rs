@@ -2,7 +2,7 @@ use crate::{
     app::cache::RawCache,
     measure::{params::GafMeasurementParams, AnyMeasured, Measurement, MeasurementSource},
 };
-use base::{
+use vgcore::{
     error::VgonioError,
     impl_any_measured_trait, math,
     math::{Mat4, Vec3},

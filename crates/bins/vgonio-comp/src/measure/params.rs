@@ -2,7 +2,7 @@
 pub use crate::measure::{bsdf::params::*, mfd::params::*};
 
 use crate::error::RuntimeError;
-use base::error::VgonioError;
+use vgcore::error::VgonioError;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,

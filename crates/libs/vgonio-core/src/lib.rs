@@ -1,4 +1,4 @@
-//! # vgonio-base
+//! # vgonio-core
 //! Core library for vgonio.
 //! Contains all the basic types and functions for the vgonio project.
 
@@ -35,6 +35,8 @@ pub mod io;
 pub mod math;
 pub mod units;
 pub mod utils;
+
+pub mod cli;
 
 pub mod optics;
 

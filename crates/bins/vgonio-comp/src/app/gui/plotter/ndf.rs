@@ -14,12 +14,12 @@ use crate::{
     measure::{mfd::MeasuredNdfData, Measurement},
 };
 #[cfg(feature = "fitting")]
-use base::{
+use vgcore::{
     bxdf::fitting::{FittedModel, FittingProblemKind},
     Symmetry,
 };
 
-use base::{
+use vgcore::{
     bxdf::distro::{MicrofacetDistribution, MicrofacetDistroKind},
     units::{rad, Radians},
     utils::{handle::Handle, range::StepRangeIncl},

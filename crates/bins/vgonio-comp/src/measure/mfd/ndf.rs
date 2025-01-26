@@ -5,12 +5,14 @@ use crate::{
         Measurement, MeasurementSource,
     },
 };
-use base::{
+use std::path::Path;
+use surf::{MicroSurface, MicroSurfaceMesh};
+use vgcore::{
     error::VgonioError,
     impl_any_measured_trait, math,
     math::{theta, Sph2, Vec3Swizzles},
     units,
-    units::{rad, Radians},
+    units::{deg, rad, Radians},
     utils::{
         handle::Handle,
         partition::{DataCarriedOnHemisphereImageWriter, SphericalDomain, SphericalPartition},
@@ -18,8 +20,6 @@ use base::{
     },
     AnyMeasured, MeasurementKind,
 };
-use std::path::Path;
-use surf::{MicroSurface, MicroSurfaceMesh};
 
 /// Structure holding the data for microfacet area distribution measurement.
 ///

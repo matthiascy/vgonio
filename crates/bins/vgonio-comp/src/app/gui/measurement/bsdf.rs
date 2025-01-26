@@ -10,9 +10,9 @@ use crate::{
         params::{BsdfMeasurementParams, SimulationKind},
     },
 };
-use base::utils::{medium::Medium, partition::SphericalDomain};
+use vgcore::utils::{medium::Medium, partition::SphericalDomain};
 #[cfg(feature = "vdbg")]
-use base::{math::Sph2, units::Rads};
+use vgcore::{math::Sph2, units::Rads};
 use std::hash::Hash;
 use uxtk::widgets::ToggleSwitch;
 

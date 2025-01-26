@@ -13,7 +13,7 @@ use crate::{
         rtc::Ray,
     },
 };
-use base::{
+use vgcore::{
     math::{Mat4, Sph2, Vec3},
     utils::{handle::Handle, partition::SphericalPartition},
 };

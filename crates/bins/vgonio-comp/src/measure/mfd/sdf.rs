@@ -2,7 +2,9 @@ use crate::{
     app::cache::RawCache,
     measure::{params::SdfMeasurementParams, Measurement, MeasurementSource},
 };
-use base::{
+use std::{borrow::Cow, path::Path};
+use surf::MicroSurface;
+use vgcore::{
     error::VgonioError,
     impl_any_measured_trait, math,
     math::{IVec2, Vec2},
@@ -10,8 +12,6 @@ use base::{
     utils::{handle::Handle, range::StepRangeIncl},
     AnyMeasured, MeasurementKind,
 };
-use std::{borrow::Cow, path::Path};
-use surf::MicroSurface;
 
 /// Slope of the microfacet normal, i.e. the normal of the microfacet in the
 /// tangent space or the slope space.
@@ -140,9 +140,9 @@ impl MeasuredSdfData {
                     (resolution as usize, resolution as usize),
                     LayerAttributes {
                         layer_name: Some(Text::from("SDF")),
-                        capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
-                            timestamp,
-                        )),
+                        capture_date: Text::new_or_none(
+                            vgcore::utils::iso_timestamp_from_datetime(timestamp),
+                        ),
                         ..LayerAttributes::default()
                     },
                     Encoding::FAST_LOSSLESS,
@@ -157,9 +157,9 @@ impl MeasuredSdfData {
                     (resolution as usize, resolution as usize),
                     LayerAttributes {
                         layer_name: Some(Text::from("SDF weighted")),
-                        capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
-                            timestamp,
-                        )),
+                        capture_date: Text::new_or_none(
+                            vgcore::utils::iso_timestamp_from_datetime(timestamp),
+                        ),
                         ..LayerAttributes::default()
                     },
                     Encoding::FAST_LOSSLESS,
@@ -174,9 +174,9 @@ impl MeasuredSdfData {
                     (resolution as usize, resolution as usize),
                     LayerAttributes {
                         layer_name: Some(Text::from("SDF difference")),
-                        capture_date: Text::new_or_none(base::utils::iso_timestamp_from_datetime(
-                            timestamp,
-                        )),
+                        capture_date: Text::new_or_none(
+                            vgcore::utils::iso_timestamp_from_datetime(timestamp),
+                        ),
                         ..LayerAttributes::default()
                     },
                     Encoding::FAST_LOSSLESS,

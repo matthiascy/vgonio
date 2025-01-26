@@ -2,7 +2,7 @@
 #[cfg(feature = "vdbg")]
 use crate::measure::bsdf::rtc::RayTrajectory;
 #[cfg(feature = "vdbg")]
-use base::math::{Vec3, Vec3A};
+use vgcore::math::{Vec3, Vec3A};
 
 use crate::{
     app::cache::RawCache,
@@ -11,7 +11,7 @@ use crate::{
         params::BsdfMeasurementParams,
     },
 };
-use base::{
+use vgcore::{
     math::Sph2,
     optics::ior::Ior,
     units::{Nanometres, Radians},
@@ -46,7 +46,7 @@ impl ReceiverParams {
         let num_patches_hemi = match self.scheme {
             PartitionScheme::Beckers => {
                 let num_rings = (Radians::HALF_PI / self.precision.theta).round() as u32;
-                let ks = base::utils::partition::beckers::compute_ks(1, num_rings);
+                let ks = vgcore::utils::partition::beckers::compute_ks(1, num_rings);
                 ks[num_rings as usize - 1] as usize
             },
             PartitionScheme::EqualAngle => {
@@ -184,7 +184,7 @@ impl Receiver {
 
         #[cfg(feature = "vdbg")]
         {
-            use base::optics::fresnel;
+            use vgcore::optics::fresnel;
             use rayon::prelude::*;
             use std::sync::atomic::AtomicU32;
 

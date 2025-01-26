@@ -1,8 +1,8 @@
 //! Reading and writing of surface files.
 
 #[cfg(feature = "surf-obj")]
-use base::math::Axis;
-use base::{
+use vgcore::math::Axis;
+use vgcore::{
     error::VgonioError,
     io::{FileEncoding, ReadFileError, ReadFileErrorKind},
     units::LengthUnit,
@@ -18,7 +18,7 @@ use crate::MicroSurface;
 /// Micro-surface file format.
 pub mod vgms {
     use super::*;
-    use base::{
+    use vgcore::{
         io::{Header, HeaderExt, ReadFileErrorKind, VgonioFileVariant, WriteFileErrorKind},
         units::LengthUnit,
         Version,
@@ -133,7 +133,7 @@ pub mod vgms {
         log::debug!("Reading VGMS file of length: {}", header.meta.length);
         // TODO: file length
         // TODO: match header.meta.sample_size
-        let samples = base::io::read_f32_data_samples(
+        let samples = vgcore::io::read_f32_data_samples(
             reader,
             header.extra.sample_count() as usize,
             header.meta.encoding,
@@ -154,10 +154,10 @@ pub mod vgms {
         // TODO: match header.meta.sample_size
         match header.meta.encoding {
             FileEncoding::Ascii => {
-                base::io::write_data_samples_ascii(writer, samples, header.extra.cols)
+                vgcore::io::write_data_samples_ascii(writer, samples, header.extra.cols)
             },
             FileEncoding::Binary => {
-                base::io::write_f32_data_samples_binary(writer, header.meta.compression, samples)
+                vgcore::io::write_f32_data_samples_binary(writer, header.meta.compression, samples)
             },
         }
         .map_err(WriteFileErrorKind::Write)?;
@@ -241,7 +241,7 @@ pub fn read_ascii_dong2015<R: BufRead>(
 
     let mut samples = vec![0.0; rows * cols];
 
-    base::io::read_ascii_samples(reader, rows * cols, &mut samples).map_err(|err| {
+    vgcore::io::read_ascii_samples(reader, rows * cols, &mut samples).map_err(|err| {
         VgonioError::new(
             format!("Failed to read samples from file {}", filepath.display()),
             Some(Box::new(ReadFileError::from_parse_error(filepath, err))),
@@ -532,7 +532,7 @@ pub fn read_omni_surf_3d<R: BufRead>(
     // Read the surface heights
     let mut samples = vec![0.0; (rows * cols) as usize];
 
-    base::io::read_binary_samples(reader, (rows * cols) as usize, &mut samples).map_err(|err| {
+    vgcore::io::read_binary_samples(reader, (rows * cols) as usize, &mut samples).map_err(|err| {
         VgonioError::from_read_file_error(
             ReadFileError {
                 path: filepath.to_owned().into_boxed_path(),

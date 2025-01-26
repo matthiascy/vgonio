@@ -28,13 +28,13 @@ use crate::{
     },
 };
 #[cfg(feature = "fitting")]
-use base::{
+use vgcore::{
     bxdf::brdf::BrdfFamily,
     bxdf::fitting::{FittedModel, FittingProblem, FittingProblemKind, FittingReport},
     utils::range::StepRangeIncl,
     AnyMeasuredBrdf,
 };
-use base::{
+use vgcore::{
     io::{CompressionScheme, FileEncoding},
     utils::handle::Handle,
     BrdfLevel, MeasurementKind, Weighting,

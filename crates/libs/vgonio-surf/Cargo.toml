@@ -35,4 +35,4 @@ serde.workspace = true
 tobj = { workspace = true, optional = true }
 uuid.workspace = true
 embree = { workspace = true, optional = true }
-base = { package = "vgonio-base", path = "../vgonio-base" }
+vgcore = { package = "vgonio-core", path = "../vgonio-core" }

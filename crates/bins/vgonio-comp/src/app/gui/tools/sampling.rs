@@ -9,7 +9,7 @@ use crate::{
     app::gui::event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
     measure,
 };
-use base::{
+use vgcore::{
     math::{Mat4, Vec3},
     units::{deg, Rads},
 };

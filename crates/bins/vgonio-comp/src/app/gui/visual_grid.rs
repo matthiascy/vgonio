@@ -1,4 +1,4 @@
-use base::math::{Mat4, Vec3, IDENTITY_MAT4};
+use vgcore::math::{Mat4, Vec3, IDENTITY_MAT4};
 use gxtk::{
     camera::ViewProjUniform, context::GpuContext, render_pass::DEFAULT_BIND_GROUP_LAYOUT_DESC,
     texture::Texture,

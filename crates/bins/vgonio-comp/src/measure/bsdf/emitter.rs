@@ -4,7 +4,7 @@ use crate::{
     app::cli::ansi,
     measure::{bsdf::rtc::Ray, SphericalTransform},
 };
-use base::{
+use vgcore::{
     math::{Sph2, Vec3},
     units::{deg, nm, rad, Nanometres, Radians, Rads},
     utils::range::StepRangeIncl,

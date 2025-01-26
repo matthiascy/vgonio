@@ -16,22 +16,6 @@ use crate::{
         params::NdfMeasurementMode,
     },
 };
-use base::{
-    bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan18Brdf},
-    error::VgonioError,
-    io::{
-        Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
-    },
-    math::{self, Mat3, Sph2, Sph3, Vec3},
-    units::{rad, Radians},
-    utils::{
-        handle::Handle,
-        medium::Medium,
-        partition::{SphericalDomain, SphericalPartition},
-        Asset,
-    },
-    AnyMeasured, MeasurementKind, Version,
-};
 use chrono::{DateTime, Local};
 use rand::{
     distributions::{Distribution, Uniform},
@@ -49,6 +33,22 @@ use std::{
     path::{Path, PathBuf},
 };
 use surf::{MicroSurface, MicroSurfaceMesh};
+use vgcore::{
+    bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan18Brdf},
+    error::VgonioError,
+    io::{
+        Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
+    },
+    math::{self, Mat3, Sph2, Sph3, Vec3},
+    units::{rad, Radians},
+    utils::{
+        handle::Handle,
+        medium::Medium,
+        partition::{SphericalDomain, SphericalPartition},
+        Asset,
+    },
+    AnyMeasured, MeasurementKind, Version,
+};
 
 /// Where the measurement data is loaded from.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -120,7 +120,7 @@ impl Measurement {
                 let timestamp = {
                     let mut timestamp = [0_u8; 32];
                     timestamp.copy_from_slice(
-                        base::utils::iso_timestamp_from_datetime(&self.timestamp).as_bytes(),
+                        vgcore::utils::iso_timestamp_from_datetime(&self.timestamp).as_bytes(),
                     );
                     timestamp
                 };
@@ -373,9 +373,9 @@ impl SphericalTransform {
     ///   distributed.
     /// * `orbit_radius` - The radius of the orbit about which the samples are
     ///   rotating around.
-    pub fn transform_disc(dest: Sph2, disc_radius: f32, orbit_radius: f32) -> Mat3 {
+    pub fn transform_disc(dest: Sph2, disk_radius: f32, orbit_radius: f32) -> Mat3 {
         Self::transform_to(dest)
-            * Mat3::from_diagonal(Vec3::new(disc_radius, disc_radius, orbit_radius))
+            * Mat3::from_diagonal(Vec3::new(disk_radius, disk_radius, orbit_radius))
     }
 }
 

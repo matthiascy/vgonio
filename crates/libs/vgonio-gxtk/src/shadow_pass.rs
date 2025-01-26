@@ -3,7 +3,7 @@ use crate::{
     render_pass::{remap_depth, RenderPass},
     texture::Texture,
 };
-use base::{error::VgonioError, math::Mat4};
+use vgcore::{error::VgonioError, math::Mat4};
 use bytemuck::{Pod, Zeroable};
 use std::sync::Arc;
 

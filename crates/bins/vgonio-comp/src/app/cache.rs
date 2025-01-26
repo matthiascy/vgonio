@@ -10,7 +10,7 @@ use crate::{
     app::{cli::ansi, Config},
     measure::{params::SurfacePath, Measurement},
 };
-use base::{
+use vgcore::{
     error::VgonioError,
     optics::ior::IorRegistry,
     utils::{handle::Handle, medium::Medium},

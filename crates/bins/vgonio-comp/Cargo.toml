@@ -10,7 +10,7 @@ default = ["dep:embree"]
 embree = ["dep:embree", "surf/embree"]
 optix = []
 bench = ["surf/bench"]
-fitting = ["base/bxdf_fit"]
+fitting = ["vgcore/bxdf_fit"]
 surf-obj = ["surf/surf-obj"]
 surf-gen = ["surf/surf-gen"]
 vdbg = []
@@ -54,13 +54,15 @@ toml.workspace = true
 type-map.workspace = true
 winit.workspace = true
 wgpu.workspace = true
-surf = { package = "vgonio-surf", path = "../../libs/vgonio-surf", features = ["exr"] }
-base = { package = "vgonio-base", path = "../../libs/vgonio-base", features = [
+surf = { package = "vgonio-surf", path = "../../libs/vgonio-surf", features = [
+    "exr",
+] }
+vgcore = { package = "vgonio-core", path = "../../libs/vgonio-core", features = [
     "cli",
     "winit",
     "io",
     "bxdf",
-    "bxdf_io"
+    "bxdf_io",
 ] }
 jabr = { package = "vgonio-jabr", path = "../../libs/vgonio-jabr" }
 gxtk = { package = "vgonio-gxtk", path = "../../libs/vgonio-gxtk" }

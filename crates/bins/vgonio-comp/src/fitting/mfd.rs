@@ -2,7 +2,10 @@ use crate::measure::{
     mfd::{MeasuredGafData, MeasuredNdfData},
     params::NdfMeasurementMode,
 };
-use base::{
+use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
+use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
+use std::fmt::Display;
+use vgcore::{
     bxdf::{
         distro::{
             BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind,
@@ -16,11 +19,8 @@ use base::{
         partition::{SphericalDomain, SphericalPartition},
         range::StepRangeIncl,
     },
-    Symmetry, Weighting,
+    ErrorMetric, Symmetry, Weighting,
 };
-use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
-use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
-use std::fmt::Display;
 
 /// Enum representing the measured microfacet distribution related data on which
 /// the fitting procedure is based.
@@ -187,7 +187,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
     fn brute_fit(
         &self,
         target: MicrofacetDistroKind,
-        metric: base::ErrorMetric,
+        metric: ErrorMetric,
         weighting: Weighting,
         max_theta_i: Option<Radians>,
         max_theta_o: Option<Radians>,

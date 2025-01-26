@@ -8,7 +8,7 @@ use crate::{
         NdfMeasurementMode, NdfMeasurementParams, SurfacePath,
     },
 };
-use base::error::VgonioError;
+use vgcore::error::VgonioError;
 use std::{
     fmt::{Display, Formatter},
     path::PathBuf,
