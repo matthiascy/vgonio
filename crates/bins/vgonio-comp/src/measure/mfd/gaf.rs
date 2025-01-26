@@ -2,14 +2,6 @@ use crate::{
     app::cache::RawCache,
     measure::{params::GafMeasurementParams, AnyMeasured, Measurement, MeasurementSource},
 };
-use vgcore::{
-    error::VgonioError,
-    impl_any_measured_trait, math,
-    math::{Mat4, Vec3},
-    units::Radians,
-    utils::{handle::Handle, range::StepRangeIncl},
-    MeasurementKind,
-};
 use bytemuck::{Pod, Zeroable};
 use gxtk::{
     camera::{Camera, Projection},
@@ -19,6 +11,14 @@ use gxtk::{
 };
 use std::path::Path;
 use surf::MicroSurface;
+use vgonio_core::{
+    error::VgonioError,
+    impl_any_measured_trait, math,
+    math::{Mat4, Vec3},
+    units::Radians,
+    utils::{handle::Handle, range::StepRangeIncl},
+    MeasurementKind,
+};
 use wgpu::{util::DeviceExt, ColorTargetState};
 
 /// Render pass computing the shadowing/masking (caused by microfacets

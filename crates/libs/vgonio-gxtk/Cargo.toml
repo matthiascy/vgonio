@@ -14,7 +14,7 @@ pollster.workspace = true
 rayon.workspace = true
 winit.workspace = true
 uuid.workspace = true
-vgcore = { package = "vgonio-core", path = "../vgonio-core", features = [
+vgonio_core = { package = "vgonio-core", path = "../vgonio-core", features = [
     "winit",
 ] }
 surf = { package = "vgonio-surf", path = "../../libs/vgonio-surf" }

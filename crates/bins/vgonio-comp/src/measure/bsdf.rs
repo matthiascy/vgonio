@@ -18,7 +18,7 @@ use crate::{
         AnyMeasured, Measurement, MeasurementSource,
     },
 };
-use vgcore::{
+use vgonio_core::{
     bxdf::brdf::measured::{
         ClausenBrdf, ClausenBrdfParameterisation, MeasuredBrdfKind, Origin, VgonioBrdf,
         VgonioBrdfParameterisation,

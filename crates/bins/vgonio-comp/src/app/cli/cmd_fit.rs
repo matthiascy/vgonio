@@ -3,7 +3,7 @@ use crate::{
     measure::bsdf::BsdfMeasurement,
     pyplot::plot_err,
 };
-use vgcore::{
+use vgonio_core::{
     bxdf::{
         brdf::{
             measured::{

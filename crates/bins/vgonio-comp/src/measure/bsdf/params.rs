@@ -2,7 +2,7 @@ use crate::{
     error::RuntimeError,
     measure::bsdf::{emitter::EmitterParams, receiver::ReceiverParams, rtc::RtcMethod, BsdfKind},
 };
-use vgcore::{
+use vgonio_core::{
     error::VgonioError,
     math::Sph2,
     units::{deg, nm, rad},

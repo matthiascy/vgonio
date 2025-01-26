@@ -4,7 +4,7 @@ use std::{
     hash::Hash,
 };
 use surf::MicroSurface;
-use vgcore::utils::handle::Handle;
+use vgonio_core::utils::handle::Handle;
 
 /// The selection mode for surfaces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

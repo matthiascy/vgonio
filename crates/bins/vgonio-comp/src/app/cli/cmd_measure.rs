@@ -4,7 +4,7 @@ use crate::{
     measure,
     measure::params::{MeasurementDescription, MeasurementParams, NdfMeasurementMode},
 };
-use vgcore::{
+use vgonio_core::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
 };

@@ -7,7 +7,7 @@ use crate::{
 };
 use std::path::Path;
 use surf::{MicroSurface, MicroSurfaceMesh};
-use vgcore::{
+use vgonio_core::{
     error::VgonioError,
     impl_any_measured_trait, math,
     math::{theta, Sph2, Vec3Swizzles},
@@ -535,7 +535,7 @@ fn classify_normal_by_zenith(
 
 #[test]
 fn test_normal_classification_by_zenith() {
-    use base::units::deg;
+    use vgonio_core::units::deg;
     let range = StepRangeIncl::new(Radians::ZERO, Radians::HALF_PI, deg!(30.0).to_radians());
     assert_eq!(
         classify_normal_by_zenith(deg!(0.0).to_radians(), range, 1.0),

@@ -1,5 +1,5 @@
 use crate::app::{args::SubCommand, Config};
-use vgcore::error::VgonioError;
+use vgonio_core::error::VgonioError;
 
 /// ANSI color codes.
 pub mod ansi {

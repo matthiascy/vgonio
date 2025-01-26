@@ -12,8 +12,8 @@ use crate::{
     },
 };
 #[cfg(feature = "fitting")]
-use vgcore::bxdf::fitting::FittingProblemKind;
-use vgcore::{
+use vgonio_core::bxdf::fitting::FittingProblemKind;
+use vgonio_core::{
     math::{IVec2, Sph2},
     units::Degrees,
     utils::{handle::Handle, partition::SphericalPartition},

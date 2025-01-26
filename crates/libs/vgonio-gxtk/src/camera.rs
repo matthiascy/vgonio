@@ -1,8 +1,8 @@
-use vgcore::{
+use std::cmp::Ordering::Equal;
+use vgonio_core::{
     math::{Mat3, Mat4, Vec3, Vec4, Vec4Swizzles},
     utils::input::InputState,
 };
-use std::cmp::Ordering::Equal;
 use winit::{event::MouseButton, keyboard::KeyCode};
 
 // pub struct OrthonormalBasis {

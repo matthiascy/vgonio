@@ -40,7 +40,7 @@ use crate::{
 };
 use gxtk::context::{GpuContext, WgpuConfig, WindowSurface};
 use uxtk::theme::{DarkTheme, LightTheme, Theme, ThemeKind};
-use vgcore::{error::VgonioError, utils::input::InputState};
+use vgonio_core::{error::VgonioError, utils::input::InputState};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyEvent, WindowEvent},

@@ -2,7 +2,7 @@
 //! J. Peters, C. Boyd, and J. Mitchell
 
 use glam::{DVec3, Vec2, Vec3};
-use vgcore::math::cbr;
+use vgonio_core::math::cbr;
 
 /// Queries the sub-triangulated points of a triangle using the PN triangle
 /// algorithm.

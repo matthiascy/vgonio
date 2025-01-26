@@ -5,7 +5,16 @@ use crate::measure::{
     params::NdfMeasurementMode,
     DataCarriedOnHemisphereSampler,
 };
-use vgcore::{
+use exr::{
+    image::{FlatImage, FlatSamples},
+    prelude::Text,
+};
+use jabr::array::{shape, DyArr, DynArr};
+use numpy::{PyArray, PyArray1, PyArray2, PyArrayMethods};
+use pyo3::{ffi::c_str, prelude::*, types::PyList};
+use std::{ffi::CString, fs::File, io::Read, path::Path};
+use surf::MicroSurface;
+use vgonio_core::{
     bxdf::{
         brdf::{
             analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
@@ -17,21 +26,13 @@ use vgcore::{
         },
         OutgoingDirs, Scattering,
     },
-    math::{self, Sph2},
+    error::VgonioError,
+    math::{self, Sph2, Vec2, Vec3},
     optics::ior::IorRegistry,
     units::{rad, Degrees, Nanometres, Radians, Rads},
     utils::range::{StepRangeExcl, StepRangeIncl},
     AnyMeasured, AnyMeasuredBrdf, BrdfLevel, ErrorMetric, MeasurementKind, Weighting,
 };
-use exr::{
-    image::{FlatImage, FlatSamples},
-    prelude::Text,
-};
-use jabr::array::{shape, DyArr, DynArr};
-use numpy::{PyArray, PyArray1, PyArray2, PyArrayMethods};
-use pyo3::{ffi::c_str, prelude::*, types::PyList};
-use std::{ffi::CString, fs::File, io::Read, path::Path};
-use surf::MicroSurface;
 
 /// Load the Python source code dynamically from the given path into a
 /// `CString`. This function is an alternative to `include_str!` for loading
@@ -794,8 +795,7 @@ impl BrdfFittingPlotter {
                                             * n_spectrum
                                             + i * n_phi_i * n_phi_o * n_theta_o * n_spectrum
                                             + j * n_phi_o * n_theta_o * n_spectrum
-                                            + k * n_theta_o * n_spectrum
-                                            + l * n_spectrum;
+                                            + k * n_theta_o * n_spectrum;
 
                                         unsafe {
                                             fitted_bk.as_slice_mut().unwrap()

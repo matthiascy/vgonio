@@ -10,7 +10,7 @@ default = ["dep:embree"]
 embree = ["dep:embree", "surf/embree"]
 optix = []
 bench = ["surf/bench"]
-fitting = ["vgcore/bxdf_fit"]
+fitting = ["vgonio-core/bxdf_fit"]
 surf-obj = ["surf/surf-obj"]
 surf-gen = ["surf/surf-gen"]
 vdbg = []
@@ -57,7 +57,7 @@ wgpu.workspace = true
 surf = { package = "vgonio-surf", path = "../../libs/vgonio-surf", features = [
     "exr",
 ] }
-vgcore = { package = "vgonio-core", path = "../../libs/vgonio-core", features = [
+vgonio-core = { path = "../../libs/vgonio-core", features = [
     "cli",
     "winit",
     "io",

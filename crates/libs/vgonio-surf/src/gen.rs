@@ -1,7 +1,7 @@
 use crate::MicroSurface;
 use glam::{IVec2, Vec2};
 use serde::{Deserialize, Serialize};
-use vgcore::units::LengthUnit;
+use vgonio_core::units::LengthUnit;
 
 /// Kind of generated surface.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, clap::ValueEnum)]

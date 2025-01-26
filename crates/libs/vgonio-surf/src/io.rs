@@ -1,16 +1,16 @@
 //! Reading and writing of surface files.
 
-#[cfg(feature = "surf-obj")]
-use vgcore::math::Axis;
-use vgcore::{
-    error::VgonioError,
-    io::{FileEncoding, ReadFileError, ReadFileErrorKind},
-    units::LengthUnit,
-};
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::{
     io::{BufRead, BufReader},
     path::Path,
+};
+#[cfg(feature = "surf-obj")]
+use vgonio_core::math::Axis;
+use vgonio_core::{
+    error::VgonioError,
+    io::{FileEncoding, ReadFileError, ReadFileErrorKind},
+    units::LengthUnit,
 };
 
 use crate::MicroSurface;
@@ -18,12 +18,12 @@ use crate::MicroSurface;
 /// Micro-surface file format.
 pub mod vgms {
     use super::*;
-    use vgcore::{
+    use std::io::{BufWriter, Read, Seek, Write};
+    use vgonio_core::{
         io::{Header, HeaderExt, ReadFileErrorKind, VgonioFileVariant, WriteFileErrorKind},
         units::LengthUnit,
         Version,
     };
-    use std::io::{BufWriter, Read, Seek, Write};
 
     /// Header of the VGMS file.
     #[derive(Debug, Clone, Copy, PartialEq)]
@@ -133,7 +133,7 @@ pub mod vgms {
         log::debug!("Reading VGMS file of length: {}", header.meta.length);
         // TODO: file length
         // TODO: match header.meta.sample_size
-        let samples = vgcore::io::read_f32_data_samples(
+        let samples = vgonio_core::io::read_f32_data_samples(
             reader,
             header.extra.sample_count() as usize,
             header.meta.encoding,
@@ -154,11 +154,13 @@ pub mod vgms {
         // TODO: match header.meta.sample_size
         match header.meta.encoding {
             FileEncoding::Ascii => {
-                vgcore::io::write_data_samples_ascii(writer, samples, header.extra.cols)
+                vgonio_core::io::write_data_samples_ascii(writer, samples, header.extra.cols)
             },
-            FileEncoding::Binary => {
-                vgcore::io::write_f32_data_samples_binary(writer, header.meta.compression, samples)
-            },
+            FileEncoding::Binary => vgonio_core::io::write_f32_data_samples_binary(
+                writer,
+                header.meta.compression,
+                samples,
+            ),
         }
         .map_err(WriteFileErrorKind::Write)?;
 
@@ -241,7 +243,7 @@ pub fn read_ascii_dong2015<R: BufRead>(
 
     let mut samples = vec![0.0; rows * cols];
 
-    vgcore::io::read_ascii_samples(reader, rows * cols, &mut samples).map_err(|err| {
+    vgonio_core::io::read_ascii_samples(reader, rows * cols, &mut samples).map_err(|err| {
         VgonioError::new(
             format!("Failed to read samples from file {}", filepath.display()),
             Some(Box::new(ReadFileError::from_parse_error(filepath, err))),
@@ -532,15 +534,17 @@ pub fn read_omni_surf_3d<R: BufRead>(
     // Read the surface heights
     let mut samples = vec![0.0; (rows * cols) as usize];
 
-    vgcore::io::read_binary_samples(reader, (rows * cols) as usize, &mut samples).map_err(|err| {
-        VgonioError::from_read_file_error(
-            ReadFileError {
-                path: filepath.to_owned().into_boxed_path(),
-                kind: ReadFileErrorKind::Parse(err),
-            },
-            "Failed to read OmniSurf3D file.",
-        )
-    })?;
+    vgonio_core::io::read_binary_samples(reader, (rows * cols) as usize, &mut samples).map_err(
+        |err| {
+            VgonioError::from_read_file_error(
+                ReadFileError {
+                    path: filepath.to_owned().into_boxed_path(),
+                    kind: ReadFileErrorKind::Parse(err),
+                },
+                "Failed to read OmniSurf3D file.",
+            )
+        },
+    )?;
 
     // Ignore the rest of the file
 

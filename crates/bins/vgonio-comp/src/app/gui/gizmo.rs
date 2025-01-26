@@ -1,4 +1,4 @@
-use vgcore::math::Mat4;
+use vgonio_core::math::Mat4;
 use egui::{Align2, Color32};
 use egui_gizmo::{Gizmo, GizmoMode, GizmoOrientation, GizmoResult, GizmoVisuals};
 

@@ -1,4 +1,4 @@
-use vgcore::{math::Vec3, utils::input::InputState};
+use vgonio_core::{math::Vec3, utils::input::InputState};
 use gxtk::camera::{
     Camera, CameraController, CameraUniform, OrbitControls, Projection, ProjectionKind,
 };

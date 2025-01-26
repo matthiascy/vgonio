@@ -1,6 +1,6 @@
 use args::CliArgs;
-use vgcore::error::VgonioError;
 use std::io::Write;
+use vgonio_core::error::VgonioError;
 
 pub(crate) mod args;
 

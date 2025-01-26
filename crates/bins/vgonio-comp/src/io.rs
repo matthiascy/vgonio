@@ -6,7 +6,7 @@ use crate::{
         Measurement,
     },
 };
-use vgcore::{
+use vgonio_core::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
     math,
@@ -30,7 +30,7 @@ pub mod vgmo {
             SdfMeasurementParams, SimulationKind,
         },
     };
-    use vgcore::{
+    use vgonio_core::{
         bxdf::brdf::measured::{Origin, VgonioBrdf, VgonioBrdfParameterisation},
         io,
         io::{
@@ -1488,7 +1488,7 @@ mod tests {
         },
         params::{BsdfMeasurementParams, SimulationKind},
     };
-    use vgcore::{
+    use vgonio_core::{
         bxdf::brdf::measured::{MeasuredBrdfKind, Origin, VgonioBrdf, VgonioBrdfParameterisation},
         io::{CompressionScheme, FileEncoding},
         math::Sph2,
@@ -1916,7 +1916,7 @@ pub fn write_measured_data_to_file(
                 "{}_{}_{}",
                 measurement.kind().ascii_str(),
                 surf_name.to_str().unwrap(),
-                vgcore::utils::iso_timestamp_short(
+                vgonio_core::utils::iso_timestamp_short(
                     measurement.timestamp + chrono::Duration::seconds(i as i64)
                 ),
             ))

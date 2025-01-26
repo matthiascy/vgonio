@@ -27,10 +27,12 @@ macro_rules! impl_least_squares_problem_common_methods {
 
 mod mfd;
 
-use vgcore::bxdf::fitting::{FittedModel, FittingProblemKind};
 pub use mfd::*;
+use vgonio_core::{
+    bxdf::fitting::{FittedModel, FittingProblemKind},
+    Symmetry,
+};
 
-use vgcore::Symmetry;
 use std::fmt::Debug;
 
 /// A collection of fitted models without repetition.

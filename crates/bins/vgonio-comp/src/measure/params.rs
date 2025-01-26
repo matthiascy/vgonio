@@ -2,7 +2,6 @@
 pub use crate::measure::{bsdf::params::*, mfd::params::*};
 
 use crate::error::RuntimeError;
-use vgcore::error::VgonioError;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
@@ -10,6 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use surf::subdivision::Subdivision;
+use vgonio_core::error::VgonioError;
 
 /// Describes the different kind of measurements with parameters.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -20,15 +20,6 @@ use crate::{
         Measurement,
     },
 };
-#[cfg(feature = "fitting")]
-use vgcore::bxdf::fitting::FittedModel;
-use vgcore::{
-    bxdf::distro::{BeckmannDistribution, MicrofacetDistribution, TrowbridgeReitzDistribution},
-    math,
-    units::{deg, rad, Radians},
-    utils::{handle::Handle, range::StepRangeIncl},
-    MeasurementKind,
-};
 use egui::{Context, Response, Ui, WidgetText};
 use egui_plot::*;
 use std::{
@@ -38,6 +29,15 @@ use std::{
 };
 use uuid::Uuid;
 use uxtk::widgets::{AngleKnob, AngleKnobWinding};
+#[cfg(feature = "fitting")]
+use vgonio_core::bxdf::fitting::FittedModel;
+use vgonio_core::{
+    bxdf::distro::{BeckmannDistribution, MicrofacetDistribution, TrowbridgeReitzDistribution},
+    math,
+    units::{deg, rad, Radians},
+    utils::{handle::Handle, range::StepRangeIncl},
+    MeasurementKind,
+};
 
 const LINE_COLORS: [egui::Color32; 16] = [
     egui::Color32::from_rgb(254, 128, 127),

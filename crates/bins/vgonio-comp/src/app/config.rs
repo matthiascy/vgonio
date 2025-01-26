@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use surf::TriangulationPattern;
-use vgcore::error::VgonioError;
+use vgonio_core::error::VgonioError;
 
 /// Vgonio configuration.
 #[derive(Debug)]

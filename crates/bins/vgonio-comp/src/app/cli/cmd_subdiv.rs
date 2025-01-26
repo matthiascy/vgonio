@@ -2,7 +2,7 @@ use crate::{
     app::{cache::Cache, Config},
     measure::params::SurfacePath,
 };
-use vgcore::error::VgonioError;
+use vgonio_core::error::VgonioError;
 use egui::ahash::HashSet;
 use std::path::PathBuf;
 use surf::{subdivision::Subdivision, HeightOffset};

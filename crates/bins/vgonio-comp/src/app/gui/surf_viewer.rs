@@ -9,7 +9,7 @@ use crate::app::{
         visual_grid::{VisualGridPipeline, VisualGridState},
     },
 };
-use vgcore::{
+use vgonio_core::{
     math::{Mat4, Vec4},
     utils::{handle::Handle, input::InputState},
 };

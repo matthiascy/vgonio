@@ -3,9 +3,9 @@ use crate::{
     render_pass::{remap_depth, RenderPass},
     texture::Texture,
 };
-use vgcore::{error::VgonioError, math::Mat4};
 use bytemuck::{Pod, Zeroable};
 use std::sync::Arc;
+use vgonio_core::{error::VgonioError, math::Mat4};
 
 /// Render pass generating depth map (from light P.O.V.) used later for shadow
 /// mapping.
@@ -94,8 +94,11 @@ impl ShadowPass {
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("shadow_pass_shader_module"),
                 source: wgpu::ShaderSource::Wgsl(
-                    include_str!("../../../bins/vgonio-comp/src/app/gui/assets/shaders/wgsl/shadow_pass.wgsl")
-                        .into(),
+                    include_str!(
+                        "../../../bins/vgonio-comp/src/app/gui/assets/shaders/wgsl/shadow_pass.\
+                         wgsl"
+                    )
+                    .into(),
                 ),
             });
         let sampler = shader_accessible.then(|| {

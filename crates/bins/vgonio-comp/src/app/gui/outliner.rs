@@ -6,7 +6,7 @@ use crate::{
     },
     measure::Measurement,
 };
-use vgcore::utils::handle::Handle;
+use vgonio_core::utils::handle::Handle;
 use egui::WidgetText;
 use std::sync::{Arc, RwLock};
 use surf::{

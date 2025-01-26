@@ -22,7 +22,10 @@ use crate::{
     io::{OutputFileFormatOption, OutputOptions},
     measure::{bsdf::receiver::ReceiverParams, params::MeasurementParams},
 };
-use vgcore::{
+use egui::Widget;
+use surf::MicroSurface;
+use uxtk::widgets::{SurfaceSelector, ToggleSwitch};
+use vgonio_core::{
     io::{CompressionScheme, FileEncoding},
     utils::{
         handle::Handle,
@@ -30,9 +33,6 @@ use vgcore::{
     },
     MeasurementKind,
 };
-use egui::Widget;
-use surf::MicroSurface;
-use uxtk::widgets::{SurfaceSelector, ToggleSwitch};
 
 impl ReceiverParams {
     /// UI for detector parameters.

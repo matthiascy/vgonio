@@ -33,7 +33,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use surf::{MicroSurface, MicroSurfaceMesh};
-use vgcore::{
+use vgonio_core::{
     bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan18Brdf},
     error::VgonioError,
     io::{
@@ -120,7 +120,7 @@ impl Measurement {
                 let timestamp = {
                     let mut timestamp = [0_u8; 32];
                     timestamp.copy_from_slice(
-                        vgcore::utils::iso_timestamp_from_datetime(&self.timestamp).as_bytes(),
+                        vgonio_core::utils::iso_timestamp_from_datetime(&self.timestamp).as_bytes(),
                     );
                     timestamp
                 };

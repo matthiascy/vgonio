@@ -1,7 +1,7 @@
 use crate::app::{cli::ansi, Config};
 #[cfg(feature = "surf-obj")]
-use vgcore::units::LengthUnit;
-use vgcore::{
+use vgonio_core::units::LengthUnit;
+use vgonio_core::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
     math::Axis,

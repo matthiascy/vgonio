@@ -5,7 +5,7 @@ use crate::measure::{
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use std::fmt::Display;
-use vgcore::{
+use vgonio_core::{
     bxdf::{
         distro::{
             BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind,

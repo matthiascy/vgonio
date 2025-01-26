@@ -1,12 +1,12 @@
 use crate::{context::GpuContext, vertex::VertexLayout};
-use vgcore::{
-    math::{Aabb, Vec3},
-    utils::Asset,
-};
 use surf::{
     subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern,
 };
 use uuid::Uuid;
+use vgonio_core::{
+    math::{Aabb, Vec3},
+    utils::Asset,
+};
 use wgpu::util::DeviceExt;
 
 /// A mesh of triangles that can be rendered with a [`wgpu::RenderPipeline`].

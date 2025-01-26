@@ -10,15 +10,15 @@ use crate::{
     },
     measure::{mfd::MeasuredGafData, Measurement},
 };
+use egui::{Align, Ui};
+use std::any::Any;
 #[cfg(feature = "fitting")]
-use vgcore::bxdf::{distro::MicrofacetDistribution, fitting::FittedModel};
-use vgcore::{
+use vgonio_core::bxdf::{distro::MicrofacetDistribution, fitting::FittedModel};
+use vgonio_core::{
     units::{rad, Radians},
     utils::{handle::Handle, range::StepRangeIncl},
     MeasurementKind,
 };
-use egui::{Align, Ui};
-use std::any::Any;
 
 pub struct MaskingShadowingExtra {
     /// The azimuthal angle (facet normal m) of the slice to be displayed, in

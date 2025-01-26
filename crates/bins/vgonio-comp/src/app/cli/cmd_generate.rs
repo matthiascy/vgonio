@@ -1,5 +1,5 @@
 use crate::app::{cli::ansi, Config};
-use vgcore::{
+use vgonio_core::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
     units::LengthUnit,

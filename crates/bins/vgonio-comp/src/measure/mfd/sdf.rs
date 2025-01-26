@@ -4,7 +4,7 @@ use crate::{
 };
 use std::{borrow::Cow, path::Path};
 use surf::MicroSurface;
-use vgcore::{
+use vgonio_core::{
     error::VgonioError,
     impl_any_measured_trait, math,
     math::{IVec2, Vec2},
@@ -141,7 +141,7 @@ impl MeasuredSdfData {
                     LayerAttributes {
                         layer_name: Some(Text::from("SDF")),
                         capture_date: Text::new_or_none(
-                            vgcore::utils::iso_timestamp_from_datetime(timestamp),
+                            vgonio_core::utils::iso_timestamp_from_datetime(timestamp),
                         ),
                         ..LayerAttributes::default()
                     },
@@ -158,7 +158,7 @@ impl MeasuredSdfData {
                     LayerAttributes {
                         layer_name: Some(Text::from("SDF weighted")),
                         capture_date: Text::new_or_none(
-                            vgcore::utils::iso_timestamp_from_datetime(timestamp),
+                            vgonio_core::utils::iso_timestamp_from_datetime(timestamp),
                         ),
                         ..LayerAttributes::default()
                     },
@@ -175,7 +175,7 @@ impl MeasuredSdfData {
                     LayerAttributes {
                         layer_name: Some(Text::from("SDF difference")),
                         capture_date: Text::new_or_none(
-                            vgcore::utils::iso_timestamp_from_datetime(timestamp),
+                            vgonio_core::utils::iso_timestamp_from_datetime(timestamp),
                         ),
                         ..LayerAttributes::default()
                     },

@@ -15,7 +15,7 @@ use surf::{
     subdivision::{Subdivision, SubdivisionKind},
     TriangulationPattern,
 };
-use vgcore::{
+use vgonio_core::{
     bxdf::brdf::measured::ClausenBrdf,
     error::VgonioError,
     math::Sph2,

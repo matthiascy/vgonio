@@ -1,5 +1,5 @@
 use crate::app::gui::event::{EventLoopProxy, VgonioEvent};
-use vgcore::units::{degrees, Degrees};
+use vgonio_core::units::{degrees, Degrees};
 use egui::{Response, Ui};
 
 pub struct MicrofacetDebugging {

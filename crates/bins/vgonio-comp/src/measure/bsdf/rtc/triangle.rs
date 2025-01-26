@@ -1,5 +1,5 @@
 use crate::measure::bsdf::rtc::{Ray, RayTriIsect};
-use vgcore::{
+use vgonio_core::{
     math,
     math::{gamma, Vec3},
 };
@@ -358,7 +358,7 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3], tmax: f32) -> Opt
 mod tests {
     use super::ray_tri_intersect_woop;
     use crate::measure::bsdf::rtc::{ray_tri_intersect_moller_trumbore, Ray};
-    use base::math::Vec3;
+    use vgonio_core::math::Vec3;
 
     #[test]
     fn test_ray_tri_intersection_woop() {
