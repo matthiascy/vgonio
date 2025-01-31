@@ -4623,8 +4623,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "vgonio-meas"
+version = "0.3.2"
+dependencies = [
+ "vgonio-core",
+]
+
+[[package]]
 name = "vgonio-measure"
 version = "0.3.2"
+dependencies = [
+ "clap",
+ "vgonio-core",
+ "vgonio-meas",
+]
 
 [[package]]
 name = "vgonio-plot"
@@ -4632,7 +4644,9 @@ version = "0.3.2"
 dependencies = [
  "clap",
  "env_logger",
+ "exr",
  "log",
+ "vgonio-bxdf",
  "vgonio-core",
  "vgonio-surf",
 ]

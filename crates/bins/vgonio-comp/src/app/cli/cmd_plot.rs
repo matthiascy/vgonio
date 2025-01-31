@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use surf::subdivision::{Subdivision, SubdivisionKind};
 use vgonio_bxdf::brdf::measured::ClausenBrdf;
 use vgonio_core::{
+    bxdf::{MicrofacetDistribution, MicrofacetDistroKind},
     config::Config,
     error::VgonioError,
     math::Sph2,
@@ -91,23 +92,29 @@ pub struct PlotOptions {
         num_args = 1..,
         help = "The roughness parameter along the x-axis and y-axis. Can be multiple values.",
         required_if_eq("kind", "brdf-fitting"),
-        required_if_eq("kind", "error-map"),
     )]
     pub alpha: Vec<f64>,
 
     #[clap(
         long = "err",
         help = "The error metric to use for plotting the error map.",
-        required_if_eq("kind", "error-map")
+        required_if_eq_all(vec![("kind", "brdf-fitting"), ("interactive", "false")])
     )]
     pub error_metric: Option<ErrorMetric>,
 
     #[clap(
         long,
         help = "The weighting function to use for plotting the error map.",
-        required_if_eq("kind", "error-map")
+        required_if_eq_all(vec![("kind", "brdf-fitting"), ("interactive", "false")])
     )]
     pub weighting: Option<Weighting>,
+
+    #[clap(
+        long,
+        help = "The BRDF model to use for plotting the error map against.",
+        required_if_eq_all(vec![("kind", "brdf-fitting"), ("interactive", "false")])
+    )]
+    pub model: Option<MicrofacetDistroKind>,
 
     #[clap(
         long,
@@ -604,6 +611,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         error_metric,
                         opts.weighting.unwrap(),
                         &cache.iors,
+                        opts.model.unwrap(),
                         opts.parallel,
                     )
                     .map_err(|pyerr| {

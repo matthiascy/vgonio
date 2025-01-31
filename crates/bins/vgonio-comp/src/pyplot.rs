@@ -19,7 +19,7 @@ use vgonio_bxdf::brdf::{
     measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, MerlBrdfParam, VgonioBrdf, Yan18Brdf},
 };
 use vgonio_core::{
-    bxdf::{AnalyticalBrdf, MeasuredBrdfKind, OutgoingDirs, Scattering},
+    bxdf::{AnalyticalBrdf, MeasuredBrdfKind, MicrofacetDistroKind, OutgoingDirs, Scattering},
     error::VgonioError,
     math::{self, Sph2, Vec2, Vec3},
     optics::IorReg,
@@ -1471,6 +1471,7 @@ impl BrdfFittingPlotter {
         metric: ErrorMetric,
         weighting: Weighting,
         iors: &IorReg,
+        model: MicrofacetDistroKind,
         parallel: bool,
     ) -> PyResult<()> {
         assert_eq!(
@@ -1495,13 +1496,11 @@ impl BrdfFittingPlotter {
         })?;
         let models: Box<[Box<dyn AnalyticalBrdf<Params = [f64; 2]>>]> = alphas
             .iter()
-            .flat_map(|(x, y)| {
-                [
-                    Box::new(MicrofacetBrdfBK::new(*x, *y))
-                        as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
-                    Box::new(MicrofacetBrdfTR::new(*x, *y))
-                        as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
-                ]
+            .map(|(x, y)| match model {
+                MicrofacetDistroKind::Beckmann => Box::new(MicrofacetBrdfBK::new(*x, *y))
+                    as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
+                MicrofacetDistroKind::TrowbridgeReitz => Box::new(MicrofacetBrdfTR::new(*x, *y))
+                    as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
             })
             .collect();
         let brdf = measured.as_any_brdf(BrdfLevel::L0).unwrap();
@@ -1601,6 +1600,14 @@ impl BrdfFittingPlotter {
                 let rs = PyArray::from_slice(py, residuals.as_slice());
                 let rmaps_py = PyArray::from_slice(py, rmaps.as_slice());
                 let mmaps_py = PyArray::from_slice(py, mmaps.as_slice());
+                let model_name = match model.distro().as_ref().unwrap() {
+                    MicrofacetDistroKind::Beckmann => "bk",
+                    MicrofacetDistroKind::TrowbridgeReitz => "tr",
+                };
+                let alpha = match model.distro().as_ref().unwrap() {
+                    MicrofacetDistroKind::Beckmann => model.params(),
+                    MicrofacetDistroKind::TrowbridgeReitz => model.params(),
+                };
                 let res = func.call1(
                     py,
                     (
@@ -1610,7 +1617,8 @@ impl BrdfFittingPlotter {
                             rmaps_py.reshape(rmaps.shape()).unwrap(),
                             mmaps_py.reshape(mmaps.shape()).unwrap(),
                         ),
-                        model.name(),
+                        model_name,
+                        (alpha[0], alpha[1]),
                         metric.to_string(),
                         &i_thetas,
                         &i_phis,

@@ -139,7 +139,7 @@ def annotate_errormap(im, data=None, valfmt="{x:.2f}", textcolors=["black", "whi
 
 MAX_DIM_PER_SUBPLOT = 64
 
-def plot_brdf_error_map_single(idx, name, figtype, model_name, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax, cbarlabel='residual', maxw=MAX_DIM_PER_SUBPLOT, maxh=MAX_DIM_PER_SUBPLOT):
+def plot_brdf_error_map_single(idx, name, figtype, model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax, cbarlabel='residual', maxw=MAX_DIM_PER_SUBPLOT, maxh=MAX_DIM_PER_SUBPLOT):
     """
     Plot a single brdf error map.
 
@@ -153,6 +153,8 @@ def plot_brdf_error_map_single(idx, name, figtype, model_name, metric, x_label, 
         Type of the figure to plot
     model_name : str
         Name of the model
+    alphaxy : (float, float)
+        The parameters of the brdf model
     x_label : str
         Label for the x-axis
     y_label : str
@@ -209,11 +211,11 @@ def plot_brdf_error_map_single(idx, name, figtype, model_name, metric, x_label, 
         im, cbar, _ = plot_brdf_error_map_subplot(data, x_label, y_label, xticks_labels, yticks_labels, axes, 1, 1, enable_annotate=enable_annotate, enable_cbar=True, cbarlabel=cbarlabel, vmin=vmin, vmax=vmax)
     
     if is_residuals:
-        fig.suptitle(fr'{name} $\lambda = {spectrum[idx]:.2f}$ nm') 
-        fig.savefig(f"{name}_{figtype}_{model_name}_{spectrum[idx]:.2f}nm.png", bbox_inches='tight')
+        fig.suptitle(fr'{name} $\lambda = {spectrum[idx]:.2f}$ nm, $\alpha_x = {alphaxy[0]:.5f}$, $\alpha_y = {alphaxy[1]:.5f}$') 
+        fig.savefig(f"{name}_{figtype}_{model_name}_{spectrum[idx]:.2f}nm_{alphaxy[0]:.5f}_{alphaxy[1]:.5f}.png", bbox_inches='tight')
     else:
-        fig.suptitle(fr'{name}')
-        fig.savefig(f"{name}_{figtype}_{model_name}.png", bbox_inches='tight')
+        fig.suptitle(fr'{name} $\alpha_x = {alphaxy[0]:.5f}$, $\alpha_y = {alphaxy[1]:.5f}$')
+        fig.savefig(f"{name}_{figtype}_{model_name}_{alphaxy[0]:.5f}_{alphaxy[1]:.5f}.png", bbox_inches='tight')
 
     plt.close()
 
@@ -235,7 +237,7 @@ def plot_brdf_error_map_subplot(data, x_label, y_label, xticks_labels, yticks_la
     
     return im, cbar, texts
 
-def task_plot_rs(progress, tid, base_idx, count, name, model_name, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax):
+def task_plot_rs(progress, tid, base_idx, count, name, model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax):
     """
     Task to plot the BRDF residuals in parallel.
 
@@ -253,6 +255,8 @@ def task_plot_rs(progress, tid, base_idx, count, name, model_name, metric, x_lab
         Name of the measured BRDF; used as the title of the plot and the filename of the plot
     model_name : str
         Name of the model
+    alphaxy : (float, float)
+        The parameters of the brdf model
     metric : str
         Metric to plot
     x_label : str
@@ -268,10 +272,10 @@ def task_plot_rs(progress, tid, base_idx, count, name, model_name, metric, x_lab
     """
     for i in range(base_idx, base_idx + count):
         time.sleep(0.05)
-        plot_brdf_error_map_single(i, name, 'residuals', model_name, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax)
+        plot_brdf_error_map_single(i, name, 'residuals', model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax)
         progress[tid] = { "progress": i - base_idx + 1, "total": count }
 
-def plot_brdf_fitting_residuals(name, residuals, rmaps, is_grid, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
+def plot_brdf_fitting_residuals(name, alphaxy, residuals, rmaps, is_grid, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
     """
     Plot the brdf fitting residuals.
 
@@ -279,6 +283,8 @@ def plot_brdf_fitting_residuals(name, residuals, rmaps, is_grid, metric, model_n
     ----------
     name : str
         Name of the measured BRDF; used as the title of the plot and the filename of the plot
+    alphaxy : (float, float)
+        The parameters of the brdf model
     residuals : ndarray
         Residuals between the measured data and the model. The shape of residuals could be either 
             - ϑi, ϕi, ϑo, ϕo, λ - grid  
@@ -376,11 +382,11 @@ def plot_brdf_fitting_residuals(name, residuals, rmaps, is_grid, metric, model_n
     y_label = r'Incident Direction $\omega_i = (\theta_i, \phi_i)$'
  
     if parallel:
-        parallel_execute(n_lambda, task_plot_rs, name, model_name, metric, x_label, y_label, xticks_labels, yticks_labels, rmaps, spectrum, vmin, vmax)
+        parallel_execute(n_lambda, task_plot_rs, name, model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, rmaps, spectrum, vmin, vmax)
     else:
-        sequential_plot(n_lambda, name, 'residuals', model_name, metric, x_label, y_label, xticks_labels, yticks_labels, rmaps, spectrum, vmin, vmax)
+        sequential_plot(n_lambda, name, 'residuals', model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, rmaps, spectrum, vmin, vmax)
 
-def task_plot_mse(progress, tid, base_idx, count, name, model_name, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax, cbarlabel):
+def task_plot_mse(progress, tid, base_idx, count, name, model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax, cbarlabel):
     """
     Task to plot the MSE of per incident angle fitting results.
 
@@ -398,6 +404,8 @@ def task_plot_mse(progress, tid, base_idx, count, name, model_name, metric, x_la
         Name of the measured BRDF; used as the title of the plot and the filename of the plot
     model_name : str
         Name of the model
+    alphaxy : (float, float)
+        The parameters of the brdf model
     metric : str
         Metric used to compute the residuals
     x_label : str
@@ -421,10 +429,10 @@ def task_plot_mse(progress, tid, base_idx, count, name, model_name, metric, x_la
     """
     for i in range(base_idx, base_idx + count):
         time.sleep(0.05)
-        plot_brdf_error_map_single(i, name, 'mse', model_name, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax, cbarlabel)
+        plot_brdf_error_map_single(i, name, 'mse', model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax, cbarlabel)
         progress[tid] = { "progress": i - base_idx + 1, "total": count }
 
-def plot_brdf_fitting_mse_per_incident_angle(name, residuals, mmaps, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
+def plot_brdf_fitting_mse_per_incident_angle(name, alphaxy, residuals, mmaps, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
     """
     Plot the MSE of per incident angle fitting results.
     """
@@ -453,11 +461,11 @@ def plot_brdf_fitting_mse_per_incident_angle(name, residuals, mmaps, metric, mod
     mmaps = mmaps.reshape(1, n_lambda, n_omega_i)
 
     if parallel:
-        parallel_execute(1, task_plot_mse, name, model_name, metric, x_label, y_label, xticks_labels, yticks_labels, mmaps, spectrum, vmin, vmax, "MSE")
+        parallel_execute(1, task_plot_mse, name, model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, mmaps, spectrum, vmin, vmax, "MSE")
     else:
-        sequential_plot(1, name, 'mse', model_name, metric, x_label, y_label, xticks_labels, yticks_labels, mmaps, spectrum, vmin, vmax, "MSE")
+        sequential_plot(1, name, 'mse', model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, mmaps, spectrum, vmin, vmax, "MSE")
 
-def plot_brdf_fitting_errors(name, data, model_name, metric, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
+def plot_brdf_fitting_errors(name, data, model_name, alphaxy, metric, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
     """
     Plot the BRDF error map. Entry point for the non-interactive BRDF fitting plot in Rust. This function will generate
     two types of plots:
@@ -484,11 +492,13 @@ def plot_brdf_fitting_errors(name, data, model_name, metric, i_thetas, i_phis, o
             number of outgoing directions in the theta (inclination) and phi (azimuth) directions. 
             If it is a list, Nωo is the length of the `o_phis` list.
         3. mmaps: MSE of per incident angle fitting results arranged in a 2D array with dimension: [Nλ, Nωi], 
-            where Nλ is the number of wavelengths, and Nωi is the number of incident directions. 
-    metric : str
-        Metric used to compute the residuals
+            where Nλ is the number of wavelengths, and Nωi is the number of incident directions.  
     model_name : str
         Name of the brdf model
+    alphaxy : (float, float)
+        The parameters of the brdf model
+    metric : str
+        Metric used to compute the residuals
     i_thetas : ndarray
         Incident directions in the theta (inclination) direction
     i_phis : ndarray
@@ -515,12 +525,12 @@ def plot_brdf_fitting_errors(name, data, model_name, metric, i_thetas, i_phis, o
     # 1. plot residual maps per wavelength
     #    each map contains all the incident directions and all the outgoing directions
     print('\nPlotting residuals...')
-    plot_brdf_fitting_residuals(name, residuals, rmaps, is_grid, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel)
+    plot_brdf_fitting_residuals(name, alphaxy, residuals, rmaps, is_grid, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel)
 
     # 2. plot MSE of per incident angle fitting results
     #    each map contains the MSE of per incident angle fitting results
     print('\nPlotting MSE...')
-    plot_brdf_fitting_mse_per_incident_angle(name, residuals, mmaps, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel)
+    plot_brdf_fitting_mse_per_incident_angle(name, alphaxy, residuals, mmaps, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel)
 
 
 def parallel_execute(ntotal, task, *task_args): 
