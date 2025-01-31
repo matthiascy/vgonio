@@ -30,6 +30,7 @@ codegen-units = 16
 
 [workspace.dependencies]
 ahash = "0.8"
+anyhow = "1"
 approx = "0.5"
 bincode = "1"
 bytemuck = { version = "1.12", features = ["derive"] }

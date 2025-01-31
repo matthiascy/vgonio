@@ -21,7 +21,6 @@ mod app;
 mod error;
 #[cfg(feature = "fitting")]
 pub mod fitting;
-mod io;
 pub mod measure;
 pub(crate) mod pyplot;
 

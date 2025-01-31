@@ -8,10 +8,7 @@ use crate::{
             notify::NotifyKind,
         },
     },
-    measure::bsdf::{
-        emitter::{EmitterParams, EmitterSamples, MeasurementPoints},
-        rtc::Ray,
-    },
+    measure::bsdf::rtc::Ray,
 };
 use gxtk::{context::GpuContext, render_pass::RenderPass, vertex::VertexLayout};
 use std::sync::Arc;
@@ -22,6 +19,7 @@ use vgonio_core::{
     res::{DataStore, Handle},
     utils::partition::SphericalPartition,
 };
+use vgonio_meas::bsdf::emitter::{EmitterParams, EmitterSamples, MeasurementPoints};
 use wgpu::util::DeviceExt;
 
 pub const DEBUG_DRAWING_SHADER: &str = r#"

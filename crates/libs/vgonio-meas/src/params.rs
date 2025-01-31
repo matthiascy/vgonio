@@ -1,5 +1,5 @@
 //! Measurement parameters.
-pub use crate::measure::{bsdf::params::*, mfd::params::*};
+pub use crate::{bsdf::params::*, mfd::params::*};
 
 use crate::error::RuntimeError;
 use serde::{Deserialize, Serialize};

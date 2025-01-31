@@ -395,7 +395,7 @@ impl VgonioGui {
                     log::debug!("Exporting measurement to {:?}", filepath);
                     self.cache.read(|cache| {
                         let measured = cache.get_measurement(meas).unwrap();
-                        crate::io::write_single_measured_data_to_file(
+                        vgonio_meas::io::write_single_measured_data_to_file(
                             measured,
                             FileEncoding::Binary,
                             CompressionScheme::Zlib,

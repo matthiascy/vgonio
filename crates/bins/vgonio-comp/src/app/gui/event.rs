@@ -4,11 +4,7 @@ use crate::{
         notify::NotifyKind,
         surf_viewer::{OverlayFlags, ShadingMode},
     },
-    io::OutputOptions,
-    measure::{
-        bsdf::emitter::{EmitterSamples, MeasurementPoints},
-        params::MeasurementParams,
-    },
+    measure::params::MeasurementParams,
 };
 use std::path::PathBuf;
 use surf::subdivision::Subdivision;
@@ -22,6 +18,10 @@ use vgonio_core::{
     units::Degrees,
     utils::partition::SphericalPartition,
     MeasurementKind,
+};
+use vgonio_meas::{
+    bsdf::emitter::{EmitterSamples, MeasurementPoints},
+    io::OutputOptions,
 };
 
 /// Event loop proxy with Vgonio events.

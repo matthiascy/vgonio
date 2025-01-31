@@ -1,6 +1,5 @@
 use crate::{
     app::{args::OutputFormat, cache::Cache, cli::ansi},
-    io::{OutputFileFormatOption, OutputOptions},
     measure,
     measure::params::{MeasurementDescription, MeasurementParams, NdfMeasurementMode},
 };
@@ -11,6 +10,7 @@ use vgonio_core::{
     io::{CompressionScheme, FileEncoding},
     res::DataStore,
 };
+use vgonio_meas::io::{OutputFileFormatOption, OutputOptions};
 
 /// Measure different metrics of the micro-surface.
 pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
@@ -259,7 +259,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             .into_boxed_slice(),
         };
 
-        crate::io::write_measured_data_to_file(
+        vgonio_meas::io::write_measured_data_to_file(
             &measured,
             &cache,
             &config,

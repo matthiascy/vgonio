@@ -1,7 +1,5 @@
-use crate::{
-    error::RuntimeError,
-    measure::bsdf::{emitter::EmitterParams, receiver::ReceiverParams, rtc::RtcMethod, BsdfKind},
-};
+use crate::bsdf::{trace::RtcMethod, BsdfKind};
+use serde::{Deserialize, Serialize};
 use vgonio_core::{
     error::VgonioError,
     math::Sph2,
@@ -12,7 +10,6 @@ use vgonio_core::{
         range::StepRangeIncl,
     },
 };
-use serde::{Deserialize, Serialize};
 
 /// Possible ways to conduct a simulation.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]

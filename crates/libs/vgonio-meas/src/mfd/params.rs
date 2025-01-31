@@ -1,11 +1,10 @@
-use crate::error::RuntimeError;
+use serde::{Deserialize, Deserializer, Serialize};
 use vgonio_core::{
     error::VgonioError,
     math::Sph2,
     units::{deg, rad, Radians},
     utils::{partition::PartitionScheme, range::StepRangeIncl},
 };
-use serde::{Deserialize, Deserializer, Serialize};
 
 /// Default azimuth angle range for the measurement: [0°, 360°] with 5° step
 /// size.

@@ -17,7 +17,6 @@ use crate::{
             notify::NotifyKind,
         },
     },
-    io::{OutputFileFormatOption, OutputOptions},
     measure::{bsdf::receiver::ReceiverParams, params::MeasurementParams},
 };
 use egui::Widget;
@@ -28,6 +27,7 @@ use vgonio_core::{
     utils::partition::{PartitionScheme, SphericalDomain},
     MeasurementKind,
 };
+use vgonio_meas::io::{OutputFileFormatOption, OutputOptions};
 
 impl ReceiverParams {
     /// UI for detector parameters.

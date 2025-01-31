@@ -7,7 +7,6 @@ use crate::measure::params::BsdfMeasurementParams;
 use crate::{
     app::cli::ansi,
     measure::bsdf::{
-        emitter::EmitterCircularSector,
         rtc::{compute_num_of_streams, HitInfo, MAX_RAY_STREAM_SIZE},
         SingleSimResult,
     },
@@ -26,6 +25,7 @@ use vgonio_core::{
     math::{Sph2, Vec3A},
     optics::fresnel,
 };
+use vgonio_meas::bsdf::emitter::EmitterCircularSector;
 
 /// SoA ray stream data for the whole ray stream.
 #[derive(Debug, Clone)]

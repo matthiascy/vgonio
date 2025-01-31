@@ -13,7 +13,7 @@ bench = ["surf/bench"]
 fitting = ["dep:vgonio-bxdf", "vgonio-bxdf/fitting"]
 surf-obj = ["surf/surf-obj"]
 surf-gen = ["surf/surf-gen"]
-vdbg = []
+vdbg = ["vgonio-meas/vdbg"]
 vvdbg = []
 
 [dependencies]
@@ -69,6 +69,7 @@ uxtk = { package = "vgonio-uxtk", path = "../../libs/vgonio-uxtk" }
 vgonio-bxdf = { path = "../../libs/vgonio-bxdf", optional = true, features = [
     "fitting", "io"
 ] }
+vgonio-meas = { path = "../../libs/vgonio-meas" }
 
 [lints]
 workspace = true

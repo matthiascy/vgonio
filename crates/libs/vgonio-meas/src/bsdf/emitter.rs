@@ -1,25 +1,21 @@
 //! Light source of the measurement system.
 
-use crate::{
-    app::cli::ansi,
-    measure::{bsdf::rtc::Ray, SphericalTransform},
-};
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::ops::Deref;
+use surf::MicroSurfaceMesh;
 use vgonio_core::{
     math::{Sph2, Vec3},
     units::{deg, nm, rad, Nanometres, Radians, Rads},
     utils::range::StepRangeIncl,
 };
-use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
-use std::ops::Deref;
-use surf::MicroSurfaceMesh;
 
 /// Parameters for the emitter.
 ///
 /// The light source is represented by a disk tangent to the hemisphere around
 /// which the emitter is rotating. The orbit radius of the emitter and the disk
 /// radius are estimated according to the size of the surface to be measured.
-/// See [`crate::measure::estimate_orbit_radius`] and
+/// See [`vgonio_comp::measure::estimate_orbit_radius`] and
 /// [`crate::measure::estimate_shape_radius`].
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EmitterParams {
@@ -96,7 +92,7 @@ impl EmitterParams {
             tstop.prettified()
         );
         let mut samples = vec![Vec3::ZERO; num_rays].into_boxed_slice();
-        crate::measure::uniform_sampling_on_unit_disk(&mut samples, tstart, tstop);
+        vgonio_comp::measure::uniform_sampling_on_unit_disk(&mut samples, tstart, tstop);
         EmitterSamples(samples)
     }
 
@@ -113,7 +109,7 @@ impl EmitterParams {
 
     /// Transforms the samples from the sampling space to the desired position
     /// in the world coordinate system.
-    pub(crate) fn transform_samples(
+    pub fn transform_samples(
         samples: &[Vec3],
         dest: Sph2,
         orbit_radius: f32,
@@ -129,7 +125,7 @@ impl EmitterParams {
     }
 
     /// Emits rays from the samples
-    pub(crate) fn emit_rays(
+    pub fn emit_rays(
         samples: &EmitterSamples,
         dest: Sph2,
         orbit_radius: f32,
@@ -167,7 +163,7 @@ impl FromIterator<Vec3> for EmitterSamples {
 
 /// Emitter's possible positions in spherical coordinates.
 #[derive(Debug, Clone)]
-pub struct MeasurementPoints(pub(crate) Box<[Sph2]>);
+pub struct MeasurementPoints(pub Box<[Sph2]>);
 
 impl Deref for MeasurementPoints {
     type Target = [Sph2];
@@ -237,15 +233,15 @@ impl<'a> EmitterCircularSector<'a> {
     /// Transforms the samples from the sampling space to the emitter's local
     /// coordinate system.
     pub fn samples_at(&self, pos: Sph2, mesh: &MicroSurfaceMesh) -> Vec<Vec3> {
-        let disk_radius = crate::measure::estimate_disc_radius(mesh);
-        let orbit_radius = crate::measure::estimate_orbit_radius(mesh);
+        let disk_radius = vgonio_comp::measure::estimate_disc_radius(mesh);
+        let orbit_radius = vgonio_comp::measure::estimate_orbit_radius(mesh);
         EmitterParams::transform_samples(&self.samples, pos, orbit_radius, disk_radius)
     }
 
     /// Emits rays from the emitter at `pos` covering the whole surface.
     pub fn emit_rays(&self, pos: Sph2, mesh: &MicroSurfaceMesh) -> Vec<Ray> {
-        let disk_radius = crate::measure::estimate_disc_radius(mesh);
-        let orbit_radius = crate::measure::estimate_orbit_radius(mesh);
+        let disk_radius = vgonio_comp::measure::estimate_disc_radius(mesh);
+        let orbit_radius = vgonio_comp::measure::estimate_orbit_radius(mesh);
         log::trace!(
             "[Emitter] emitting rays from {} with orbit radius = {}, disk radius = {:?}",
             pos,

@@ -6,7 +6,6 @@
 
 mod gaf;
 mod ndf;
-pub(crate) mod params;
 mod sdf;
 
 pub use gaf::*;

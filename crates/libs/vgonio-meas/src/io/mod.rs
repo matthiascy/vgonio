@@ -1,11 +1,3 @@
-use crate::{
-    app::{cache::Cache, cli::ansi},
-    measure::{
-        bsdf::BsdfMeasurement,
-        mfd::{MeasuredGafData, MeasuredNdfData},
-        Measurement,
-    },
-};
 use std::{
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
@@ -19,7 +11,15 @@ use vgonio_core::{
 
 pub mod vgmo {
     use super::*;
-    use crate::measure::{
+    use jabr::array::DyArr;
+    use std::{
+        collections::HashMap,
+        io::{BufWriter, Seek},
+        mem,
+        mem::MaybeUninit,
+        ptr,
+    };
+    use vgonio_comp::measure::{
         bsdf::{
             emitter::EmitterParams,
             receiver::{BounceAndEnergy, ReceiverParams},
@@ -30,14 +30,6 @@ pub mod vgmo {
             BsdfMeasurementParams, GafMeasurementParams, NdfMeasurementMode, NdfMeasurementParams,
             SdfMeasurementParams, SimulationKind,
         },
-    };
-    use jabr::array::DyArr;
-    use std::{
-        collections::HashMap,
-        io::{BufWriter, Seek},
-        mem,
-        mem::MaybeUninit,
-        ptr,
     };
     use vgonio_core::{
         io,
@@ -1235,7 +1227,7 @@ pub mod vgmo {
     }
 
     impl BsdfMeasurement {
-        pub(crate) fn write_vgonio_brdf<W: Write>(
+        pub fn write_vgonio_brdf<W: Write>(
             writer: &mut W,
             level: BrdfLevel,
             brdf: &VgonioBrdf,
@@ -1244,7 +1236,7 @@ pub mod vgmo {
             io::write_binary_samples(writer, brdf.samples.as_slice())
         }
 
-        pub(crate) fn read_vgonio_brdf<R: Read>(
+        pub fn read_vgonio_brdf<R: Read>(
             reader: &mut R,
             n_wi: usize,
             n_wo: usize,
@@ -1266,7 +1258,7 @@ pub mod vgmo {
             Ok(level)
         }
 
-        pub(crate) fn write_measured_bsdf_data<
+        pub fn write_measured_bsdf_data<
             'a,
             W: Write,
             F: Iterator<Item = (&'a BrdfLevel, &'a VgonioBrdf)>,
@@ -1280,7 +1272,7 @@ pub mod vgmo {
             Ok(())
         }
 
-        pub(crate) fn read_measured_bsdf_data<R: Read>(
+        pub fn read_measured_bsdf_data<R: Read>(
             reader: &mut R,
             n_wi: usize,
             n_wo: usize,
@@ -1301,7 +1293,7 @@ pub mod vgmo {
             Ok(brdfs)
         }
 
-        pub(crate) fn write_raw_measured_data<W: Write>(
+        pub fn write_raw_measured_data<W: Write>(
             writer: &mut W,
             raw: &RawBsdfMeasurement,
             nrays64: bool,
@@ -1319,7 +1311,7 @@ pub mod vgmo {
             writer.flush()
         }
 
-        pub(crate) fn read_raw_measured_data<R: Read>(
+        pub fn read_raw_measured_data<R: Read>(
             reader: &mut R,
             n_wi: usize,
             n_wo: usize,
@@ -1483,14 +1475,6 @@ pub mod vgmo {
 
 #[cfg(test)]
 mod tests {
-    use crate::measure::{
-        bsdf::{
-            emitter::EmitterParams,
-            receiver::{BounceAndEnergy, ReceiverParams},
-            BsdfKind, BsdfMeasurement, RawBsdfMeasurement, SingleBsdfMeasurementStats,
-        },
-        params::{BsdfMeasurementParams, SimulationKind},
-    };
     use jabr::array::DyArr;
     use std::{
         collections::HashMap,
@@ -1498,6 +1482,14 @@ mod tests {
         mem::MaybeUninit,
     };
     use vgonio_bxdf::brdf::measured::{VgonioBrdf, VgonioBrdfParameterisation};
+    use vgonio_comp::measure::{
+        bsdf::{
+            emitter::EmitterParams,
+            receiver::{BounceAndEnergy, ReceiverParams},
+            BsdfKind, BsdfMeasurement, RawBsdfMeasurement, SingleBsdfMeasurementStats,
+        },
+        params::{BsdfMeasurementParams, SimulationKind},
+    };
     use vgonio_core::{
         bxdf::{MeasuredBrdfKind, Origin},
         io::{CompressionScheme, FileEncoding},

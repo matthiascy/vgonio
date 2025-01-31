@@ -1,5 +1,5 @@
 [package]
-name = "vgonio-meas"
+name = "vgonio-pyplt"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,17 +8,17 @@ version.workspace = true
 
 [features]
 default = []
-vdbg = []
+surface = ["dep:vgonio-surf"]
 
 [dependencies]
-chrono.workspace = true
-exr.workspace = true
+exr = { workspace = true }
+numpy.workspace = true
+pyo3.workspace = true
 log.workspace = true
-serde.workspace = true
-static_assertions.workspace = true
 vgonio-core = { path = "../../libs/vgonio-core" }
-vgonio-bxdf = { path = "../../libs/vgonio-bxdf" }
 vgonio-jabr = { path = "../../libs/vgonio-jabr" }
+vgonio-bxdf = { path = "../../libs/vgonio-bxdf" }
+vgonio-surf = { path = "../../libs/vgonio-surf", optional = true }
 
 [lints]
 workspace = true

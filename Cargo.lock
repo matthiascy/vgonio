@@ -4555,6 +4555,7 @@ dependencies = [
  "vgonio-core",
  "vgonio-gxtk",
  "vgonio-jabr",
+ "vgonio-meas",
  "vgonio-surf",
  "vgonio-uxtk",
  "wgpu",
@@ -4626,7 +4627,14 @@ dependencies = [
 name = "vgonio-meas"
 version = "0.3.2"
 dependencies = [
+ "chrono",
+ "exr",
+ "log",
+ "serde",
+ "static_assertions",
+ "vgonio-bxdf",
  "vgonio-core",
+ "vgonio-jabr",
 ]
 
 [[package]]
@@ -4657,6 +4665,20 @@ version = "0.0.1"
 dependencies = [
  "cxx",
  "cxx-build",
+]
+
+[[package]]
+name = "vgonio-pyplt"
+version = "0.3.2"
+dependencies = [
+ "exr",
+ "log",
+ "numpy",
+ "pyo3",
+ "vgonio-bxdf",
+ "vgonio-core",
+ "vgonio-jabr",
+ "vgonio-surf",
 ]
 
 [[package]]

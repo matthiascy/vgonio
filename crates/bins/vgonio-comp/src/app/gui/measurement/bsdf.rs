@@ -6,15 +6,16 @@ use crate::{
         misc::{range_step_size_inclusive_angle_ui, range_step_size_inclusive_length_ui},
     },
     measure::{
-        bsdf::{emitter::EmitterParams, rtc::RtcMethod, BsdfKind},
+        bsdf::{rtc::RtcMethod, BsdfKind},
         params::{BsdfMeasurementParams, SimulationKind},
     },
 };
+use std::hash::Hash;
+use uxtk::widgets::ToggleSwitch;
 use vgonio_core::utils::{medium::Medium, partition::SphericalDomain};
 #[cfg(feature = "vdbg")]
 use vgonio_core::{math::Sph2, units::Rads};
-use std::hash::Hash;
-use uxtk::widgets::ToggleSwitch;
+use vgonio_meas::bsdf::emitter::EmitterParams;
 
 impl BsdfKind {
     /// Creates the UI for selecting the BSDF kind.

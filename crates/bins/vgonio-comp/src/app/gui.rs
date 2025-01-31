@@ -64,13 +64,13 @@ use crate::{
             surf_viewer::SurfaceViewerStates,
         },
     },
-    io::OutputOptions,
     measure::params::MeasurementParams,
 };
 use vgonio_core::{
     config::Config,
     res::{DataStore, RawDataStore},
 };
+use vgonio_meas::io::OutputOptions;
 
 /// Launches Vgonio GUI application native window.
 pub fn run(config: Config) -> Result<(), VgonioError> {
@@ -651,7 +651,7 @@ impl VgonioGuiApp {
                             }),
                         };
                         if let Some(opts @ OutputOptions { .. }) = output_opts {
-                            crate::io::write_measured_data_to_file(
+                            vgonio_meas::io::write_measured_data_to_file(
                                 &data,
                                 &self.cache,
                                 &self.config,
