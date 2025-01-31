@@ -20,46 +20,46 @@ get_file_path() {
     local surface="$2"
     
     case "$kind" in
-        # "vgonio")
-        #     # Handle special case for isotropic_vgonio
-        #     if [ "$surface" = "isotropic_vgonio" ]; then
-        #         echo "$BASE_DIR/vgonio/bsdf_isotropic_2024-12-04T21-36-04.vgmo"
-        #         return
-        #     fi
+        "vgonio")
+            # Handle special case for isotropic_vgonio
+            if [ "$surface" = "isotropic_vgonio" ]; then
+                echo "$BASE_DIR/vgonio/bsdf_isotropic_2024-12-04T21-36-04.vgmo"
+                return
+            fi
             
-        #     # Extract base name (al0, al1, etc) and folder type
-        #     local base=$(echo "$surface" | grep -o "al[0-9]\+")
-        #     local folder_type=$(echo "$surface" | sed "s/${base}_//")
+            # Extract base name (al0, al1, etc) and folder type
+            local base=$(echo "$surface" | grep -o "al[0-9]\+")
+            local folder_type=$(echo "$surface" | sed "s/${base}_//")
             
-        #     if [ "$folder_type" = "original" ]; then
-        #         # Files in original folder
-        #         echo "$BASE_DIR/vgonio/original/bsdf_${base}bar100_*.vgmo"
-        #     elif [[ "$folder_type" =~ wiggly_l[0-9]+_[0-9]+\.[0-9]+ ]]; then
-        #         # Files in wiggly folders
-        #         echo "$BASE_DIR/vgonio/${folder_type}/bsdf_${base}bar100_*.vgmo"
-        #     else
-        #         # Files in root folder (shouldn't happen with current data)
-        #         echo "$BASE_DIR/vgonio/bsdf_${base}_*.vgmo"
-        #     fi
-        #     ;;
+            if [ "$folder_type" = "original" ]; then
+                # Files in original folder
+                echo "$BASE_DIR/vgonio/original/bsdf_${base}bar100_*.vgmo"
+            elif [[ "$folder_type" =~ wiggly_l[0-9]+_[0-9]+\.[0-9]+ ]]; then
+                # Files in wiggly folders
+                echo "$BASE_DIR/vgonio/${folder_type}/bsdf_${base}bar100_*.vgmo"
+            else
+                # Files in root folder (shouldn't happen with current data)
+                echo "$BASE_DIR/vgonio/bsdf_${base}_*.vgmo"
+            fi
+            ;;
         "clausen")
             echo "$BASE_DIR/clausen/${surface}bar.json"
             ;;
-        # "yan2018")
-        #     # Extract base name and resolution (e.g., from al65_128 get al65 and 128)
-        #     local base=$(echo "$surface" | sed 's/_[0-9]\+$//')
-        #     local res=$(echo "$surface" | grep -o '[0-9]\+$')
+        "yan2018")
+            # Extract base name and resolution (e.g., from al65_128 get al65 and 128)
+            local base=$(echo "$surface" | sed 's/_[0-9]\+$//')
+            local res=$(echo "$surface" | grep -o '[0-9]\+$')
             
-        #     # Add bar100 suffix for al1-al65
-        #     if [ "$base" != "al0" ]; then
-        #         base="${base}bar100"
-        #     fi
+            # Add bar100 suffix for al1-al65
+            if [ "$base" != "al0" ]; then
+                base="${base}bar100"
+            fi
             
-        #     echo "$BASE_DIR/yan2018/${base}_brdf_rohs_${res}_t5_p30.exr"
-        #     ;;
-        # "merl")
-        #     echo "$BASE_DIR/merl/${surface}.binary"
-        #     ;;
+            echo "$BASE_DIR/yan2018/${base}_brdf_rohs_${res}_t5_p30.exr"
+            ;;
+        "merl")
+            echo "$BASE_DIR/merl/${surface}.binary"
+            ;;
         *)
             echo ""
             ;;

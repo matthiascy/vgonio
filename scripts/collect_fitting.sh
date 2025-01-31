@@ -6,6 +6,9 @@ SUB_DIRS=("clausen") # "rgl" "vgonio" "clausen" "merl" "yan2018")
 DISTROS=("bk" "tr")
 WEIGHTING=("none" "lncos")
 
+# Store the initial working directory
+INITIAL_DIR="$(pwd)"
+
 # Check if fd exists
 if ! command -v fd &> /dev/null; then
     exit 1
@@ -22,9 +25,9 @@ fi
 echo "Running fitting with brute force: $BRUTE_FORCE"
 # Output CSV file
 if [ $BRUTE_FORCE -eq 1 ]; then
-    OUTPUT_CSV="fitting_results_brute.csv"
+    OUTPUT_CSV="$INITIAL_DIR/fitting_results_brute.csv"
 else
-    OUTPUT_CSV="fitting_results_nllsq.csv"
+    OUTPUT_CSV="$INITIAL_DIR/fitting_results_nllsq.csv"
 fi
 
 HEADER="# run date: $(date)"
