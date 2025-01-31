@@ -1,0 +1,33 @@
+[package]
+name = "vgonio-bxdf"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+license-file.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+fitting = ["dep:levenberg-marquardt", "dep:nalgebra", "vgonio-core/fitting_api", "dep:indicatif", "dep:rayon"]
+cli = ["clap"]
+io = ["dep:serde_json", "dep:serde-pickle", "dep:exr", "dep:chrono"]
+
+[dependencies]
+chrono = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+exr = { workspace = true, optional = true }
+indicatif = { workspace = true, optional = true }
+levenberg-marquardt = { workspace = true, optional = true }
+nalgebra = { workspace = true, optional = true }
+libm.workspace = true
+log.workspace = true
+rayon = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true, optional = true }
+serde-pickle = { workspace = true, optional = true }
+powitacq = { package = "vgonio-powitacq", path = "../../libs/vgonio-powitacq" }
+vgonio-core = { path = "../vgonio-core" }
+vgonio-jabr = { path = "../vgonio-jabr" }

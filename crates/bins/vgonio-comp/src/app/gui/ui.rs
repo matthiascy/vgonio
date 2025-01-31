@@ -1,21 +1,18 @@
 use super::{docking::DockSpace, event::EventResponse};
+use crate::app::cache::Cache;
 use crate::{
-    app::{
-        cache::Cache,
-        gui::{
-            data::PropertyData,
-            event::{EventLoopProxy, OutlinerEvent, SurfaceViewerEvent, VgonioEvent},
-            file_drop::FileDragDrop,
-            // gizmo::NavigationGizmo,
-            icons,
-            measurement::MeasurementDialog,
-            notify::{NotifyKind, NotifySystem},
-            outliner::OutlinerItem,
-            plotter::{PlotInspector, PlottingWidget},
-            tools::{SamplingInspector, Scratch, Tools},
-            DebuggingInspector,
-        },
-        Config,
+    app::gui::{
+        data::PropertyData,
+        event::{EventLoopProxy, OutlinerEvent, SurfaceViewerEvent, VgonioEvent},
+        file_drop::FileDragDrop,
+        // gizmo::NavigationGizmo,
+        icons,
+        measurement::MeasurementDialog,
+        notify::{NotifyKind, NotifySystem},
+        outliner::OutlinerItem,
+        plotter::{PlotInspector, PlottingWidget},
+        tools::{SamplingInspector, Scratch, Tools},
+        DebuggingInspector,
     },
     measure::Measurement,
 };
@@ -27,26 +24,24 @@ use crate::{
         mfd::{MeasuredGafData, MeasuredNdfData},
     },
 };
-#[cfg(feature = "fitting")]
-use vgonio_core::{
-    bxdf::brdf::BrdfFamily,
-    bxdf::fitting::{FittedModel, FittingProblem, FittingProblemKind, FittingReport},
-    utils::range::StepRangeIncl,
-    AnyMeasuredBrdf,
-};
-use vgonio_core::{
-    io::{CompressionScheme, FileEncoding},
-    utils::handle::Handle,
-    BrdfLevel, MeasurementKind, Weighting,
-};
 use egui_file_dialog::{DialogMode, FileDialog};
 use gxtk::{context::GpuContext, mesh::RenderableMesh};
 use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use surf::{HeightOffset, MicroSurface};
+use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh};
 use uxtk::{theme::ThemeKind, UiRenderer};
+#[cfg(feature = "fitting")]
+use vgonio_bxdf::fitting::{FittedModel, FittingProblem, FittingProblemKind, FittingReport};
+#[cfg(feature = "fitting")]
+use vgonio_core::{bxdf::BrdfFamily, utils::range::StepRangeIncl, AnyMeasuredBrdf};
+use vgonio_core::{
+    config::Config,
+    io::{CompressionScheme, FileEncoding},
+    res::{DataStore, Handle},
+    BrdfLevel, MeasurementKind, Weighting,
+};
 
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
@@ -64,7 +59,8 @@ pub struct VgonioGui {
     drag_drop: FileDragDrop,
 
     file_dialog: FileDialog,
-    export: Option<Handle<Measurement>>,
+    /// Handles to the measurements that are to be exported.
+    export: Option<Handle>,
 
     // Gizmo inside the viewport for navigating the scene.
     // navigator: NavigationGizmo,
@@ -341,14 +337,10 @@ impl VgonioGui {
                         self.config.user.triangulation,
                         Some(*subdivision),
                     );
-                    let new_renderable_hdl = Handle::new();
-                    let new_renderable = RenderableMesh::from_micro_surface_mesh_with_id(
-                        &self.gpu_ctx,
-                        &new_mesh,
-                        new_renderable_hdl.id(),
-                    );
+                    let (new_renderable, new_renderable_hdl) =
+                        RenderableMesh::from_micro_surface_mesh(&self.gpu_ctx, &new_mesh);
                     let new_micro_facet_area = new_mesh.facet_total_area;
-                    let new_mesh_hdl = Handle::with_id(new_mesh.uuid);
+                    let new_mesh_hdl = Handle::from_uuid::<MicroSurface>(new_mesh.uuid);
                     cache.meshes.insert(new_mesh_hdl, new_mesh);
                     cache.renderables.insert(new_renderable_hdl, new_renderable);
 
@@ -590,10 +582,7 @@ impl VgonioGui {
         });
     }
 
-    fn open_files(
-        &mut self,
-        files: &[PathBuf],
-    ) -> (Vec<Handle<MicroSurface>>, Vec<Handle<Measurement>>) {
+    fn open_files(&mut self, files: &[PathBuf]) -> (Vec<Handle>, Vec<Handle>) {
         let mut surfaces = vec![];
         let mut measurements = vec![];
         // TODO: handle other file types

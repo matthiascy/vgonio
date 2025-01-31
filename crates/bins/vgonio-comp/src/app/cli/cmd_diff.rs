@@ -1,6 +1,5 @@
-use crate::app::Config;
-use vgonio_core::error::VgonioError;
 use std::{borrow::Cow, path::PathBuf};
+use vgonio_core::{config::Config, error::VgonioError};
 
 /// Options for the `diff` subcommand.
 #[derive(clap::Args, Debug, Clone)]

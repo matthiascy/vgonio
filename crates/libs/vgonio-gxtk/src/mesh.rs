@@ -1,11 +1,11 @@
 use crate::{context::GpuContext, vertex::VertexLayout};
-use surf::{
-    subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern,
-};
+use surf::{subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh};
 use uuid::Uuid;
 use vgonio_core::{
+    asset,
     math::{Aabb, Vec3},
-    utils::Asset,
+    res::*,
+    TriangulationPattern,
 };
 use wgpu::util::DeviceExt;
 
@@ -26,22 +26,10 @@ pub struct RenderableMesh {
     pub topology: wgpu::PrimitiveTopology,
 }
 
-impl Asset for RenderableMesh {}
+asset!(RenderableMesh, "RenderableMesh");
 
 // TODO: create a separate method to extract face normals of an heightfield
 impl RenderableMesh {
-    pub fn from_micro_surface_with_id(
-        ctx: &GpuContext,
-        surf: &MicroSurface,
-        id: Uuid,
-        offset: HeightOffset,
-        pattern: TriangulationPattern,
-        subdiv: Option<Subdivision>,
-    ) -> Self {
-        let mesh = surf.as_micro_surface_mesh(offset, pattern, subdiv);
-        Self::from_micro_surface_mesh_with_id(ctx, &mesh, id)
-    }
-
     /// Creates a new [`RenderableMesh`] directly from a [`MicroSurface`].
     pub fn from_micro_surface(
         ctx: &GpuContext,
@@ -49,15 +37,13 @@ impl RenderableMesh {
         offset: HeightOffset,
         pattern: TriangulationPattern,
         subdiv: Option<Subdivision>,
-    ) -> Self {
-        Self::from_micro_surface_with_id(ctx, surf, Uuid::new_v4(), offset, pattern, subdiv)
+    ) -> (Self, Handle) {
+        let mesh = surf.as_micro_surface_mesh(offset, pattern, subdiv);
+        Self::from_micro_surface_mesh(ctx, &mesh)
     }
 
-    pub fn from_micro_surface_mesh_with_id(
-        ctx: &GpuContext,
-        mesh: &MicroSurfaceMesh,
-        id: Uuid,
-    ) -> Self {
+    /// Creates a new [`RenderableMesh`] directly from a [`MicroSurfaceMesh`].
+    pub fn from_micro_surface_mesh(ctx: &GpuContext, mesh: &MicroSurfaceMesh) -> (Self, Handle) {
         log::debug!(
             "Creating mesh view with vertex count: {}, expected size: {} bytes",
             mesh.num_verts,
@@ -123,23 +109,24 @@ impl RenderableMesh {
             mesh.facets.len()
         );
 
-        Self {
-            uuid: id,
-            msurf: Some(mesh.msurf),
-            vertices_count: mesh.num_verts as u32,
-            indices_count: mesh.facets.len() as u32,
-            extent: mesh.bounds,
-            vertex_layout,
-            vertex_buffer,
-            index_buffer,
-            facet_normal_buffer,
-            vertex_normal_buffer,
-            index_format: wgpu::IndexFormat::Uint32,
-            topology: wgpu::PrimitiveTopology::TriangleList,
-        }
-    }
+        let handle = Self::new_handle();
 
-    pub fn from_micro_surface_mesh(ctx: &GpuContext, mesh: &MicroSurfaceMesh) -> Self {
-        Self::from_micro_surface_mesh_with_id(ctx, mesh, Uuid::new_v4())
+        (
+            Self {
+                uuid: handle.into_uuid(),
+                msurf: Some(mesh.msurf),
+                vertices_count: mesh.num_verts as u32,
+                indices_count: mesh.facets.len() as u32,
+                extent: mesh.bounds,
+                vertex_layout,
+                vertex_buffer,
+                index_buffer,
+                facet_normal_buffer,
+                vertex_normal_buffer,
+                index_format: wgpu::IndexFormat::Uint32,
+                topology: wgpu::PrimitiveTopology::TriangleList,
+            },
+            handle,
+        )
     }
 }

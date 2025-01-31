@@ -8,8 +8,9 @@ use vgonio_core::{
     error::VgonioError,
     impl_any_measured_trait, math,
     math::{IVec2, Vec2},
+    res::{Handle, RawDataStore},
     units::{rad, Radians},
-    utils::{handle::Handle, range::StepRangeIncl},
+    utils::range::StepRangeIncl,
     AnyMeasured, MeasurementKind,
 };
 
@@ -243,7 +244,7 @@ impl MeasuredSdfData {
 
 /// Measures the slope distribution function (SDF) of the given microsurfaces.
 pub fn measure_slope_distribution(
-    handles: &[Handle<MicroSurface>],
+    handles: &[Handle],
     params: SdfMeasurementParams,
     cache: &RawCache,
 ) -> Box<[Measurement]> {

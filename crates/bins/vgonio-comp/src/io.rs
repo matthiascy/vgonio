@@ -1,19 +1,20 @@
 use crate::{
-    app::{cache::Cache, cli::ansi, Config},
+    app::{cache::Cache, cli::ansi},
     measure::{
         bsdf::BsdfMeasurement,
         mfd::{MeasuredGafData, MeasuredNdfData},
         Measurement,
     },
 };
-use vgonio_core::{
-    error::VgonioError,
-    io::{CompressionScheme, FileEncoding},
-    math,
-};
 use std::{
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
+};
+use vgonio_core::{
+    config::Config,
+    error::VgonioError,
+    io::{CompressionScheme, FileEncoding},
+    math,
 };
 
 pub mod vgmo {
@@ -30,8 +31,15 @@ pub mod vgmo {
             SdfMeasurementParams, SimulationKind,
         },
     };
+    use jabr::array::DyArr;
+    use std::{
+        collections::HashMap,
+        io::{BufWriter, Seek},
+        mem,
+        mem::MaybeUninit,
+        ptr,
+    };
     use vgonio_core::{
-        bxdf::brdf::measured::{Origin, VgonioBrdf, VgonioBrdfParameterisation},
         io,
         io::{
             CompressionScheme, FileEncoding, Header, HeaderExt, ReadFileErrorKind,
@@ -46,14 +54,9 @@ pub mod vgmo {
         },
         AnyMeasured, BrdfLevel, MeasurementKind, Version,
     };
-    use jabr::array::DyArr;
-    use std::{
-        collections::HashMap,
-        io::{BufWriter, Seek},
-        mem,
-        mem::MaybeUninit,
-        ptr,
-    };
+
+    use vgonio_bxdf::brdf::measured::{VgonioBrdf, VgonioBrdfParameterisation};
+    use vgonio_core::bxdf::Origin;
 
     /// The VGMO header extension.
     #[derive(Debug, Clone, PartialEq)]
@@ -1488,8 +1491,15 @@ mod tests {
         },
         params::{BsdfMeasurementParams, SimulationKind},
     };
+    use jabr::array::DyArr;
+    use std::{
+        collections::HashMap,
+        io::{BufReader, BufWriter, Cursor},
+        mem::MaybeUninit,
+    };
+    use vgonio_bxdf::brdf::measured::{VgonioBrdf, VgonioBrdfParameterisation};
     use vgonio_core::{
-        bxdf::brdf::measured::{MeasuredBrdfKind, Origin, VgonioBrdf, VgonioBrdfParameterisation},
+        bxdf::{MeasuredBrdfKind, Origin},
         io::{CompressionScheme, FileEncoding},
         math::Sph2,
         units::{nm, rad, Rads},
@@ -1499,12 +1509,6 @@ mod tests {
             range::StepRangeIncl,
         },
         BrdfLevel, Version,
-    };
-    use jabr::array::DyArr;
-    use std::{
-        collections::HashMap,
-        io::{BufReader, BufWriter, Cursor},
-        mem::MaybeUninit,
     };
 
     #[test]

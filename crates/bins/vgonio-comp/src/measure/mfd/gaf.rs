@@ -15,8 +15,9 @@ use vgonio_core::{
     error::VgonioError,
     impl_any_measured_trait, math,
     math::{Mat4, Vec3},
+    res::{Handle, RawDataStore},
     units::Radians,
-    utils::{handle::Handle, range::StepRangeIncl},
+    utils::range::StepRangeIncl,
     MeasurementKind,
 };
 use wgpu::{util::DeviceExt, ColorTargetState};
@@ -61,10 +62,10 @@ pub struct VisibilityEstimator {
     /// Colour attachments used to compute the ratio of visible projected area
     /// over the whole area of all visible facets at each measurement point.
     /// Each colour attachment is a 2D texture array with one layer per
-    /// measurement point. The first colour attachment is used to store the
+    /// measurement point. The first colour attachment is used to storage the
     /// visible projected area (area of visible facets respecting each
-    /// other), the second colour attachment is used to store the whole area of
-    /// all visible facets.
+    /// other), the second colour attachment is used to storage the whole area
+    /// of all visible facets.
     color_attachments: [ColorAttachment; 2],
 
     /// Depth buffers of all micro-facets at all possible measurement points.
@@ -1485,7 +1486,7 @@ impl MeasuredGafData {
 /// Measurement of microfacet shadowing and masking function.
 pub fn measure_masking_shadowing_function(
     params: GafMeasurementParams,
-    handles: &[Handle<MicroSurface>],
+    handles: &[Handle],
     cache: &RawCache,
 ) -> Box<[Measurement]> {
     log::info!("Measuring microfacet masking/shadowing function...");

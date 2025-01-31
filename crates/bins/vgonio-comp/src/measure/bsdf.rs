@@ -18,17 +18,6 @@ use crate::{
         AnyMeasured, Measurement, MeasurementSource,
     },
 };
-use vgonio_core::{
-    bxdf::brdf::measured::{
-        ClausenBrdf, ClausenBrdfParameterisation, MeasuredBrdfKind, Origin, VgonioBrdf,
-        VgonioBrdfParameterisation,
-    },
-    error::VgonioError,
-    math::{rcp_f64, Sph2, Vec3},
-    units::{Degs, Nanometres, Radians, Rads},
-    utils::{handle::Handle, medium::Medium, partition::SphericalPartition},
-    AnyMeasuredBrdf, BrdfLevel, MeasurementKind,
-};
 use chrono::{DateTime, Local};
 use jabr::array::DyArr;
 use serde::{Deserialize, Serialize};
@@ -38,6 +27,18 @@ use std::{
     path::Path,
 };
 use surf::{MicroSurface, MicroSurfaceMesh};
+use vgonio_bxdf::brdf::measured::{
+    ClausenBrdf, ClausenBrdfParameterisation, VgonioBrdf, VgonioBrdfParameterisation,
+};
+use vgonio_core::{
+    bxdf::{MeasuredBrdfKind, Origin},
+    error::VgonioError,
+    math::{rcp_f64, Sph2, Vec3},
+    res::{Handle, RawDataStore},
+    units::{Degs, Nanometres, Radians, Rads},
+    utils::{medium::Medium, partition::SphericalPartition},
+    AnyMeasuredBrdf, BrdfLevel, MeasurementKind,
+};
 
 pub mod emitter;
 pub(crate) mod params;
@@ -1187,7 +1188,7 @@ impl<'a> ExactSizeIterator for SingleSimResultRayChunk<'a> {
 /// Measures the BSDF of a surface using geometric ray tracing methods.
 pub fn measure_bsdf_rt(
     params: BsdfMeasurementParams,
-    handles: &[Handle<MicroSurface>],
+    handles: &[Handle],
     cache: &RawCache,
 ) -> Box<[Measurement]> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
@@ -1381,7 +1382,9 @@ pub fn measure_bsdf_rt(
                     };
                     measurements.push(Measurement {
                         name: surf.file_stem().unwrap().to_owned(),
-                        source: MeasurementSource::Measured(Handle::with_id(surf.uuid)),
+                        source: MeasurementSource::Measured(Handle::with_id::<MicroSurface>(
+                            surf.uuid,
+                        )),
                         timestamp: Local::now(),
                         measured: Box::new(BsdfMeasurement { params, raw, bsdfs }),
                     });
@@ -1407,7 +1410,7 @@ fn rtc_simulation_grid<'a>(
     _surf: &'a MicroSurface,
     _mesh: &'a MicroSurfaceMesh,
     _emitter: &'a Emitter,
-    _cache: &'a RawCache,
+    _cache: &'a RawDataStore,
 ) -> Box<dyn Iterator<Item = SingleSimResult>> {
     // Temporary deactivated
     // for (surf, mesh) in surfaces.iter().zip(meshes.iter()) {
@@ -1439,7 +1442,7 @@ fn rtc_simulation_optix<'a>(
     _params: &'a BsdfMeasurementParams,
     _surf: &'a MicroSurfaceMesh,
     _emitter: &'a Emitter,
-    _cache: &'a RawCache,
+    _cache: &'a RawDataStore,
 ) -> Box<dyn Iterator<Item = SingleSimResult>> {
     todo!()
 }

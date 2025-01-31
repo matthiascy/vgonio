@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::{atomic, atomic::AtomicU64};
 use vgonio_core::{
     math::Sph2,
-    optics::ior::Ior,
+    optics::Ior,
     units::{Nanometres, Radians},
     utils::{
         partition::{PartitionScheme, SphericalDomain, SphericalPartition},

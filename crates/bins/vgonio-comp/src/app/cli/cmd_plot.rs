@@ -1,5 +1,4 @@
 use crate::{
-    app::{cache::Cache, Config},
     measure::{
         bsdf::BsdfMeasurement,
         mfd::{MeasuredGafData, MeasuredNdfData},
@@ -10,17 +9,17 @@ use crate::{
         plot_brdf_vgonio_clausen, plot_gaf, plot_ndf, plot_surfaces, BrdfFittingPlotter,
     },
 };
+
+use crate::app::cache::Cache;
 use std::path::PathBuf;
-use surf::{
-    subdivision::{Subdivision, SubdivisionKind},
-    TriangulationPattern,
-};
+use surf::subdivision::{Subdivision, SubdivisionKind};
+use vgonio_bxdf::brdf::measured::ClausenBrdf;
 use vgonio_core::{
-    bxdf::brdf::measured::ClausenBrdf,
+    config::Config,
     error::VgonioError,
     math::Sph2,
     units::{Degs, Nanometres, Radians, Rads},
-    BrdfLevel, ErrorMetric, MeasurementKind, Symmetry, Weighting,
+    BrdfLevel, ErrorMetric, MeasurementKind, Symmetry, TriangulationPattern, Weighting,
 };
 
 #[rustfmt::skip]

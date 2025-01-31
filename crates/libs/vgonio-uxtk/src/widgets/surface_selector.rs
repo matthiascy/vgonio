@@ -3,8 +3,7 @@ use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
 };
-use surf::MicroSurface;
-use vgonio_core::utils::handle::Handle;
+use vgonio_core::res::Handle;
 
 /// The selection mode for surfaces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,9 +20,9 @@ pub struct SurfaceSelector {
     /// The selection mode.
     mode: SelectionMode,
     /// The selected surfaces.
-    selected: HashSet<Handle<MicroSurface>>,
+    selected: HashSet<Handle>,
     /// The surfaces that can be selected.
-    surfaces: HashMap<Handle<MicroSurface>, String>,
+    surfaces: HashMap<Handle, String>,
     /// Selection changed.
     changed: bool,
 }
@@ -54,21 +53,19 @@ impl SurfaceSelector {
     pub fn any_selected(&self) -> bool { !self.selected.is_empty() }
 
     /// Returns the selected surfaces.
-    pub fn selected(&self) -> impl ExactSizeIterator<Item = Handle<MicroSurface>> + '_ {
+    pub fn selected(&self) -> impl ExactSizeIterator<Item = Handle> + '_ {
         self.selected.iter().copied()
     }
 
     /// Returns the first selected surface.
-    pub fn first_selected(&self) -> Option<Handle<MicroSurface>> {
-        self.selected.iter().next().copied()
-    }
+    pub fn first_selected(&self) -> Option<Handle> { self.selected.iter().next().copied() }
 
     /// Returns the number of selected surfaces.
     pub fn selected_count(&self) -> usize { self.selected.len() }
 
     /// Returns the single selected surface only if the mode of selection is
     /// single.
-    pub fn single_selected(&self) -> Option<Handle<MicroSurface>> {
+    pub fn single_selected(&self) -> Option<Handle> {
         if self.mode == SelectionMode::Single {
             self.selected.iter().next().copied()
         } else {
@@ -80,7 +77,7 @@ impl SurfaceSelector {
     pub fn selection_changed(&mut self) -> bool { self.changed }
 
     /// Updates the list of surfaces.
-    pub fn update<'a>(&mut self, surfs: impl IntoIterator<Item = (Handle<MicroSurface>, &'a str)>) {
+    pub fn update<'a>(&mut self, surfs: impl IntoIterator<Item = (Handle, &'a str)>) {
         for (hdl, name) in surfs {
             if self.surfaces.contains_key(&hdl) {
                 continue;
@@ -91,7 +88,7 @@ impl SurfaceSelector {
 
     /// Ui for the surface selector.
     pub fn ui(&mut self, id_salt: impl Hash, ui: &mut egui::Ui) {
-        let mut to_be_added: Option<Handle<MicroSurface>> = None;
+        let mut to_be_added: Option<Handle> = None;
         egui::Grid::new("surface_selector_grid")
             .num_columns(2)
             .show(ui, |ui| {

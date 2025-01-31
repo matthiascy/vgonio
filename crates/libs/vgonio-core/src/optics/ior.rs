@@ -1,6 +1,7 @@
 //! Index of refraction.
 use crate::{
-    math,
+    asset, math,
+    res::{Asset, AssetLoader, AssetTypeId, AssetTypeRegistry, Error},
     units::{nanometres, Length, LengthMeasurement, Nanometres},
     utils::medium::{MaterialKind, Medium},
 };
@@ -9,31 +10,122 @@ use std::{
     collections::HashMap,
     fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut},
+    path::PathBuf,
+    str::FromStr,
 };
 
-#[cfg(feature = "io")]
 use std::path::Path;
 
 /// Refractive index database.
-#[derive(Debug)]
-pub struct IorRegistry(pub(crate) HashMap<Medium, Vec<IorRecord>>);
+#[derive(Debug, Clone)]
+pub struct IorReg(pub(crate) HashMap<Medium, Vec<IorRecord>>);
 
-impl Default for IorRegistry {
+impl Default for IorReg {
     fn default() -> Self { Self::new() }
 }
 
-impl Deref for IorRegistry {
+impl Deref for IorReg {
     type Target = HashMap<Medium, Vec<IorRecord>>;
     fn deref(&self) -> &Self::Target { &self.0 }
 }
 
-impl DerefMut for IorRegistry {
+impl DerefMut for IorReg {
     fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }
 
-impl IorRegistry {
+asset!(IorReg, "IorReg");
+
+/// Loader for refractive index database.
+pub struct IorRegLoader {
+    /// System directory.
+    sys_dir: Option<PathBuf>,
+    /// User directory.
+    usr_dir: Option<PathBuf>,
+    /// Excluded files.
+    excluded: Option<Vec<String>>,
+}
+
+impl IorRegLoader {
+    /// Creates a new refractive index database loader.
+    ///
+    /// # Arguments
+    ///
+    /// * `sys_dir` - The base system directory used to resolve the path when
+    ///   the path is in form `sys://`. The actual path is resolved to
+    ///   `sys_dir/ior/path`.
+    /// * `usr_dir` - The base user directory used to resolve the path when the
+    ///   path is in form `user://`. The actual path is resolved to
+    ///   `usr_dir/ior/path`.
+    /// * `excluded` - The list of excluded files.
+    pub fn new(
+        sys_dir: Option<&Path>,
+        usr_dir: Option<&Path>,
+        excluded: Option<Vec<String>>,
+    ) -> Self {
+        Self {
+            sys_dir: sys_dir.map(|path| path.to_path_buf().join("ior")),
+            usr_dir: usr_dir.map(|path| path.to_path_buf().join("ior")),
+            excluded,
+        }
+    }
+}
+
+impl AssetLoader for IorRegLoader {
+    fn asset_type(&self) -> &'static str { IorReg::asset_type() }
+
+    fn asset_type_id(&self) -> AssetTypeId { IorReg::asset_type_id() }
+
+    fn load(&self, path: Option<&Path>) -> Result<Box<dyn Asset>, Error> {
+        let own_excluded = self
+            .excluded
+            .as_ref()
+            .and_then(|ss| Some(ss.iter().map(|s| s.as_str()).collect::<Vec<_>>()));
+        let excluded = own_excluded.as_deref().unwrap_or(&[]);
+        match path {
+            Some(path) => {
+                let mut ior_reg = IorReg::new();
+                let n = ior_reg.load_from_path(path, excluded)?;
+                log::debug!("  Loaded {} ior files from {:?}", n, path);
+                Ok(Box::new(ior_reg))
+            },
+            None => {
+                log::debug!("Loading refractive index database from default paths ...");
+                log::debug!("  -- sys_dir: {:?}", self.sys_dir);
+                log::debug!("  -- usr_dir: {:?}", self.usr_dir);
+
+                if self.sys_dir.is_none() {
+                    log::debug!(
+                        "  Refractive index database not found at sys dir: {:?}",
+                        self.sys_dir
+                    );
+                }
+
+                if self.usr_dir.is_none() {
+                    log::debug!(
+                        "  Refractive index database not found at user dir: {:?}",
+                        self.usr_dir
+                    );
+                }
+
+                if self.usr_dir.is_none() && self.sys_dir.is_none() {
+                    log::error!("No path specified to load refractive index database");
+                    todo!("return an error");
+                }
+
+                let mut ior_reg = IorReg::new();
+                let n = ior_reg.load_from_path(self.sys_dir.as_ref().unwrap(), excluded)?;
+                log::debug!("  Loaded {} ior files from {:?}", n, self.sys_dir);
+                let n = ior_reg.load_from_path(self.usr_dir.as_ref().unwrap(), excluded)?;
+                log::debug!("  Loaded {} ior files from {:?}", n, self.usr_dir);
+                Ok(Box::new(ior_reg))
+            },
+        }
+    }
+}
+
+impl IorReg {
     /// Create an empty database.
-    pub fn new() -> IorRegistry { IorRegistry(HashMap::new()) }
+    pub fn new() -> IorReg { IorReg(HashMap::new()) }
 
     /// Returns the refractive index of the given medium at the given wavelength
     /// (in nanometres).
@@ -94,7 +186,48 @@ impl IorRegistry {
             .collect::<Option<Box<[_]>>>()
     }
 
-    #[cfg(feature = "io")]
+    /// Loads refractive indices from the given path.
+    pub fn load_from_path(&mut self, path: &Path, excluded: &[&str]) -> Result<u32, Error> {
+        let mut n_loaded = 0;
+        if path.is_file() {
+            let filename = path.file_name().unwrap().to_str().unwrap();
+            if excluded.contains(&filename) {
+                log::debug!("  -- excluded: {}", filename);
+                return Ok(0);
+            }
+            let medium = Medium::from_str(
+                path.file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .split('_')
+                    .next()
+                    .unwrap(),
+            )
+            .unwrap();
+            // TODO: print error if read_iors_from_file returns None as we don't want to
+            // interrupt the loading process of other files.
+            let loaded_iors = IorReg::read_iors_from_file(path).unwrap();
+            let iors = self.0.entry(medium).or_default();
+            for ior in loaded_iors.iter() {
+                if !iors.contains(ior) {
+                    iors.push(*ior);
+                }
+            }
+            iors.sort_by(|a, b| a.wavelength.partial_cmp(&b.wavelength).unwrap());
+            n_loaded += 1;
+        } else if path.is_dir() {
+            for entry in path.read_dir()? {
+                let entry = entry?;
+                let path = entry.path();
+                n_loaded += self.load_from_path(&path, excluded)?;
+            }
+        } else {
+            todo!("return an error");
+        }
+        Ok(n_loaded)
+    }
+
     /// Read a csv file and return a vector of refractive indices.
     /// File format: "wavelength, µm", "eta", "k"
     pub fn read_iors_from_file(path: &Path) -> Option<Box<[IorRecord]>> {

@@ -15,10 +15,7 @@ use crate::{
             plotter::sdf::SlopeDistributionExtra,
         },
     },
-    measure::{
-        mfd::{MeasuredGafData, MeasuredNdfData},
-        Measurement,
-    },
+    measure::mfd::{MeasuredGafData, MeasuredNdfData},
 };
 use egui::{Context, Response, Ui, WidgetText};
 use egui_plot::*;
@@ -29,13 +26,15 @@ use std::{
 };
 use uuid::Uuid;
 use uxtk::widgets::{AngleKnob, AngleKnobWinding};
+use vgonio_bxdf::distro::{BeckmannDistribution, TrowbridgeReitzDistribution};
 #[cfg(feature = "fitting")]
-use vgonio_core::bxdf::fitting::FittedModel;
+use vgonio_bxdf::fitting::FittedModel;
 use vgonio_core::{
-    bxdf::distro::{BeckmannDistribution, MicrofacetDistribution, TrowbridgeReitzDistribution},
+    bxdf::MicrofacetDistribution,
     math,
+    res::Handle,
     units::{deg, rad, Radians},
-    utils::{handle::Handle, range::StepRangeIncl},
+    utils::range::StepRangeIncl,
     MeasurementKind,
 };
 
@@ -78,7 +77,7 @@ pub trait PlottingWidget {
             });
     }
 
-    fn measurement_data_handle(&self) -> Handle<Measurement>;
+    fn measurement_data_handle(&self) -> Handle;
 
     fn measurement_data_kind(&self) -> MeasurementKind;
 }
@@ -86,7 +85,11 @@ pub trait PlottingWidget {
 /// Trait for extra data to be used by the plotting inspector.
 pub trait VariantData {
     /// Initialise the extra data.
-    fn pre_process(&mut self, data: Handle<Measurement>, cache: &RawCache);
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The handle to the measurement data.
+    fn pre_process(&mut self, data: Handle, cache: &RawCache);
 
     /// Returns the curve to be displayed.
     fn current_curve(&self) -> Option<&Curve>;
@@ -102,13 +105,7 @@ pub trait VariantData {
 
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
-    fn ui(
-        &mut self,
-        ui: &mut Ui,
-        event_loop: &EventLoopProxy,
-        data: Handle<Measurement>,
-        cache: &Cache,
-    );
+    fn ui(&mut self, ui: &mut Ui, event_loop: &EventLoopProxy, data: Handle, cache: &Cache);
 }
 
 pub struct PlotInspector {
@@ -117,7 +114,8 @@ pub struct PlotInspector {
     /// Name for the plot.
     name: String,
     /// The handle to the data to be plotted.
-    data_handle: Handle<Measurement>,
+    /// This is the handle to the measurement data.
+    data_handle: Handle,
     /// Cache of the app.
     cache: Cache,
     /// Inspector properties data might be used by the plot.
@@ -231,7 +229,7 @@ impl Deref for Curve {
 }
 
 impl VariantData for BsdfPlotExtraData {
-    fn pre_process(&mut self, _data: Handle<Measurement>, _cache: &RawCache) {
+    fn pre_process(&mut self, _data: Handle, _cache: &RawCache) {
         // TODO: pre-process data
     }
 
@@ -244,13 +242,7 @@ impl VariantData for BsdfPlotExtraData {
 
     fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
-    fn ui(
-        &mut self,
-        _ui: &mut Ui,
-        _event_loop: &EventLoopProxy,
-        _data: Handle<Measurement>,
-        _cache: &Cache,
-    ) {
+    fn ui(&mut self, _ui: &mut Ui, _event_loop: &EventLoopProxy, _data: Handle, _cache: &Cache) {
         todo!()
     }
 }
@@ -259,7 +251,7 @@ impl PlotInspector {
     /// Creates a new inspector for a microfacet area distribution function.
     pub fn new_adf(
         name: String,
-        data: Handle<Measurement>,
+        data: Handle,
         cache: Cache,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
@@ -274,7 +266,7 @@ impl PlotInspector {
     /// Creates a new inspector for a microfacet masking-shadowing function.
     pub fn new_msf(
         name: String,
-        data: Handle<Measurement>,
+        data: Handle,
         cache: Cache,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
@@ -297,7 +289,7 @@ impl PlotInspector {
     /// function.
     pub fn new_bsdf(
         name: String,
-        data: Handle<Measurement>,
+        data: Handle,
         cache: Cache,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
@@ -309,7 +301,7 @@ impl PlotInspector {
 
     pub fn new_sdf(
         name: String,
-        data: Handle<Measurement>,
+        data: Handle,
         cache: Cache,
         props: Arc<RwLock<PropertyData>>,
         event_loop: EventLoopProxy,
@@ -349,7 +341,7 @@ impl PlotInspector {
 
     fn new_inner(
         name: String,
-        data: Handle<Measurement>,
+        data: Handle,
         extra: Option<Box<dyn VariantData>>,
         cache: Cache,
         props: Arc<RwLock<PropertyData>>,
@@ -835,10 +827,10 @@ impl PlottingWidget for PlotInspector {
         }
     }
 
-    fn measurement_data_handle(&self) -> Handle<Measurement> { self.data_handle }
+    fn measurement_data_handle(&self) -> Handle { self.data_handle }
 
     fn measurement_data_kind(&self) -> MeasurementKind {
-        match self.data_handle.variant_id() {
+        match self.data_handle.variant() {
             0 => MeasurementKind::Bsdf,
             1 => MeasurementKind::Ndf,
             2 => MeasurementKind::Gaf,

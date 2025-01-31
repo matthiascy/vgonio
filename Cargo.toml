@@ -1,9 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-    "crates/bins/*",
-    "crates/libs/*",
-]
+members = ["crates/bins/*", "crates/libs/*"]
 
 [workspace.package]
 authors = ["Yang Chen <matthiasychen@gmail.com>"]
@@ -68,6 +65,7 @@ futures-intrusive = "0.5"
 glam = { version = "~0.28", features = ["serde", "bytemuck"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 indicatif = { version = "0.17", features = ["rayon"] }
+lazy_static = "1.5"
 levenberg-marquardt = "0.14"
 nalgebra = "0.33"
 libm = "0.2"
@@ -89,7 +87,7 @@ serde_json = "1.0"
 serde-pickle = "1.2"
 serde_yaml = "0.9"
 static_assertions = "1.1"
-thiserror = "~1.0"
+thiserror = "2.0"
 tobj = "4.0"
 toml = "0.8"
 type-map = "0.5"
@@ -100,6 +98,12 @@ web-sys = "0.3.70"
 which = "4.4"
 winit = "~0.30"
 wgpu = { version = "22", features = ["wgsl"] }
+vgonio-core = { path = "crates/libs/vgonio-core" }
+vgonio-surf = { path = "crates/libs/vgonio-surf" }
+
+vgonio-jabr = { path = "crates/libs/vgonio-jabr" }
+vgonio-powitacq = { path = "crates/libs/vgonio-powitacq" }
+vgonio-gxtk = { path = "crates/libs/vgonio-gxtk" }
 
 [workspace.lints.clippy]
 missing_docs = "warn"

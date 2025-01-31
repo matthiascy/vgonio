@@ -1,19 +1,9 @@
-use crate::app::gui::docking::{Dockable, WidgetKind};
-use std::sync::{Arc, RwLock};
-use surf::subdivision::SubdivisionKind;
-use uuid::Uuid;
-#[cfg(feature = "fitting")]
-use vgonio_core::{
-    bxdf::{brdf::BrdfFamily, distro::MicrofacetDistroKind, fitting::FittingProblemKind},
-    Symmetry,
-};
-use vgonio_core::{utils::partition::beckers, MeasurementKind};
-
 use crate::{
     app::{
         cache::Cache,
         gui::{
             data::PropertyData,
+            docking::{Dockable, WidgetKind},
             event::{EventLoopProxy, VgonioEvent},
             outliner::OutlinerItem,
         },
@@ -24,6 +14,17 @@ use crate::{
         MeasurementSource,
     },
 };
+use std::sync::{Arc, RwLock};
+use surf::subdivision::SubdivisionKind;
+use uuid::Uuid;
+#[cfg(feature = "fitting")]
+use vgonio_bxdf::fitting::FittingProblemKind;
+#[cfg(feature = "fitting")]
+use vgonio_core::{
+    bxdf::{BrdfFamily, MicrofacetDistroKind},
+    Symmetry,
+};
+use vgonio_core::{utils::partition::beckers, MeasurementKind};
 
 /// The property inspector.
 ///
@@ -193,9 +194,9 @@ impl PropertyInspector {
                                 ui.end_row();
 
                                 ui.add(egui::Label::new("Timestamp:"));
-                                ui.add(egui::Label::new(vgonio_core::utils::iso_timestamp_display(
-                                    &state.timestamp,
-                                )));
+                                ui.add(egui::Label::new(
+                                    vgonio_core::utils::iso_timestamp_display(&state.timestamp),
+                                ));
                                 ui.end_row();
 
                                 ui.add(egui::Label::new("Kind:"));

@@ -1,26 +1,21 @@
-use crate::{
-    app::{cache::Cache, cli::ansi, Config},
-    measure::bsdf::BsdfMeasurement,
-    pyplot::plot_err,
-};
+use crate::{app::cli::ansi, measure::bsdf::BsdfMeasurement, pyplot::plot_err};
+use std::{fmt::Debug, path::PathBuf};
 use vgonio_core::{
-    bxdf::{
-        brdf::{
-            measured::{
-                merl::MerlBrdf, rgl::RglBrdf, yan::Yan18Brdf, ClausenBrdf, MeasuredBrdfKind,
-            },
-            BrdfFamily,
-        },
-        distro::MicrofacetDistroKind,
-        fitting::FittingProblem,
-    },
+    config::Config,
     error::VgonioError,
-    optics::ior::IorRegistry,
+    optics::IorReg,
+    res::DataStore,
     units::{Radians, Rads},
     utils::range::StepRangeIncl,
     AnyMeasuredBrdf, BrdfLevel, ErrorMetric, Symmetry, Weighting,
 };
-use std::{fmt::Debug, path::PathBuf};
+
+use crate::app::cache::Cache;
+use vgonio_bxdf::{
+    brdf::measured::{merl::MerlBrdf, rgl::RglBrdf, yan::Yan18Brdf, ClausenBrdf},
+    fitting::FittingProblem,
+};
+use vgonio_core::bxdf::{BrdfFamily, MeasuredBrdfKind, MicrofacetDistroKind};
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     println!(
@@ -186,7 +181,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     })
 }
 
-fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, iors: &IorRegistry) {
+fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, iors: &IorReg) {
     println!(
         "      {} Fitting using brute force method...",
         ansi::YELLOW_GT
@@ -223,7 +218,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, ior
 fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
     opts: &FitOptions,
     brdf: &F,
-    iors: &IorRegistry,
+    iors: &IorReg,
     theta_limit: Option<Radians>,
 ) {
     let limit = theta_limit.unwrap_or(Radians::HALF_PI);

@@ -8,15 +8,17 @@ use crate::{
             plotter::{angle_knob, Curve, VariantData},
         },
     },
-    measure::{mfd::MeasuredGafData, Measurement},
+    measure::mfd::MeasuredGafData,
 };
 use egui::{Align, Ui};
 use std::any::Any;
+use vgonio_bxdf::fitting::FittedModel;
 #[cfg(feature = "fitting")]
-use vgonio_core::bxdf::{distro::MicrofacetDistribution, fitting::FittedModel};
+use vgonio_core::bxdf::MicrofacetDistribution;
 use vgonio_core::{
+    res::Handle,
     units::{rad, Radians},
-    utils::{handle::Handle, range::StepRangeIncl},
+    utils::range::StepRangeIncl,
     MeasurementKind,
 };
 
@@ -68,7 +70,7 @@ impl Default for MaskingShadowingExtra {
 }
 
 impl VariantData for MaskingShadowingExtra {
-    fn pre_process(&mut self, data: Handle<Measurement>, cache: &RawCache) {
+    fn pre_process(&mut self, data: Handle, cache: &RawCache) {
         let measurement = cache.get_measurement(data).unwrap();
         assert_eq!(
             measurement.measured.kind(),
@@ -162,13 +164,7 @@ impl VariantData for MaskingShadowingExtra {
 
     fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
-    fn ui(
-        &mut self,
-        ui: &mut Ui,
-        _event_loop: &EventLoopProxy,
-        _data: Handle<Measurement>,
-        _cache: &Cache,
-    ) {
+    fn ui(&mut self, ui: &mut Ui, _event_loop: &EventLoopProxy, _data: Handle, _cache: &Cache) {
         ui.allocate_ui_with_layout(
             egui::Vec2::new(ui.available_width(), 48.0),
             egui::Layout::left_to_right(Align::Center),

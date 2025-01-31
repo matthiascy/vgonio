@@ -13,14 +13,15 @@ use crate::{
         rtc::Ray,
     },
 };
-use vgonio_core::{
-    math::{Mat4, Sph2, Vec3},
-    utils::{handle::Handle, partition::SphericalPartition},
-};
 use gxtk::{context::GpuContext, render_pass::RenderPass, vertex::VertexLayout};
 use std::sync::Arc;
 use surf::{MicroSurface, MicroSurfaceMesh};
 use uuid::Uuid;
+use vgonio_core::{
+    math::{Mat4, Sph2, Vec3},
+    res::{DataStore, Handle},
+    utils::partition::SphericalPartition,
+};
 use wgpu::util::DeviceExt;
 
 pub const DEBUG_DRAWING_SHADER: &str = r#"
@@ -143,7 +144,8 @@ pub struct DebugDrawingState {
     surface_primitive_drawing: bool,
     event_loop: EventLoopProxy,
     cache: Cache,
-    pub microsurface: Option<(Handle<MicroSurface>, Handle<MicroSurfaceMesh>)>,
+    // (MicroSurface, MicroSurfaceMesh)
+    pub microsurface: Option<(Handle, Handle)>,
     pub msurf_prim_rp: RenderPass,
     pub msurf_prim_index_buf: wgpu::Buffer,
     pub msurf_prim_index_count: u32,
@@ -661,7 +663,7 @@ impl DebugDrawingState {
         self.detector_partition = Some(partition);
     }
 
-    pub fn update_focused_surface(&mut self, surf: Option<Handle<MicroSurface>>) {
+    pub fn update_focused_surface(&mut self, surf: Option<Handle>) {
         if let Some(surf) = surf {
             self.cache.read(|cache| {
                 self.microsurface = Some((surf, cache.get_micro_surface_record(surf).unwrap().mesh))

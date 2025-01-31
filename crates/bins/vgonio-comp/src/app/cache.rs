@@ -1,3 +1,8 @@
+use crate::{
+    app::cli::ansi,
+    measure::{params::SurfacePath, Measurement},
+};
+use gxtk::{context::GpuContext, mesh::RenderableMesh};
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -5,28 +10,23 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-
-use crate::{
-    app::{cli::ansi, Config},
-    measure::{params::SurfacePath, Measurement},
-};
+use surf::{subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh};
 use vgonio_core::{
+    config::Config,
     error::VgonioError,
-    optics::ior::IorRegistry,
-    utils::{handle::Handle, medium::Medium},
-};
-use gxtk::{context::GpuContext, mesh::RenderableMesh};
-use surf::{
-    subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh, TriangulationPattern,
+    optics::IorReg,
+    res::{Asset, AssetsStorage, Handle},
+    utils::medium::Medium,
+    TriangulationPattern,
 };
 
 /// A record inside the cache for a micro-surface.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct MicroSurfaceRecord {
     path: PathBuf,
-    pub surf: Handle<MicroSurface>,
-    pub mesh: Handle<MicroSurfaceMesh>,
-    pub renderable: Handle<RenderableMesh>,
+    pub surf: Handle,
+    pub mesh: Handle,
+    pub renderable: Handle,
 }
 
 impl Hash for MicroSurfaceRecord {
@@ -63,22 +63,22 @@ pub struct RawCache {
     pub dir: PathBuf,
 
     /// Refractive index database.
-    pub iors: IorRegistry,
+    pub iors: IorReg,
 
     /// Micro-surface record cache, indexed by micro-surface uuid.
-    pub records: HashMap<Handle<MicroSurface>, MicroSurfaceRecord>,
+    pub records: HashMap<Handle, MicroSurfaceRecord>,
 
     /// Micro-surface cache, indexed by micro-surface uuid.
-    msurfs: HashMap<Handle<MicroSurface>, MicroSurface>,
+    msurfs: HashMap<Handle, MicroSurface>,
 
     /// Micro-surface triangle mesh cache, indexed by micro-surface mesh uuid.
-    pub(crate) meshes: HashMap<Handle<MicroSurfaceMesh>, MicroSurfaceMesh>,
+    pub(crate) meshes: HashMap<Handle, MicroSurfaceMesh>,
 
     /// Cache for `RenderableMesh`s, indexed by renderable mesh uuid.
-    pub(crate) renderables: HashMap<Handle<RenderableMesh>, RenderableMesh>,
+    pub(crate) renderables: HashMap<Handle, RenderableMesh>,
 
     /// Cache for measured data.
-    measurements: HashMap<Handle<Measurement>, Measurement>,
+    measurements: HashMap<Handle, Measurement>,
 
     // TODO: recently files
     /// Cache for recently opened files.
@@ -96,7 +96,7 @@ impl RawCache {
             meshes: Default::default(),
             recent_opened_files: None,
             last_opened_dir: None,
-            iors: IorRegistry::default(),
+            iors: IorReg::default(),
             renderables: Default::default(),
             records: Default::default(),
             measurements: Default::default(),
@@ -105,7 +105,7 @@ impl RawCache {
 
     /// Returns a micro-surface profile [`MicroSurface`] from the cache given
     /// its handle.
-    pub fn get_micro_surface(&self, handle: Handle<MicroSurface>) -> Option<&MicroSurface> {
+    pub fn get_micro_surface(&self, handle: Handle) -> Option<&MicroSurface> {
         self.msurfs.get(&handle)
     }
 
@@ -113,7 +113,7 @@ impl RawCache {
     /// given handle to the micro-surface profile.
     pub fn get_micro_surface_mesh_by_surface_id(
         &self,
-        handle: Handle<MicroSurface>,
+        handle: Handle,
     ) -> Option<&MicroSurfaceMesh> {
         self.records
             .get(&handle)
@@ -122,10 +122,7 @@ impl RawCache {
 
     /// Returns a micro-surface profile [`MicroSurfaceMesh`] from the cache
     /// given its handle.
-    pub fn get_micro_surface_mesh(
-        &self,
-        handle: Handle<MicroSurfaceMesh>,
-    ) -> Option<&MicroSurfaceMesh> {
+    pub fn get_micro_surface_mesh(&self, handle: Handle) -> Option<&MicroSurfaceMesh> {
         self.meshes.get(&handle)
     }
 
@@ -134,8 +131,8 @@ impl RawCache {
     pub fn create_micro_surface_renderable_mesh(
         &mut self,
         ctx: &GpuContext,
-        msurf: Handle<MicroSurface>,
-    ) -> Result<Handle<RenderableMesh>, VgonioError> {
+        msurf: Handle,
+    ) -> Result<Handle, VgonioError> {
         log::debug!("Creating renderable mesh for micro-surface: {}", msurf);
         let record = self.records.get_mut(&msurf).ok_or_else(|| {
             VgonioError::new(
@@ -158,8 +155,7 @@ impl RawCache {
             )
         })?;
         log::trace!("MicroSurfaceMesh of surface {}: {}", msurf, mesh.uuid);
-        let handle = Handle::new();
-        let renderable = RenderableMesh::from_micro_surface_mesh_with_id(ctx, mesh, handle.id);
+        let (renderable, handle) = RenderableMesh::from_micro_surface_mesh(ctx, mesh);
         self.renderables.insert(handle, renderable);
         record.renderable = handle;
         log::debug!(
@@ -171,16 +167,13 @@ impl RawCache {
         Ok(handle)
     }
 
-    pub fn get_micro_surface_record(
-        &self,
-        handle: Handle<MicroSurface>,
-    ) -> Option<&MicroSurfaceRecord> {
+    pub fn get_micro_surface_record(&self, handle: Handle) -> Option<&MicroSurfaceRecord> {
         self.records.get(&handle)
     }
 
     pub fn get_micro_surface_records<'a, T>(&self, handles: T) -> Vec<MicroSurfaceRecord>
     where
-        T: Iterator<Item = &'a Handle<MicroSurface>>,
+        T: Iterator<Item = &'a Handle>,
     {
         handles
             .filter_map(|hdl| self.records.get(hdl))
@@ -192,7 +185,7 @@ impl RawCache {
     /// given handle to the micro-surface profile.
     pub fn get_micro_surface_renderable_mesh_by_surface_id(
         &self,
-        handle: Handle<MicroSurface>,
+        handle: Handle,
     ) -> Option<&RenderableMesh> {
         self.records
             .get(&handle)
@@ -201,15 +194,12 @@ impl RawCache {
 
     /// Returns a micro-surface profile [`RenderableMesh`] from the cache
     /// given its handle.
-    pub fn get_micro_surface_renderable_mesh(
-        &self,
-        handle: Handle<RenderableMesh>,
-    ) -> Option<&RenderableMesh> {
+    pub fn get_micro_surface_renderable_mesh(&self, handle: Handle) -> Option<&RenderableMesh> {
         self.renderables.get(&handle)
     }
 
     /// Returns the file path to the micro-surface profile given its handle.
-    pub fn get_micro_surface_filepath(&self, handle: Handle<MicroSurface>) -> Option<&Path> {
+    pub fn get_micro_surface_filepath(&self, handle: Handle) -> Option<&Path> {
         self.records.get(&handle).map(|r| r.path.as_path())
     }
 
@@ -218,10 +208,7 @@ impl RawCache {
 
     /// Returns a list of micro-surface profiles [`MicroSurface`] from the
     /// cache, given a list of handles to the micro-surface profiles.
-    pub fn get_micro_surfaces(
-        &self,
-        handles: &[Handle<MicroSurface>],
-    ) -> Vec<Option<&MicroSurface>> {
+    pub fn get_micro_surfaces(&self, handles: &[Handle]) -> Vec<Option<&MicroSurface>> {
         handles.iter().map(|h| self.msurfs.get(h)).collect()
     }
 
@@ -229,7 +216,7 @@ impl RawCache {
     /// cache given a list of handles to the micro-surface profiles.
     pub fn get_micro_surface_meshes_by_surfaces(
         &self,
-        handles: &[Handle<MicroSurface>],
+        handles: &[Handle],
     ) -> Vec<Option<&MicroSurfaceMesh>> {
         handles
             .iter()
@@ -239,19 +226,13 @@ impl RawCache {
 
     /// Returns a list of micro-surface meshes [`MicroSurfaceMesh`] from the
     /// cache given its handles.
-    pub fn get_micro_surface_meshes(
-        &self,
-        handles: &[Handle<MicroSurfaceMesh>],
-    ) -> Vec<Option<&MicroSurfaceMesh>> {
+    pub fn get_micro_surface_meshes(&self, handles: &[Handle]) -> Vec<Option<&MicroSurfaceMesh>> {
         handles.iter().map(|h| self.meshes.get(h)).collect()
     }
 
     /// Returns a list of micro-surface profiles' file paths from the cache
     /// given a list of handles to the micro-surface profiles.
-    pub fn get_micro_surface_filepaths(
-        &self,
-        handles: &[Handle<MicroSurface>],
-    ) -> Option<Vec<&Path>> {
+    pub fn get_micro_surface_filepaths(&self, handles: &[Handle]) -> Option<Vec<&Path>> {
         handles
             .iter()
             .map(|handle| self.get_micro_surface_filepath(*handle))
@@ -267,7 +248,7 @@ impl RawCache {
             .collect()
     }
 
-    pub fn get_measurement(&self, handle: Handle<Measurement>) -> Option<&Measurement> {
+    pub fn get_measurement(&self, handle: Handle) -> Option<&Measurement> {
         self.measurements.get(&handle)
     }
 
@@ -277,7 +258,7 @@ impl RawCache {
         config: &Config,
         path: &Path,
         subdiv: Option<Subdivision>,
-    ) -> Result<(Handle<MicroSurface>, Handle<MicroSurfaceMesh>), VgonioError> {
+    ) -> Result<(Handle, Handle), VgonioError> {
         match config.resolve_path(path) {
             None => Err(VgonioError::new(
                 format!(
@@ -297,13 +278,13 @@ impl RawCache {
                 } else {
                     log::debug!("-- loading: {}", filepath.display());
                     let msurf = MicroSurface::read_from_file(&filepath, None)?;
-                    let msurf_hdl = Handle::with_id(msurf.uuid);
+                    let msurf_hdl = Handle::from_uuid::<MicroSurface>(msurf.uuid);
                     let mesh = msurf.as_micro_surface_mesh(
                         HeightOffset::Grounded,
                         config.user.triangulation,
                         subdiv,
                     );
-                    let mesh_hdl = Handle::with_id(mesh.uuid);
+                    let mesh_hdl = Handle::from_uuid::<MicroSurfaceMesh>(mesh.uuid);
                     self.msurfs.insert(msurf_hdl, msurf);
                     self.meshes.insert(mesh_hdl, mesh);
                     self.records.insert(
@@ -325,10 +306,7 @@ impl RawCache {
     ///
     /// This will remove the micro-surface from the cache, including surface
     /// mesh and renderable mesh.
-    pub fn unload_micro_surface(
-        &mut self,
-        handle: Handle<MicroSurface>,
-    ) -> Result<(), VgonioError> {
+    pub fn unload_micro_surface(&mut self, handle: Handle) -> Result<(), VgonioError> {
         let record = self.records.get(&handle).ok_or_else(|| {
             VgonioError::new(format!("Failed to unload micro-surface: {}", handle), None)
         })?;
@@ -343,8 +321,8 @@ impl RawCache {
     pub fn add_micro_surface_measurement(
         &mut self,
         data: Measurement,
-    ) -> Result<Handle<Measurement>, VgonioError> {
-        let handle = Handle::with_type_id(data.measured.kind() as u8);
+    ) -> Result<Handle, VgonioError> {
+        let handle = Handle::new_with_variant::<Measurement>(data.measured.kind() as u8);
         self.measurements.insert(handle, data);
         Ok(handle)
     }
@@ -355,7 +333,7 @@ impl RawCache {
         &mut self,
         config: &Config,
         path: &Path,
-    ) -> Result<Handle<Measurement>, VgonioError> {
+    ) -> Result<Handle, VgonioError> {
         match config.resolve_path(path) {
             None => Err(VgonioError::new(
                 "Failed to resolve measurement file.",
@@ -372,7 +350,8 @@ impl RawCache {
                 } else {
                     log::debug!("-- loading: {}", filepath.display());
                     let data = Measurement::read_from_file(&filepath)?;
-                    let handle = Handle::with_type_id(data.measured.kind() as u8);
+                    let handle =
+                        Handle::new_with_variant::<Measurement>(data.measured.kind() as u8);
                     self.measurements.insert(handle, data);
                     Ok(handle)
                 }
@@ -398,7 +377,7 @@ impl RawCache {
         config: &Config,
         paths: &[SurfacePath],
         pattern: TriangulationPattern,
-    ) -> Result<Vec<Handle<MicroSurface>>, VgonioError> {
+    ) -> Result<Vec<Handle>, VgonioError> {
         log::info!("Loading micro surfaces from {:?}", paths);
         let canonical = paths
             .iter()
@@ -435,13 +414,13 @@ impl RawCache {
                     } else {
                         log::debug!("-- loading: {}", filepath.display());
                         let msurf = MicroSurface::read_from_file(&filepath, None).unwrap();
-                        let msurf_hdl = Handle::with_id(msurf.uuid);
+                        let msurf_hdl = Handle::from_uuid::<MicroSurface>(msurf.uuid);
                         let mesh = msurf.as_micro_surface_mesh(
                             HeightOffset::Grounded,
                             pattern,
                             subdivision,
                         );
-                        let mesh_hdl = Handle::new();
+                        let mesh_hdl = Handle::from_uuid::<MicroSurfaceMesh>(mesh.uuid);
                         self.msurfs.insert(msurf_hdl, msurf);
                         self.meshes.insert(mesh_hdl, mesh);
                         self.records.insert(
@@ -469,7 +448,6 @@ impl RawCache {
         Ok(loaded)
     }
 
-    // TODO: move to RefractiveIndexRegistry
     /// Loads the refractive index database from the paths specified in the
     /// configuration.
     ///
@@ -508,10 +486,9 @@ impl RawCache {
         log::debug!("  Loaded {} ior files from {:?}", n, user_path);
     }
 
-    // TODO: move to RefractiveIndexRegistry
     /// Load the refractive index database from the given path.
     /// Returns the number of files loaded.
-    fn load_refractive_indices(iors: &mut IorRegistry, path: &Path, excluded: &[String]) -> u32 {
+    fn load_refractive_indices(iors: &mut IorReg, path: &Path, excluded: &[String]) -> u32 {
         let mut n_files = 0;
         if path.is_file() {
             log::debug!("Loading refractive index database from {:?}", path);
@@ -530,8 +507,7 @@ impl RawCache {
                     .unwrap(),
             )
             .unwrap();
-            // TODO: make this a method of RefractiveIndexRegistry
-            let refractive_indices = IorRegistry::read_iors_from_file(path).unwrap();
+            let refractive_indices = IorReg::read_iors_from_file(path).unwrap();
             let iors = iors.entry(medium).or_default();
             for ior in refractive_indices.iter() {
                 if !iors.contains(ior) {

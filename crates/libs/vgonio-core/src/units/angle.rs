@@ -4,6 +4,9 @@ use num_traits::Zero;
 use std::str::FromStr;
 // TODO: refactor this module to use const generics
 
+#[cfg(feature = "serde")]
+use serde::Deserialize;
+
 /// Radian unit.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct URadian;
@@ -258,10 +261,11 @@ impl<A: AngleUnit> FromStr for Angle<A> {
     fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
 }
 
+#[cfg(feature = "serde")]
 super::impl_serialization!(Angle<A> where A: AngleUnit, #[doc = "Customized serialization for the `Angle` type."]);
 
-/// Customized deserialization for the `Angle` type.
-impl<'de, A: AngleUnit> serde::Deserialize<'de> for Angle<A> {
+#[cfg(feature = "serde")]
+impl<'de, A: AngleUnit> Deserialize<'de> for Angle<A> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -539,6 +543,7 @@ mod angle_unit_tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn de_serialization() {
         let a: Degrees = degrees!(180.0);
         let serialized = serde_yaml::to_string(&a).unwrap();

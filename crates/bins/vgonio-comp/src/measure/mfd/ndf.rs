@@ -11,10 +11,10 @@ use vgonio_core::{
     error::VgonioError,
     impl_any_measured_trait, math,
     math::{theta, Sph2, Vec3Swizzles},
+    res::{Handle, RawDataStore},
     units,
     units::{deg, rad, Radians},
     utils::{
-        handle::Handle,
         partition::{DataCarriedOnHemisphereImageWriter, SphericalDomain, SphericalPartition},
         range::StepRangeIncl,
     },
@@ -171,7 +171,7 @@ const FACET_CHUNK_SIZE: usize = 4096;
 /// Measure the microfacet distribution of a list of micro surfaces.
 pub fn measure_area_distribution(
     params: NdfMeasurementParams,
-    handles: &[Handle<MicroSurface>],
+    handles: &[Handle],
     cache: &RawCache,
 ) -> Box<[Measurement]> {
     #[cfg(feature = "bench")]
@@ -204,7 +204,7 @@ pub fn measure_area_distribution(
 fn measure_area_distribution_by_points<'a>(
     surfaces: impl Iterator<
         Item = (
-            (&'a Handle<MicroSurface>, &'a Option<&'a MicroSurface>),
+            (&'a Handle, &'a Option<&'a MicroSurface>),
             &'a Option<&'a MicroSurfaceMesh>,
         ),
     >,
@@ -364,7 +364,7 @@ fn measure_area_distribution_by_points<'a>(
 fn measure_area_distribution_by_partition<'a>(
     surfaces: impl Iterator<
         Item = (
-            (&'a Handle<MicroSurface>, &'a Option<&'a MicroSurface>),
+            (&'a Handle, &'a Option<&'a MicroSurface>),
             &'a Option<&'a MicroSurfaceMesh>,
         ),
     >,

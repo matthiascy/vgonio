@@ -1,19 +1,16 @@
 use crate::{
-    app::{
-        args::{PrintInfoKind, PrintInfoOptions},
-        Config,
-    },
+    app::args::{PrintInfoKind, PrintInfoOptions},
     measure::params::{
         BsdfMeasurementParams, GafMeasurementParams, MeasurementDescription, MeasurementParams,
         NdfMeasurementMode, NdfMeasurementParams, SurfacePath,
     },
 };
-use vgonio_core::error::VgonioError;
 use std::{
     fmt::{Display, Formatter},
     path::PathBuf,
 };
 use surf::subdivision::Subdivision;
+use vgonio_core::{config::Config, error::VgonioError};
 
 impl Display for NdfMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

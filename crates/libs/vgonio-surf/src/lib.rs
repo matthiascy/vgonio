@@ -15,6 +15,7 @@ pub mod subdivision;
 
 #[cfg(feature = "embree")]
 use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
+use vgonio_core::{asset, TriangulationPattern};
 
 use crate::dcel::HalfEdgeMesh;
 
@@ -36,8 +37,9 @@ use vgonio_core::{
         WriteFileErrorKind,
     },
     math::{pairwise_sum, rcp_f32, sqr, Aabb, Vec3},
+    res::{Asset, AssetTypeId},
     units::LengthUnit,
-    utils::{range::CountRangeIncl, Asset},
+    utils::range::CountRangeIncl,
     Version,
 };
 
@@ -123,7 +125,7 @@ pub struct MicroSurface {
     pub samples: Vec<f32>,
 }
 
-impl Asset for MicroSurface {}
+asset!(MicroSurface, "MicroSurface");
 
 impl MicroSurface {
     /// Creates a micro-surface (height field) with specified height value.
@@ -281,8 +283,11 @@ impl MicroSurface {
                 (f32::max(max, *x), f32::min(min, *x))
             });
 
+        // TODO: considering removal
+        let handle = MicroSurface::new_handle();
+
         MicroSurface {
-            uuid: uuid::Uuid::new_v4(),
+            uuid: handle.into_uuid(),
             name: name.unwrap_or(gen_micro_surface_name()),
             path,
             rows,
@@ -570,8 +575,11 @@ impl MicroSurface {
             vert_normals[i].write(normal.normalize());
         }
 
+        // TODO: consider removing
+        let handle = MicroSurfaceMesh::new_handle();
+
         let mut mesh = MicroSurfaceMesh {
-            uuid: uuid::Uuid::new_v4(),
+            uuid: handle.into_uuid(),
             num_facets: num_faces,
             num_verts: verts.len(),
             bounds: extent,
@@ -736,29 +744,6 @@ impl MicroSurface {
     }
 }
 
-/// Triangulation pattern for grid triangulation.
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum TriangulationPattern {
-    /// Triangulate from top to bottom, left to right.
-    /// 0  <--  1
-    /// | A  /  |
-    /// |  /  B |
-    /// 2  -->  3
-    ///
-    /// 102,123
-    BottomLeftToTopRight,
-    /// Triangulate from top to bottom, right to left.
-    /// 0  <--  1
-    /// |  \  B |
-    /// | A  \  |
-    /// 2  -->  3
-    ///
-    /// 023, 031
-    #[default]
-    TopLeftToBottomRight,
-}
-
 /// Generate triangle indices for grid triangulation.
 ///
 /// The grid is assumed to be a regular grid with `cols` columns and `rows`
@@ -903,7 +888,7 @@ pub struct MicroSurfaceMesh {
     pub pattern: TriangulationPattern,
 }
 
-impl Asset for MicroSurfaceMesh {}
+asset!(MicroSurfaceMesh, "MicroSurfaceMesh");
 
 impl MicroSurfaceMesh {
     /// Returns the surface area of a facet.

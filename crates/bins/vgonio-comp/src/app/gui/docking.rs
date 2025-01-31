@@ -17,6 +17,7 @@ use std::{
 };
 use uuid::Uuid;
 use uxtk::UiRenderer;
+use vgonio_core::res::DataStore;
 
 /// Docking space for widgets.
 pub struct DockSpace {

@@ -11,10 +11,10 @@ use std::{
 };
 
 use crate::math::{ulp_eq, Axis};
-use serde::{Deserialize, Serialize};
 
 /// Axis-aligned bounding box.
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Copy, Clone)]
 pub struct Aabb {
     /// Minimum corner of the box.
     pub min: Vec3,

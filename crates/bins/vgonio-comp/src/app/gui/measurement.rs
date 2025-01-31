@@ -3,12 +3,10 @@ mod msf;
 mod ndf;
 mod sdf;
 
-#[cfg(any(feature = "vdbg", debug_assertions))]
-use crate::app::cache::Cache;
 use crate::{
     app::{
         args::OutputFormat,
-        cache::RawCache,
+        cache::{Cache, RawCache},
         gui::{
             event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
             measurement::{
@@ -23,14 +21,11 @@ use crate::{
     measure::{bsdf::receiver::ReceiverParams, params::MeasurementParams},
 };
 use egui::Widget;
-use surf::MicroSurface;
 use uxtk::widgets::{SurfaceSelector, ToggleSwitch};
 use vgonio_core::{
     io::{CompressionScheme, FileEncoding},
-    utils::{
-        handle::Handle,
-        partition::{PartitionScheme, SphericalDomain},
-    },
+    res::Handle,
+    utils::partition::{PartitionScheme, SphericalDomain},
     MeasurementKind,
 };
 
@@ -154,7 +149,7 @@ impl MeasurementDialog {
         }
     }
 
-    pub fn update_surface_selector(&mut self, surfs: &[Handle<MicroSurface>], cache: &RawCache) {
+    pub fn update_surface_selector(&mut self, surfs: &[Handle], cache: &RawCache) {
         let surfs = cache.get_micro_surface_records(surfs.iter());
         let surfs = surfs.iter().map(|r| (r.surf, r.name()));
         self.selector.update(surfs);

@@ -33,19 +33,19 @@ use std::{
     path::{Path, PathBuf},
 };
 use surf::{MicroSurface, MicroSurfaceMesh};
+use vgonio_bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan18Brdf};
 use vgonio_core::{
-    bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan18Brdf},
+    asset,
     error::VgonioError,
     io::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
     },
     math::{self, Mat3, Sph2, Sph3, Vec3},
+    res::{AssetTypeId, Handle},
     units::{rad, Radians},
     utils::{
-        handle::Handle,
         medium::Medium,
         partition::{SphericalDomain, SphericalPartition},
-        Asset,
     },
     AnyMeasured, MeasurementKind, Version,
 };
@@ -56,7 +56,8 @@ pub enum MeasurementSource {
     /// Measurement data is loaded from a file.
     Loaded(PathBuf),
     /// Measurement data is generated from a micro-surface.
-    Measured(Handle<MicroSurface>),
+    /// The handle is the micro-surface handle.
+    Measured(Handle),
 }
 
 impl MeasurementSource {
@@ -69,7 +70,7 @@ impl MeasurementSource {
     }
 
     /// Returns the micro-surface handle if the measurement data is generated.
-    pub fn micro_surface(&self) -> Option<Handle<MicroSurface>> {
+    pub fn micro_surface(&self) -> Option<Handle> {
         match self {
             MeasurementSource::Loaded(_) => None,
             MeasurementSource::Measured(ms) => Some(*ms),
@@ -96,7 +97,7 @@ pub struct Measurement {
 unsafe impl Send for Measurement {}
 unsafe impl Sync for Measurement {}
 
-impl Asset for Measurement {}
+asset!(Measurement, "Measurement");
 
 impl PartialEq for Measurement {
     fn eq(&self, other: &Self) -> bool { self.source == other.source }

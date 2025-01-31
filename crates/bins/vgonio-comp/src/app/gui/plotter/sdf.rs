@@ -11,14 +11,15 @@ use crate::{
     },
     measure::{mfd::MeasuredSdfData, Measurement},
 };
-#[cfg(feature = "fitting")]
-use vgonio_core::bxdf::fitting::FittedModel;
-use vgonio_core::{
-    units::{deg, rad, Radians},
-    utils::{handle::Handle, range::StepRangeIncl},
-};
 use egui::{Align, Ui};
 use std::any::Any;
+#[cfg(feature = "fitting")]
+use vgonio_bxdf::fitting::FittedModel;
+use vgonio_core::{
+    res::Handle,
+    units::{deg, rad, Radians},
+    utils::range::StepRangeIncl,
+};
 
 pub struct SlopeDistributionExtra {
     /// The azimuth of the facet normal.
@@ -91,7 +92,7 @@ impl SlopeDistributionExtra {
 }
 
 impl VariantData for SlopeDistributionExtra {
-    fn pre_process(&mut self, data: Handle<Measurement>, cache: &RawCache) {
+    fn pre_process(&mut self, data: Handle, cache: &RawCache) {
         self.generate_curves(cache.get_measurement(data).unwrap());
     }
 
@@ -110,7 +111,7 @@ impl VariantData for SlopeDistributionExtra {
         &mut self,
         ui: &mut Ui,
         _event_loop: &EventLoopProxy,
-        data: Handle<Measurement>,
+        measurement: Handle,
         cache: &Cache,
     ) {
         let azi_step_size = self.azi_range.step_size;
@@ -172,7 +173,7 @@ impl VariantData for SlopeDistributionExtra {
 
             if ui.button("Update").clicked() {
                 cache.read(|cache| {
-                    self.generate_curves(cache.get_measurement(data).unwrap());
+                    self.generate_curves(cache.get_measurement(measurement).unwrap());
                 });
             }
         });

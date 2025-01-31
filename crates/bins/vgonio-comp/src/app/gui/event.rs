@@ -8,21 +8,21 @@ use crate::{
     measure::{
         bsdf::emitter::{EmitterSamples, MeasurementPoints},
         params::MeasurementParams,
-        Measurement,
     },
 };
-#[cfg(feature = "fitting")]
-use vgonio_core::bxdf::fitting::FittingProblemKind;
-use vgonio_core::{
-    math::{IVec2, Sph2},
-    units::Degrees,
-    utils::{handle::Handle, partition::SphericalPartition},
-    MeasurementKind,
-};
 use std::path::PathBuf;
-use surf::{subdivision::Subdivision, MicroSurface, MicroSurfaceMesh};
+use surf::subdivision::Subdivision;
 use uuid::Uuid;
 use uxtk::theme::ThemeKind;
+#[cfg(feature = "fitting")]
+use vgonio_bxdf::fitting::FittingProblemKind;
+use vgonio_core::{
+    math::{IVec2, Sph2},
+    res::Handle,
+    units::Degrees,
+    utils::partition::SphericalPartition,
+    MeasurementKind,
+};
 
 /// Event loop proxy with Vgonio events.
 #[derive(Clone, Debug)]
@@ -64,11 +64,11 @@ pub enum VgonioEvent {
         /// Parameters of the measurement.
         params: MeasurementParams,
         /// Surfaces to be measured.
-        surfaces: Vec<Handle<MicroSurface>>,
+        surfaces: Vec<Handle>,
         /// Output file format.
         output_opts: Option<OutputOptions>,
     },
-    ExportMeasurement(Handle<Measurement>),
+    ExportMeasurement(Handle),
     Notify {
         kind: NotifyKind,
         text: String,
@@ -79,17 +79,17 @@ pub enum VgonioEvent {
     Outliner(OutlinerEvent),
     Graphing {
         kind: MeasurementKind,
-        data: Handle<Measurement>,
+        data: Handle,
         independent: bool,
     },
     #[cfg(feature = "fitting")]
     Fitting {
         kind: FittingProblemKind,
-        data: Handle<Measurement>,
+        data: Handle,
         scale: f32,
     },
     SubdivideSurface {
-        surf: Handle<MicroSurface>,
+        surf: Handle,
         subdivision: Subdivision,
     },
 }
@@ -118,7 +118,7 @@ pub enum SurfaceViewerEvent {
     },
     UpdateSurfaceList {
         /// List of surfaces to display.
-        surfaces: Vec<Handle<MicroSurface>>,
+        surfaces: Vec<Handle>,
     },
     /// Notify the GUI backend that a surface viewer's overlay has been updated.
     UpdateOverlay {
@@ -186,15 +186,15 @@ pub enum DebuggingEvent {
         t: f32,
     },
     UpdateMicroSurface {
-        surf: Handle<MicroSurface>,
-        mesh: Handle<MicroSurfaceMesh>,
+        surf: Handle,
+        mesh: Handle,
     },
     UpdateEmitterSamples(EmitterSamples),
     UpdateMeasurementPoints(MeasurementPoints),
     UpdateEmitterPosition {
         position: Sph2,
     },
-    UpdateFocusedSurface(Option<Handle<MicroSurface>>),
+    UpdateFocusedSurface(Option<Handle>),
     UpdateSurfacePrimitiveId {
         id: u32,
         status: bool,

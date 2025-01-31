@@ -14,21 +14,15 @@ use numpy::{PyArray, PyArray1, PyArray2, PyArrayMethods};
 use pyo3::{ffi::c_str, prelude::*, types::PyList};
 use std::{ffi::CString, fs::File, io::Read, path::Path};
 use surf::MicroSurface;
+use vgonio_bxdf::brdf::{
+    analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
+    measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, MerlBrdfParam, VgonioBrdf, Yan18Brdf},
+};
 use vgonio_core::{
-    bxdf::{
-        brdf::{
-            analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-            measured::{
-                rgl::RglBrdf, ClausenBrdf, MeasuredBrdfKind, MerlBrdf, MerlBrdfParam, VgonioBrdf,
-                Yan18Brdf,
-            },
-            AnalyticalBrdf,
-        },
-        OutgoingDirs, Scattering,
-    },
+    bxdf::{AnalyticalBrdf, MeasuredBrdfKind, OutgoingDirs, Scattering},
     error::VgonioError,
     math::{self, Sph2, Vec2, Vec3},
-    optics::ior::IorRegistry,
+    optics::IorReg,
     units::{rad, Degrees, Nanometres, Radians, Rads},
     utils::range::{StepRangeExcl, StepRangeIncl},
     AnyMeasured, AnyMeasuredBrdf, BrdfLevel, ErrorMetric, MeasurementKind, Weighting,
@@ -667,7 +661,7 @@ impl BrdfFittingPlotter {
     pub fn plot_interactive(
         brdf: &dyn AnyMeasuredBrdf,
         alphas: &[(f64, f64)],
-        iors: &IorRegistry,
+        iors: &IorReg,
     ) -> PyResult<()> {
         log::info!("Plotting BRDF fitting...");
         let n_models = alphas.len();
@@ -1476,7 +1470,7 @@ impl BrdfFittingPlotter {
         alphas: &[(f64, f64)],
         metric: ErrorMetric,
         weighting: Weighting,
-        iors: &IorRegistry,
+        iors: &IorReg,
         parallel: bool,
     ) -> PyResult<()> {
         assert_eq!(

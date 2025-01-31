@@ -8,6 +8,7 @@ use crate::{
     units::{Angle, AngleUnit, Radians},
 };
 use approx::AbsDiffEq;
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
@@ -246,6 +247,7 @@ macro_rules! impl_serialisation {
             }
         }
 
+        #[cfg(feature = "serde")]
         impl<$T> Serialize for $range<$T>
         where
             $T: Serialize + Copy + Display + Clone,
@@ -258,6 +260,7 @@ macro_rules! impl_serialisation {
             }
         }
 
+        #[cfg(feature = "serde")]
         impl<'d, $T> Deserialize<'d> for $range<$T>
         where
             $T: Deserialize<'d> + Copy + FromStr + Clone,
@@ -343,6 +346,7 @@ macro_rules! impl_serialisation {
             }
         }
 
+        #[cfg(feature = "serde")]
         impl<$T> Serialize for $range<$T>
         where
             $T: Serialize + Copy + Display + Clone,
@@ -355,6 +359,7 @@ macro_rules! impl_serialisation {
             }
         }
 
+        #[cfg(feature = "serde")]
         impl<'d, $T> Deserialize<'d> for $range<$T>
         where
             $T: Deserialize<'d> + Copy + FromStr + Clone,
@@ -641,6 +646,7 @@ pub enum StepRange<T: Copy + Clone> {
     Exclusive(StepRangeExcl<T>),
 }
 
+#[cfg(feature = "serde")]
 impl<T> Serialize for StepRange<T>
 where
     T: Serialize + Copy + Clone + Display,
@@ -708,6 +714,7 @@ where
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'d, T> Deserialize<'d> for StepRange<T>
 where
     T: Deserialize<'d> + Copy + FromStr,
@@ -766,6 +773,7 @@ impl<T: Copy + Clone> CountRange<T> {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<T> Serialize for CountRange<T>
 where
     T: Serialize + Copy + Clone + Display,
@@ -835,6 +843,7 @@ where
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'d, T> Deserialize<'d> for CountRange<T>
 where
     T: Deserialize<'d> + Copy + FromStr,
@@ -879,6 +888,7 @@ pub enum Range<T: Copy + Clone> {
     ByStepCount(CountRange<T>),
 }
 
+#[cfg(feature = "serde")]
 impl<T> Serialize for Range<T>
 where
     T: Serialize + Copy + Clone + Display,
@@ -909,6 +919,7 @@ where
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'d, T> Deserialize<'d> for Range<T>
 where
     T: Deserialize<'d> + Copy + FromStr,
@@ -1150,6 +1161,7 @@ mod range_by_step_count_tests {
     use super::*;
 
     #[test]
+    #[cfg(feature = "serde")]
     fn serialization_inclusive() {
         let range = CountRangeIncl::new(0, 10, 3);
         let serialized = serde_yaml::to_string(&range).unwrap();
@@ -1166,6 +1178,7 @@ mod range_by_step_count_tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn serialization_exclusive() {
         let range = CountRangeExcl::new(0, 10, 3);
         let serialized = serde_yaml::to_string(&range).unwrap();
@@ -1259,6 +1272,7 @@ mod range_by_step_size_tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn serialisation_exclusive() {
         let range = StepRange::new_exclusive(0.0, 20.0, 0.5);
         let serialized = serde_yaml::to_string(&range).unwrap();
@@ -1276,6 +1290,7 @@ mod range_by_step_size_tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn deserialisation_exclusive() {
         let range_str = "0 .. 20 / 0.5";
         let deserialized: StepRange<f32> = serde_yaml::from_str(&range_str).unwrap();
@@ -1288,6 +1303,7 @@ mod range_by_step_size_tests {
     }
 
     #[test]
+    #[cfg(feature = "serde")]
     fn serialisation_inclusive() {
         let range = StepRangeIncl::new(0.0, 20.0, 0.5f32);
         let serialized = serde_yaml::to_string(&range).unwrap();

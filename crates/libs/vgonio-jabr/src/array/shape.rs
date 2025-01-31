@@ -4,7 +4,7 @@ use crate::array::{dim::DimSeq, mem::MemLayout};
 // implementation See: https://github.com/rust-lang/rust/issues/110395
 /// Common trait for types that can be used to represent the shape of an array.
 pub trait Shape {
-    /// The underlying type used to store the shape.
+    /// The underlying type used to storage the shape.
     type Underlying: DimSeq;
     type Metadata: ShapeMetadata;
     /// Creates a new metadata object for the shape.

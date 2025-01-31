@@ -1,28 +1,28 @@
 //! Medium of the surface.
 
 use crate::error::VgonioError;
-use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 /// Medium of the surface.
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
 pub enum Medium {
     /// Vacuum.
-    #[serde(rename = "vac")]
+    #[cfg_attr(feature = "serde", serde(rename = "vac"))]
     Vacuum = 0x00,
     /// Air.
-    #[serde(rename = "air")]
+    #[cfg_attr(feature = "serde", serde(rename = "air"))]
     Air = 0x01,
     /// Aluminium.
-    #[serde(rename = "al")]
+    #[cfg_attr(feature = "serde", serde(rename = "al"))]
     Aluminium = 0x02,
     /// Copper.
-    #[serde(rename = "cu")]
+    #[cfg_attr(feature = "serde", serde(rename = "cu"))]
     Copper = 0x03,
     /// Unknown.
-    #[serde(rename = "unknown")]
+    #[cfg_attr(feature = "serde", serde(rename = "unknown"))]
     Unknown,
 }
 

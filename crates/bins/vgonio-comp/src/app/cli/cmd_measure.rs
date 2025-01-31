@@ -1,14 +1,16 @@
 use crate::{
-    app::{args::OutputFormat, cache::Cache, cli::ansi, Config},
+    app::{args::OutputFormat, cache::Cache, cli::ansi},
     io::{OutputFileFormatOption, OutputOptions},
     measure,
     measure::params::{MeasurementDescription, MeasurementParams, NdfMeasurementMode},
 };
+use std::{path::PathBuf, time::Instant};
 use vgonio_core::{
+    config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
+    res::DataStore,
 };
-use std::{path::PathBuf, time::Instant};
 
 /// Measure different metrics of the micro-surface.
 pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {

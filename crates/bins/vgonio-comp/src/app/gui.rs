@@ -28,12 +28,9 @@ pub(crate) use tools::DebuggingInspector;
 pub use ui::VgonioGui;
 
 use crate::{
-    app::{
-        cache::RawCache,
-        gui::{
-            bsdf_viewer::BsdfViewer,
-            event::{BsdfViewerEvent, DebuggingEvent, EventResponse, VgonioEvent},
-        },
+    app::gui::{
+        bsdf_viewer::BsdfViewer,
+        event::{BsdfViewerEvent, DebuggingEvent, EventResponse, VgonioEvent},
     },
     error::RuntimeError,
     measure,
@@ -58,7 +55,7 @@ use self::tools::SamplingInspector;
 
 use crate::{
     app::{
-        cache::Cache,
+        cache::{Cache, RawCache},
         gui::{
             docking::WidgetKind,
             event::{EventLoopProxy, SurfaceViewerEvent},
@@ -66,10 +63,13 @@ use crate::{
             state::{debug::DebugDrawingState, GuiContext},
             surf_viewer::SurfaceViewerStates,
         },
-        Config,
     },
     io::OutputOptions,
     measure::params::MeasurementParams,
+};
+use vgonio_core::{
+    config::Config,
+    res::{DataStore, RawDataStore},
 };
 
 /// Launches Vgonio GUI application native window.
@@ -141,7 +141,7 @@ pub struct VgonioGuiApp {
     /// The configuration of the app. See [`Config`].
     config: Arc<Config>,
     /// The cache of the app including preloaded datafiles. See
-    /// [`Cache`].
+    /// [`DataStore`].
     cache: Cache,
     /// Input states collected from the window.
     input: InputState,

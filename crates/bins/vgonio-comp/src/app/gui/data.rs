@@ -1,18 +1,15 @@
+use super::outliner::OutlinerItem;
 #[cfg(feature = "fitting")]
 use crate::fitting::FittedModels;
-use crate::{
-    app::cache::RawCache,
-    measure::{Measurement, MeasurementSource},
-};
-use vgonio_core::{units::LengthUnit, utils::handle::Handle, MeasurementKind};
+use crate::{app::cache::RawCache, measure::MeasurementSource};
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
-use surf::{
-    subdivision::{Subdivision, SubdivisionKind},
-    MicroSurface,
+use surf::subdivision::{Subdivision, SubdivisionKind};
+use vgonio_core::{
+    res::Handle,
+    units::LengthUnit,
+    MeasurementKind,
 };
-
-use super::outliner::OutlinerItem;
 
 /// Micro surface properties.
 #[derive(Clone, Debug)]
@@ -79,9 +76,9 @@ pub struct MeasurementProp {
 #[derive(Debug)]
 pub struct PropertyData {
     /// Micro surface properties.
-    pub surfaces: HashMap<Handle<MicroSurface>, MicroSurfaceProp>,
+    pub surfaces: HashMap<Handle, MicroSurfaceProp>,
     /// Measured data properties.
-    pub measured: HashMap<Handle<Measurement>, MeasurementProp>,
+    pub measured: HashMap<Handle, MeasurementProp>,
     /// The currently selected item.
     pub selected: Option<OutlinerItem>,
 }
@@ -100,7 +97,7 @@ impl PropertyData {
     ///
     /// This should be called whenever the micro surface cache is updated (new
     /// micro surfaces are added or removed)
-    pub fn update_surfaces(&mut self, surfs: &[Handle<MicroSurface>], cache: &RawCache) {
+    pub fn update_surfaces(&mut self, surfs: &[Handle], cache: &RawCache) {
         for hdl in surfs {
             if let std::collections::hash_map::Entry::Vacant(e) = self.surfaces.entry(*hdl) {
                 let record = cache.get_micro_surface_record(*hdl).unwrap();
@@ -135,11 +132,11 @@ impl PropertyData {
     pub fn any_visible_surfaces(&self) -> bool { self.surfaces.iter().any(|(_, s)| s.visible) }
 
     /// Returns a list of visible micro surfaces.
-    pub fn visible_surfaces_with_props(&self) -> Vec<(&Handle<MicroSurface>, &MicroSurfaceProp)> {
+    pub fn visible_surfaces_with_props(&self) -> Vec<(&Handle, &MicroSurfaceProp)> {
         self.surfaces.iter().filter(|(_, s)| s.visible).collect()
     }
 
-    pub fn visible_surfaces(&self) -> Vec<Handle<MicroSurface>> {
+    pub fn visible_surfaces(&self) -> Vec<Handle> {
         self.surfaces
             .iter()
             .filter(|(_, s)| s.visible)
@@ -148,11 +145,7 @@ impl PropertyData {
     }
 
     /// Updates the list of measurement data.
-    pub fn update_measurement_data(
-        &mut self,
-        measurements: &[Handle<Measurement>],
-        cache: &RawCache,
-    ) {
+    pub fn update_measurement_data(&mut self, measurements: &[Handle], cache: &RawCache) {
         for meas in measurements {
             if let std::collections::hash_map::Entry::Vacant(e) = self.measured.entry(*meas) {
                 let data = cache.get_measurement(*meas).unwrap();

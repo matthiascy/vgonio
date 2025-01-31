@@ -4,29 +4,29 @@ use crate::app::gui::event::VgonioEvent;
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;
 use crate::{
-    app::{
-        cache::{Cache, RawCache},
-        gui::{
-            event::EventLoopProxy,
-            plotter::{angle_knob, Curve, VariantData},
-        },
+    app::gui::{
+        event::EventLoopProxy,
+        plotter::{angle_knob, Curve, VariantData},
     },
     measure::{mfd::MeasuredNdfData, Measurement},
 };
 #[cfg(feature = "fitting")]
-use vgonio_core::{
-    bxdf::fitting::{FittedModel, FittingProblemKind},
-    Symmetry,
-};
+use vgonio_core::Symmetry;
 
 use vgonio_core::{
-    bxdf::distro::{MicrofacetDistribution, MicrofacetDistroKind},
+    bxdf::MicrofacetDistribution,
     units::{rad, Radians},
-    utils::{handle::Handle, range::StepRangeIncl},
+    utils::range::StepRangeIncl,
 };
 
+use crate::app::cache::{Cache, RawCache};
 use egui::{Align, Ui};
 use std::any::Any;
+use vgonio_bxdf::fitting::{FittedModel, FittingProblemKind};
+use vgonio_core::{
+    bxdf::MicrofacetDistroKind,
+    res::{DataStore, Handle, RawDataStore},
+};
 
 struct ModelSelector {
     model: MicrofacetDistroKind,
@@ -106,7 +106,7 @@ impl AreaDistributionExtra {
 }
 
 impl VariantData for AreaDistributionExtra {
-    fn pre_process(&mut self, data: Handle<Measurement>, cache: &RawCache) {
+    fn pre_process(&mut self, data: Handle, cache: &RawCache) {
         let measurement = cache.get_measurement(data).unwrap();
         let ndf = measurement
             .measured
@@ -205,13 +205,7 @@ impl VariantData for AreaDistributionExtra {
 
     fn as_any_mut(&mut self) -> &mut dyn Any { self }
 
-    fn ui(
-        &mut self,
-        ui: &mut Ui,
-        event_loop: &EventLoopProxy,
-        data: Handle<Measurement>,
-        _cache: &Cache,
-    ) {
+    fn ui(&mut self, ui: &mut Ui, event_loop: &EventLoopProxy, data: Handle, _cache: &Cache) {
         ui.allocate_ui_with_layout(
             egui::Vec2::new(ui.available_width(), 48.0),
             egui::Layout::left_to_right(Align::Center),

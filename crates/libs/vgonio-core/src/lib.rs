@@ -9,19 +9,17 @@
 #![feature(const_format_args)]
 #![feature(adt_const_params)]
 #![feature(structural_match)]
+#![feature(slice_pattern)]
 // Enable _mm_rcp14_ss
 #![feature(stdarch_x86_avx512)]
 #![feature(seek_stream_len)]
+#![feature(associated_type_defaults)]
 #![warn(missing_docs)]
 // TODO: Enable this feature when it is stable to use const generics in the
 // whole project. #![feature(effects)]
-#![cfg(feature = "bxdf")]
-#![feature(associated_type_defaults)]
 
-use bxdf::{brdf::measured::MeasuredBrdfKind, BrdfProxy};
 use error::VgonioError;
-use optics::ior::IorRegistry;
-use serde::{Deserialize, Serialize};
+use optics::IorReg;
 use std::{
     fmt::{Debug, Display, Formatter},
     hash::Hash,
@@ -33,14 +31,18 @@ use units::Nanometres;
 pub mod error;
 pub mod io;
 pub mod math;
+pub mod res;
 pub mod units;
 pub mod utils;
 
+#[cfg(feature = "cli")]
 pub mod cli;
+
+#[cfg(feature = "config")]
+pub mod config;
 
 pub mod optics;
 
-#[cfg(feature = "bxdf")]
 pub mod bxdf;
 
 /// Indicates whether something is uniform in all directions or not.
@@ -139,9 +141,7 @@ impl Version {
 }
 
 impl Display for Version {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_string())
-    }
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.as_string()) }
 }
 
 /// Metrics to use for the error/distance computation.
@@ -193,6 +193,7 @@ pub enum Weighting {
     LnCos,
 }
 
+use crate::bxdf::{BrdfProxy, MeasuredBrdfKind};
 use utils::medium::Medium;
 
 /// The level of the measured BRDF.
@@ -200,7 +201,8 @@ use utils::medium::Medium;
 /// This is used to indicate the level of the measured BRDF that includes the
 /// energy of rays at the given bounce.
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum BrdfLevel {
     /// The level of the measured BRDF that includes the energy of rays at
     /// all bounces.
@@ -425,7 +427,8 @@ macro_rules! impl_any_measured_trait {
 
 /// Kind of different measurements.
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MeasurementKind {
     /// BSDF measurement.
     Bsdf = 0x00,
@@ -496,7 +499,7 @@ pub trait AnyMeasuredBrdf: Sync + Send {
     fn incident_medium(&self) -> Medium;
 
     /// Returns a proxy for the measured BRDF.
-    fn proxy(&self, iors: &IorRegistry) -> BrdfProxy;
+    fn proxy(&self, iors: &IorReg) -> BrdfProxy;
 
     /// Casts the measured BRDF to any type for later downcasting.
     fn as_any(&self) -> &dyn std::any::Any;
@@ -521,6 +524,30 @@ macro_rules! any_measured_brdf_trait_common_impl {
 
         fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
     };
+}
+
+/// Triangulation pattern for grid triangulation.
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
+pub enum TriangulationPattern {
+    /// Triangulate from top to bottom, left to right.
+    /// 0  <--  1
+    /// | A  /  |
+    /// |  /  B |
+    /// 2  -->  3
+    ///
+    /// 102,123
+    BottomLeftToTopRight,
+    /// Triangulate from top to bottom, right to left.
+    /// 0  <--  1
+    /// |  \  B |
+    /// | A  \  |
+    /// 2  -->  3
+    ///
+    /// 023, 031
+    #[default]
+    TopLeftToBottomRight,
 }
 
 #[cfg(test)]

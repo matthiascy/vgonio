@@ -6,13 +6,13 @@ use crate::{
     },
     measure::Measurement,
 };
-use vgonio_core::utils::handle::Handle;
 use egui::WidgetText;
 use std::sync::{Arc, RwLock};
 use surf::{
     subdivision::{Subdivision, SubdivisionKind},
     MicroSurface,
 };
+use vgonio_core::res::Handle;
 
 /// Outliner is a widget that displays the scene graph of the current scene.
 ///
@@ -24,9 +24,9 @@ pub struct Outliner {
     // gpu_ctx: Arc<GpuContext>,
     event_loop: EventLoopProxy,
     /// Collapsable headers for the micro surfaces.
-    surface_headers: Vec<CollapsableHeader<Handle<MicroSurface>>>,
+    surface_headers: Vec<CollapsableHeader<MicroSurface>>,
     /// Collapsable headers for the measured data.
-    measured_headers: Vec<CollapsableHeader<Handle<Measurement>>>,
+    measured_headers: Vec<CollapsableHeader<Measurement>>,
     /// The property data of each item.
     data: Arc<RwLock<PropertyData>>,
 }
@@ -47,15 +47,16 @@ impl Outliner {
 
 #[derive(Debug, Clone, Copy)]
 pub enum OutlinerItem {
-    MicroSurface(Handle<MicroSurface>),
-    MeasurementData(Handle<Measurement>),
+    MicroSurface(Handle),
+    MeasurementData(Handle),
 }
 
 pub struct CollapsableHeader<T> {
-    item: T,
+    item: Handle,
+    _phantom: std::marker::PhantomData<T>,
 }
 
-impl CollapsableHeader<Handle<MicroSurface>> {
+impl CollapsableHeader<MicroSurface> {
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
@@ -64,7 +65,7 @@ impl CollapsableHeader<Handle<MicroSurface>> {
     ) {
         egui::collapsing_header::CollapsingState::load_with_default_open(
             ui.ctx(),
-            ui.make_persistent_id(self.item.id()),
+            ui.make_persistent_id(self.item),
             false,
         )
         .show_header(ui, |ui| {
@@ -164,7 +165,7 @@ impl CollapsableHeader<Handle<MicroSurface>> {
     }
 }
 
-impl CollapsableHeader<Handle<Measurement>> {
+impl CollapsableHeader<Measurement> {
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
@@ -173,7 +174,7 @@ impl CollapsableHeader<Handle<Measurement>> {
     ) {
         let _ = egui::collapsing_header::CollapsingState::load_with_default_open(
             ui.ctx(),
-            ui.make_persistent_id(self.item.id()),
+            ui.make_persistent_id(self.item),
             false,
         )
         .show_header(ui, |ui| {
@@ -209,13 +210,19 @@ impl Outliner {
             let data = self.data.read().unwrap();
             for hdl in data.surfaces.keys() {
                 if !self.surface_headers.iter().any(|h| h.item == *hdl) {
-                    self.surface_headers.push(CollapsableHeader { item: *hdl });
+                    self.surface_headers.push(CollapsableHeader {
+                        item: *hdl,
+                        _phantom: Default::default(),
+                    });
                 }
             }
 
             for hdl in data.measured.keys() {
                 if !self.measured_headers.iter().any(|h| h.item == *hdl) {
-                    self.measured_headers.push(CollapsableHeader { item: *hdl });
+                    self.measured_headers.push(CollapsableHeader {
+                        item: *hdl,
+                        _phantom: Default::default(),
+                    });
                 }
             }
         }

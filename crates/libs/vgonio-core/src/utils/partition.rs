@@ -5,7 +5,6 @@ use crate::{
     utils::range::StepRangeIncl,
 };
 use num_traits::Euclid;
-use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
 use crate::error::VgonioError;
@@ -21,20 +20,21 @@ use std::{
 };
 
 /// The domain of the spherical coordinate.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum SphericalDomain {
     /// Simulation happens only on the upper part of the sphere.
     #[default]
-    #[serde(rename = "upper_hemisphere")]
+    #[cfg_attr(feature = "serde", serde(rename = "upper_hemisphere"))]
     Upper = 0x01,
 
     /// Simulation happens only on the lower part of the sphere.
-    #[serde(rename = "lower_hemisphere")]
+    #[cfg_attr(feature = "serde", serde(rename = "lower_hemisphere"))]
     Lower = 0x02,
 
     /// Simulation happens on the whole sphere.
-    #[serde(rename = "whole_sphere")]
+    #[cfg_attr(feature = "serde", serde(rename = "whole_sphere"))]
     Whole = 0x00,
 }
 
@@ -116,8 +116,9 @@ impl SphericalDomain {
 }
 
 /// Scheme of the spherical partition.
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
 pub enum PartitionScheme {
     /// Partition scheme based on "A general rule for disk and hemisphere
     /// partition into equal-area cells" by Benoit Beckers et Pierre Beckers.
@@ -598,7 +599,8 @@ impl SphericalPartition {
     /// # Arguments
     /// * `w` - The width of the image.
     /// * `h` - The height of the image.
-    /// * `indices` - The buffer to store the patch indices. -1 means no patch.
+    /// * `indices` - The buffer to storage the patch indices. -1 means no
+    ///   patch.
     pub fn compute_pixel_patch_indices(&self, w: u32, h: u32, indices: &mut [i32]) {
         debug_assert_eq!(
             indices.len(),

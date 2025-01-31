@@ -12,12 +12,6 @@ use crate::{
         SingleSimResult,
     },
 };
-#[cfg(not(feature = "vdbg"))]
-use vgonio_core::optics::ior::Ior;
-use vgonio_core::{
-    math::{Sph2, Vec3A},
-    optics::fresnel,
-};
 use embree::{
     BufferUsage, Config, Device, Geometry, HitN, IntersectContext, IntersectContextExt,
     IntersectContextFlags, RayHitNp, RayN, RayNp, Scene, SceneFlags, SoAHit, SoARay, ValidMask,
@@ -26,6 +20,12 @@ use embree::{
 use rayon::prelude::*;
 use std::sync::Arc;
 use surf::MicroSurfaceMesh;
+#[cfg(not(feature = "vdbg"))]
+use vgonio_core::optics::Ior;
+use vgonio_core::{
+    math::{Sph2, Vec3A},
+    optics::fresnel,
+};
 
 /// SoA ray stream data for the whole ray stream.
 #[derive(Debug, Clone)]
@@ -587,8 +587,8 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
 
     #[cfg(not(feature = "vdbg"))]
     {
-        use vgonio_core::math::{Vec3, Vec3A};
         use jabr::array::DyArr;
+        use vgonio_core::math::{Vec3, Vec3A};
         // Unpack the stream data into a single result.
         let dirs = stream_data
             .last_hit

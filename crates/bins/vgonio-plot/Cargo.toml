@@ -9,5 +9,13 @@ version.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+surface = ["dep:vgonio-surf"]
+
 [dependencies]
 clap.workspace = true
+log.workspace = true
+env_logger.workspace = true
+vgonio-core = { workspace = true, features = ["cli", "config"] }
+vgonio-surf = { path = "../../libs/vgonio-surf", optional = true }

@@ -6,7 +6,6 @@
 use crate::Version;
 use byteorder::{LittleEndian, ReadBytesExt};
 use num_traits::Float;
-use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
     fmt,
@@ -200,7 +199,8 @@ impl From<std::io::Error> for WriteFileErrorKind {
 
 /// Data encoding while storing the data.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum FileEncoding {
     /// The data is encoded as ascii text (plain text).
@@ -251,7 +251,8 @@ impl FileEncoding {
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum CompressionScheme {
     /// No compression.
     None = 0x00,
@@ -294,7 +295,8 @@ impl CompressionScheme {
 }
 
 /// Enum for different file variants.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum VgonioFileVariant {
     /// A Measurement Output file.
     Vgmo,

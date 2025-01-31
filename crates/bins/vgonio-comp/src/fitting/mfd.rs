@@ -5,14 +5,12 @@ use crate::measure::{
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use std::fmt::Display;
+use vgonio_bxdf::{
+    distro::{BeckmannDistribution, TrowbridgeReitzDistribution},
+    fitting::{FittingProblem, FittingReport, MinimisationReport},
+};
 use vgonio_core::{
-    bxdf::{
-        distro::{
-            BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind,
-            TrowbridgeReitzDistribution,
-        },
-        fitting::{FittingProblem, FittingReport, MinimisationReport},
-    },
+    bxdf::{MicrofacetDistribution, MicrofacetDistroKind},
     math::sph_to_cart,
     units::Radians,
     utils::{

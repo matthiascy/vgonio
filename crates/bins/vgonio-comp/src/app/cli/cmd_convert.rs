@@ -1,13 +1,14 @@
-use crate::app::{cli::ansi, Config};
+use crate::app::cli::ansi;
+use std::path::PathBuf;
+use surf::{HeightOffset, MicroSurface};
 #[cfg(feature = "surf-obj")]
 use vgonio_core::units::LengthUnit;
 use vgonio_core::{
+    config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
     math::Axis,
 };
-use std::path::PathBuf;
-use surf::{HeightOffset, MicroSurface};
 
 #[derive(clap::Args, Debug)]
 #[clap(
@@ -23,7 +24,7 @@ pub struct ConvertOptions {
     )]
     pub inputs: Vec<PathBuf>,
 
-    /// Path to store converted files. If not specified, the files will be
+    /// Path to storage converted files. If not specified, the files will be
     /// stored in the current working directory.
     #[arg(short, long)]
     pub output: Option<PathBuf>,

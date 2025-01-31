@@ -6,11 +6,11 @@ license.workspace = true
 version.workspace = true
 
 [features]
-default = ["dep:embree"]
+default = ["dep:embree", "dep:vgonio-bxdf", "vgonio-bxdf/io"]
 embree = ["dep:embree", "surf/embree"]
 optix = []
 bench = ["surf/bench"]
-fitting = ["vgonio-core/bxdf_fit"]
+fitting = ["dep:vgonio-bxdf", "vgonio-bxdf/fitting"]
 surf-obj = ["surf/surf-obj"]
 surf-gen = ["surf/surf-gen"]
 vdbg = []
@@ -61,12 +61,14 @@ vgonio-core = { path = "../../libs/vgonio-core", features = [
     "cli",
     "winit",
     "io",
-    "bxdf",
-    "bxdf_io",
+    "config",
 ] }
 jabr = { package = "vgonio-jabr", path = "../../libs/vgonio-jabr" }
 gxtk = { package = "vgonio-gxtk", path = "../../libs/vgonio-gxtk" }
 uxtk = { package = "vgonio-uxtk", path = "../../libs/vgonio-uxtk" }
+vgonio-bxdf = { path = "../../libs/vgonio-bxdf", optional = true, features = [
+    "fitting", "io"
+] }
 
 [lints]
 workspace = true

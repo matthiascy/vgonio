@@ -9,10 +9,6 @@ use crate::app::{
         visual_grid::{VisualGridPipeline, VisualGridState},
     },
 };
-use vgonio_core::{
-    math::{Mat4, Vec4},
-    utils::{handle::Handle, input::InputState},
-};
 use egui::{Ui, WidgetText};
 use gxtk::{
     camera::{ProjectionKind, ViewProjUniform},
@@ -28,6 +24,11 @@ use uuid::Uuid;
 use uxtk::{
     theme::{DarkTheme, LightTheme, Theme, ThemeKind},
     UiRenderer,
+};
+use vgonio_core::{
+    math::{Mat4, Vec4},
+    res::{Handle, RawDataStore},
+    utils::input::InputState,
 };
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
@@ -181,7 +182,7 @@ impl SurfaceViewerState {
 
     pub fn update(
         &mut self,
-        surfaces: &[(&Handle<MicroSurface>, &MicroSurfaceProp)],
+        surfaces: &[(&Handle, &MicroSurfaceProp)],
         input: &InputState,
         dt: std::time::Duration,
         theme: ThemeKind,
@@ -238,7 +239,7 @@ pub struct SurfaceViewerStates {
     /// States of the micro surface rendering for each surface viewer.
     states: HashMap<Uuid, SurfaceViewerState>,
     /// List of surfaces ready to be rendered.
-    surfaces: HashSet<Handle<MicroSurface>>,
+    surfaces: HashSet<Handle>,
 }
 
 impl SurfaceViewerStates {
@@ -258,7 +259,7 @@ impl SurfaceViewerStates {
         self.states.get(&viewer)
     }
 
-    pub fn update_surfaces_list(&mut self, surfaces: &[Handle<MicroSurface>]) {
+    pub fn update_surfaces_list(&mut self, surfaces: &[Handle]) {
         for surface in surfaces {
             self.surfaces.insert(*surface);
         }
@@ -328,7 +329,7 @@ impl SurfaceViewerStates {
         dt: std::time::Duration,
         theme: ThemeKind,
         cache: &RawCache,
-        surfaces: &[(&Handle<MicroSurface>, &MicroSurfaceProp)],
+        surfaces: &[(&Handle, &MicroSurfaceProp)],
     ) -> wgpu::CommandEncoder {
         let mut encoder = gpu
             .device
@@ -480,7 +481,7 @@ pub struct MicroSurfaceState {
     local_uniform_buffer: wgpu::Buffer,
     /// Lookup table linking micro surface handle to its offset in the local
     /// uniform buffer.
-    locals_lookup: Vec<Handle<MicroSurface>>,
+    locals_lookup: Vec<Handle>,
 }
 
 impl MicroSurfaceState {
@@ -712,10 +713,7 @@ impl MicroSurfaceState {
     /// Update the list of surfaces.
     ///
     /// Updates the lookup table.
-    pub fn update_surfaces_list<'a, S: Iterator<Item = &'a Handle<MicroSurface>>>(
-        &mut self,
-        surfs: S,
-    ) {
+    pub fn update_surfaces_list<'a, S: Iterator<Item = &'a Handle>>(&mut self, surfs: S) {
         for hdl in surfs {
             if self.locals_lookup.contains(hdl) {
                 continue;
@@ -728,7 +726,7 @@ impl MicroSurfaceState {
         &mut self,
         gpu: &GpuContext,
         view_proj: &ViewProjUniform,
-        surfaces: &[(&Handle<MicroSurface>, &MicroSurfaceProp)],
+        surfaces: &[(&Handle, &MicroSurfaceProp)],
     ) {
         // Update global uniform buffer.
         gpu.queue.write_buffer(
