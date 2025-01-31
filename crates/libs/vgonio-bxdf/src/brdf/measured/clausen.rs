@@ -21,7 +21,7 @@ use vgonio_core::{
 use vgonio_jabr::array::{DyArr, DynArr};
 
 // TODO: relayout in theta_i, phi_i, theta_o, phi_o format
-/// Parameterisation for the Clausen BRDF.
+/// Parametrisation for the Clausen BRDF.
 ///
 /// BRDFs measured in the paper "Investigation and Simulation of Diffraction on
 /// Rough Surfaces" are in-plane BRDFs where the incident direction and the
@@ -29,7 +29,7 @@ use vgonio_jabr::array::{DyArr, DynArr};
 /// measurements at the positions where the incident and outgoing directions are
 /// the same.
 #[derive(Clone, PartialEq, Debug)]
-pub struct ClausenBrdfParameterisation {
+pub struct ClausenBrdfParametrisation {
     /// Polar angles of the incident directions.
     pub i_thetas: DyArr<f32>,
     /// Polar angles of the outgoing directions.
@@ -46,12 +46,12 @@ pub struct ClausenBrdfParameterisation {
     pub n_wo: usize,
 }
 
-impl BrdfParam for ClausenBrdfParameterisation {
+impl BrdfParam for ClausenBrdfParametrisation {
     fn kind() -> BrdfParamKind { BrdfParamKind::InOutDirs }
 }
 
-impl ClausenBrdfParameterisation {
-    // /// Create a new parameterisation for the Clausen BRDF.
+impl ClausenBrdfParametrisation {
+    // /// Create a new parametrisation for the Clausen BRDF.
     // pub fn new(incoming: DyArr<Sph2>, outgoing: DyArr<Sph2, 2>) -> Self {
     //     let num_outgoing_per_incoming = outgoing.shape()[1];
     //     Self {
@@ -89,7 +89,7 @@ impl ClausenBrdfParameterisation {
 /// R. Marroquim.
 ///
 /// BRDF samples are stored in a 3D array with dimensions: ωi, ωo, λ.
-pub type ClausenBrdf = MeasuredBrdf<ClausenBrdfParameterisation, 3>;
+pub type ClausenBrdf = MeasuredBrdf<ClausenBrdfParametrisation, 3>;
 
 unsafe impl Send for ClausenBrdf {}
 unsafe impl Sync for ClausenBrdf {}
@@ -103,7 +103,7 @@ impl ClausenBrdf {
         origin: Origin,
         incident_medium: Medium,
         transmitted_medium: Medium,
-        params: Box<ClausenBrdfParameterisation>,
+        params: Box<ClausenBrdfParametrisation>,
         spectrum: DyArr<Nanometres>,
         samples: DyArr<f32, 3>,
     ) -> Self {
@@ -327,7 +327,7 @@ impl ClausenBrdf {
         log::debug!("i_thetas: {:?}", i_thetas);
         log::debug!("o_thetas: {:?}", o_thetas);
         log::debug!("phis: {:?}", phis);
-        let params = Box::new(ClausenBrdfParameterisation {
+        let params = Box::new(ClausenBrdfParametrisation {
             incoming: DyArr::from_vec_1d(wi_wo_pairs.iter().map(|(wi, _)| *wi).collect::<Vec<_>>()),
             outgoing,
             n_wo,

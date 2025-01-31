@@ -1,5 +1,5 @@
 [package]
-name = "vgonio-measure"
+name = "vgonio-meas"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,10 +10,7 @@ version.workspace = true
 default = []
 
 [dependencies]
-clap = { workspace = true }
-vgonio-meas = { path = "../../libs/vgonio-meas" }
-vgonio-core = { path = "../../libs/vgonio-core", features = ["cli"] }
-
+vgonio-core = { path = "../../libs/vgonio-core", optional = true }
 
 [lints]
 workspace = true

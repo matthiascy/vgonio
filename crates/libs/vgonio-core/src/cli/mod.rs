@@ -1,5 +1,3 @@
-use log::LevelFilter;
-
 /// Parses the arguments, returns the arguments and the launch time.
 ///
 /// # Arguments
@@ -23,10 +21,21 @@ pub fn parse_args<T: clap::Parser>(name: &str) -> (T, std::time::SystemTime) {
     (args, launch_time)
 }
 
+/// Common arguments for the CLI.
+#[derive(Debug, Copy, Clone, clap::Args)]
+pub struct CommonArgs {
+    #[clap(
+        long,
+        help = "The log level. 0 = Error, 1 = Warn, 2 = Info, 3 = Debug, 4 = Trace",
+        default_value = "0"
+    )]
+    pub log_level: u8,
+}
+
 /// A filter for the logger.
 ///
 /// This is a tuple of a module name and a log level filter.
-pub type LogFilter<'a> = (&'a str, LevelFilter);
+pub type LogFilter<'a> = (&'a str, log::LevelFilter);
 
 /// Initialises logging settings.
 ///

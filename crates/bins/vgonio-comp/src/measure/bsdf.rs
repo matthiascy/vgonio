@@ -28,7 +28,7 @@ use std::{
 };
 use surf::{MicroSurface, MicroSurfaceMesh};
 use vgonio_bxdf::brdf::measured::{
-    ClausenBrdf, ClausenBrdfParameterisation, VgonioBrdf, VgonioBrdfParameterisation,
+    ClausenBrdf, ClausenBrdfParametrisation, VgonioBrdf, VgonioBrdfParameterisation,
 };
 use vgonio_core::{
     bxdf::{MeasuredBrdfKind, Origin},
@@ -285,9 +285,9 @@ pub struct BsdfMeasurement {
 }
 
 impl AnyMeasured for BsdfMeasurement {
-    fn has_multiple_levels(&self) -> bool { true }
-
     fn kind(&self) -> MeasurementKind { MeasurementKind::Bsdf }
+
+    fn has_multiple_levels(&self) -> bool { true }
 
     fn as_any(&self) -> &dyn std::any::Any { self }
 
@@ -336,10 +336,10 @@ impl BsdfMeasurement {
         Ok(())
     }
 
-    /// Resamples the BSDF data to match the `ClausenBrdfParameterisation`.
+    /// Resamples the BSDF data to match the `ClausenBrdfParametrisation`.
     pub fn resample(
         &self,
-        params: &ClausenBrdfParameterisation,
+        params: &ClausenBrdfParametrisation,
         level: BrdfLevel,
         dense: bool,
         phi_offset: Radians,
@@ -405,7 +405,7 @@ impl BsdfMeasurement {
                     }
                 }
             }
-            ClausenBrdfParameterisation {
+            ClausenBrdfParametrisation {
                 incoming: params.incoming.clone(),
                 outgoing,
                 n_wo: n_wo_dense,

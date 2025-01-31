@@ -52,6 +52,11 @@ pub struct PlotArgs {
     #[clap(short, long, help = "The kind of plot to generate.")]
     pub kind: PlotKind,
 
+    /// Path to the user config file. If not specified, vgonio will load the
+    /// default config file.
+    #[clap(short, long, help = "Path to the user config file")]
+    pub config: Option<PathBuf>,
+
     #[clap(short, long, help = "The log level.")]
     pub log_level: u8,
 
@@ -70,7 +75,7 @@ pub struct PlotArgs {
         help = "The error metric to use for plotting the error map.",
         required_if_eq("kind", "brdf-fitting")
     )]
-    pub err_metric: Option<ErrorMetric>,
+    pub error_metric: Option<ErrorMetric>,
 
     #[clap(
         long,
