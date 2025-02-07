@@ -1,22 +1,31 @@
+import gc
 import math
+import multiprocessing
 import os
 import time
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.ticker import StrMethodFormatter
-import multiprocessing
-import rich
-from rich.progress import Progress, BarColumn, TimeRemainingColumn, TimeElapsedColumn, MofNCompleteColumn, TextColumn
-from concurrent.futures import ProcessPoolExecutor
 import warnings
+from concurrent.futures import ProcessPoolExecutor
+
+import matplotlib.pyplot as plt
+import numpy as np
+import rich
+from matplotlib.ticker import StrMethodFormatter
+from rich.progress import Progress, BarColumn, TimeRemainingColumn, TimeElapsedColumn, MofNCompleteColumn, TextColumn
 
 # Suppress warnings to avoid clogging the console
 warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 SIZE_TO_FIGSIZE_RATIO = 36 / 64
+# Maximum number of subplots per row in a figure, i.e. number of columns
+MAX_SUBPLOTS_PER_ROW = 2
+# Maximum number of subplots per col in a figure, i.e. number of rows
+MAX_SUBPLOTS_PER_COL = 64
+MAX_DIM_PER_SUBPLOT = 64
 
-def errormap(data, xlabels, ylabels, ax=None, enable_cbar=True, cbarkw=None, cbarlabel="", vmin=None, vmax=None, **kwargs):
+
+def errormap(data, xlabels, ylabels, ax=None, enable_cbar=True, cbarkw=None, cbarlabel="", vmin=None, vmax=None,
+             **kwargs):
     """Plot a 2D error map with square pixels.
 
     Parameters
@@ -51,12 +60,12 @@ def errormap(data, xlabels, ylabels, ax=None, enable_cbar=True, cbarkw=None, cba
 
     if cbarkw is None:
         cbarkw = {}
-    
+
     if vmin is None:
         vmin = np.nanmin(data)
     if vmax is None:
         vmax = np.nanmax(data)
- 
+
     # Plot the error map
     # imshow expects the data to be in the shape of [y, x]
     im = ax.imshow(data, vmin=vmin, vmax=vmax, **kwargs)
@@ -76,13 +85,14 @@ def errormap(data, xlabels, ylabels, ax=None, enable_cbar=True, cbarkw=None, cba
 
     # Turn spines off and create white grid.
     ax.spines[:].set_visible(False)
-    
-    ax.set_xticks(np.arange(data.shape[1]+1)-.5, minor=True)
-    ax.set_yticks(np.arange(data.shape[0]+1)-.5, minor=True)
+
+    ax.set_xticks(np.arange(data.shape[1] + 1) - .5, minor=True)
+    ax.set_yticks(np.arange(data.shape[0] + 1) - .5, minor=True)
     ax.grid(which="minor", color="w", linestyle='-', linewidth=2)
     ax.tick_params(which="minor", bottom=False, left=False)
 
     return im, cbar
+
 
 def annotate_errormap(im, data=None, valfmt="{x:.2f}", textcolors=["black", "white"], threshold=None, **textkw):
     """Annotate a heatmap/error map with text values.
@@ -112,7 +122,7 @@ def annotate_errormap(im, data=None, valfmt="{x:.2f}", textcolors=["black", "whi
     """
     if not isinstance(data, (list, np.ndarray)):
         data = im.get_array()
-    
+
     # Normalize the threshold to the images color range.
     if threshold is not None:
         threshold = im.norm(threshold)
@@ -124,9 +134,9 @@ def annotate_errormap(im, data=None, valfmt="{x:.2f}", textcolors=["black", "whi
     kw.update(textkw)
 
     if isinstance(valfmt, str):
-        valfmt = StrMethodFormatter(valfmt) 
+        valfmt = StrMethodFormatter(valfmt)
 
-    # Loop over the data and create a `Text` for each "pixel".
+        # Loop over the data and create a `Text` for each "pixel".
     # Change the text's color depending on the data.
     texts = []
     for i in range(data.shape[0]):
@@ -137,9 +147,15 @@ def annotate_errormap(im, data=None, valfmt="{x:.2f}", textcolors=["black", "whi
 
     return texts
 
-MAX_DIM_PER_SUBPLOT = 64
 
-def plot_brdf_error_map_single(idx, name, figtype, model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax, cbarlabel='residual', maxw=MAX_DIM_PER_SUBPLOT, maxh=MAX_DIM_PER_SUBPLOT):
+def save_figure(fig, sup_title, filename):
+    fig.suptitle(sup_title)
+    fig.savefig(filename, bbox_inches='tight')
+
+
+def plot_brdf_error_map_single(idx, name, figtype, model_name, alphaxy, metric, x_label, y_label, xticks_labels,
+                               yticks_labels, maps, spectrum, vmin, vmax, cbarlabel='residual',
+                               maxw=MAX_DIM_PER_SUBPLOT, maxh=MAX_DIM_PER_SUBPLOT):
     """
     Plot a single brdf error map.
 
@@ -163,7 +179,7 @@ def plot_brdf_error_map_single(idx, name, figtype, model_name, alphaxy, metric, 
         Labels for the x-axis ticks
     yticks_labels : list
         Labels for the y-axis ticks
-    maps : list
+    maps : numpy.ndarray
         List of maps to plot; each map is a 2D numpy array
     vmin : float, optional
         Minimum value for the colorbar
@@ -172,16 +188,85 @@ def plot_brdf_error_map_single(idx, name, figtype, model_name, alphaxy, metric, 
     """
     is_residuals = figtype == 'residuals'
     if is_residuals:
-        (_, h, w) = maps.shape # nlambda, nwi, nwo
+        (_, h, w) = maps.shape  # nlambda, nwi, nwo
     else:
-        (_, w, h) = maps.shape # 1, nlambda, nomega_i
+        (_, w, h) = maps.shape  # 1, nlambda, nomega_i
 
     model_name = model_name.lower()
- 
+
+    rich.print(f"Plotting {figtype} map for {name} at wavelength {spectrum[idx]:.2f} nm with {h} x {w} data points")
+
+    if is_residuals:
+        base_sup_title = fr'{name} $\lambda = {spectrum[idx]:.2f}$ nm, $\alpha_x = {alphaxy[0]:.5f}$, $\alpha_y = {alphaxy[1]:.5f}$'
+        base_file_name = f"{name}_{figtype}_{model_name}_{spectrum[idx]:.2f}nm_{alphaxy[0]:.5f}_{alphaxy[1]:.5f}"
+    else:
+        base_sup_title = fr'{name} $\alpha_x = {alphaxy[0]:.5f}$, $\alpha_y = {alphaxy[1]:.5f}$'
+        base_file_name = f"{name}_{figtype}_{model_name}_{alphaxy[0]:.5f}_{alphaxy[1]:.5f}"
+
+    print(f"original size {w * SIZE_TO_FIGSIZE_RATIO} x {h * SIZE_TO_FIGSIZE_RATIO})")
+
     if h > maxh or w > maxw:
         n_rows = math.ceil(h / maxh)
         n_cols = math.ceil(w / maxw)
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(w * SIZE_TO_FIGSIZE_RATIO, h * SIZE_TO_FIGSIZE_RATIO)) 
+        total_count = n_rows * n_cols
+
+        # For very large images, split the image into multiple figures
+        # n_figs_rows = math.ceil(n_rows / MAX_SUBPLOTS_PER_ROW)
+        # n_figs_cols = math.ceil(n_cols / MAX_SUBPLOTS_PER_COL)
+        #
+        # rich.print(
+        #     f"Plotting {n_figs_rows} x {n_figs_cols} figures")
+        #
+        # for i in range(n_figs_rows):
+        #     for j in range(n_figs_cols):
+        #         n_sub_rows = min(MAX_SUBPLOTS_PER_ROW, n_rows - i * MAX_SUBPLOTS_PER_ROW)
+        #         n_sub_cols = min(MAX_SUBPLOTS_PER_COL, n_cols - j * MAX_SUBPLOTS_PER_COL)
+        #         x_base = j * MAX_SUBPLOTS_PER_ROW * maxw
+        #         y_base = i * MAX_SUBPLOTS_PER_COL * maxh
+        #
+        #         fig_width = n_sub_cols * MAX_DIM_PER_SUBPLOT * SIZE_TO_FIGSIZE_RATIO
+        #         fig_height = n_sub_rows * MAX_DIM_PER_SUBPLOT * SIZE_TO_FIGSIZE_RATIO
+        #
+        #         rich.print(f"Plotting figure with size {fig_width} x {fig_height}")
+        #
+        #         fig, axes = plt.subplots(n_sub_rows, n_sub_cols, figsize=(fig_width, fig_height))
+        #         axes = axes.reshape(n_sub_rows, n_sub_cols)
+        #
+        #         for k in range(n_sub_rows):
+        #             for l in range(n_sub_cols):
+        #                 x_start = x_base + l * maxw
+        #                 x_end = min(x_start + maxw, w)
+        #                 y_start = y_base + k * maxh
+        #                 y_end = min(y_start + maxh, h)
+        #                 x_labels_sub = xticks_labels[x_start:x_end]
+        #                 y_labels_sub = yticks_labels[y_start:y_end]
+        #                 if is_residuals:
+        #                     data = maps[idx, y_start:y_end, x_start:x_end]
+        #                 else:
+        #                     data = maps[0, x_start:x_end, y_start:y_end].T
+        #                 im, cbar, _ = plot_brdf_error_map_subplot(data, x_label, y_label, x_labels_sub,
+        #                                                           y_labels_sub,
+        #                                                           axes[k, l], k * n_sub_cols + l + 1,
+        #                                                           total_count,
+        #                                                           enable_annotate=False, enable_cbar=False,
+        #                                                           vmin=vmin,
+        #                                                           vmax=vmax)
+        #                 # Only show the colorbar for the last subplot
+        #                 if k == n_sub_rows - 1 and l == n_sub_cols - 1:
+        #                     cbar = fig.colorbar(im, ax=axes.ravel()[-1], location='right')
+        #                     cbar.set_label(cbarlabel, rotation=-90, va='bottom')
+        #
+        #                 # Delete the image to save memory
+        #                 del im
+        #                 del data
+        #                 del cbar
+        #                 del x_labels_sub
+        #                 del y_labels_sub
+        #                 gc.collect()
+        #
+        #         save_figure(fig, base_sup_title, f"{base_file_name}_part_{i}_{j}.png")
+
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(w * SIZE_TO_FIGSIZE_RATIO, h * SIZE_TO_FIGSIZE_RATIO))
         axes = axes.reshape(n_rows, n_cols)
 
         for i in range(n_rows):
@@ -190,40 +275,54 @@ def plot_brdf_error_map_single(idx, name, figtype, model_name, alphaxy, metric, 
                 x_end = min(x_start + maxw, w)
                 y_start = i * maxh
                 y_end = min(y_start + maxh, h)
-                x_labels_sub = xticks_labels[x_start:x_end] 
+                x_labels_sub = xticks_labels[x_start:x_end]
                 y_labels_sub = yticks_labels[y_start:y_end]
                 if is_residuals:
                     data = maps[idx, y_start:y_end, x_start:x_end]
                 else:
                     data = maps[0, x_start:x_end, y_start:y_end].T
-                im, cbar, _ = plot_brdf_error_map_subplot(data, x_label, y_label, x_labels_sub, y_labels_sub, axes[i, j], i * n_cols + j + 1, n_rows * n_cols, enable_annotate=False, enable_cbar=False, vmin=vmin, vmax=vmax)
+                im, cbar, _ = plot_brdf_error_map_subplot(data, x_label, y_label, x_labels_sub, y_labels_sub,
+                                                          axes[i, j], i * n_cols + j + 1, n_rows * n_cols,
+                                                          enable_annotate=False, enable_cbar=False, vmin=vmin,
+                                                          vmax=vmax)
 
         cbar = fig.colorbar(im, ax=axes.ravel()[-1], location='right')
         cbar.set_label(cbarlabel, rotation=-90, va='bottom')
+
+        save_figure(fig, base_sup_title, f"{base_file_name}.png")
+
+        # Delete the figure to save memory
+        fig.clear()
+        plt.close(fig)
+        del fig
+        del axes
+        gc.collect()
+
     else:
-        fig, axes = plt.subplots(figsize=(w * SIZE_TO_FIGSIZE_RATIO, h * SIZE_TO_FIGSIZE_RATIO)) 
+        rich.print(f"Plotting {figtype} map for {name} at wavelength {spectrum[idx]:.2f} nm with {h} x {w} pixels")
+        fig, ax = plt.subplots(figsize=(w * SIZE_TO_FIGSIZE_RATIO, h * SIZE_TO_FIGSIZE_RATIO))
         if is_residuals:
             data = maps[idx]
         else:
             data = maps.T
 
         enable_annotate = True if figtype == 'residuals' else False
-        im, cbar, _ = plot_brdf_error_map_subplot(data, x_label, y_label, xticks_labels, yticks_labels, axes, 1, 1, enable_annotate=enable_annotate, enable_cbar=True, cbarlabel=cbarlabel, vmin=vmin, vmax=vmax)
-    
-    if is_residuals:
-        fig.suptitle(fr'{name} $\lambda = {spectrum[idx]:.2f}$ nm, $\alpha_x = {alphaxy[0]:.5f}$, $\alpha_y = {alphaxy[1]:.5f}$') 
-        fig.savefig(f"{name}_{figtype}_{model_name}_{spectrum[idx]:.2f}nm_{alphaxy[0]:.5f}_{alphaxy[1]:.5f}.png", bbox_inches='tight')
-    else:
-        fig.suptitle(fr'{name} $\alpha_x = {alphaxy[0]:.5f}$, $\alpha_y = {alphaxy[1]:.5f}$')
-        fig.savefig(f"{name}_{figtype}_{model_name}_{alphaxy[0]:.5f}_{alphaxy[1]:.5f}.png", bbox_inches='tight')
+        im, cbar, _ = plot_brdf_error_map_subplot(data, x_label, y_label, xticks_labels, yticks_labels, ax, 1, 1,
+                                                  enable_annotate=enable_annotate, enable_cbar=True,
+                                                  cbarlabel=cbarlabel, vmin=vmin, vmax=vmax)
+        save_figure(fig, base_sup_title, f"{base_file_name}.png")
 
     plt.close()
 
-def plot_brdf_error_map_subplot(data, x_label, y_label, xticks_labels, yticks_labels, ax, part_idx=1, total_parts=1, enable_annotate=True, enable_cbar=True, cbarlabel='residual', vmin=None, vmax=None, **kwargs):
+
+def plot_brdf_error_map_subplot(data, x_label, y_label, xticks_labels, yticks_labels, ax, part_idx=1, total_parts=1,
+                                enable_annotate=True, enable_cbar=True, cbarlabel='residual', vmin=None, vmax=None,
+                                **kwargs):
     """
     Plot a 2D error map with square pixels.
     """
-    im, cbar = errormap(data, xticks_labels, yticks_labels, ax=ax, enable_cbar=enable_cbar, cmap='YlGn', cbarlabel=cbarlabel, vmin=vmin, vmax=vmax)  
+    im, cbar = errormap(data, xticks_labels, yticks_labels, ax=ax, enable_cbar=enable_cbar, cmap='YlGn',
+                        cbarlabel=cbarlabel, vmin=vmin, vmax=vmax)
 
     texts = None
     if enable_annotate:
@@ -234,10 +333,12 @@ def plot_brdf_error_map_subplot(data, x_label, y_label, xticks_labels, yticks_la
 
     if total_parts > 1:
         ax.set_title(fr'{part_idx} / {total_parts}')
-    
+
     return im, cbar, texts
 
-def task_plot_rs(progress, tid, base_idx, count, name, model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax):
+
+def task_plot_rs(progress, tid, base_idx, count, name, model_name, alphaxy, metric, x_label, y_label, xticks_labels,
+                 yticks_labels, maps, spectrum, vmin, vmax):
     """
     Task to plot the BRDF residuals in parallel.
 
@@ -272,10 +373,13 @@ def task_plot_rs(progress, tid, base_idx, count, name, model_name, alphaxy, metr
     """
     for i in range(base_idx, base_idx + count):
         time.sleep(0.05)
-        plot_brdf_error_map_single(i, name, 'residuals', model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax)
-        progress[tid] = { "progress": i - base_idx + 1, "total": count }
+        plot_brdf_error_map_single(i, name, 'residuals', model_name, alphaxy, metric, x_label, y_label, xticks_labels,
+                                   yticks_labels, maps, spectrum, vmin, vmax)
+        progress[tid] = {"progress": i - base_idx + 1, "total": count}
 
-def plot_brdf_fitting_residuals(name, alphaxy, residuals, rmaps, is_grid, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
+
+def plot_brdf_fitting_residuals(name, alphaxy, residuals_shape, rmaps, is_grid, metric, model_name, i_thetas, i_phis,
+                                o_thetas, o_phis, offsets, spectrum, parallel):
     """
     Plot the brdf fitting residuals.
 
@@ -285,10 +389,10 @@ def plot_brdf_fitting_residuals(name, alphaxy, residuals, rmaps, is_grid, metric
         Name of the measured BRDF; used as the title of the plot and the filename of the plot
     alphaxy : (float, float)
         The parameters of the brdf model
-    residuals : ndarray
-        Residuals between the measured data and the model. The shape of residuals could be either 
-            - ϑi, ϕi, ϑo, ϕo, λ - grid  
-            - ϑi, ϕi, ωo, λ - list
+    residuals_shape : ndarray
+        # Residuals between the measured data and the model. The shape of residuals could be either
+        #     - ϑi, ϕi, ϑo, ϕo, λ - grid
+        #     - ϑi, ϕi, ωo, λ - list
     rmaps : ndarray
         Residuals arranged in a 2D array with dimension: [Nλ, Nωo, Nωi], where Nλ is the number of wavelengths, 
         Nωo is the number of outgoing directions, and Nωi is the number of incident directions.
@@ -322,11 +426,11 @@ def plot_brdf_fitting_residuals(name, alphaxy, residuals, rmaps, is_grid, metric
         Wavelengths in nanometers
     parallel : bool
         Whether to plot in parallel or not
-    """ 
+    """
     # 1. plot residual maps per wavelength
     #    each map contains all the incident directions and all the outgoing directions
     if is_grid:
-        (n_theta_i, n_phi_i, n_theta_o, n_phi_o, n_lambda) = residuals.shape
+        (n_theta_i, n_phi_i, n_theta_o, n_phi_o, n_lambda) = residuals_shape
 
         yticks_labels = np.empty(n_theta_i * n_phi_i, dtype=object)
         for ti in range(n_theta_i):
@@ -349,7 +453,7 @@ def plot_brdf_fitting_residuals(name, alphaxy, residuals, rmaps, is_grid, metric
                     xticks_labels[to * n_phi_o + po] = f'{" ":>3s}~{" ":>3s} {phi_deg:>6.1f}°'
     else:
         n_theta_o = len(o_thetas)
-        (n_theta_i, n_phi_i, n_omega_o, n_lambda) = residuals.shape
+        (n_theta_i, n_phi_i, n_omega_o, n_lambda) = residuals_shape
 
         yticks_labels = np.empty(n_theta_i * n_phi_i, dtype=object)
         for ti in range(n_theta_i):
@@ -360,7 +464,7 @@ def plot_brdf_fitting_residuals(name, alphaxy, residuals, rmaps, is_grid, metric
                     yticks_labels[ti * n_phi_i + pi] = f'{theta_deg:>6.1f}° {phi_deg:>6.1f}°'
                 else:
                     yticks_labels[ti * n_phi_i + pi] = f'{" ":>3s}~{" ":>3s} {phi_deg:>6.1f}°'
-        
+
         xticks_labels = np.empty(n_omega_o, dtype=object)
         for i, theta_o in enumerate(o_thetas):
             theta_deg = np.degrees(theta_o)
@@ -372,7 +476,8 @@ def plot_brdf_fitting_residuals(name, alphaxy, residuals, rmaps, is_grid, metric
                     xticks_labels[j] = f'{" ":>3s}~{" ":>3s} {phi_deg:>6.1f}°'
 
         if len(xticks_labels) != n_omega_o:
-            raise ValueError(f"Number of y_labels ({len(xticks_labels)}) does not match number of omega_o ({n_omega_o})")
+            raise ValueError(
+                f"Number of y_labels ({len(xticks_labels)}) does not match number of omega_o ({n_omega_o})")
 
     vmin = np.nanmin(rmaps)
     vmax = np.nanmax(rmaps)
@@ -380,13 +485,17 @@ def plot_brdf_fitting_residuals(name, alphaxy, residuals, rmaps, is_grid, metric
 
     x_label = r'Outgoing Direction $\omega_o = (\theta_o, \phi_o)$'
     y_label = r'Incident Direction $\omega_i = (\theta_i, \phi_i)$'
- 
-    if parallel:
-        parallel_execute(n_lambda, task_plot_rs, name, model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, rmaps, spectrum, vmin, vmax)
-    else:
-        sequential_plot(n_lambda, name, 'residuals', model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, rmaps, spectrum, vmin, vmax)
 
-def task_plot_mse(progress, tid, base_idx, count, name, model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax, cbarlabel):
+    if parallel:
+        parallel_execute(n_lambda, task_plot_rs, name, model_name, alphaxy, metric, x_label, y_label, xticks_labels,
+                         yticks_labels, rmaps, spectrum, vmin, vmax)
+    else:
+        sequential_plot(n_lambda, name, 'residuals', model_name, alphaxy, metric, x_label, y_label, xticks_labels,
+                        yticks_labels, rmaps, spectrum, vmin, vmax)
+
+
+def task_plot_mse(progress, tid, base_idx, count, name, model_name, alphaxy, metric, x_label, y_label, xticks_labels,
+                  yticks_labels, maps, spectrum, vmin, vmax, cbarlabel):
     """
     Task to plot the MSE of per incident angle fitting results.
 
@@ -416,8 +525,8 @@ def task_plot_mse(progress, tid, base_idx, count, name, model_name, alphaxy, met
         Labels for the x-axis ticks
     yticks_labels : list
         Labels for the y-axis ticks
-    maps : list
-        List of maps to plot; each map is a 2D numpy array
+    maps : ndarray
+        Array of maps to plot; each map is a 2D numpy array
     spectrum : ndarray
         Wavelengths in nanometers
     vmin : float, optional
@@ -429,10 +538,13 @@ def task_plot_mse(progress, tid, base_idx, count, name, model_name, alphaxy, met
     """
     for i in range(base_idx, base_idx + count):
         time.sleep(0.05)
-        plot_brdf_error_map_single(i, name, 'mse', model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, maps, spectrum, vmin, vmax, cbarlabel)
-        progress[tid] = { "progress": i - base_idx + 1, "total": count }
+        plot_brdf_error_map_single(i, name, 'mse', model_name, alphaxy, metric, x_label, y_label, xticks_labels,
+                                   yticks_labels, maps, spectrum, vmin, vmax, cbarlabel)
+        progress[tid] = {"progress": i - base_idx + 1, "total": count}
 
-def plot_brdf_fitting_mse_per_incident_angle(name, alphaxy, residuals, mmaps, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
+
+def plot_brdf_fitting_mse_per_incident_angle(name, alphaxy, residuals, mmaps, metric, model_name, i_thetas, i_phis,
+                                             o_thetas, o_phis, offsets, spectrum, parallel):
     """
     Plot the MSE of per incident angle fitting results.
     """
@@ -457,15 +569,18 @@ def plot_brdf_fitting_mse_per_incident_angle(name, alphaxy, residuals, mmaps, me
     x_label = r'Wavelength $\lambda$ (nm)'
     y_label = r'Incident Direction $\omega_i = (\theta_i, \phi_i)$'
 
-
     mmaps = mmaps.reshape(1, n_lambda, n_omega_i)
 
     if parallel:
-        parallel_execute(1, task_plot_mse, name, model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, mmaps, spectrum, vmin, vmax, "MSE")
+        parallel_execute(1, task_plot_mse, name, model_name, alphaxy, metric, x_label, y_label, xticks_labels,
+                         yticks_labels, mmaps, spectrum, vmin, vmax, "MSE")
     else:
-        sequential_plot(1, name, 'mse', model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels, mmaps, spectrum, vmin, vmax, "MSE")
+        sequential_plot(1, name, 'mse', model_name, alphaxy, metric, x_label, y_label, xticks_labels, yticks_labels,
+                        mmaps, spectrum, vmin, vmax, "MSE")
 
-def plot_brdf_fitting_errors(name, data, model_name, alphaxy, metric, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel):
+
+def plot_brdf_fitting_errors(name, data, model_name, alphaxy, metric, i_thetas, i_phis, o_thetas, o_phis, offsets,
+                             spectrum, parallel):
     """
     Plot the BRDF error map. Entry point for the non-interactive BRDF fitting plot in Rust. This function will generate
     two types of plots:
@@ -479,7 +594,7 @@ def plot_brdf_fitting_errors(name, data, model_name, alphaxy, metric, i_thetas, 
     ----------
     name : str
         Name of the measured BRDF; used as the title of the plot and the filename of the plot
-    data : (ndarray, ndarray, ndarray)
+    data: (ndarray, ndarray, ndarray)
         Include three arrays:
         1. residuals: Residuals between the measured data and the model. The shape of residuals could be either 
             - ϑi, ϕi, ϑo, ϕo, λ - grid  
@@ -519,34 +634,39 @@ def plot_brdf_fitting_errors(name, data, model_name, alphaxy, metric, i_thetas, 
     parallel : bool
         Whether to plot in parallel or not
     """
-    residuals, rmaps, mmaps = data
+    residuals_shape, rmaps, mmaps = data
     is_grid = not isinstance(offsets, np.ndarray)
+    print(rmaps.dtype)
+    print(mmaps.dtype)
 
     # 1. plot residual maps per wavelength
     #    each map contains all the incident directions and all the outgoing directions
-    print('\nPlotting residuals...')
-    plot_brdf_fitting_residuals(name, alphaxy, residuals, rmaps, is_grid, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel)
+
+    # print('\nPlotting residuals...')
+    # plot_brdf_fitting_residuals(name, alphaxy, residuals_shape, rmaps, is_grid, metric, model_name, i_thetas, i_phis,
+    #                             o_thetas, o_phis, offsets, spectrum, parallel)
 
     # 2. plot MSE of per incident angle fitting results
     #    each map contains the MSE of per incident angle fitting results
     print('\nPlotting MSE...')
-    plot_brdf_fitting_mse_per_incident_angle(name, alphaxy, residuals, mmaps, metric, model_name, i_thetas, i_phis, o_thetas, o_phis, offsets, spectrum, parallel)
+    plot_brdf_fitting_mse_per_incident_angle(name, alphaxy, residuals_shape, mmaps, metric, model_name, i_thetas,
+                                             i_phis, o_thetas, o_phis, offsets, spectrum, parallel)
 
 
-def parallel_execute(ntotal, task, *task_args): 
+def parallel_execute(ntotal, task, *task_args):
     n_workers = os.cpu_count() * 3 // 4
 
     with Progress(
-        "[progress.description]{task.description}",
-        BarColumn(style="bold"),
-        "[progress.percentage]{task.percentage:>3.0f}%",
-        MofNCompleteColumn(),
-        TextColumn("•"),
-        TimeElapsedColumn(),
-        TextColumn("•"),
-        TimeRemainingColumn(),
+            "[progress.description]{task.description}",
+            BarColumn(style="bold"),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            MofNCompleteColumn(),
+            TextColumn("•"),
+            TimeElapsedColumn(),
+            TextColumn("•"),
+            TimeRemainingColumn(),
     ) as progress:
-        futures = [] # keep track of the futures
+        futures = []  # keep track of the futures
         with multiprocessing.Manager() as manager:
             status = manager.dict()
             overall = progress.add_task(f"Generating BRDF fitting maps, {ntotal} in total: ")
@@ -555,7 +675,7 @@ def parallel_execute(ntotal, task, *task_args):
                 # create tasks with chunk size of 16
                 for chunk_idx in range(0, ntotal, 16):
                     chunk_size = min(16, ntotal - chunk_idx)
-                    tid = progress.add_task(f"  Processing {chunk_idx+1} ~ {chunk_idx+chunk_size}", visible=False)
+                    tid = progress.add_task(f"  Processing {chunk_idx + 1} ~ {chunk_idx + chunk_size}", visible=False)
                     futures.append(executor.submit(task, status, tid, chunk_idx, chunk_size, *task_args))
 
                 n_to_be_finished = len(futures)
@@ -578,15 +698,19 @@ def parallel_execute(ntotal, task, *task_args):
                 for future in futures:
                     future.result()
 
+
 def sequential_plot(ntotal, name, figtype, *args):
-    with Progress(
-        TextColumn("[green]Generating error maps...[/green] [progress.percentage]{task.percentage:>3.0f}%"),
-        BarColumn(style="bold"),
-        MofNCompleteColumn(),
-        TextColumn("•"),
-        TimeElapsedColumn(),
-        TextColumn("•"),
-        TimeRemainingColumn(),
-    ) as progress:
-        for i in progress.track(range(ntotal)):
-            plot_brdf_error_map_single(i, name, figtype, *args) 
+    rich.print(f"Plotting {figtype} maps sequentially... {ntotal} in total")
+    for i in range(ntotal):
+        plot_brdf_error_map_single(i, name, figtype, *args)
+    # with Progress(
+    #         TextColumn("[green]Generating error maps...[/green] [progress.percentage]{task.percentage:>3.0f}%"),
+    #         BarColumn(style="bold"),
+    #         MofNCompleteColumn(),
+    #         TextColumn("•"),
+    #         TimeElapsedColumn(),
+    #         TextColumn("•"),
+    #         TimeRemainingColumn(),
+    # ) as progress:
+    #     for i in progress.track(range(ntotal)):
+    #         plot_brdf_error_map_single(i, name, figtype, *args)

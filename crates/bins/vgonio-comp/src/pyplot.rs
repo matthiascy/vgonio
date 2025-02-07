@@ -368,9 +368,9 @@ pub fn plot_ndf(
                             let (spls, opp_spls) = ndf.slice_at(phi);
                             (
                                 label,
-                                numpy::PyArray1::from_vec(py, theta),
-                                numpy::PyArray1::from_slice(py, spls),
-                                numpy::PyArray1::from_slice(py, opp_spls.unwrap()),
+                                PyArray1::from_vec(py, theta),
+                                PyArray1::from_slice(py, spls),
+                                PyArray1::from_slice(py, opp_spls.unwrap()),
                             )
                         },
                         NdfMeasurementMode::ByPartition { .. } => {
@@ -1507,11 +1507,25 @@ impl BrdfFittingPlotter {
         let proxy = brdf.proxy(iors);
         let shape = proxy.samples().shape();
 
+        let n_spectrum = brdf.spectrum().len();
+        let n_theta_i = proxy.i_thetas.len();
+        let n_phi_i = proxy.i_phis.len();
+        let i_count = n_theta_i * n_phi_i;
+        let (o_count, is_grid) = match &proxy.o_dirs {
+            OutgoingDirs::List { o_phis, .. } => (o_phis.len(), false),
+            OutgoingDirs::Grid { o_thetas, o_phis } => (o_thetas.len() * o_phis.len(), true),
+        };
+
+        let mut residuals = DynArr::<f64>::splat(f64::NAN, shape);
+        // Residual maps per wavelength
+        let mut rmaps = DynArr::<f32>::zeros(&[n_spectrum, i_count, o_count]);
+        // MSE of residuals per incident angle
+        let mut mmaps = DynArr::<f32>::zeros(&[n_spectrum, i_count]);
+
         Python::with_gil(|py| {
             let i_thetas = PyArray::from_slice(py, &proxy.i_thetas.as_slice());
             let i_phis = PyArray::from_slice(py, &proxy.i_phis.as_slice());
-            let i_count = proxy.i_thetas.len() * proxy.i_phis.len();
-            let (o_thetas, o_phis, offsets, o_count, is_grid) = match &proxy.o_dirs {
+            let (o_thetas, o_phis, offsets) = match &proxy.o_dirs {
                 OutgoingDirs::List {
                     o_thetas,
                     o_phis,
@@ -1520,35 +1534,24 @@ impl BrdfFittingPlotter {
                     PyArray::from_slice(py, &o_thetas.as_slice()),
                     PyArray::from_slice(py, &o_phis.as_slice()),
                     Some(PyArray::from_slice(py, &offsets.as_slice())),
-                    o_phis.len(),
-                    false,
                 ),
                 OutgoingDirs::Grid { o_thetas, o_phis } => (
                     PyArray::from_slice(py, &o_thetas.as_slice()),
                     PyArray::from_slice(py, &o_phis.as_slice()),
                     None,
-                    o_thetas.len() * o_phis.len(),
-                    true,
                 ),
             };
             let spectrum = PyArray::from_slice(py, {
                 unsafe { std::mem::transmute::<&[Nanometres], &[f32]>(brdf.spectrum()) }
             });
 
-            let mut residuals = DynArr::<f64>::splat(f64::NAN, shape);
-            let n_spectrum = brdf.spectrum().len();
-            let n_theta_i = proxy.i_thetas.len();
-            let n_phi_i = proxy.i_phis.len();
-            // Residual maps per wavelength
-            let mut rmaps = DynArr::<f64>::zeros(&[n_spectrum, i_count, o_count]);
-            // MSE of residuals per incident angle
-            let mut mmaps = DynArr::<f64>::zeros(&[n_spectrum, i_count]);
-
-            let rcp_o_count = math::rcp_f64(o_count as f64);
+            let rcp_o_count = math::rcp_f32(o_count as f32);
 
             for model in models.iter() {
+                println!("Fitting model: {:?}", model.params());
                 let modelled = proxy.generate_analytical(model.as_ref());
                 proxy.residuals(&modelled, weighting, residuals.as_mut_slice());
+                drop(modelled);
 
                 // Rearrange the residuals to the shape of the residual maps per wavelength
                 // In case of the grid: ϑi, ϕi, ϑo, ϕo, λ -> λ, (ϑi, ϕi), (ϑo, ϕo)
@@ -1562,7 +1565,7 @@ impl BrdfFittingPlotter {
                                 for l in 0..n_theta_o {
                                     for m in 0..n_phi_o {
                                         rmaps[[i, j * n_phi_i + k, l * n_phi_o + m]] =
-                                            residuals[[j, k, l, m, i]];
+                                            residuals[[j, k, l, m, i]] as f32;
                                     }
                                 }
                             }
@@ -1573,7 +1576,7 @@ impl BrdfFittingPlotter {
                         for j in 0..n_theta_i {
                             for k in 0..n_phi_i {
                                 for l in 0..o_count {
-                                    rmaps[[i, j * n_phi_i + k, l]] = residuals[[j, k, l, i]];
+                                    rmaps[[i, j * n_phi_i + k, l]] = residuals[[j, k, l, i]] as f32;
                                 }
                             }
                         }
@@ -1582,7 +1585,7 @@ impl BrdfFittingPlotter {
 
                 // Compute the MSE of residuals per incident angle from the residual maps
                 // Pre-allocate the memory for the MSE maps computation
-                let mut temp = DynArr::<f64>::zeros(&[o_count]);
+                let mut temp = DynArr::<f32>::zeros(&[o_count]);
                 for i in 0..n_spectrum {
                     for j in 0..i_count {
                         for k in 0..o_count {
@@ -1597,9 +1600,10 @@ impl BrdfFittingPlotter {
                 }
 
                 // TODO: avoid copying the data to Python
-                let rs = PyArray::from_slice(py, residuals.as_slice());
+                // let rs = PyArray::from_slice(py, residuals.as_slice());
                 let rmaps_py = PyArray::from_slice(py, rmaps.as_slice());
                 let mmaps_py = PyArray::from_slice(py, mmaps.as_slice());
+
                 let model_name = match model.distro().as_ref().unwrap() {
                     MicrofacetDistroKind::Beckmann => "bk",
                     MicrofacetDistroKind::TrowbridgeReitz => "tr",
@@ -1613,7 +1617,8 @@ impl BrdfFittingPlotter {
                     (
                         name,
                         (
-                            rs.reshape(shape).unwrap(),
+                            PyArray::from_slice(py, shape),
+                            // rs.reshape(shape).unwrap(),
                             rmaps_py.reshape(rmaps.shape()).unwrap(),
                             mmaps_py.reshape(mmaps.shape()).unwrap(),
                         ),
@@ -1629,12 +1634,14 @@ impl BrdfFittingPlotter {
                         parallel,
                     ),
                 );
+                drop(mmaps_py);
+                drop(rmaps_py);
                 if let Err(e) = res {
                     e.print_and_set_sys_last_vars(py);
                 }
                 residuals.fill(f64::NAN);
-                rmaps.fill(f64::NAN);
-                mmaps.fill(f64::NAN);
+                rmaps.fill(f32::NAN);
+                mmaps.fill(f32::NAN);
             }
             Ok(())
         })
