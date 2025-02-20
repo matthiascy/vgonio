@@ -1,7 +1,5 @@
-use crate::{
-    app::gui::{event::EventLoopProxy, misc::range_step_size_inclusive_angle_ui},
-    measure::params::GafMeasurementParams,
-};
+use crate::app::gui::{event::EventLoopProxy, misc::range_step_size_inclusive_angle_ui};
+use vgonio_core::measure::params::GafMeasurementParams;
 
 pub struct GafMeasurementTab {
     pub params: GafMeasurementParams,

@@ -6,15 +6,15 @@ license.workspace = true
 version.workspace = true
 
 [features]
-default = ["dep:embree", "dep:vgonio-bxdf", "vgonio-bxdf/io"]
-embree = ["dep:embree", "surf/embree"]
+default = ["dep:embree"]
+embree = ["dep:embree"]
 optix = []
-bench = ["surf/bench"]
-fitting = ["dep:vgonio-bxdf", "vgonio-bxdf/fitting"]
-surf-obj = ["surf/surf-obj"]
-surf-gen = ["surf/surf-gen"]
-vdbg = ["vgonio-meas/vdbg"]
-vvdbg = []
+#bench = ["surf/bench"]
+fitting = ["vgonio-core/bxdf-fitting"]
+#surf-obj = ["surf/surf-obj"]
+#surf-gen = ["surf/surf-gen"]
+#vdbg = ["vgonio-meas/vdbg"]
+#vvdbg = []
 
 [dependencies]
 chrono.workspace = true
@@ -54,9 +54,6 @@ toml.workspace = true
 type-map.workspace = true
 winit.workspace = true
 wgpu.workspace = true
-surf = { package = "vgonio-surf", path = "../../libs/vgonio-surf", features = [
-    "exr",
-] }
 vgonio-core = { path = "../../libs/vgonio-core", features = [
     "cli",
     "winit",
@@ -66,10 +63,6 @@ vgonio-core = { path = "../../libs/vgonio-core", features = [
 jabr = { package = "vgonio-jabr", path = "../../libs/vgonio-jabr" }
 gxtk = { package = "vgonio-gxtk", path = "../../libs/vgonio-gxtk" }
 uxtk = { package = "vgonio-uxtk", path = "../../libs/vgonio-uxtk" }
-vgonio-bxdf = { path = "../../libs/vgonio-bxdf", optional = true, features = [
-    "fitting", "io"
-] }
-vgonio-meas = { path = "../../libs/vgonio-meas" }
 
 [lints]
 workspace = true

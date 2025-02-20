@@ -1,15 +1,12 @@
 use super::outliner::OutlinerItem;
+use crate::app::cache::RawCache;
 #[cfg(feature = "fitting")]
 use crate::fitting::FittedModels;
-use crate::{app::cache::RawCache, measure::MeasurementSource};
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
-use surf::subdivision::{Subdivision, SubdivisionKind};
-use vgonio_core::{
-    res::Handle,
-    units::LengthUnit,
-    MeasurementKind,
-};
+use vgonio_core::surface::::{Subdivision, SubdivisionKind};
+use vgonio_core::{res::Handle, units::LengthUnit, MeasurementKind};
+use vgonio_meas::MeasurementSource;
 
 /// Micro surface properties.
 #[derive(Clone, Debug)]

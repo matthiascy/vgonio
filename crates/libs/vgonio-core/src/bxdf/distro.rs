@@ -2,6 +2,12 @@ use crate::Symmetry;
 use glam::Vec3;
 use std::fmt::Debug;
 
+pub mod beckmann;
+pub mod trowbridge_reitz;
+
+pub use beckmann::*;
+pub use trowbridge_reitz::*;
+
 /// Different kinds of microfacet distribution functions.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]

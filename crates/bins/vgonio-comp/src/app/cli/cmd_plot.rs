@@ -1,19 +1,13 @@
-use crate::{
-    measure::{
-        bsdf::BsdfMeasurement,
-        mfd::{MeasuredGafData, MeasuredNdfData},
-        params::SurfacePath,
-    },
-    pyplot::{
-        plot_brdf_3d, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
-        plot_brdf_vgonio_clausen, plot_gaf, plot_ndf, plot_surfaces, BrdfFittingPlotter,
-    },
+use crate::pyplot::{
+    plot_brdf_3d, plot_brdf_map, plot_brdf_slice, plot_brdf_slice_in_plane,
+    plot_brdf_vgonio_clausen, plot_gaf, plot_ndf, plot_surfaces, BrdfFittingPlotter,
 };
+use vgonio_meas::{};
 
 use crate::app::cache::Cache;
 use std::path::PathBuf;
-use surf::subdivision::{Subdivision, SubdivisionKind};
-use vgonio_bxdf::brdf::measured::ClausenBrdf;
+use vgonio_core::surface::::{Subdivision, SubdivisionKind};
+use vgonio_core::bxdf::brdf::measured::ClausenBrdf;
 use vgonio_core::{
     bxdf::{MicrofacetDistribution, MicrofacetDistroKind},
     config::Config,
@@ -22,6 +16,9 @@ use vgonio_core::{
     units::{Degs, Nanometres, Radians, Rads},
     BrdfLevel, ErrorMetric, MeasurementKind, Symmetry, TriangulationPattern, Weighting,
 };
+use vgonio_core::measure::bsdf::BsdfMeasurement;
+use vgonio_core::measure::mfd::{MeasuredGafData, MeasuredNdfData};
+use vgonio_core::measure::params::SurfacePath;
 
 #[rustfmt::skip]
 // Same BRDF but different incident angles

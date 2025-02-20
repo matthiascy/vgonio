@@ -1,7 +1,6 @@
-use crate::app::cli::ansi;
 use std::path::PathBuf;
 use surf::{HeightOffset, MicroSurface};
-#[cfg(feature = "surf-obj")]
+#[cfg(feature = "surface-obj")]
 use vgonio_core::units::LengthUnit;
 use vgonio_core::{
     config::Config,
@@ -164,7 +163,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
             .filter_map(|filepath| {
                 log::info!("Converting {:?}", filepath);
                 let result: Result<(MicroSurface, String), VgonioError> = {
-                    #[cfg(feature = "surf-obj")]
+                    #[cfg(feature = "surface-obj")]
                     let loaded = match filepath.extension() {
                         None => MicroSurface::read_from_file(&filepath, None),
                         Some(ext) => {
@@ -179,7 +178,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                             }
                         },
                     };
-                    #[cfg(not(feature = "surf-obj"))]
+                    #[cfg(not(feature = "surface-obj"))]
                     let loaded = MicroSurface::read_from_file(filepath, None);
 
                     if let Ok(loaded) = loaded {

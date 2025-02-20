@@ -8,12 +8,16 @@ version.workspace = true
 
 [features]
 default = []
+optix = ["vgonio-core/measure-bxdf-optix"]
+embree = ["vgonio-core/measure-bxdf-embree"]
 
 [dependencies]
 clap = { workspace = true }
-vgonio-meas = { path = "../../libs/vgonio-meas" }
-vgonio-core = { path = "../../libs/vgonio-core", features = ["cli"] }
-
+chrono = { workspace = true }
+log = { workspace = true }
+rayon = { workspace = true }
+vgonio-core = { path = "../../libs/vgonio-core", features = ["cli", "measure", "io", "serde"] }
+vgonio-jabr = { path = "../../libs/vgonio-jabr" }
 
 [lints]
 workspace = true

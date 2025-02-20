@@ -1,9 +1,14 @@
 use glam::Vec3;
+use std::fmt::{Display, Formatter};
 
 mod distro;
 mod measured;
 mod proxy;
 mod traits;
+
+pub mod brdf;
+#[cfg(feature = "bxdf-fitting")]
+pub mod fitting;
 
 use crate::{
     math::cos_theta,
@@ -13,6 +18,63 @@ pub use distro::*;
 pub use measured::*;
 pub use proxy::*;
 pub use traits::*;
+
+/// Variants of the Bidirectional Scattering Distribution Function (BSDF).
+#[non_exhaustive]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
+pub enum BsdfKind {
+    /// Bidirectional reflectance distribution function.
+    Brdf = 0x00,
+
+    /// Bidirectional transmittance distribution function.
+    Btdf = 0x01,
+
+    /// Bidirectional scattering-surface distribution function.
+    Bssdf = 0x02,
+
+    /// Bidirectional scattering-surface reflectance distribution function.
+    Bssrdf = 0x03,
+
+    /// Bidirectional scattering-surface transmittance distribution function.
+    Bsstdf = 0x04,
+}
+
+impl Display for BsdfKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BsdfKind::Brdf => {
+                write!(f, "brdf")
+            },
+            BsdfKind::Btdf => {
+                write!(f, "btdf")
+            },
+            BsdfKind::Bssdf => {
+                write!(f, "bssdf")
+            },
+            BsdfKind::Bssrdf => {
+                write!(f, "bssrdf")
+            },
+            BsdfKind::Bsstdf => {
+                write!(f, "bsstdf")
+            },
+        }
+    }
+}
+
+impl From<u8> for BsdfKind {
+    fn from(value: u8) -> Self {
+        match value {
+            0x00 => BsdfKind::Brdf,
+            0x01 => BsdfKind::Btdf,
+            0x02 => BsdfKind::Bssdf,
+            0x03 => BsdfKind::Bssrdf,
+            0x04 => BsdfKind::Bsstdf,
+            _ => panic!("Invalid BSDF kind: {}", value),
+        }
+    }
+}
 
 /// Different kinds of BRDFs.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]

@@ -17,4 +17,3 @@ uuid.workspace = true
 vgonio_core = { package = "vgonio-core", path = "../vgonio-core", features = [
     "winit",
 ] }
-surf = { package = "vgonio-surf", path = "../../libs/vgonio-surf" }

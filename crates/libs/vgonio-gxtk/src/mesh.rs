@@ -1,5 +1,5 @@
 use crate::{context::GpuContext, vertex::VertexLayout};
-use surf::{subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh};
+use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh};
 use uuid::Uuid;
 use vgonio_core::{
     asset,
@@ -8,6 +8,7 @@ use vgonio_core::{
     TriangulationPattern,
 };
 use wgpu::util::DeviceExt;
+use vgonio_core::surface::::Subdivision;
 
 /// A mesh of triangles that can be rendered with a [`wgpu::RenderPipeline`].
 #[derive(Debug)]

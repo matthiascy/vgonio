@@ -1,4 +1,4 @@
-use crate::{app::cli::ansi, measure::bsdf::BsdfMeasurement, pyplot::plot_err};
+use crate::pyplot::plot_err;
 use std::{fmt::Debug, path::PathBuf};
 use vgonio_core::{
     config::Config,
@@ -11,11 +11,15 @@ use vgonio_core::{
 };
 
 use crate::app::cache::Cache;
-use vgonio_bxdf::{
-    brdf::measured::{merl::MerlBrdf, rgl::RglBrdf, yan::Yan18Brdf, ClausenBrdf},
-    fitting::FittingProblem,
+use vgonio_core::{
+    bxdf::{
+        brdf::measured::{merl::MerlBrdf, rgl::RglBrdf, yan::Yan18Brdf, ClausenBrdf},
+        fitting::FittingProblem,
+        BrdfFamily, MeasuredBrdfKind, MicrofacetDistroKind,
+    },
+    measure::bsdf::BsdfMeasurement,
+    utils::ansi,
 };
-use vgonio_core::bxdf::{BrdfFamily, MeasuredBrdfKind, MicrofacetDistroKind};
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     println!(

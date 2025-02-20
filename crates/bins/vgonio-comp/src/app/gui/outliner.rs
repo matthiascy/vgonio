@@ -1,18 +1,14 @@
-use crate::{
-    app::gui::{
-        data::PropertyData,
-        docking::{Dockable, WidgetKind},
-        event::{EventLoopProxy, OutlinerEvent, VgonioEvent},
-    },
-    measure::Measurement,
+use crate::app::gui::{
+    data::PropertyData,
+    docking::{Dockable, WidgetKind},
+    event::{EventLoopProxy, OutlinerEvent, VgonioEvent},
 };
 use egui::WidgetText;
 use std::sync::{Arc, RwLock};
-use surf::{
-    subdivision::{Subdivision, SubdivisionKind},
-    MicroSurface,
-};
+use surf::MicroSurface;
 use vgonio_core::res::Handle;
+use vgonio_core::surface::::{Subdivision, SubdivisionKind};
+use vgonio_meas::Measurement;
 
 /// Outliner is a widget that displays the scene graph of the current scene.
 ///

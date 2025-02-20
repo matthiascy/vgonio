@@ -3,6 +3,9 @@ use std::path::Path;
 
 use super::{AssetTypeId, AssetTypeRegistry};
 
+/// Parameters for asset loaders.
+pub trait LoaderParams: Sized {}
+
 /// Trait for loading assets from raw data.
 pub trait AssetLoader: Send + Sync {
     /// Returns the type of asset that this loader can load. This should be the

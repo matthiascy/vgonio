@@ -100,8 +100,6 @@ which = "4.4"
 winit = "~0.30"
 wgpu = { version = "22", features = ["wgsl"] }
 vgonio-core = { path = "crates/libs/vgonio-core" }
-vgonio-surf = { path = "crates/libs/vgonio-surf" }
-
 vgonio-jabr = { path = "crates/libs/vgonio-jabr" }
 vgonio-powitacq = { path = "crates/libs/vgonio-powitacq" }
 vgonio-gxtk = { path = "crates/libs/vgonio-gxtk" }

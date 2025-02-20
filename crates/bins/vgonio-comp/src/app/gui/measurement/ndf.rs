@@ -1,8 +1,6 @@
-use crate::{
-    app::gui::{event::EventLoopProxy, misc, misc::range_step_size_inclusive_angle_ui},
-    measure::params::{NdfMeasurementMode, NdfMeasurementParams},
-};
+use crate::app::gui::{event::EventLoopProxy, misc, misc::range_step_size_inclusive_angle_ui};
 use egui::Widget;
+use vgonio_core::measure::params::{NdfMeasurementMode, NdfMeasurementParams};
 
 #[derive(Debug)]
 pub struct NdfMeasurementTab {

@@ -3,12 +3,9 @@ use crate::app::gui::event::VgonioEvent;
 
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::debug_print_angle_pair;
-use crate::{
-    app::gui::{
-        event::EventLoopProxy,
-        plotter::{angle_knob, Curve, VariantData},
-    },
-    measure::{mfd::MeasuredNdfData, Measurement},
+use crate::app::gui::{
+    event::EventLoopProxy,
+    plotter::{angle_knob, Curve, VariantData},
 };
 #[cfg(feature = "fitting")]
 use vgonio_core::Symmetry;
@@ -22,9 +19,11 @@ use vgonio_core::{
 use crate::app::cache::{Cache, RawCache};
 use egui::{Align, Ui};
 use std::any::Any;
-use vgonio_bxdf::fitting::{FittedModel, FittingProblemKind};
 use vgonio_core::{
-    bxdf::MicrofacetDistroKind,
+    bxdf::{
+        fitting::{FittedModel, FittingProblemKind},
+        MicrofacetDistroKind,
+    },
     res::{DataStore, Handle, RawDataStore},
 };
 

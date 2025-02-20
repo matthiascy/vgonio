@@ -15,7 +15,7 @@ use crate::{
             plotter::sdf::SlopeDistributionExtra,
         },
     },
-    measure::mfd::{MeasuredGafData, MeasuredNdfData},
+    bxdf::distro::{BeckmannDistribution, TrowbridgeReitzDistribution},
 };
 use egui::{Context, Response, Ui, WidgetText};
 use egui_plot::*;
@@ -26,12 +26,12 @@ use std::{
 };
 use uuid::Uuid;
 use uxtk::widgets::{AngleKnob, AngleKnobWinding};
-use vgonio_bxdf::distro::{BeckmannDistribution, TrowbridgeReitzDistribution};
 #[cfg(feature = "fitting")]
-use vgonio_bxdf::fitting::FittedModel;
+use vgonio_core::bxdf::fitting::FittedModel;
 use vgonio_core::{
     bxdf::MicrofacetDistribution,
     math,
+    measure::mfd::{MeasuredGafData, MeasuredNdfData},
     res::Handle,
     units::{deg, rad, Radians},
     utils::range::StepRangeIncl,

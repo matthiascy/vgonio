@@ -1,6 +1,6 @@
 #![feature(iter_map_windows)]
 
-use vgonio_bxdf::brdf::measured::ClausenBrdf;
+use vgonio_core::bxdf::brdf::measured::ClausenBrdf;
 use vgonio_core::{
     cli,
     config::Config,
@@ -13,7 +13,7 @@ use vgonio_core::{
 use vgonio_plot::{PlotArgs, PlotKind};
 
 #[cfg(feature = "surface")]
-use vgonio_surf::subdivision::{Subdivision, SubdivisionKind};
+use vgonio_core::surface::::{Subdivision, SubdivisionKind};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (args, launch_time) = cli::parse_args::<PlotArgs>("vgonio-plot");

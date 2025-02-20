@@ -1,7 +1,7 @@
 //! Index of refraction.
 use crate::{
     asset, math,
-    res::{Asset, AssetLoader, AssetTypeId, AssetTypeRegistry, Error},
+    res::{Asset, AssetLoader, AssetTypeId, Error},
     units::{nanometres, Length, LengthMeasurement, Nanometres},
     utils::medium::{MaterialKind, Medium},
 };
@@ -71,7 +71,7 @@ impl IorRegLoader {
 }
 
 impl AssetLoader for IorRegLoader {
-    fn asset_type(&self) -> &'static str { IorReg::asset_type() }
+    fn asset_type(&self) -> &'static str { IorReg::asset_type_name() }
 
     fn asset_type_id(&self) -> AssetTypeId { IorReg::asset_type_id() }
 

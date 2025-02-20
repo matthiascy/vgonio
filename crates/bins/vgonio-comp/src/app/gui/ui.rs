@@ -1,29 +1,20 @@
 use super::{docking::DockSpace, event::EventResponse};
 use crate::app::cache::Cache;
-use crate::{
-    app::gui::{
-        data::PropertyData,
-        event::{EventLoopProxy, OutlinerEvent, SurfaceViewerEvent, VgonioEvent},
-        file_drop::FileDragDrop,
-        // gizmo::NavigationGizmo,
-        icons,
-        measurement::MeasurementDialog,
-        notify::{NotifyKind, NotifySystem},
-        outliner::OutlinerItem,
-        plotter::{PlotInspector, PlottingWidget},
-        tools::{SamplingInspector, Scratch, Tools},
-        DebuggingInspector,
-    },
-    measure::Measurement,
+use crate::app::gui::{
+    data::PropertyData,
+    event::{EventLoopProxy, OutlinerEvent, SurfaceViewerEvent, VgonioEvent},
+    file_drop::FileDragDrop,
+    // gizmo::NavigationGizmo,
+    icons,
+    measurement::MeasurementDialog,
+    notify::{NotifyKind, NotifySystem},
+    outliner::OutlinerItem,
+    plotter::{PlotInspector, PlottingWidget},
+    tools::{SamplingInspector, Scratch, Tools},
+    DebuggingInspector,
 };
 #[cfg(feature = "fitting")]
-use crate::{
-    fitting::{MfdFittingData, MicrofacetDistributionFittingProblem},
-    measure::{
-        bsdf::BsdfMeasurement,
-        mfd::{MeasuredGafData, MeasuredNdfData},
-    },
-};
+use crate::fitting::{MfdFittingData, MicrofacetDistributionFittingProblem};
 use egui_file_dialog::{DialogMode, FileDialog};
 use gxtk::{context::GpuContext, mesh::RenderableMesh};
 use std::{
@@ -33,7 +24,11 @@ use std::{
 use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh};
 use uxtk::{theme::ThemeKind, UiRenderer};
 #[cfg(feature = "fitting")]
-use vgonio_bxdf::fitting::{FittedModel, FittingProblem, FittingProblemKind, FittingReport};
+use vgonio_core::bxdf::fitting::{FittedModel, FittingProblem, FittingProblemKind, FittingReport};
+#[cfg(feature = "fitting")]
+use vgonio_core::measure::bsdf::BsdfMeasurement;
+#[cfg(feature = "fitting")]
+use vgonio_core::measure::mfd::{MeasuredGafData, MeasuredNdfData};
 #[cfg(feature = "fitting")]
 use vgonio_core::{bxdf::BrdfFamily, utils::range::StepRangeIncl, AnyMeasuredBrdf};
 use vgonio_core::{
@@ -42,6 +37,8 @@ use vgonio_core::{
     res::{DataStore, Handle},
     BrdfLevel, MeasurementKind, Weighting,
 };
+#[cfg(feature = "fitting")]
+use vgonio_meas::{};
 
 /// Implementation of the GUI for vgonio application.
 pub struct VgonioGui {
@@ -113,7 +110,7 @@ impl VgonioGui {
             // navigator: NavigationGizmo::new(GizmoOrientation::Global),
             measurement: MeasurementDialog::new(
                 event_loop.clone(),
-                #[cfg(any(feature = "vdbg", debug_assertions))]
+                #[cfg(any(feature = "measure-vdbg", debug_assertions))]
                 cache.clone(),
             ),
             plotters: vec![],
@@ -146,7 +143,7 @@ impl VgonioGui {
                 EventResponse::Handled
             },
             VgonioEvent::SurfaceViewer(SurfaceViewerEvent::Create { uuid, .. }) => {
-                #[cfg(any(feature = "vdbg", debug_assertions))]
+                #[cfg(any(feature = "measure-vdbg", debug_assertions))]
                 self.measurement.update_surface_viewers(&[*uuid]);
                 EventResponse::Ignored(event)
             },

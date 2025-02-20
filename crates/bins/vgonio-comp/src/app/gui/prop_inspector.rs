@@ -1,30 +1,28 @@
-use crate::{
-    app::{
-        cache::Cache,
-        gui::{
-            data::PropertyData,
-            docking::{Dockable, WidgetKind},
-            event::{EventLoopProxy, VgonioEvent},
-            outliner::OutlinerItem,
-        },
-    },
-    measure::{
-        mfd::{MeasuredGafData, MeasuredNdfData},
-        params::NdfMeasurementMode,
-        MeasurementSource,
+use crate::app::{
+    cache::Cache,
+    gui::{
+        data::PropertyData,
+        docking::{Dockable, WidgetKind},
+        event::{EventLoopProxy, VgonioEvent},
+        outliner::OutlinerItem,
     },
 };
 use std::sync::{Arc, RwLock};
-use surf::subdivision::SubdivisionKind;
+use vgonio_core::surface::::SubdivisionKind;
 use uuid::Uuid;
 #[cfg(feature = "fitting")]
-use vgonio_bxdf::fitting::FittingProblemKind;
+use vgonio_core::bxdf::fitting::FittingProblemKind;
 #[cfg(feature = "fitting")]
 use vgonio_core::{
     bxdf::{BrdfFamily, MicrofacetDistroKind},
     Symmetry,
 };
 use vgonio_core::{utils::partition::beckers, MeasurementKind};
+use vgonio_core::measure::mfd::{MeasuredGafData, MeasuredNdfData};
+use vgonio_core::measure::params::NdfMeasurementMode;
+use vgonio_meas::{
+    MeasurementSource,
+};
 
 /// The property inspector.
 ///

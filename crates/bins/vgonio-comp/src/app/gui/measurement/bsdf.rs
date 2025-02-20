@@ -1,26 +1,50 @@
-#[cfg(feature = "vdbg")]
+#[cfg(feature = "measure-vdbg")]
 use crate::app::gui::{DebuggingEvent, VgonioEvent};
 use crate::{
     app::gui::{
         event::EventLoopProxy,
         misc::{range_step_size_inclusive_angle_ui, range_step_size_inclusive_length_ui},
     },
-    measure::{
-        bsdf::{rtc::RtcMethod, BsdfKind},
-        params::{BsdfMeasurementParams, SimulationKind},
-    },
+    bxdf::BsdfKind,
 };
 use std::hash::Hash;
-use uxtk::widgets::ToggleSwitch;
-use vgonio_core::utils::{medium::Medium, partition::SphericalDomain};
-#[cfg(feature = "vdbg")]
+#[cfg(feature = "measure-vdbg")]
 use vgonio_core::{math::Sph2, units::Rads};
-use vgonio_meas::bsdf::emitter::EmitterParams;
+use vgonio_core::{
+    measure::{
+        bsdf::{emitter::EmitterParams, trace::RtcMethod},
+        params::{BsdfMeasurementParams, SimulationKind},
+    },
+    utils::{medium::Medium, partition::SphericalDomain},
+};
 
-impl BsdfKind {
+/// Trait for any types that have a UI.
+pub trait WithUI {
+    /// Creates the UI for the type.
+    ///
+    /// # Arguments
+    ///
+    /// * `ui` - The egui UI.
+    /// * `id` - The source to generate the ID for the UI element.
+    /// * `extra` - Additional contents to add to the UI; useful for adding more
+    ///   complex UI elements depending on some external conditions.
+    fn ui<R>(
+        &mut self,
+        ui: &mut egui::Ui,
+        id: Option<impl Hash>,
+        extra: Option<impl FnMut(&mut Self, &mut egui::Ui) -> R>,
+    ) -> R;
+}
+
+impl WithUI for BsdfKind {
     /// Creates the UI for selecting the BSDF kind.
-    pub fn selectable_ui(&mut self, id_source: impl Hash, ui: &mut egui::Ui) {
-        egui::ComboBox::from_id_salt(id_source)
+    fn ui<R>(
+        &mut self,
+        ui: &mut egui::Ui,
+        id: Option<impl Hash>,
+        _extra: Option<impl FnMut(&mut Self, &mut egui::Ui) -> R>,
+    ) -> R {
+        egui::ComboBox::from_id_salt(id.unwrap())
             .selected_text(format!("{}", self))
             .show_ui(ui, |ui| {
                 ui.selectable_value(self, BsdfKind::Brdf, "BRDF");
@@ -32,23 +56,32 @@ impl BsdfKind {
     }
 }
 
-pub fn medium_selectable_ui(medium: &mut Medium, id_source: impl Hash, ui: &mut egui::Ui) {
-    egui::ComboBox::from_id_salt(id_source)
-        .selected_text(format!("{:?}", medium))
-        .show_ui(ui, |ui| {
-            ui.selectable_value(medium, Medium::Air, "Air");
-            ui.selectable_value(medium, Medium::Copper, "Copper");
-            ui.selectable_value(medium, Medium::Aluminium, "Aluminium");
-            ui.selectable_value(medium, Medium::Vacuum, "Vacuum");
-        });
-}
-
-impl EmitterParams {
-    /// Creates the UI for parameterizing the emitter.
-    pub fn ui<R>(
+impl WithUI for Medium {
+    /// Creates the UI for selecting the medium.
+    fn ui<R>(
         &mut self,
         ui: &mut egui::Ui,
-        add_contents: impl FnOnce(&mut EmitterParams, &mut egui::Ui) -> R,
+        id: Option<impl Hash>,
+        _extra: Option<impl FnMut(&mut Self, &mut egui::Ui) -> R>,
+    ) -> R {
+        egui::ComboBox::from_id_salt(id.unwrap())
+            .selected_text(format!("{:?}", self))
+            .show_ui(ui, |ui| {
+                ui.selectable_value(self, Medium::Air, "Air");
+                ui.selectable_value(self, Medium::Copper, "Copper");
+                ui.selectable_value(self, Medium::Aluminium, "Aluminium");
+                ui.selectable_value(self, Medium::Vacuum, "Vacuum");
+            });
+    }
+}
+
+impl WithUI for EmitterParams {
+    /// Creates the UI for parameterizing the emitter.
+    fn ui<R>(
+        &mut self,
+        ui: &mut egui::Ui,
+        _id: Option<impl Hash>,
+        extra: Option<impl FnOnce(&mut EmitterParams, &mut egui::Ui) -> R>,
     ) {
         egui::CollapsingHeader::new("Emitter")
             .default_open(true)
@@ -84,8 +117,10 @@ impl EmitterParams {
                         range_step_size_inclusive_length_ui(&mut self.spectrum, ui);
                         ui.end_row();
 
-                        add_contents(self, ui);
-                    });
+                        if let Some(mut add_contents) = extra {
+                            add_contents(self, ui)
+                        }
+                    })
             });
     }
 }
@@ -121,7 +156,7 @@ pub fn spherical_domain_ui(domain: &mut SphericalDomain, ui: &mut egui::Ui) {
 pub struct BsdfMeasurementTab {
     pub params: BsdfMeasurementParams,
     event_loop: EventLoopProxy,
-    #[cfg(feature = "vdbg")]
+    #[cfg(feature = "measure-vdbg")]
     debug: BsdfMeasurementDebug,
 }
 
@@ -131,7 +166,7 @@ impl BsdfMeasurementTab {
         Self {
             params: BsdfMeasurementParams::default(),
             event_loop,
-            #[cfg(feature = "vdbg")]
+            #[cfg(feature = "measure-vdbg")]
             debug: BsdfMeasurementDebug {
                 detector_dome_drawing: false,
                 emitter_samples_drawing: false,
@@ -147,7 +182,7 @@ impl BsdfMeasurementTab {
         }
     }
 
-    #[cfg(feature = "vdbg")]
+    #[cfg(feature = "measure-vdbg")]
     pub fn measurement_point(&self) -> Sph2 {
         let zenith_count = self.params.emitter.zenith.step_count_wrapped();
         let azimuth_idx = self.debug.measurement_point_index / zenith_count as i32;
@@ -161,8 +196,8 @@ impl BsdfMeasurementTab {
     pub fn ui(
         &mut self,
         ui: &mut egui::Ui,
-        #[cfg(feature = "vdbg")] debug_draw: bool,
-        #[cfg(feature = "vdbg")] orbit_radius: f32,
+        #[cfg(feature = "measure-vdbg")] debug_draw: bool,
+        #[cfg(feature = "measure-vdbg")] orbit_radius: f32,
     ) {
         egui::CollapsingHeader::new("Parameters")
             .default_open(true)
@@ -235,7 +270,7 @@ impl BsdfMeasurementTab {
                         }
                     });
                 // TODO: Emitter sector
-                #[cfg(feature = "vdbg")]
+                #[cfg(feature = "measure-vdbg")]
                 self.params.emitter.ui(ui, |params, ui| {
                     if debug_draw {
                         ui.label("Samples");
@@ -360,7 +395,7 @@ impl BsdfMeasurementTab {
                     }
                 });
                 // TODO: Add multiple receivers
-                #[cfg(feature = "vdbg")]
+                #[cfg(feature = "measure-vdbg")]
                 for receiver in &mut self.params.receivers {
                     receiver.ui(ui, |params, ui| {
                         if debug_draw {
@@ -443,7 +478,7 @@ impl BsdfMeasurementTab {
     }
 }
 
-#[cfg(feature = "vdbg")]
+#[cfg(feature = "measure-vdbg")]
 pub struct BsdfMeasurementDebug {
     pub detector_dome_drawing: bool,
     pub emitter_samples_drawing: bool,

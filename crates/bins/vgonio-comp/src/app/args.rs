@@ -1,14 +1,10 @@
 #[cfg(feature = "fitting")]
 use crate::app::cli::FitOptions;
-#[cfg(feature = "surf-gen")]
+#[cfg(feature = "surface-gen")]
 use crate::app::cli::GenerateOptions;
-use crate::app::cli::{ConvertOptions, DiffOptions, MeasureOptions, PlotOptions, SubdivideOptions};
-use clap::ValueEnum;
+use crate::app::cli::{ConvertOptions, DiffOptions, PlotOptions, SubdivideOptions};
 use serde::{Deserialize, Serialize};
-use std::{
-    fmt::{Display, Formatter},
-    path::PathBuf,
-};
+use std::{fmt::Display, path::PathBuf};
 
 /// Vgonio command line interface arguments.
 #[derive(clap::Parser, Debug)]
@@ -73,13 +69,12 @@ pub struct CliArgs {
 /// Vgonio command.
 #[derive(clap::Subcommand, Debug)]
 pub enum SubCommand {
-    #[cfg(feature = "surf-gen")]
+    #[cfg(feature = "surface-gen")]
     /// Generates a new micro-geometry level surface.
     Generate(GenerateOptions),
 
-    /// Measures micro-geometry level light transport related metrics.
-    Measure(MeasureOptions),
-
+    // /// Measures micro-geometry level light transport related metrics.
+    // Measure(MeasureOptions),
     /// Prints related information about the current vgonio instance.
     #[clap(name = "info")]
     PrintInfo(PrintInfoOptions),
@@ -132,36 +127,4 @@ pub enum FastMeasurementKind {
     #[clap(name = "msf")]
     /// Micro-facet masking-shadowing function.
     MaskingShadowingFunction,
-}
-
-#[derive(Debug, Copy, Clone, Default, PartialEq, Serialize, Deserialize, ValueEnum)]
-#[serde(rename_all = "lowercase")]
-pub enum OutputFormat {
-    /// Vgonio internal file format.
-    #[default]
-    Vgmo,
-    // /// Portable float map.
-    // Pfm,
-    // /// Portable network graphics.
-    // Png,
-    /// OpenEXR image format with resolution.
-    Exr,
-    /// Vgonio interal file format together with a EXR file.
-    VgmoExr,
-}
-
-impl Display for OutputFormat {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Vgmo => write!(f, "vgmo"),
-            Self::Exr => write!(f, "exr"),
-            Self::VgmoExr => write!(f, "vgmo+exr"),
-        }
-    }
-}
-
-impl OutputFormat {
-    pub fn is_vgmo(&self) -> bool { matches!(self, Self::Vgmo | Self::VgmoExr) }
-
-    pub fn is_exr(&self) -> bool { matches!(self, Self::Exr | Self::VgmoExr) }
 }

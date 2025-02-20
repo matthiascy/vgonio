@@ -38,6 +38,16 @@ impl VgonioError {
         }
     }
 
+    pub fn new_message<S>(message: S) -> Self
+    where
+        S: Into<String>,
+    {
+        Self {
+            message: message.into(),
+            source: None,
+        }
+    }
+
     /// Creates a new VgonioError from a Utf8Error.
     pub fn from_utf8_error<S>(err: Utf8Error, message: S) -> Self
     where

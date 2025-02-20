@@ -1,6 +1,10 @@
 //! Application Asset Management
 
-use std::{fmt::Debug, path::Path};
+use std::{
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+    path::Path,
+};
 
 mod asset;
 mod handle;
@@ -10,6 +14,7 @@ mod store;
 
 use crate::optics::{IorReg, IorRegLoader};
 
+use crate::utils::ansi;
 pub use asset::*;
 pub use handle::*;
 pub use loader::*;
@@ -18,38 +23,57 @@ pub use store::*;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Error when an asset type is not found in the storage.
     #[error("Asset type {0} not found in the storage")]
     AssetTypeNotFound(&'static str),
 
+    /// Error when an asset with a specific handle is not found in the storage.
     #[error("Asset with ID {0} not found in the storage")]
     AssetNotFound(Handle),
 
+    /// Error when the asset type of handle does not match the expected type.
     #[error("Type mismatch: expected {expected}, got {actual}")]
     TypeMismatch {
         expected: &'static str,
         actual: &'static str,
     },
 
+    /// Error when an asset type is not found in the storage.
     #[error("I/O error: {0}")]
     IoError(#[from] std::io::Error),
 
+    /// Error when no loader is found for a specific asset type.
     #[error("No loader found for asset of type {0}")]
     LoaderNotFound(&'static str),
 
+    /// Error when the asset type ID of a handle does not match the expected
+    /// type.
     #[error("Unknown asset type ID {0}")]
     UnknownAssetTypeId(u8),
 
+    /// Error when the provided path is not a valid directory.
     #[error("Provided path '{0}' is not a valid directory")]
     InvalidDirectory(String),
+
+    /// Error when the asset doesn't have a dependency that is requested.
+    #[error("Asset of type {asset} doesn't have a dependency for {requested}")]
+    AssetMissingDependency {
+        asset: &'static str,
+        requested: &'static str,
+    },
+
+    /// Error when the IOR database is not loaded.
+    #[error("IOR database not loaded")]
+    IorDbNotLoaded,
 }
 
 /// Structure for caching intermediate results and data.
 /// Also used for managing assets.
 pub struct RawDataStore {
     /// Generic storage for assets that don't need specific handling.
-    pub assets: AssetsStorage,
+    assets: AssetsStorage,
     /// Handle to the refractive index database.
-    pub ior_db: Option<Handle>,
+    ior_db: Option<Handle>,
 }
 
 impl RawDataStore {
@@ -76,8 +100,19 @@ impl RawDataStore {
         let loader = IorRegLoader::new(sys_data_dir, user_data_dir, exclude_ior_files);
         assets.register_loader::<IorReg>(Box::new(loader));
 
+        // TODO: auto indenting for log messages
         if load_ior_db {
-            let ior_db = assets.load_asset::<IorReg>(None).unwrap();
+            println!(
+                "  {}>{} Loading data files (refractive indices, spd etc.)...",
+                ansi::BRIGHT_YELLOW,
+                ansi::RESET
+            );
+            let ior_db = assets.load_asset::<IorReg>(None, None).unwrap();
+            println!(
+                "    {}✓{} Successfully load data files",
+                ansi::BRIGHT_CYAN,
+                ansi::RESET
+            );
             Self {
                 assets,
                 ior_db: Some(ior_db),
@@ -99,14 +134,14 @@ impl RawDataStore {
     pub fn get<T: Asset>(&self, handle: Handle) -> Result<&T, Error> {
         self.assets
             .get_store::<T>()
-            .ok_or(Error::AssetTypeNotFound(T::asset_type()))
+            .ok_or(Error::AssetTypeNotFound(T::asset_type_name()))
             .and_then(|store| store.get(&handle).ok_or(Error::AssetNotFound(handle)))
             .and_then(|asset| {
                 asset
                     .as_any()
                     .downcast_ref::<T>()
                     .ok_or(Error::TypeMismatch {
-                        expected: T::asset_type(),
+                        expected: T::asset_type_name(),
                         actual: asset.own_type_name(),
                     })
             })
@@ -116,7 +151,7 @@ impl RawDataStore {
     pub fn get_mut<T: Asset>(&mut self, handle: Handle) -> Result<&mut T, Error> {
         self.assets
             .get_store_mut::<T>()
-            .ok_or(Error::AssetTypeNotFound(T::asset_type()))
+            .ok_or(Error::AssetTypeNotFound(T::asset_type_name()))
             .and_then(|store| store.get_mut(&handle).ok_or(Error::AssetNotFound(handle)))
             .and_then(|asset| {
                 let asset_type_name = asset.own_type_name();
@@ -124,7 +159,7 @@ impl RawDataStore {
                     .as_any_mut()
                     .downcast_mut::<T>()
                     .ok_or(Error::TypeMismatch {
-                        expected: T::asset_type(),
+                        expected: T::asset_type_name(),
                         actual: asset_type_name,
                     })
             })
@@ -135,7 +170,7 @@ impl RawDataStore {
         if T::asset_type_id() != handle.asset_type_id() {
             let actual = handle.asset_type_name();
             return Err(Error::TypeMismatch {
-                expected: T::asset_type(),
+                expected: T::asset_type_name(),
                 actual,
             });
         }
@@ -161,6 +196,24 @@ impl RawDataStore {
             .flat_map(|store| store.values_mut())
             .filter_map(|asset| asset.as_any_mut().downcast_mut::<T>())
     }
+
+    /// Gets a reference to the refractive index database.
+    pub fn ior_db(&self) -> Result<&IorReg, Error> {
+        self.ior_db
+            .as_ref()
+            .and_then(|handle| self.get::<IorReg>(*handle).ok())
+            .ok_or(Error::IorDbNotLoaded)
+    }
+}
+
+impl Deref for RawDataStore {
+    type Target = AssetsStorage;
+
+    fn deref(&self) -> &Self::Target { &self.assets }
+}
+
+impl DerefMut for RawDataStore {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.assets }
 }
 
 /// A thread-safe cache. This is a wrapper around `RawCache`.

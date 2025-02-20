@@ -1,25 +1,25 @@
-#[cfg(feature = "vdbg")]
-use crate::measure::bsdf::rtc::RayTrajectory;
-use crate::{
-    app::{
-        cache::Cache,
-        gui::{
-            event::{EventLoopProxy, VgonioEvent},
-            notify::NotifyKind,
-        },
+use crate::app::{
+    cache::Cache,
+    gui::{
+        event::{EventLoopProxy, VgonioEvent},
+        notify::NotifyKind,
     },
-    measure::bsdf::rtc::Ray,
 };
 use gxtk::{context::GpuContext, render_pass::RenderPass, vertex::VertexLayout};
 use std::sync::Arc;
 use surf::{MicroSurface, MicroSurfaceMesh};
 use uuid::Uuid;
+#[cfg(feature = "measure-vdbg")]
+use vgonio_core::measure::bsdf::trace::RayTrajectory;
 use vgonio_core::{
     math::{Mat4, Sph2, Vec3},
+    measure::bsdf::{
+        emitter::{EmitterParams, EmitterSamples, MeasurementPoints},
+        trace::Ray,
+    },
     res::{DataStore, Handle},
     utils::partition::SphericalPartition,
 };
-use vgonio_meas::bsdf::emitter::{EmitterParams, EmitterSamples, MeasurementPoints};
 use wgpu::util::DeviceExt;
 
 pub const DEBUG_DRAWING_SHADER: &str = r#"
@@ -94,7 +94,7 @@ pub struct DebugDrawingState {
     pub emitter_samples: Option<EmitterSamples>,
     /// Emitter samples buffer.
     pub emitter_samples_buffer: Option<wgpu::Buffer>,
-    #[cfg(feature = "vdbg")]
+    #[cfg(feature = "measure-vdbg")]
     /// Emitter samples uniform buffer.
     pub emitter_samples_uniform_buffer: Option<wgpu::Buffer>,
     /// Emitter measurement points buffer.
@@ -355,7 +355,7 @@ impl DebugDrawingState {
             emitter_position: Sph2::zero(),
             emitter_samples: None,
             emitter_samples_buffer: None,
-            #[cfg(feature = "vdbg")]
+            #[cfg(feature = "measure-vdbg")]
             emitter_samples_uniform_buffer: None,
             emitter_points_buffer: None,
             emitter_rays: None,
@@ -702,7 +702,7 @@ impl DebugDrawingState {
     }
 
     /// Updates the ray trajectories for the debugging draw calls.
-    #[cfg(feature = "vdbg")]
+    #[cfg(feature = "measure-vdbg")]
     pub fn update_ray_trajectories(
         &mut self,
         ctx: &GpuContext,

@@ -43,7 +43,17 @@ pub mod config;
 
 pub mod optics;
 
+#[cfg(feature = "bxdf")]
 pub mod bxdf;
+
+#[cfg(feature = "measure")]
+pub mod measure;
+
+#[cfg(feature = "pybind")]
+mod pybind;
+
+#[cfg(feature = "surface")]
+pub mod surface;
 
 /// Indicates whether something is uniform in all directions or not.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
@@ -548,6 +558,43 @@ pub enum TriangulationPattern {
     /// 023, 031
     #[default]
     TopLeftToBottomRight,
+}
+
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "lowercase")
+)]
+#[derive(Debug, Copy, Clone, Default, PartialEq)]
+pub enum OutputFormat {
+    /// Vgonio internal file format.
+    #[default]
+    Vgmo,
+    // /// Portable float map.
+    // Pfm,
+    // /// Portable network graphics.
+    // Png,
+    /// OpenEXR image format with resolution.
+    Exr,
+    /// Vgonio internal file format together with an EXR file.
+    VgmoExr,
+}
+
+impl Display for OutputFormat {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Vgmo => write!(f, "vgmo"),
+            Self::Exr => write!(f, "exr"),
+            Self::VgmoExr => write!(f, "vgmo+exr"),
+        }
+    }
+}
+
+impl OutputFormat {
+    pub fn is_vgmo(&self) -> bool { matches!(self, Self::Vgmo | Self::VgmoExr) }
+
+    pub fn is_exr(&self) -> bool { matches!(self, Self::Exr | Self::VgmoExr) }
 }
 
 #[cfg(test)]

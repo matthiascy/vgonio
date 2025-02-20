@@ -1,21 +1,19 @@
 #[cfg(debug_assertions)]
 use crate::app::gui::plotter::{debug_print_angle, debug_print_angle_pair};
-use crate::{
-    app::{
-        cache::{Cache, RawCache},
-        gui::{
-            event::EventLoopProxy,
-            plotter::{angle_knob, Curve, VariantData},
-        },
+use crate::app::{
+    cache::{Cache, RawCache},
+    gui::{
+        event::EventLoopProxy,
+        plotter::{angle_knob, Curve, VariantData},
     },
-    measure::mfd::MeasuredGafData,
 };
 use egui::{Align, Ui};
 use std::any::Any;
-use vgonio_bxdf::fitting::FittedModel;
 #[cfg(feature = "fitting")]
 use vgonio_core::bxdf::MicrofacetDistribution;
 use vgonio_core::{
+    bxdf::fitting::FittedModel,
+    measure::mfd::MeasuredGafData,
     res::Handle,
     units::{rad, Radians},
     utils::range::StepRangeIncl,

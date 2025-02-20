@@ -1,16 +1,12 @@
-use crate::measure::{
-    mfd::{MeasuredGafData, MeasuredNdfData},
-    params::NdfMeasurementMode,
-};
+use crate::bxdf::distro::{BeckmannDistribution, TrowbridgeReitzDistribution};
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationReason};
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use std::fmt::Display;
-use vgonio_bxdf::{
-    distro::{BeckmannDistribution, TrowbridgeReitzDistribution},
-    fitting::{FittingProblem, FittingReport, MinimisationReport},
-};
 use vgonio_core::{
-    bxdf::{MicrofacetDistribution, MicrofacetDistroKind},
+    bxdf::{
+        fitting::{FittingProblem, FittingReport, MinimisationReport},
+        MicrofacetDistribution, MicrofacetDistroKind,
+    },
     math::sph_to_cart,
     units::Radians,
     utils::{
@@ -18,6 +14,10 @@ use vgonio_core::{
         range::StepRangeIncl,
     },
     ErrorMetric, Symmetry, Weighting,
+};
+use vgonio_meas::{
+    mfd::{MeasuredGafData, MeasuredNdfData},
+    params::NdfMeasurementMode,
 };
 
 /// Enum representing the measured microfacet distribution related data on which

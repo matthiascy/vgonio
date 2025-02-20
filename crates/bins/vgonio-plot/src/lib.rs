@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use vgonio_core::{BrdfLevel, ErrorMetric, Symmetry, Weighting};
 
 #[cfg(feature = "surface")]
-use vgonio_surf::subdivision::SubdivisionKind;
+use vgonio_core::surface::::SubdivisionKind;
 
 mod utils;
 

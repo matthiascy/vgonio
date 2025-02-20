@@ -3,38 +3,41 @@ mod msf;
 mod ndf;
 mod sdf;
 
-use crate::{
-    app::{
-        args::OutputFormat,
-        cache::{Cache, RawCache},
-        gui::{
-            event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
-            measurement::{
-                bsdf::BsdfMeasurementTab, msf::GafMeasurementTab, ndf::NdfMeasurementTab,
-                sdf::SdfMeasurementTab,
-            },
-            misc,
-            notify::NotifyKind,
+use crate::app::{
+    cache::{Cache, RawCache},
+    gui::{
+        event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
+        measurement::{
+            bsdf::{BsdfMeasurementTab, WithUI},
+            msf::GafMeasurementTab,
+            ndf::NdfMeasurementTab,
+            sdf::SdfMeasurementTab,
         },
+        misc,
+        notify::NotifyKind,
     },
-    measure::{bsdf::receiver::ReceiverParams, params::MeasurementParams},
 };
 use egui::Widget;
+use std::hash::Hash;
 use uxtk::widgets::{SurfaceSelector, ToggleSwitch};
 use vgonio_core::{
     io::{CompressionScheme, FileEncoding},
+    measure::{
+        bsdf::receiver::ReceiverParams,
+        io::{OutputFileFormatOption, OutputOptions},
+    },
     res::Handle,
     utils::partition::{PartitionScheme, SphericalDomain},
     MeasurementKind,
 };
-use vgonio_meas::io::{OutputFileFormatOption, OutputOptions};
 
-impl ReceiverParams {
+impl WithUI for ReceiverParams {
     /// UI for detector parameters.
-    pub fn ui<R>(
+    fn ui<R>(
         &mut self,
         ui: &mut egui::Ui,
-        add_contents: impl FnOnce(&mut ReceiverParams, &mut egui::Ui) -> R,
+        _id: Option<impl Hash>,
+        extra: impl FnOnce(&mut ReceiverParams, &mut egui::Ui) -> R,
     ) {
         egui::CollapsingHeader::new("Detector")
             .default_open(true)
@@ -74,7 +77,9 @@ impl ReceiverParams {
                         });
                         ui.end_row();
 
-                        add_contents(self, ui);
+                        if let Some(extra) = extra {
+                            extra(self, ui);
+                        }
                     });
             });
     }
@@ -111,16 +116,16 @@ pub struct MeasurementDialog {
     write_to_file: bool,
     /// Event loop proxy.
     event_loop: EventLoopProxy,
-    #[cfg(any(feature = "vdbg", debug_assertions))]
+    #[cfg(any(feature = "measure-vdbg", debug_assertions))]
     debug: MeasurementDialogDebug,
-    #[cfg(any(feature = "vdbg", debug_assertions))]
+    #[cfg(any(feature = "measure-vdbg", debug_assertions))]
     cache: Cache,
 }
 
 impl MeasurementDialog {
     pub fn new(
         event_loop: EventLoopProxy,
-        #[cfg(any(feature = "vdbg", debug_assertions))] cache: Cache,
+        #[cfg(any(feature = "measure-vdbg", debug_assertions))] cache: Cache,
     ) -> Self {
         MeasurementDialog {
             kind: MeasurementKind::Bsdf,
@@ -136,7 +141,7 @@ impl MeasurementDialog {
             compression: CompressionScheme::None,
             write_to_file: false,
             event_loop,
-            #[cfg(any(feature = "vdbg", debug_assertions))]
+            #[cfg(any(feature = "measure-vdbg", debug_assertions))]
             debug: MeasurementDialogDebug {
                 enable_debug_draw: false,
                 surf_prim_id: 0,
@@ -144,7 +149,7 @@ impl MeasurementDialog {
                 surface_viewers: vec![],
                 focused_viewer: None,
             },
-            #[cfg(any(feature = "vdbg", debug_assertions))]
+            #[cfg(any(feature = "measure-vdbg", debug_assertions))]
             cache,
         }
     }
@@ -155,7 +160,7 @@ impl MeasurementDialog {
         self.selector.update(surfs);
     }
 
-    #[cfg(any(feature = "vdbg", debug_assertions))]
+    #[cfg(any(feature = "measure-vdbg", debug_assertions))]
     pub fn update_surface_viewers(&mut self, viewers: &[uuid::Uuid]) {
         for viewer in viewers {
             if !self.debug.surface_viewers.contains(viewer) {
@@ -172,7 +177,7 @@ impl MeasurementDialog {
             .fixed_size((400.0, 600.0))
             .show(ctx, |ui| {
                 measurement_kind_selectable_ui(&mut self.kind, ui);
-                #[cfg(feature = "vdbg")]
+                #[cfg(feature = "measure-vdbg")]
                 {
                     ui.horizontal_wrapped(|ui| {
                         ui.label("Debug draw: ");
@@ -234,7 +239,7 @@ impl MeasurementDialog {
                                 ));
                             }
 
-                            #[cfg(any(feature = "vdbg", debug_assertions))]
+                            #[cfg(any(feature = "measure-vdbg", debug_assertions))]
                             if self.debug.enable_debug_draw {
                                 ui.label("Primitive ID: ");
                                 ui.horizontal_wrapped(|ui| {
@@ -275,7 +280,7 @@ impl MeasurementDialog {
 
                 match self.kind {
                     MeasurementKind::Bsdf => {
-                        #[cfg(feature = "vdbg")]
+                        #[cfg(feature = "measure-vdbg")]
                         let orbit_radius = match self.selector.first_selected() {
                             None => 0.0,
                             Some(surf) => self.cache.read(|cache| {
@@ -286,9 +291,9 @@ impl MeasurementDialog {
                         };
                         self.tab_bsdf.ui(
                             ui,
-                            #[cfg(feature = "vdbg")]
+                            #[cfg(feature = "measure-vdbg")]
                             self.debug.enable_debug_draw,
-                            #[cfg(feature = "vdbg")]
+                            #[cfg(feature = "measure-vdbg")]
                             orbit_radius,
                         )
                     },
@@ -432,7 +437,7 @@ impl MeasurementDialog {
     }
 }
 
-#[cfg(any(feature = "vdbg", debug_assertions))]
+#[cfg(any(feature = "measure-vdbg", debug_assertions))]
 pub struct MeasurementDialogDebug {
     enable_debug_draw: bool,
     surf_prim_id: usize,

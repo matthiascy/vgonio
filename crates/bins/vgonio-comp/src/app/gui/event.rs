@@ -1,17 +1,14 @@
 use super::outliner::OutlinerItem;
-use crate::{
-    app::gui::{
-        notify::NotifyKind,
-        surf_viewer::{OverlayFlags, ShadingMode},
-    },
-    measure::params::MeasurementParams,
+use crate::app::gui::{
+    notify::NotifyKind,
+    surf_viewer::{OverlayFlags, ShadingMode},
 };
 use std::path::PathBuf;
-use surf::subdivision::Subdivision;
+use vgonio_core::surface::::Subdivision;
 use uuid::Uuid;
 use uxtk::theme::ThemeKind;
 #[cfg(feature = "fitting")]
-use vgonio_bxdf::fitting::FittingProblemKind;
+use vgonio_core::bxdf::fitting::FittingProblemKind;
 use vgonio_core::{
     math::{IVec2, Sph2},
     res::Handle,
@@ -19,10 +16,10 @@ use vgonio_core::{
     utils::partition::SphericalPartition,
     MeasurementKind,
 };
-use vgonio_meas::{
-    bsdf::emitter::{EmitterSamples, MeasurementPoints},
-    io::OutputOptions,
-};
+use vgonio_core::measure::bsdf::emitter::{EmitterSamples, MeasurementPoints};
+use vgonio_core::measure::io::OutputOptions;
+use vgonio_core::measure::params::MeasurementParams;
+use vgonio_meas::{};
 
 /// Event loop proxy with Vgonio events.
 #[derive(Clone, Debug)]

@@ -4492,27 +4492,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vgonio-bxdf"
-version = "0.3.2"
-dependencies = [
- "chrono",
- "clap",
- "exr",
- "indicatif",
- "levenberg-marquardt",
- "libm",
- "log",
- "nalgebra",
- "rayon",
- "serde",
- "serde-pickle",
- "serde_json",
- "vgonio-core",
- "vgonio-jabr",
- "vgonio-powitacq",
-]
-
-[[package]]
 name = "vgonio-comp"
 version = "0.3.2"
 dependencies = [
@@ -4551,12 +4530,9 @@ dependencies = [
  "toml",
  "type-map",
  "uuid",
- "vgonio-bxdf",
  "vgonio-core",
  "vgonio-gxtk",
  "vgonio-jabr",
- "vgonio-meas",
- "vgonio-surf",
  "vgonio-uxtk",
  "wgpu",
  "winit",
@@ -4566,6 +4542,7 @@ dependencies = [
 name = "vgonio-core"
 version = "0.3.2"
 dependencies = [
+ "ahash",
  "approx",
  "byteorder",
  "cfg-if",
@@ -4573,25 +4550,36 @@ dependencies = [
  "clap",
  "csv",
  "dirs",
+ "embree",
  "env_logger",
  "exr",
  "flate2",
  "glam 0.28.0",
  "indicatif",
  "lazy_static",
+ "levenberg-marquardt",
+ "libm",
  "log",
+ "nalgebra",
+ "nohash-hasher",
  "num-traits",
  "paste",
  "proptest",
  "pyo3",
+ "rand",
+ "rand_chacha",
  "rayon",
  "serde",
+ "serde-pickle",
+ "serde_json",
  "serde_yaml",
  "static_assertions",
  "thiserror 2.0.11",
+ "tobj",
  "toml",
  "uuid",
  "vgonio-jabr",
+ "vgonio-powitacq",
  "winit",
 ]
 
@@ -4611,7 +4599,6 @@ dependencies = [
  "rayon",
  "uuid",
  "vgonio-core",
- "vgonio-surf",
  "wgpu",
  "winit",
 ]
@@ -4624,26 +4611,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "vgonio-meas"
-version = "0.3.2"
-dependencies = [
- "chrono",
- "exr",
- "log",
- "serde",
- "static_assertions",
- "vgonio-bxdf",
- "vgonio-core",
- "vgonio-jabr",
-]
-
-[[package]]
 name = "vgonio-measure"
 version = "0.3.2"
 dependencies = [
+ "chrono",
  "clap",
+ "log",
+ "rayon",
  "vgonio-core",
- "vgonio-meas",
+ "vgonio-jabr",
 ]
 
 [[package]]
@@ -4654,9 +4630,7 @@ dependencies = [
  "env_logger",
  "exr",
  "log",
- "vgonio-bxdf",
  "vgonio-core",
- "vgonio-surf",
 ]
 
 [[package]]
@@ -4675,38 +4649,13 @@ dependencies = [
  "log",
  "numpy",
  "pyo3",
- "vgonio-bxdf",
  "vgonio-core",
  "vgonio-jabr",
- "vgonio-surf",
 ]
 
 [[package]]
 name = "vgonio-serve"
 version = "0.3.2"
-
-[[package]]
-name = "vgonio-surf"
-version = "0.1.0"
-dependencies = [
- "ahash",
- "byteorder",
- "chrono",
- "clap",
- "embree",
- "exr",
- "flate2",
- "glam 0.28.0",
- "log",
- "nohash-hasher",
- "pyo3",
- "rand",
- "rayon",
- "serde",
- "tobj",
- "uuid",
- "vgonio-core",
-]
 
 [[package]]
 name = "vgonio-uxtk"
@@ -4720,7 +4669,6 @@ dependencies = [
  "type-map",
  "vgonio-core",
  "vgonio-gxtk",
- "vgonio-surf",
 ]
 
 [[package]]

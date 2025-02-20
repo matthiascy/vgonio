@@ -11,7 +11,7 @@ workspace = true
 
 [features]
 default = []
-surface = ["dep:vgonio-surf"]
+surface = []
 
 [dependencies]
 clap.workspace = true
@@ -19,5 +19,3 @@ env_logger.workspace = true
 exr.workspace = true
 log.workspace = true
 vgonio-core = { workspace = true, features = ["cli", "config"] }
-vgonio-bxdf = { path = "../../libs/vgonio-bxdf" }
-vgonio-surf = { path = "../../libs/vgonio-surf", optional = true }

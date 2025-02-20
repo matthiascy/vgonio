@@ -1,8 +1,10 @@
-use crate::{app::cache::Cache, measure::params::SurfacePath};
+use crate::app::cache::Cache;
 use egui::ahash::HashSet;
 use std::path::PathBuf;
-use surf::{subdivision::Subdivision, HeightOffset};
+use surf::HeightOffset;
 use vgonio_core::{config::Config, error::VgonioError};
+use vgonio_core::surface::::Subdivision;
+use vgonio_core::measure::params::SurfacePath;
 
 #[derive(Debug, Clone, clap::Args)]
 pub struct SubdivideOptions {

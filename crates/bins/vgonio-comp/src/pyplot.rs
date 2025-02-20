@@ -1,9 +1,8 @@
 use core::f64;
 
-use crate::measure::{
-    mfd::{MeasuredGafData, MeasuredNdfData},
-    params::NdfMeasurementMode,
-    DataCarriedOnHemisphereSampler,
+use crate::bxdf::brdf::{
+    analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
+    measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, MerlBrdfParam, VgonioBrdf, Yan18Brdf},
 };
 use exr::{
     image::{FlatImage, FlatSamples},
@@ -14,10 +13,6 @@ use numpy::{PyArray, PyArray1, PyArray2, PyArrayMethods};
 use pyo3::{ffi::c_str, prelude::*, types::PyList};
 use std::{ffi::CString, fs::File, io::Read, path::Path};
 use surf::MicroSurface;
-use vgonio_bxdf::brdf::{
-    analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-    measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, MerlBrdfParam, VgonioBrdf, Yan18Brdf},
-};
 use vgonio_core::{
     bxdf::{AnalyticalBrdf, MeasuredBrdfKind, MicrofacetDistroKind, OutgoingDirs, Scattering},
     error::VgonioError,
@@ -26,6 +21,11 @@ use vgonio_core::{
     units::{rad, Degrees, Nanometres, Radians, Rads},
     utils::range::{StepRangeExcl, StepRangeIncl},
     AnyMeasured, AnyMeasuredBrdf, BrdfLevel, ErrorMetric, MeasurementKind, Weighting,
+};
+use vgonio_meas::{
+    mfd::{MeasuredGafData, MeasuredNdfData},
+    params::NdfMeasurementMode,
+    DataCarriedOnHemisphereSampler,
 };
 
 /// Load the Python source code dynamically from the given path into a

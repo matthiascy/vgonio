@@ -8,17 +8,15 @@ version.workspace = true
 
 [features]
 default = []
-surface = ["dep:vgonio-surf"]
+surface = ["vgonio-core/surface"]
 
 [dependencies]
 exr = { workspace = true }
 numpy.workspace = true
 pyo3.workspace = true
 log.workspace = true
-vgonio-core = { path = "../../libs/vgonio-core" }
+vgonio-core = { path = "../../libs/vgonio-core", optional = true }
 vgonio-jabr = { path = "../../libs/vgonio-jabr" }
-vgonio-bxdf = { path = "../../libs/vgonio-bxdf" }
-vgonio-surf = { path = "../../libs/vgonio-surf", optional = true }
 
 [lints]
 workspace = true

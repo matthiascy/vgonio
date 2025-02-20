@@ -53,24 +53,21 @@ const WIN_INITIAL_HEIGHT: u32 = 900;
 
 use self::tools::SamplingInspector;
 
-use crate::{
-    app::{
-        cache::{Cache, RawCache},
-        gui::{
-            docking::WidgetKind,
-            event::{EventLoopProxy, SurfaceViewerEvent},
-            notify::NotifyKind,
-            state::{debug::DebugDrawingState, GuiContext},
-            surf_viewer::SurfaceViewerStates,
-        },
+use crate::app::{
+    cache::{Cache, RawCache},
+    gui::{
+        docking::WidgetKind,
+        event::{EventLoopProxy, SurfaceViewerEvent},
+        notify::NotifyKind,
+        state::{debug::DebugDrawingState, GuiContext},
+        surf_viewer::SurfaceViewerStates,
     },
-    measure::params::MeasurementParams,
 };
 use vgonio_core::{
     config::Config,
+    measure::{io::OutputOptions, params::MeasurementParams},
     res::{DataStore, RawDataStore},
 };
-use vgonio_meas::io::OutputOptions;
 
 /// Launches Vgonio GUI application native window.
 pub fn run(config: Config) -> Result<(), VgonioError> {
@@ -622,11 +619,11 @@ impl VgonioGuiApp {
                                     return;
                                 }
 
-                                #[cfg(feature = "vdbg")]
+                                #[cfg(feature = "measure-vdbg")]
                                 {
-                                    use crate::measure::bsdf::BsdfMeasurement;
+                                    use vgonio_core::measure::bsdf::BsdfMeasurement;
                                     let measured = self.cache.read(|cache| {
-                                        measure::bsdf::measure_bsdf_rt(params, &surfaces, cache)
+                                        vgonio_meas::bsdf::measure_bsdf_rt(params, &surfaces, cache)
                                     });
                                     let bsdf = measured[0]
                                         .measured
@@ -641,7 +638,7 @@ impl VgonioGuiApp {
                                     measured
                                 }
 
-                                #[cfg(not(feature = "vdbg"))]
+                                #[cfg(not(feature = "measure-vdbg"))]
                                 self.cache.read(|cache| {
                                     measure::bsdf::measure_bsdf_rt(params, &surfaces, cache)
                                 })

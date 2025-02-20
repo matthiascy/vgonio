@@ -1,7 +1,3 @@
-use crate::{
-    app::cli::ansi,
-    measure::{params::SurfacePath, Measurement},
-};
 use gxtk::{context::GpuContext, mesh::RenderableMesh};
 use std::{
     collections::HashMap,
@@ -10,15 +6,18 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-use surf::{subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh};
+use surf::{HeightOffset, MicroSurface, MicroSurfaceMesh};
 use vgonio_core::{
     config::Config,
     error::VgonioError,
     optics::IorReg,
-    res::{Asset, AssetsStorage, Handle},
-    utils::medium::Medium,
+    res::Handle,
+    utils::{ansi, medium::Medium},
     TriangulationPattern,
 };
+use vgonio_core::measure::params::SurfacePath;
+use vgonio_core::surface::::Subdivision;
+use vgonio_meas::{Measurement};
 
 /// A record inside the cache for a micro-surface.
 #[derive(Clone, Debug)]
@@ -72,10 +71,10 @@ pub struct RawCache {
     msurfs: HashMap<Handle, MicroSurface>,
 
     /// Micro-surface triangle mesh cache, indexed by micro-surface mesh uuid.
-    pub(crate) meshes: HashMap<Handle, MicroSurfaceMesh>,
+    pub meshes: HashMap<Handle, MicroSurfaceMesh>,
 
     /// Cache for `RenderableMesh`s, indexed by renderable mesh uuid.
-    pub(crate) renderables: HashMap<Handle, RenderableMesh>,
+    pub renderables: HashMap<Handle, RenderableMesh>,
 
     /// Cache for measured data.
     measurements: HashMap<Handle, Measurement>,
@@ -308,7 +307,7 @@ impl RawCache {
     /// mesh and renderable mesh.
     pub fn unload_micro_surface(&mut self, handle: Handle) -> Result<(), VgonioError> {
         let record = self.records.get(&handle).ok_or_else(|| {
-            VgonioError::new(format!("Failed to unload micro-surface: {}", handle), None)
+            VgonioError::new_message(format!("Failed to unload micro-surface: {}", handle))
         })?;
         self.msurfs.remove(&handle);
         self.meshes.remove(&record.mesh);

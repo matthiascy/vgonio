@@ -8,12 +8,14 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
 };
-use vgonio_bxdf::brdf::{
-    analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-    measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan18Brdf},
-};
 use vgonio_core::{
-    bxdf::{AnalyticalBrdf, MeasuredBrdfKind, MicrofacetDistroKind, OutgoingDirs, Scattering},
+    bxdf::{
+        brdf::{
+            analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
+            measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan18Brdf},
+        },
+        AnalyticalBrdf, MeasuredBrdfKind, MicrofacetDistroKind, OutgoingDirs, Scattering,
+    },
     math,
     math::Sph2,
     optics::IorReg,

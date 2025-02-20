@@ -41,7 +41,7 @@ impl std::fmt::Display for AssetTypeId {
 /// Trait for assets that can be stored.
 pub trait Asset: Any + Send + Sync + 'static {
     /// Unique identifier for the asset type.
-    fn asset_type() -> &'static str
+    fn asset_type_name() -> &'static str
     where
         Self: Sized;
 
@@ -72,11 +72,12 @@ pub trait Asset: Any + Send + Sync + 'static {
     }
 }
 
+// TODO: derive macro for this?
 #[macro_export]
 macro_rules! asset {
     ($t:ty, $n:expr) => {
         impl $crate::res::Asset for $t {
-            fn asset_type() -> &'static str { $n }
+            fn asset_type_name() -> &'static str { $n }
 
             fn asset_type_id() -> $crate::res::AssetTypeId {
                 use $crate::res::{AssetTypeId, AssetTypeIdAllocator, AssetTypeRegistry};
@@ -107,8 +108,23 @@ macro_rules! asset {
 }
 
 /// Structure for tracking asset dependencies.
+///
+/// This structure is used to track dependencies between assets.
 #[derive(Debug, Default)]
 pub struct AssetDeps {
-    depends_on: Vec<Handle>,
-    used_by: Vec<Handle>,
+    /// Parent asset handle if this asset is derived from another asset.
+    pub(crate) derived_from: Option<Handle>,
+    /// Assets derived from this asset.
+    pub(crate) derived_by: Vec<Handle>,
+    /// Assets that this asset depends on.
+    pub(crate) depends_on: Vec<Handle>,
+}
+
+impl AssetDeps {
+    /// Gets the parent asset handle if this asset is derived from another
+    /// asset.
+    pub fn derived_from(&self) -> Option<Handle> { self.derived_from }
+
+    /// Gets the assets derived from this asset.
+    pub fn derived_by(&self) -> &[Handle] { &self.derived_by }
 }

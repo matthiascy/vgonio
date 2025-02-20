@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 /// Parses the arguments, returns the arguments and the launch time.
 ///
 /// # Arguments
@@ -22,7 +24,7 @@ pub fn parse_args<T: clap::Parser>(name: &str) -> (T, std::time::SystemTime) {
 }
 
 /// Common arguments for the CLI.
-#[derive(Debug, Copy, Clone, clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 pub struct CommonArgs {
     #[clap(
         long,
@@ -30,6 +32,12 @@ pub struct CommonArgs {
         default_value = "0"
     )]
     pub log_level: u8,
+
+    /// Path to a specific config file.
+    /// In the absence of this argument, VGonio will load the default config
+    /// file.
+    #[clap(short, long, help = "Path to the config file")]
+    pub config: Option<PathBuf>,
 }
 
 /// A filter for the logger.

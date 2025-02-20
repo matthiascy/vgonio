@@ -1,4 +1,6 @@
-use crate::res::{loader::AssetLoader, Asset, AssetTypeId, AssetTypeRegistry, Error, Handle};
+use crate::res::{
+    loader::AssetLoader, Asset, AssetDeps, AssetTypeId, AssetTypeRegistry, Error, Handle,
+};
 use std::{collections::HashMap, path::Path};
 
 /// Container for assets of the same type.
@@ -15,8 +17,8 @@ pub struct AssetsStorage {
     assets: HashMap<AssetTypeId, AssetsContainer>,
     /// List of asset loaders.
     loaders: HashMap<AssetTypeId, Box<dyn AssetLoader>>,
-    // TODO: Asset dependencies.
-    // dependencies: HashMap<Handle, AssetDeps>,
+    /// Asset dependencies.
+    dependencies: HashMap<Handle, AssetDeps>,
 }
 
 impl AssetsStorage {
@@ -27,18 +29,57 @@ impl AssetsStorage {
     }
 
     /// Loads asset of a specific type.
-    pub fn load_asset<T: Asset>(&mut self, path: Option<&Path>) -> Result<Handle, Error> {
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the asset file.
+    /// * `post` - Function to call after the asset is loaded, e.g. to set
+    ///  dependencies, where the argument is the dependencies for all assets.
+    pub fn load_asset<T: Asset>(
+        &mut self,
+        path: Option<&Path>,
+        post: Option<fn(&mut HashMap<Handle, AssetDeps>)>,
+    ) -> Result<Handle, Error> {
         let asset_type_id = T::asset_type_id();
         let loader = self
             .loaders
             .get(&asset_type_id)
-            .ok_or(Error::LoaderNotFound(T::asset_type()))?;
+            .ok_or(Error::LoaderNotFound(T::asset_type_name()))?;
         let asset = loader.load(path)?;
-        self.insert_asset(asset)
+        self.insert_asset(asset).map(|handle| {
+            if let Some(f) = post {
+                f(&mut self.dependencies);
+            }
+            handle
+        })
+    }
+
+    /// Loads assets of the same type with different paths.
+    ///
+    /// # Arguments
+    ///
+    /// * `paths` - Paths to the asset files.
+    /// * `post` - Function to call after the asset is loaded, e.g. to set
+    /// dependencies, where the argument is the dependencies for all assets.
+    pub fn load_assets<T: Asset>(
+        &mut self,
+        paths: &[&Path],
+        post: Option<fn(&mut HashMap<Handle, AssetDeps>)>,
+    ) -> Result<Box<[Handle]>, Error> {
+        let mut handles = Vec::new();
+        for path in paths {
+            let handle = self.load_asset::<T>(Some(path), post)?;
+            handles.push(handle);
+        }
+        Ok(handles.into_boxed_slice())
     }
 
     /// Loads assets from a directory recursively.
-    pub fn load_directory<T: Asset>(&mut self, path: &Path) -> Result<(), Error> {
+    pub fn load_directory<T: Asset>(
+        &mut self,
+        path: &Path,
+        post: Option<fn(&mut HashMap<Handle, AssetDeps>)>,
+    ) -> Result<(), Error> {
         if !path.is_dir() {
             return Err(Error::InvalidDirectory(
                 path.to_path_buf().to_str().unwrap().to_string(),
@@ -48,9 +89,9 @@ impl AssetsStorage {
         for entry in path.read_dir()? {
             let entry = entry?;
             if entry.file_type()?.is_dir() {
-                self.load_directory::<T>(&entry.path())?;
+                self.load_directory::<T>(&entry.path(), post)?;
             } else {
-                self.load_asset::<T>(Some(&entry.path()))?;
+                self.load_asset::<T>(Some(&entry.path()), post)?;
             }
         }
         Ok(())
@@ -135,6 +176,37 @@ impl AssetsStorage {
             .get_mut(&T::asset_type_id())
             .and_then(|store| store.get_mut(&handle))
             .and_then(|asset| asset.as_any_mut().downcast_mut::<T>())
+    }
+
+    /// Gets asset dependencies by handle.
+    pub fn get_deps(&self, handle: Handle) -> Option<&AssetDeps> { self.dependencies.get(&handle) }
+
+    /// Sets asset dependencies by handle.
+    pub fn set_deps(&mut self, handle: Handle, deps: AssetDeps) {
+        self.dependencies.insert(handle, deps);
+    }
+
+    /// Removes asset dependencies by handle.
+    pub fn remove_deps(&mut self, handle: Handle) { self.dependencies.remove(&handle); }
+
+    /// Updates asset dependencies of a specific asset by a function.
+    pub fn update_deps<F>(&mut self, handle: Handle, f: F)
+    where
+        F: FnOnce(Option<&mut AssetDeps>),
+    {
+        f(self.dependencies.get_mut(&handle));
+    }
+
+    // TODO: smallvec?
+    /// Gets the assets with a specific type derived from an asset specified by
+    /// handle.
+    pub fn get_derived_assets<T: Asset>(&self, handle: Handle) -> Option<Box<[Handle]>> {
+        self.get_deps(handle).and_then(|deps| {
+            deps.derived_by
+                .iter()
+                .map(|h| h.same_type_id_as::<T>().then_some(*h))
+                .collect::<_>()
+        })
     }
 
     /// Gets a store for a specific asset type if it exists.

@@ -17,6 +17,12 @@ pub use glam::*;
 // TODO: remove this
 use num_traits::Float;
 
+/// Machine epsilon for `f32`.
+pub const MACHINE_EPSILON: f32 = f32::EPSILON * 0.5;
+
+/// Returns the gamma factor for a floating point number.
+pub const fn gamma_f32(n: f32) -> f32 { (n * MACHINE_EPSILON) / (1.0 - n * MACHINE_EPSILON) }
+
 // TODO: self-contained math library, tailored for specific use cases
 // TODO: constify as much as possible
 
