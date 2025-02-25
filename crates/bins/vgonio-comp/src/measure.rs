@@ -5,7 +5,6 @@ pub mod mfd;
 pub mod params;
 
 use crate::{
-    app::cli::ansi::YELLOW_GT,
     io::{
         vgmo::{vgmo_header_ext_from_data, VgmoHeaderExt},
         OutputFileFormatOption,
@@ -36,6 +35,7 @@ use surf::{MicroSurface, MicroSurfaceMesh};
 use vgonio_bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan18Brdf};
 use vgonio_core::{
     asset,
+    cli::ansi,
     error::VgonioError,
     io::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
@@ -214,7 +214,8 @@ impl Measurement {
             });
         } else if filepath.extension().unwrap() == "binary" {
             println!(
-                "  {YELLOW_GT} Loading MERL BSDF file: {}",
+                "  {} Loading MERL BSDF file: {}",
+                ansi::YELLOW_GT,
                 filepath.display()
             );
             let loaded = MerlBrdf::load(filepath)?;

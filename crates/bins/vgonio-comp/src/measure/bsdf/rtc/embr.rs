@@ -2,16 +2,13 @@
 
 #[cfg(feature = "vdbg")]
 use crate::measure::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
+use crate::measure::bsdf::{
+    emitter::EmitterCircularSector,
+    rtc::{compute_num_of_streams, HitInfo, MAX_RAY_STREAM_SIZE},
+    SingleSimResult,
+};
 #[cfg(not(feature = "vdbg"))]
 use crate::measure::params::BsdfMeasurementParams;
-use crate::{
-    app::cli::ansi,
-    measure::bsdf::{
-        emitter::EmitterCircularSector,
-        rtc::{compute_num_of_streams, HitInfo, MAX_RAY_STREAM_SIZE},
-        SingleSimResult,
-    },
-};
 use embree::{
     BufferUsage, Config, Device, Geometry, HitN, IntersectContext, IntersectContextExt,
     IntersectContextFlags, RayHitNp, RayN, RayNp, Scene, SceneFlags, SoAHit, SoARay, ValidMask,
@@ -23,6 +20,7 @@ use surf::MicroSurfaceMesh;
 #[cfg(not(feature = "vdbg"))]
 use vgonio_core::optics::Ior;
 use vgonio_core::{
+    cli::ansi,
     math::{Sph2, Vec3A},
     optics::fresnel,
 };

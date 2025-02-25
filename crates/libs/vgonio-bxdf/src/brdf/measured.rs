@@ -32,12 +32,12 @@ where
     pub incident_medium: Medium,
     /// Transmitted medium.
     pub transmitted_medium: Medium,
-    /// The parameterisation of the measured BRDF.
+    /// The parametrisation of the measured BRDF.
     pub params: Box<P>,
     /// Wavelengths at which the BRDF is measured.
     pub spectrum: DyArr<Nanometres>,
     /// Sampled BRDF data stored in a multidimensional array.
-    /// Its shape depends on the parameterisation of the BRDF.
+    /// Its shape depends on the parametrisation of the BRDF.
     pub samples: DyArr<f32, N>,
     /// The kind of the measured BRDF.
     pub kind: MeasuredBrdfKind,

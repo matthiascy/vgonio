@@ -1,5 +1,8 @@
-use crate::brdf::analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR};
-use levenberg_marquardt::LeastSquaresProblem;
+use crate::{
+    brdf::analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
+    fitting::{FittingProblem, MinimisationReport},
+};
+use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt};
 use nalgebra::{Dyn, Matrix, Owned, VecStorage, Vector, U1, U2};
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use vgonio_core::{
@@ -580,4 +583,34 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
             Some(self.jacobian())
         }
     }
+}
+
+macro_rules! impl_minimise_method {
+    () => {
+        /// Runs the NLLSQ algorithm to fit the BRDF model to the measured data.
+        pub fn minimise(
+            self,
+        ) -> (
+            Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
+            MinimisationReport,
+        ) {
+            let solver = LevenbergMarquardt::new();
+            let n_data_points = self
+                .proxy
+                .n_filtered_samples(self.max_theta_i, self.max_theta_o);
+            let (fitted, report) = solver.minimize(self);
+            (
+                fitted.model,
+                MinimisationReport::from_lm_nllsq(report, n_data_points),
+            )
+        }
+    };
+}
+
+impl<'a> NllsqBrdfFittingProxy<'a, { Symmetry::Isotropic }> {
+    impl_minimise_method!();
+}
+
+impl<'a> NllsqBrdfFittingProxy<'a, { Symmetry::Anisotropic }> {
+    impl_minimise_method!();
 }

@@ -1,3 +1,5 @@
+pub mod ansi;
+
 /// Parses the arguments, returns the arguments and the launch time.
 ///
 /// # Arguments

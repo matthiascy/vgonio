@@ -18,7 +18,7 @@ use vgonio_core::{
 };
 use vgonio_jabr::array::{s, DArr, DyArr, DynArr};
 
-/// Parameterisation for a measured BRDF from the MERL database: <http://www.merl.com/brdf/>
+/// Parametrisation for a measured BRDF from the MERL database: <http://www.merl.com/brdf/>
 #[derive(Debug, Clone, PartialEq)]
 pub struct MerlBrdfParam {
     /// The zenith angles difference between the incident and outgoing

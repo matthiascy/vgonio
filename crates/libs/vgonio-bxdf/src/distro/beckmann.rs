@@ -27,7 +27,7 @@ impl Debug for BeckmannDistribution {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "BeckmannDistrib. {{ α_x: {}, α_y: {} }}",
+            "Beckmann {{ αx: {:.8}, αy: {:.8} }}",
             self.alpha_x, self.alpha_y
         )
     }

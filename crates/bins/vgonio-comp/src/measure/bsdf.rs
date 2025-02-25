@@ -7,7 +7,7 @@ use crate::measure::bsdf::rtc::embr;
 #[cfg(feature = "vdbg")]
 use crate::measure::bsdf::rtc::RayTrajectory;
 use crate::{
-    app::{cache::RawCache, cli::ansi},
+    app::cache::RawCache,
     measure::{
         bsdf::{
             emitter::Emitter,
@@ -32,6 +32,7 @@ use vgonio_bxdf::brdf::measured::{
 };
 use vgonio_core::{
     bxdf::{MeasuredBrdfKind, Origin},
+    cli::ansi,
     error::VgonioError,
     math::{rcp_f64, Sph2, Vec3},
     res::{Handle, RawDataStore},

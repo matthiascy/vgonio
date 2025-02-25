@@ -1,18 +1,16 @@
 //! Light source of the measurement system.
 
-use crate::{
-    app::cli::ansi,
-    measure::{bsdf::rtc::Ray, SphericalTransform},
-};
-use vgonio_core::{
-    math::{Sph2, Vec3},
-    units::{deg, nm, rad, Nanometres, Radians, Rads},
-    utils::range::StepRangeIncl,
-};
+use crate::measure::{bsdf::rtc::Ray, SphericalTransform};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use surf::MicroSurfaceMesh;
+use vgonio_core::{
+    cli::ansi,
+    math::{Sph2, Vec3},
+    units::{deg, nm, rad, Nanometres, Radians, Rads},
+    utils::range::StepRangeIncl,
+};
 
 /// Parameters for the emitter.
 ///

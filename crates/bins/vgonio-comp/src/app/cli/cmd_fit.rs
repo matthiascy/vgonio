@@ -1,5 +1,9 @@
-use crate::{app::cli::ansi, measure::bsdf::BsdfMeasurement, pyplot::plot_err};
-use std::{fmt::Debug, path::PathBuf};
+use crate::{measure::bsdf::BsdfMeasurement, pyplot::plot_err};
+use std::{
+    fmt::Debug,
+    io::{BufWriter, Write},
+    path::PathBuf,
+};
 use vgonio_core::{
     config::Config,
     error::VgonioError,
@@ -10,12 +14,16 @@ use vgonio_core::{
     AnyMeasuredBrdf, BrdfLevel, ErrorMetric, Symmetry, Weighting,
 };
 
-use crate::app::cache::Cache;
+use crate::{app::cache::Cache, pyplot::plot_per_wavelength_err};
 use vgonio_bxdf::{
     brdf::measured::{merl::MerlBrdf, rgl::RglBrdf, yan::Yan18Brdf, ClausenBrdf},
-    fitting::FittingProblem,
+    fitting::{FittingProblem, FittingReport},
 };
-use vgonio_core::bxdf::{BrdfFamily, MeasuredBrdfKind, MicrofacetDistroKind};
+use vgonio_core::{
+    bxdf::{AnalyticalBrdf, BrdfFamily, BrdfProxy, MeasuredBrdfKind, MicrofacetDistroKind},
+    cli::ansi,
+    units::Nanometres,
+};
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     println!(
@@ -183,35 +191,170 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
 
 fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, iors: &IorReg) {
     println!(
-        "      {} Fitting using brute force method...",
-        ansi::YELLOW_GT
+        "      {} Fitting using brute force method... {}",
+        ansi::YELLOW_GT,
+        if opts.per_wavelength {
+            "per wavelength"
+        } else {
+            ""
+        }
     );
     let start = std::time::Instant::now();
-    let report = brdf.proxy(iors).brute_fit(
-        opts.distro,
-        opts.error_metric.unwrap_or(ErrorMetric::Mse),
-        opts.weighting,
-        opts.theta_limit.map(|t| Radians::from_degrees(t)),
-        opts.theta_limit.map(|t| Radians::from_degrees(t)),
-        opts.brute_precision,
-    );
+    let full_proxy = brdf.proxy(iors);
+    let reports = if opts.per_wavelength {
+        let mut reports = Box::new_uninit_slice(brdf.spectrum().len());
+        let wavelengths = brdf.spectrum();
+        let filename = format!(
+            "{}_{}_{:?}_{:?}.csv",
+            opts.inputs[0].file_stem().unwrap().display(),
+            opts.error_metric.unwrap(),
+            opts.distro.unwrap(),
+            opts.weighting,
+        );
+        let file = std::fs::File::create(filename).unwrap();
+        let mut writer = BufWriter::new(file);
+        writer
+            .write(b"surface,kind,weighing,distro,wavelength,alpha,error\n")
+            .unwrap();
+        for (i, w) in wavelengths.iter().enumerate() {
+            let proxy = full_proxy.per_wavelength(i);
+            let report = brdf_fitting_brute_force_inner(proxy, opts, 0, Some(*w));
+            writer
+                .write(
+                    format!(
+                        "{},{:?},{:?},{:?},{},{},{}\n",
+                        opts.inputs[0].file_stem().unwrap().to_str().unwrap(),
+                        opts.kind,
+                        opts.weighting,
+                        opts.distro.unwrap(),
+                        w,
+                        report.best_model().unwrap().params()[0],
+                        report.best_model_report().unwrap().1.objective_fn
+                    )
+                    .as_bytes(),
+                )
+                .unwrap();
+            reports[i].write(report);
+        }
+        unsafe { reports.assume_init() }
+    } else {
+        Box::new([brdf_fitting_brute_force_inner(full_proxy, opts, 4, None)])
+    };
     let end = std::time::Instant::now();
     println!("    {} Took: {:?}", ansi::YELLOW_GT, end - start);
 
-    report.print_fitting_report(4);
-
     if opts.plot {
-        let mut alpha_error_pairs = report
-            .reports
-            .iter()
-            .map(|(m, r)| (m.params()[0], r.objective_fn))
-            .collect::<Vec<_>>();
-        // Sort the error by alpha value for later plotting
-        alpha_error_pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        let (alpha, error): (Vec<_>, Vec<_>) = alpha_error_pairs.into_iter().unzip();
+        // Per wavelength fitting
+        if opts.per_wavelength && opts.symmetry.is_isotropic() {
+            let wavelengths = brdf
+                .spectrum()
+                .iter()
+                .map(|w| w.as_f32())
+                .collect::<Vec<_>>();
+            let (alphas, errors): (Vec<_>, Vec<_>) = reports
+                .iter()
+                .map(|report| {
+                    let best = report.best_model().unwrap();
+                    let best_report = report.best_model_report().unwrap();
+                    (best.params()[0], best_report.1.objective_fn)
+                })
+                .unzip();
+            plot_per_wavelength_err(
+                &wavelengths,
+                alphas.as_slice(),
+                errors.as_slice(),
+                opts.brute_precision,
+            )
+        }
 
-        plot_err(error.as_slice(), alpha.as_slice(), opts.brute_precision)
-            .expect("Failed to plot the error.");
+        for report in reports.iter() {
+            let mut alpha_error_pairs = report
+                .reports
+                .iter()
+                .map(|(m, r)| (m.params()[0], r.objective_fn))
+                .collect::<Vec<_>>();
+            // Sort the error by alpha value for later plotting
+            alpha_error_pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+            let (alpha, error): (Vec<_>, Vec<_>) = alpha_error_pairs.into_iter().unzip();
+
+            plot_err(error.as_slice(), alpha.as_slice(), opts.brute_precision)
+                .expect("Failed to plot the error.");
+        }
+    }
+
+    fn brdf_fitting_brute_force_inner(
+        proxy: BrdfProxy,
+        opts: &FitOptions,
+        n: usize,
+        w: Option<Nanometres>,
+    ) -> FittingReport<Box<dyn AnalyticalBrdf<Params = [f64; 2]>>> {
+        let report = proxy.brute_fit(
+            opts.distro.unwrap(),
+            opts.error_metric.unwrap_or(ErrorMetric::Mse),
+            opts.weighting,
+            opts.theta_limit.map(|t| Radians::from_degrees(t)),
+            opts.theta_limit.map(|t| Radians::from_degrees(t)),
+            opts.brute_precision,
+        );
+        // Print the fitting report
+        if let Some(w) = w {
+            print!("      {} λ = {:?}: ", ansi::YELLOW_GT, w);
+        }
+        report.print_fitting_report(n);
+        report
+    }
+}
+
+fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, iors: &IorReg) {
+    let full_proxy = brdf.proxy(iors);
+
+    let _reports = if opts.per_wavelength {
+        let mut reports = Box::new_uninit_slice(brdf.spectrum().len());
+        let wavelengths = brdf.spectrum();
+        for (i, w) in wavelengths.iter().enumerate() {
+            let proxy = full_proxy.per_wavelength(i);
+            reports[i].write(brdf_fitting_nllsq_inner(&proxy, opts, 0, Some(*w)));
+        }
+        unsafe { reports.assume_init() }
+    } else {
+        Box::new([brdf_fitting_nllsq_inner(&full_proxy, opts, 4, None)])
+    };
+
+    fn brdf_fitting_nllsq_inner(
+        proxy: &BrdfProxy,
+        opts: &FitOptions,
+        n: usize,
+        w: Option<Nanometres>,
+    ) -> FittingReport<Box<dyn AnalyticalBrdf<Params = [f64; 2]>>> {
+        // Adjust the alpha range only if the model is isotropic
+        let alpha = match opts.symmetry {
+            Symmetry::Isotropic => {
+                let report = proxy.brute_fit(
+                    opts.distro.unwrap(),
+                    opts.error_metric.unwrap_or(ErrorMetric::Mse),
+                    opts.weighting,
+                    opts.theta_limit.map(|t| Radians::from_degrees(t)),
+                    opts.theta_limit.map(|t| Radians::from_degrees(t)),
+                    2,
+                );
+                let mid = report.best_model().unwrap().params()[0];
+                StepRangeIncl::new(mid - 0.01, mid + 0.1, 0.001)
+            },
+            Symmetry::Anisotropic => StepRangeIncl::new(0.0, 1.0, 0.01),
+        };
+        let report = proxy.nllsq_fit(
+            opts.distro.unwrap(),
+            opts.symmetry,
+            opts.weighting,
+            alpha,
+            opts.theta_limit.map(|t| Radians::from_degrees(t)),
+            opts.theta_limit.map(|t| Radians::from_degrees(t)),
+        );
+        if let Some(w) = w {
+            println!("      {} λ = {:?}: ", ansi::YELLOW_GT, w);
+        }
+        report.print_fitting_report(n);
+        report
     }
 }
 
@@ -224,7 +367,7 @@ fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
     let limit = theta_limit.unwrap_or(Radians::HALF_PI);
     println!(
         "    {} Fitting ({:?}) to model: {:?}, distro: {:?}, symmetry: {}, method: {:?}, error \
-         metric: {:?}, weighting: {:?}, θ < {}",
+         metric: {}, weighting: {:?}, θ < {}",
         ansi::YELLOW_GT,
         brdf.kind(),
         opts.family,
@@ -242,36 +385,7 @@ fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
 
     match opts.method {
         FittingMethod::Brute => brdf_fitting_brute_force(brdf, opts, iors),
-        FittingMethod::Nllsq => {
-            let proxy = brdf.proxy(iors);
-
-            // Adjust the alpha range only if the model is isotropic
-            let alpha = match opts.symmetry {
-                Symmetry::Isotropic => {
-                    let report = brdf.proxy(iors).brute_fit(
-                        opts.distro,
-                        opts.error_metric.unwrap_or(ErrorMetric::Mse),
-                        opts.weighting,
-                        opts.theta_limit.map(|t| Radians::from_degrees(t)),
-                        opts.theta_limit.map(|t| Radians::from_degrees(t)),
-                        2,
-                    );
-                    let mid = report.best_model().unwrap().params()[0];
-                    StepRangeIncl::new(mid - 0.01, mid + 0.1, 0.001)
-                },
-                Symmetry::Anisotropic => StepRangeIncl::new(0.0, 1.0, 0.01),
-            };
-
-            let report = proxy.nllsq_fit(
-                opts.distro,
-                opts.symmetry,
-                opts.weighting,
-                alpha,
-                opts.theta_limit.map(|t| Radians::from_degrees(t)),
-                opts.theta_limit.map(|t| Radians::from_degrees(t)),
-            );
-            report.print_fitting_report(8);
-        },
+        FittingMethod::Nllsq => brdf_fitting_nllsq(brdf, opts, iors),
     }
 }
 
@@ -327,7 +441,7 @@ pub struct FitOptions {
                 distribution will be used.",
         required_if_eq("family", "microfacet")
     )]
-    pub distro: MicrofacetDistroKind,
+    pub distro: Option<MicrofacetDistroKind>,
 
     #[clap(
         long,
@@ -366,6 +480,13 @@ pub struct FitOptions {
         default_value = "none"
     )]
     pub weighting: Weighting,
+
+    #[clap(
+        long,
+        help = "Whether to fit the measured data per wavelength.",
+        default_value = "false"
+    )]
+    pub per_wavelength: bool,
 
     #[clap(
         long,

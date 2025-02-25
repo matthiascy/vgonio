@@ -60,6 +60,26 @@ pub fn plot_err(errs: &[f64], alpha: &[f64], n_digits: u32) -> PyResult<()> {
     })
 }
 
+pub fn plot_per_wavelength_err(wavelengths: &[f32], alphas: &[f64], errors: &[f64], n_digits: u32) {
+    Python::with_gil(|py| {
+        let fun: Py<PyAny> = PyModule::from_code(
+            py,
+            c_str!(include_str!("./pyplot/pyplot.py")),
+            c_str!("pyplot.py"),
+            c_str!("vgp"),
+        )
+        .unwrap()
+        .getattr("plot_per_wavelength_err")
+        .unwrap()
+        .into();
+        let wavelengths = PyArray1::from_vec(py, wavelengths.to_vec());
+        let alphas = PyArray1::from_vec(py, alphas.to_vec());
+        let errors = PyArray1::from_vec(py, errors.to_vec());
+        let args = (wavelengths, alphas, errors, n_digits);
+        fun.call1(py, args).unwrap();
+    });
+}
+
 /// Plot the comparison between two the VgonioBrdf and ClausenBrdf.
 ///
 /// # Arguments

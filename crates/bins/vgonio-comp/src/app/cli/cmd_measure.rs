@@ -1,11 +1,12 @@
 use crate::{
-    app::{args::OutputFormat, cache::Cache, cli::ansi},
+    app::{args::OutputFormat, cache::Cache},
     io::{OutputFileFormatOption, OutputOptions},
     measure,
     measure::params::{MeasurementDescription, MeasurementParams, NdfMeasurementMode},
 };
 use std::{path::PathBuf, time::Instant};
 use vgonio_core::{
+    cli::ansi,
     config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},

@@ -1,9 +1,9 @@
-use crate::app::cli::ansi;
 use std::path::PathBuf;
 use surf::{HeightOffset, MicroSurface};
 #[cfg(feature = "surf-obj")]
 use vgonio_core::units::LengthUnit;
 use vgonio_core::{
+    cli::ansi,
     config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},

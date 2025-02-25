@@ -3,6 +3,7 @@ use levenberg_marquardt::{MinimizationReport, TerminationReason};
 use std::fmt::Debug;
 use vgonio_core::{
     bxdf::{AnalyticalBrdf, BrdfFamily, MicrofacetDistribution, MicrofacetDistroKind},
+    cli::ansi,
     math::rcp_f64,
     units::Radians,
     utils::range::StepRangeIncl,
@@ -179,22 +180,22 @@ impl<M> FittingReport<M> {
     where
         M: Debug,
     {
-        if n == 0 {
-            return;
+        // Only log the best model
+        if n > 0 {
+            if self.reports.is_empty() {
+                println!("No fitting reports");
+                return;
+            }
+
+            println!("Fitting reports (first {}):", n);
+            for (m, r) in self.reports.iter().take(n) {
+                println!(
+                    "    - {:?}, metric: {}, obj_fn: {}",
+                    m, r.error_metric, r.objective_fn
+                );
+            }
         }
 
-        if self.reports.is_empty() {
-            println!("No fitting reports");
-            return;
-        }
-
-        println!("Fitting reports (first {}):", n);
-        for (m, r) in self.reports.iter().take(n) {
-            println!(
-                "    - Model: {:?}, Err: {:?}, ObjFn: {}",
-                m, r.error_metric, r.objective_fn
-            );
-        }
         let best = self.best_model();
         if best.is_none() {
             println!("  No best model found");
@@ -205,7 +206,8 @@ impl<M> FittingReport<M> {
         // Currently, the user termination is only used in the brute force fitting
         if let TerminationReason::User(_) = best_report.1.termination {
             println!(
-                "  Best model: {:?}, metric: {:?}, err: {}",
+                "{} {:?}, metric: {}, obj_fn: {}",
+                ansi::GREEN_CHECK,
                 best.unwrap(),
                 best_report.1.error_metric,
                 best_report.1.objective_fn
@@ -215,7 +217,8 @@ impl<M> FittingReport<M> {
             let rcp = rcp_f64(best_report.1.n_data_points as f64);
             let mse = best_report.1.objective_fn * 2.0 * rcp;
             println!(
-                "  Best model: {:?}, metric: {:?}, err: {}, mse: {}",
+                "{} {:?}, metric: {}, obj_fn: {}, mse: {}",
+                ansi::GREEN_CHECK,
                 best.unwrap(),
                 best_report.1.error_metric,
                 best_report.1.objective_fn,
@@ -299,7 +302,6 @@ pub mod brdf {
             max_theta_i: Option<Radians>,
             max_theta_o: Option<Radians>,
         ) -> FittingReport<Self::Model> {
-            let solver = LevenbergMarquardt::new();
             let cpu_count = (std::thread::available_parallelism().unwrap().get() / 2).max(1);
             let tasks = init_microfacet_brdf_models(initial, target, symmetry);
             let tasks_per_cpu = tasks.len().div_ceil(cpu_count);
@@ -309,7 +311,6 @@ pub mod brdf {
                 tasks_per_cpu,
                 cpu_count
             );
-            let n_filtered_samples = self.n_filtered_samples(max_theta_i, max_theta_o);
             let results = tasks
                 .par_chunks(tasks_per_cpu)
                 .flat_map(|models| {
@@ -326,14 +327,7 @@ pub mod brdf {
                                             max_theta_i,
                                             max_theta_o,
                                         );
-                                    let (result, report) = solver.minimize(nllsq_proxy);
-                                    (
-                                        result.model,
-                                        MinimisationReport::from_lm_nllsq(
-                                            report,
-                                            n_filtered_samples,
-                                        ),
-                                    )
+                                    nllsq_proxy.minimise()
                                 },
                                 Symmetry::Anisotropic => {
                                     let nllsq_proxy = NllsqBrdfFittingProxy::<
@@ -346,14 +340,7 @@ pub mod brdf {
                                         max_theta_i,
                                         max_theta_o,
                                     );
-                                    let (result, report) = solver.minimize(nllsq_proxy);
-                                    (
-                                        result.model,
-                                        MinimisationReport::from_lm_nllsq(
-                                            report,
-                                            n_filtered_samples,
-                                        ),
-                                    )
+                                    nllsq_proxy.minimise()
                                 },
                             };
 

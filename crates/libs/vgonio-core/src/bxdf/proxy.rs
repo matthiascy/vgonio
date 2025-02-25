@@ -3,7 +3,7 @@ use crate::{
     math,
     math::Sph2,
     optics::Ior,
-    units::{rad, Radians},
+    units::{rad, Nanometres, Radians},
     AnyMeasuredBrdf, ErrorMetric, Weighting,
 };
 use rayon::iter::{ParallelBridge, ParallelIterator};
@@ -148,6 +148,10 @@ pub struct BrdfProxy<'a> {
     pub(crate) source: ProxySource,
     /// The raw BRDF data that the proxy is associated with.
     pub(crate) brdf: &'a dyn AnyMeasuredBrdf,
+    /// The wavelength spectrum of the proxy; this is not always the same as
+    /// the spectrum of the raw BRDF data as the proxy can be generated for
+    /// a single wavelength.
+    pub spectrum: Box<[Nanometres]>,
     /// Incident angles (polar angle) in radians of the resampled BRDF data.
     pub i_thetas: Cow<'a, DyArr<f32>>,
     /// Incident angles (azimuthal angle) in radians of the resampled BRDF
@@ -166,13 +170,8 @@ pub struct BrdfProxy<'a> {
     pub(crate) iors_t: Cow<'a, [Ior]>,
 }
 
-// /// A trait for BRDFs that can be fitted with an analytical model.
-// pub trait AnalyticalFit: AnyMeasuredBrdf + Sync {
-//     /// Create a proxy for this BRDF.
-//     fn proxy(&self, iors: &IorRegistry) -> BrdfProxy;
-// }
-
 impl<'a> BrdfProxy<'a> {
+    /// Creates a new BRDF proxy.
     pub fn new(
         has_nan: bool,
         source: ProxySource,
@@ -184,10 +183,12 @@ impl<'a> BrdfProxy<'a> {
         iors_i: Cow<'a, [Ior]>,
         iors_t: Cow<'a, [Ior]>,
     ) -> Self {
+        let spectrum = brdf.spectrum().to_vec().into_boxed_slice();
         Self {
             has_nan,
             source,
             brdf,
+            spectrum,
             i_thetas,
             i_phis,
             o_dirs,
@@ -208,6 +209,61 @@ impl<'a> BrdfProxy<'a> {
 
     /// Returns the refractive indices for the transmitted medium.
     pub fn iors_t(&self) -> &[Ior] { &self.iors_t }
+
+    /// Returns single wavelength proxy.
+    pub fn per_wavelength(&'a self, idx: usize) -> BrdfProxy<'a> {
+        assert!(
+            idx < self.spectrum.len(),
+            "The index must be less than the number of wavelengths"
+        );
+        // Grid: [Nθ_i, Nφ_i, Nθ_o, Nφ_o, Nλ] -> [Nθ_i, Nφ_i, Nθ_o, Nφ_o, 1]
+        // List: [Nθ_i, Nφ_i, Nω_o, Nλ] -> [Nθ_i, Nφ_i, Nω_o, 1]
+        let shape = self.resampled.shape();
+        let mut new_shape = shape.to_vec();
+        let last_idx = new_shape.len() - 1;
+        new_shape[last_idx] = 1;
+
+        let mut sampled = DynArr::zeros(&new_shape);
+        let iors_i = &self.iors_i[idx..idx + 1];
+        let iors_t = &self.iors_t[idx..idx + 1];
+        let spectrum = &self.spectrum[idx..idx + 1];
+
+        match self.o_dirs {
+            OutgoingDirs::Grid { .. } => {
+                for i in 0..shape[0] {
+                    for j in 0..shape[1] {
+                        for k in 0..shape[2] {
+                            for l in 0..shape[3] {
+                                sampled[[i, j, k, l, 0]] = self.resampled[[i, j, k, l, idx]];
+                            }
+                        }
+                    }
+                }
+            },
+            OutgoingDirs::List { .. } => {
+                for i in 0..shape[0] {
+                    for j in 0..shape[1] {
+                        for k in 0..shape[2] {
+                            sampled[[i, j, k, 0]] = self.resampled[[i, j, k, idx]];
+                        }
+                    }
+                }
+            },
+        }
+
+        Self {
+            has_nan: self.has_nan,
+            source: self.source,
+            brdf: self.brdf,
+            spectrum: spectrum.to_vec().into_boxed_slice(),
+            i_thetas: self.i_thetas.clone(),
+            i_phis: self.i_phis.clone(),
+            o_dirs: self.o_dirs.clone(),
+            resampled: Cow::Owned(sampled),
+            iors_i: Cow::Borrowed(iors_i),
+            iors_t: Cow::Borrowed(iors_t),
+        }
+    }
 
     /// Returns the number of samples used for fitting.
     ///
@@ -296,6 +352,7 @@ impl<'a> BrdfProxy<'a> {
             && self.i_phis == other.i_phis
             && self.o_dirs == other.o_dirs
             && self.brdf.spectrum() == other.brdf.spectrum()
+            && self.spectrum == other.spectrum
             && self.resampled.shape() == other.resampled.shape()
     }
 
@@ -674,7 +731,7 @@ impl<'a> BrdfProxy<'a> {
     /// Generate the data points following the same incident and outgoing
     /// angles for the given analytical BRDF.
     pub fn generate_analytical(&self, model: &dyn AnalyticalBrdf<Params = [f64; 2]>) -> Self {
-        let n_spectrum = self.brdf.spectrum().len();
+        let n_spectrum = self.spectrum.len();
         let mut resampled = DynArr::zeros(self.resampled.shape());
         let i_thetas = self.i_thetas.as_slice();
         let i_phis = self.i_phis.as_slice();
@@ -771,6 +828,7 @@ impl<'a> BrdfProxy<'a> {
             has_nan: false,
             source: ProxySource::Analytical,
             brdf: self.brdf,
+            spectrum: self.spectrum.clone(),
             i_thetas: self.i_thetas.clone(),
             i_phis: self.i_phis.clone(),
             o_dirs: self.o_dirs.clone(),

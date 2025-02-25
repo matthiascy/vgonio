@@ -1,11 +1,10 @@
 from typing import Tuple
+
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter
-from matplotlib.tri import Triangulation
-from matplotlib.widgets import Button, TextBox
 import numpy as np
 import seaborn as sns
-from pandas.core.common import is_full_slice
+from matplotlib.tri import Triangulation
+from matplotlib.widgets import Button, TextBox
 
 # Use this to avoid GUI
 # mpl.use('Agg')
@@ -27,23 +26,44 @@ def plot_err(alphas, errs, n_digits):
     plt.show()
 
 
+def plot_per_wavelength_err(wavelengths, alphas, errors, n_digits):
+    x = wavelengths
+    y = alphas
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(x, y, "o-", label="Roughness α")
+
+    # for i, txt in enumerate(errors):
+    #     plt.annotate(f"error {txt:.{n_digits}f}", (x[i], y[i] + 0.02 * y[i]))
+
+    # for i, txt in enumerate(y):
+    #     plt.annotate(f"{txt:.{n_digits}f}", (x[i], y[i]))
+
+    plt.xlabel("Wavelengths (nm)")
+    plt.ylabel("Roughness α")
+    plt.title("Per wavelength fitting results")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
 def format_angle_pair(t):
     return f"θ: {np.degrees(t[0]):>4.2f}, φ: {np.degrees(t[1]):>6.2f}"
 
 
 def plot_brdf_comparison(
-    n_wi,
-    dense,
-    n_wo_itrp,
-    wi_wo_pairs_itrp,
-    n_wo_olaf,
-    wi_wo_pairs_olaf,
-    brdf_itrp,
-    wavelengths_itrp,
-    brdf_max_itrp,
-    brdf_olaf,
-    wavelengths_olaf,
-    brdf_max_olaf,
+        n_wi,
+        dense,
+        n_wo_itrp,
+        wi_wo_pairs_itrp,
+        n_wo_olaf,
+        wi_wo_pairs_olaf,
+        brdf_itrp,
+        wavelengths_itrp,
+        brdf_max_itrp,
+        brdf_olaf,
+        wavelengths_olaf,
+        brdf_max_olaf,
 ):
     n_wavelengths_itrp = len(wavelengths_itrp)
     n_wavelengths_olaf = len(wavelengths_olaf)
@@ -93,7 +113,7 @@ def plot_brdf_comparison(
             for k in np.arange(0, n_wavelengths_olaf):
                 olaf_arranged[k, wi_idx, wo_idx] = brdf_olaf[
                     k * n_wi * n_wo_olaf + wi_idx * n_wo_olaf + wo_idx_org
-                ]
+                    ]
 
     for wi_idx, ((wi_theta, wi_phi), wos) in enumerate(wi_wo_pairs_itrp):
         # print(f"wi idx: {wi_idx}, θi: {np.degrees(wi_theta):>6.2f}, φi: {np.degrees(wi_phi):>6.2f}")
@@ -107,7 +127,7 @@ def plot_brdf_comparison(
             for k in range(n_wavelengths_itrp):
                 itrp_arranged[k, wi_idx, wo_idx] = brdf_itrp[
                     k * n_wi * n_wo_itrp + wi_idx * n_wo_itrp + wo_idx_org
-                ]
+                    ]
 
     cur_wi_idx = 0
     olaf_cur_lambda_idx = 0
@@ -213,18 +233,18 @@ def plot_brdf_comparison(
         fig.canvas.draw_idle()
 
     def update_comp(
-        olaf_lambda_idx, olaf_wi_idx, itrp_lambda_idx, itrp_wi_idx, normalize=False
+            olaf_lambda_idx, olaf_wi_idx, itrp_lambda_idx, itrp_wi_idx, normalize=False
     ):
         if normalize:
             max_measured = brdf_max_olaf[
                 olaf_wi_idx * n_wavelengths_olaf + olaf_lambda_idx
-            ]
+                ]
             olaf_curve_comp[0].set_ydata(
                 olaf_arranged[olaf_lambda_idx, olaf_wi_idx, :] / max_measured
             )
             max_interpolated = brdf_max_itrp[
                 itrp_wi_idx * n_wavelengths_itrp + itrp_lambda_idx
-            ]
+                ]
             itrp_curve_comp[0].set_ydata(
                 itrp_arranged[itrp_lambda_idx, itrp_wi_idx, :] / max_interpolated
             )
@@ -330,13 +350,13 @@ def add_polar_brdf_plot_phi_o_text(ax, ymax, phi_o_deg, phi_o_deg_opp):
 
 
 def plot_brdf_slice(
-    phi_o_deg,
-    phi_o_deg_opp,
-    brdf_slices: list[tuple[np.ndarray, np.ndarray, np.ndarray, str]],
-    legend=False,
-    cmap="tab10",
-    scale=1.0,
-    use_log=False,
+        phi_o_deg,
+        phi_o_deg_opp,
+        brdf_slices: list[tuple[np.ndarray, np.ndarray, np.ndarray, str]],
+        legend=False,
+        cmap="tab10",
+        scale=1.0,
+        use_log=False,
 ):
     sns.set_theme(style="whitegrid", color_codes=True)
 
@@ -346,7 +366,7 @@ def plot_brdf_slice(
 
     ymax = 0
     for i, (slice_phi_o, slice_phi_o_opp, theta, wavelengths, label) in enumerate(
-        brdf_slices
+            brdf_slices
     ):
         xs = np.append(np.flip(-np.radians(theta)), np.radians(theta))
         if use_log:
@@ -360,7 +380,7 @@ def plot_brdf_slice(
         else:
             for l in range(1):
                 ys = (
-                    np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l]) * scale
+                        np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l]) * scale
                 )
                 ax_polar.plot(xs, ys, label=f"{label}", linewidth=1.8, color=cm(i))
                 # λ = {wavelengths[l]:.0f} nm
@@ -388,7 +408,7 @@ def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices):
             np.flip(-np.radians(np.array(theta_o))), np.radians(np.array(theta_o))
         )
         for i, (slice_phi, slice_phi_opp, ti) in enumerate(
-            zip(slices_phi, slices_phi_opp, theta_i)
+                zip(slices_phi, slices_phi_opp, theta_i)
         ):
             if i % 3 == 0:
                 slice_phi_o = np.array(slice_phi).reshape((-1, n_spectrum))
@@ -552,7 +572,7 @@ linestyles = ["solid", "dashed", "dashdot", "dotted"]
 
 
 def plot_ndf_slice(
-    phi, phi_opp, ndf_slices: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]], ylim
+        phi, phi_opp, ndf_slices: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]], ylim
 ):
     # Angles are in radians
     print(f"Plotting NDF slice with wm = ({np.degrees(phi)}, {np.degrees(phi_opp)})")
@@ -623,12 +643,12 @@ def plot_ndf_slice(
 
 
 def plot_gaf_slice(
-    tm,
-    pm,
-    pv,
-    pv_opp,
-    gaf_slices: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]],
-    save=None,
+        tm,
+        pm,
+        pv,
+        pv_opp,
+        gaf_slices: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]],
+        save=None,
 ):
     print(
         f"Plotting GAF slice with wm = ({np.degrees(tm)}, {np.degrees(pm)}) at pv = {np.degrees(pv)}"
@@ -695,15 +715,15 @@ def plot_gaf_slice(
 
 
 def plot_brdf_map(
-    images: list[str, Tuple[int, int], np.ndarray],
-    cmap="BuPu",
-    cbar=False,
-    coord=False,
-    diff=False,
-    fc="black",
-    pstep=45,
-    tstep=30,
-    save=None,
+        images: list[str, Tuple[int, int], np.ndarray],
+        cmap="BuPu",
+        cbar=False,
+        coord=False,
+        diff=False,
+        fc="black",
+        pstep=45,
+        tstep=30,
+        save=None,
 ):
     print("params: ", cmap, cbar, coord, diff, fc, pstep, tstep)
     from tone_mapping import tone_mapping
@@ -860,12 +880,12 @@ def plot_surfaces(surfaces, cmap, ds_factor=4):
 
 
 def plot_brdf_fitting(
-    samples: np.ndarray,
-    incoming: Tuple[np.ndarray, np.ndarray],
-    outgoing: Tuple[np.ndarray, np.ndarray],
-    wavelengths: np.ndarray,
-    fitted: Tuple[np.ndarray, np.ndarray],
-    alphas: np.ndarray,
+        samples: np.ndarray,
+        incoming: Tuple[np.ndarray, np.ndarray],
+        outgoing: Tuple[np.ndarray, np.ndarray],
+        wavelengths: np.ndarray,
+        fitted: Tuple[np.ndarray, np.ndarray],
+        alphas: np.ndarray,
 ):
     print("Plotting BRDF fitting")
     from matplotlib.widgets import Slider, CheckButtons

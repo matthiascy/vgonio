@@ -1,5 +1,5 @@
 use crate::{
-    app::{cache::Cache, cli::ansi},
+    app::cache::Cache,
     measure::{
         bsdf::BsdfMeasurement,
         mfd::{MeasuredGafData, MeasuredNdfData},
@@ -11,6 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use vgonio_core::{
+    cli::ansi,
     config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},

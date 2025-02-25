@@ -4,29 +4,27 @@
 
 #[cfg(feature = "vdbg")]
 use crate::measure::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
-use crate::{
-    app::cli::ansi,
-    measure::{
-        bsdf::{
-            emitter::EmitterCircularSector,
-            rtc,
-            rtc::{Hit, HitInfo, Ray, MAX_RAY_STREAM_SIZE},
-            SingleSimResult,
-        },
-        params::BsdfMeasurementParams,
+use crate::measure::{
+    bsdf::{
+        emitter::EmitterCircularSector,
+        rtc,
+        rtc::{Hit, HitInfo, Ray, MAX_RAY_STREAM_SIZE},
+        SingleSimResult,
     },
-};
-#[cfg(feature = "vdbg")]
-use vgonio_core::optics::fresnel;
-use vgonio_core::{
-    math,
-    math::{IVec2, UVec2, Vec2, Vec3, Vec3Swizzles},
+    params::BsdfMeasurementParams,
 };
 #[cfg(not(feature = "vdbg"))]
 use jabr::array::DyArr;
 use rayon::prelude::*;
 use std::time::Instant;
 use surf::{MicroSurface, MicroSurfaceMesh};
+#[cfg(feature = "vdbg")]
+use vgonio_core::optics::fresnel;
+use vgonio_core::{
+    cli::ansi,
+    math,
+    math::{IVec2, UVec2, Vec2, Vec3, Vec3Swizzles},
+};
 
 /// Extra data associated with a ray stream.
 ///
@@ -1221,11 +1219,11 @@ impl<'ms> MultilevelGrid<'ms> {
 #[cfg(test)]
 mod tests {
     use crate::measure::bsdf::rtc::{grid::MultilevelGrid, Hit, Ray};
+    use surf::{HeightOffset, MicroSurface, TriangulationPattern};
     use vgonio_core::{
         math::{ulp_eq, IVec2, UVec2, Vec3, Vec3Swizzles},
         units::LengthUnit,
     };
-    use surf::{HeightOffset, MicroSurface, TriangulationPattern};
 
     #[test]
     fn multilevel_grid_creation() {

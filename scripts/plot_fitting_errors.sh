@@ -70,28 +70,28 @@ get_file_path() {
 while IFS=, read -r kind surface distribution weighting alpha_x alpha_y mse || [ -n "$kind" ]; do
     # Skip header lines and empty lines
     [[ "$kind" =~ ^#.*$ || "$kind" == "kind" || -z "$kind" ]] && continue
-    
+
     # Get the input file path
     input_file=$(get_file_path "$kind" "$surface")
-    
+
     # For vgonio files with wildcards, get the first matching file
     if [[ "$input_file" == *"*"* ]]; then
         input_file=$(ls $input_file 2>/dev/null | head -n 1)
     fi
-    
+
     # Skip if file doesn't exist
     if [ ! -f "$input_file" ]; then
         echo "Warning: File not found: $input_file of kind $kind and surface $surface"
         continue
     fi
-    
+
     # Create output directory for this surface
     output_dir="$OUTPUT_BASE_DIR/${kind}_${surface}/${distribution}_${weighting}"
     mkdir -p "$output_dir"
-    
+
     # Change to the output directory
     cd "$output_dir" || continue
-    
+
     echo "Generating plots for $kind/$surface ($distribution, $weighting)"
     echo "  Input file: $input_file"
     echo "  Output dir: $output_dir"
@@ -99,7 +99,7 @@ while IFS=, read -r kind surface distribution weighting alpha_x alpha_y mse || [
 
     # Print cwd
     echo "Current working directory: $(pwd)"
-    
+
     # Run the plot command
     $VGONIO_COMP_CMD "$input_file" \
         --kind brdf-fitting \
@@ -108,10 +108,10 @@ while IFS=, read -r kind surface distribution weighting alpha_x alpha_y mse || [
         --alpha "$alpha_x" "$alpha_y" \
         --model "$distribution" \
         --parallel
-    
+
     # Return to original directory
     cd - > /dev/null || exit
-    
+
 done < fitting-baseline.csv
 
 echo "Plot generation completed. Results are in the '$OUTPUT_BASE_DIR' directory."

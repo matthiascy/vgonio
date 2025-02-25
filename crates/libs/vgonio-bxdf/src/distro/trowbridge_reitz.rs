@@ -33,7 +33,7 @@ impl Debug for TrowbridgeReitzDistribution {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "TrowbridgeReitzDistrib. {{ α_x: {}, α_y: {} }}",
+            "TrowbridgeReitz {{ αx: {}, αy: {} }}",
             self.alpha_x, self.alpha_y
         )
     }

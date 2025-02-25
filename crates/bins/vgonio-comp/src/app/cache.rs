@@ -1,7 +1,4 @@
-use crate::{
-    app::cli::ansi,
-    measure::{params::SurfacePath, Measurement},
-};
+use crate::measure::{params::SurfacePath, Measurement};
 use gxtk::{context::GpuContext, mesh::RenderableMesh};
 use std::{
     collections::HashMap,
@@ -12,6 +9,7 @@ use std::{
 };
 use surf::{subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh};
 use vgonio_core::{
+    cli::ansi,
     config::Config,
     error::VgonioError,
     optics::IorReg,

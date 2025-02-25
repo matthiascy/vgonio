@@ -97,7 +97,7 @@ pub fn brdf_fitting_brute_force_anisotropic<F: AnyMeasuredBrdf>(
     let count = alphax.step_count() * alphay.step_count();
     let mut errs = Box::new_uninit_slice(count);
     // Limit the number of threads to 1/2 of the available parallelism to avoid
-    // occupying too much resources.
+    // occupying too many resources.
     let num_threads = ((std::thread::available_parallelism().unwrap().get()) / 2).max(1);
     let chunk_size = count / num_threads;
     errs.par_chunks_mut(chunk_size)
