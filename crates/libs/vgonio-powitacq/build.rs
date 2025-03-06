@@ -2,6 +2,7 @@ fn main() {
     cxx_build::bridge("src/lib.rs")
         .file("cxx/powitacq.cc")
         .std("c++11")
+        .flag("-Wno-unused-value")
         .compile("vgonio-powitacq");
 
     println!("cargo:rerun-if-changed=src/lib.rs");
