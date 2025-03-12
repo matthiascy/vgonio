@@ -15,6 +15,7 @@ io = ["dep:exr"]
 winit = ["dep:winit"]
 serde = ["dep:serde"]
 fitting_api = ["bxdf_fitting_api", "mdf_fitting_api"]
+cuda = ["dep:cust"]
 bxdf_fitting_api = []
 mdf_fitting_api = []
 
@@ -26,6 +27,7 @@ cfg-if.workspace = true
 chrono.workspace = true
 clap = { workspace = true, optional = true }
 csv = { workspace = true }
+cust = { workspace = true, optional = true }
 dirs = { workspace = true, optional = true }
 env_logger = { workspace = true, optional = true }
 exr = { workspace = true, optional = true }

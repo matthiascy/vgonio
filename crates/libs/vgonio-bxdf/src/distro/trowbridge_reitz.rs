@@ -15,7 +15,7 @@ use vgonio_core::{
 /// where $\alpha$ is the width parameter of the NDF, $\theta_m$ is the angle
 /// between the microfacet normal and the normal of the surface.
 ///
-/// In case of anisotropic distribution, the NDF is defined as
+/// in the case of anisotropic distribution, the NDF is defined as
 ///
 /// $$ D(\mathbf{m}) = \frac{\alpha_x \alpha_y}{\pi \cos^4 \theta_m (\alpha_x^2
 /// \cos^2 \phi_m + \alpha_y^2 \sin^2 \phi_m) (\alpha^2 + \tan^2 \theta_m)^2} $$
@@ -230,8 +230,9 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        bxdf::distro::{MicrofacetDistribution, TrowbridgeReitzDistribution},
+    use crate::distro::TrowbridgeReitzDistribution;
+    use vgonio_core::{
+        bxdf::MicrofacetDistribution,
         math::{sph_to_cart, Vec3},
         units::{Degs, Rads},
     };

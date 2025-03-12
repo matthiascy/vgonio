@@ -1,6 +1,6 @@
 use crate::{
     brdf::analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-    fitting::{FittingProblem, MinimisationReport},
+    fitting::MinimisationReport,
 };
 use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt};
 use nalgebra::{Dyn, Matrix, Owned, VecStorage, Vector, U1, U2};
@@ -17,6 +17,18 @@ use vgonio_jabr::array::{
     shape::{compute_index_from_strides, compute_strides},
     MemLayout,
 };
+
+/// Helper macro to create an instance of the analytical BRDF model.
+macro_rules! create_analytical_brdf_instance {
+    ($model:ident, $ax:expr, $ay:expr) => {
+        match $model {
+            MicrofacetDistroKind::TrowbridgeReitz => Box::new(MicrofacetBrdfTR::new($ax, $ay))
+                as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
+            MicrofacetDistroKind::Beckmann => Box::new(MicrofacetBrdfBK::new($ax, $ay))
+                as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
+        }
+    };
+}
 
 /// Initialises the microfacet based BRDF models with the given range of
 /// roughness parameters as the initial guess.
@@ -36,14 +48,7 @@ pub(crate) fn init_microfacet_brdf_models(
         Symmetry::Isotropic => (0..count)
             .map(|i| {
                 let alpha = range.start + range.step_size * i as f64;
-                match target {
-                    MicrofacetDistroKind::TrowbridgeReitz => {
-                        Box::new(MicrofacetBrdfTR::new(alpha, alpha)) as _
-                    },
-                    MicrofacetDistroKind::Beckmann => {
-                        Box::new(MicrofacetBrdfBK::new(alpha, alpha)) as _
-                    },
-                }
+                create_analytical_brdf_instance!(target, alpha, alpha)
             })
             .collect(),
         Symmetry::Anisotropic => (0..count)
@@ -51,14 +56,7 @@ pub(crate) fn init_microfacet_brdf_models(
                 let ax = range.start + range.step_size * i as f64;
                 (0..count).map(move |j| {
                     let ay = range.start + range.step_size * j as f64;
-                    match target {
-                        MicrofacetDistroKind::TrowbridgeReitz => {
-                            Box::new(MicrofacetBrdfTR::new(ax, ay)) as _
-                        },
-                        MicrofacetDistroKind::Beckmann => {
-                            Box::new(MicrofacetBrdfBK::new(ax, ay)) as _
-                        },
-                    }
+                    create_analytical_brdf_instance!(target, ax, ay)
                 })
             })
             .collect(),
@@ -121,7 +119,6 @@ impl<'a, const I: Symmetry> NllsqBrdfFittingProxy<'a, I> {
         let jac_len = jac_shape.iter().product();
         let mut residuals = Vector::<f64, Dyn, VecStorage<f64, Dyn, U1>>::zeros(jac_len);
         let modelled = self.proxy.generate_analytical(&*self.model);
-        log::debug!("filtered residuals: {:?}", self.filtered());
         if self.filtered() {
             self.proxy.residuals_filtered(
                 &modelled,
@@ -335,8 +332,8 @@ impl<'a> NllsqBrdfFittingProxy<'a, { Symmetry::Anisotropic }> {
         jac_shape[shape.len()] = 2;
         let mut jac_strides = vec![1; jac_shape.len()].into_boxed_slice();
         compute_strides(&jac_shape, &mut jac_strides, MemLayout::RowMajor);
-        let jac_len = jac_shape.iter().product();
-        let mut jacobian = Matrix::<f64, Dyn, U2, Owned<f64, Dyn, U2>>::zeros(jac_len);
+        let jac_len = jac_shape.iter().product::<usize>();
+        let mut jacobian = Matrix::<f64, Dyn, U2, Owned<f64, Dyn, U2>>::zeros(jac_len / 2);
         match &self.proxy.o_dirs {
             OutgoingDirs::Grid {
                 o_thetas: theta_o,
@@ -546,10 +543,8 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for NllsqBrdfFittingProxy<'a, { Symme
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
         if self.filtered() {
-            log::debug!("filtered jacobian");
             Some(self.jacobian_filtered())
         } else {
-            log::debug!("unfiltered jacobian");
             Some(self.jacobian())
         }
     }

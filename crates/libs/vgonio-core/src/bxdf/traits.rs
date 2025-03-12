@@ -9,7 +9,7 @@ use std::fmt::Debug;
 
 /// Common interface for BRDFs (analytical BRDF models).
 pub trait AnalyticalBrdf: Send + Sync + Debug + 'static {
-    /// The type of the parameters of the BRDF model.
+    /// The type of BRDF model's parameters.
     type Params;
 
     /// The name of the BRDF model.
@@ -36,7 +36,7 @@ pub trait AnalyticalBrdf: Send + Sync + Debug + 'static {
     /// Sets the parameters of the BRDF model.
     fn set_params(&mut self, params: &Self::Params);
 
-    /// Evaluates the BRDF ($f_r$) with the classical parameterization for any
+    /// Evaluates the BRDF ($f_r$) with the classical parametrisation for any
     /// incident and outgoing direction located on the hemisphere.
     ///
     /// # Arguments
@@ -46,7 +46,7 @@ pub trait AnalyticalBrdf: Send + Sync + Debug + 'static {
     fn eval(&self, vi: &Vec3, vo: &Vec3) -> f64;
 
     #[rustfmt::skip]
-    /// Evaluates the BRDF ($f_r$) with the Rusinkiewicz parameterization.
+    /// Evaluates the BRDF ($f_r$) with the Rusinkiewicz parametrisation.
     ///
     /// Szymon M Rusinkiewicz. A new change of variables for efficient BRDF
     /// representation. In Rendering Techniques '98, pages 11-22. Springer, 1998.
@@ -141,7 +141,6 @@ pub trait AnalyticalBrdf: Send + Sync + Debug + 'static {
     /// # Note
     ///
     /// For each incident direction `vi`, the derivatives with respect to params
-    ///
     /// are evaluated for each outgoing direction `vo`.
     /// The returned vector has the length of number of parameters times the
     /// length of `vi` times the length of `vo`.

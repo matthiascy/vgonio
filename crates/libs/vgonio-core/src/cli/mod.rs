@@ -105,3 +105,12 @@ pub fn log_filter_from_level(level: u8) -> log::LevelFilter {
         _ => log::LevelFilter::Trace,
     }
 }
+
+/// Prints a message to the console.
+pub fn println(symbol: char, indent: u32, msg: std::fmt::Arguments, color: ansi::Color) {
+    let indent = " ".repeat(indent as usize);
+    println!(
+        "{}\u{001b}[{}m{} \u{001b}[0m{}",
+        indent, color as u8, symbol, msg,
+    );
+}

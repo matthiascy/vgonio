@@ -9,6 +9,8 @@ import rich
 matplotlib.rcParams['figure.max_open_warning'] = 0
 
 
+# python scripts/per_wavelength.py ./per_wavelength --fitted ./fitting-baseline.csv --output ./per_wavelength/plot/
+
 def plot_per_wavelength_err_single(title, wavelengths, alphas, errors, fitted, out_dir=None, separate=False):
     x = wavelengths
     y = alphas
@@ -39,6 +41,25 @@ def plot_per_wavelength_err_single(title, wavelengths, alphas, errors, fitted, o
     # plt.show()
 
 
+def plot_per_wavelength_err_anisotropic(title, wavelengths, alphas_x, alphas_y, errors, mses, out_dir=None):
+    x = wavelengths
+    y0 = alphas_x
+    y1 = alphas_y
+    fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+    fig.suptitle(title)
+
+    ax.plot(x, y0, ".-", label=r"$\alpha_x$")
+    ax.plot(x, y1, ".-", label=r"$\alpha_y$")
+    ax.set_xlabel("Wavelengths (nm)")
+    ax.set_ylabel(f"Roughness α")
+    ax.legend()
+
+    if out_dir:
+        fig.savefig(os.path.join(out_dir, f"{title.replace(' ', '_')}.png"))
+    else:
+        fig.savefig(f"{title.replace(' ', '_')}.png")
+
+
 def list_all_files(path: str, ext: str):
     """Recursively list all files in a directory with a specific extension together with the subfolder name"""
     import os
@@ -60,9 +81,46 @@ if __name__ == "__main__":
     parser.add_argument("input", help="Input file or directory containing the CSV files")
     parser.add_argument("--fitted", help="Fitted value stored inside a CSV file")
     parser.add_argument("--output", help="Output directory to store the plots")
-    parser.add_argument("--separate", action="store_true", help="Create separate plots for each file")
-    parser.add_argument("--compact", action="store_true", help="Create compact plots")
+
+    exclusive_group = parser.add_mutually_exclusive_group(required=True)
+    exclusive_group.add_argument("--separate", action="store_true", help="Create separate plots for each file")
+    exclusive_group.add_argument("--compact", action="store_true", help="Create compact plots")
+
+    parser.add_argument("--aniso", action="store_true", help="Values are anisotropic.")
+
     args = parser.parse_args()
+
+    # temporary plot for anisotropic
+    if args.aniso:
+        with open(args.input, "r") as f:
+            reader = csv.reader(f)
+            header = next(reader)
+            kind = ""
+            surface = ""
+            weighting = ""
+            distro = ""
+            wavelengths = []
+            alphas_x = []
+            alphas_y = []
+            errors = []
+            mses = []
+            for i, row in enumerate(reader):
+                if i == 0:
+                    surface = row[0]
+                    kind = row[1]
+                    weighting = row[2]
+                    distro = row[3]
+                if row[4] == "none":
+                    continue
+                wavelengths.append(float(row[4].split(' ')[0]))
+                alphas_x.append(float(row[5]))
+                alphas_y.append(float(row[6]))
+                errors.append(float(row[7]))
+                if len(row) > 8:
+                    mses.append(float(row[8]))
+            plot_per_wavelength_err_anisotropic(f"{surface} {kind} {weighting} {distro}", wavelengths, alphas_x,
+                                                alphas_y, errors, mses)
+        exit(0)
 
     with open(args.fitted) as f:
         reader = csv.DictReader(f)
@@ -126,7 +184,7 @@ if __name__ == "__main__":
                             distro = row[3]
                         wavelengths.append(float(row[4].split(' ')[0]))
                         alphas.append(float(row[5]))
-                        errors.append(float(row[6]))
+                        errors.append(float(row[7]))
 
                     # find the fitted value for this kind, surface, weighting, distro
                     surface_key = list(filter(lambda x: x if x == surface else None, fitted[kind].keys()))[0]

@@ -1,10 +1,13 @@
 use crate::{measure::bsdf::BsdfMeasurement, pyplot::plot_err};
+use dirs::cache_dir;
 use std::{
-    fmt::Debug,
+    fmt::{format, Debug},
+    fs::File,
     io::{BufWriter, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use vgonio_core::{
+    cli,
     config::Config,
     error::VgonioError,
     optics::IorReg,
@@ -25,13 +28,50 @@ use vgonio_core::{
     units::Nanometres,
 };
 
+macro_rules! load_and_fit {
+    ($brdf:ty, $opts:expr, $cache:expr, $config:expr, $inputs:expr, $theta_limit:expr) => {
+        for input in $inputs {
+            let measurement = $cache
+                .load_micro_surface_measurement(&$config, &input)
+                .unwrap();
+            if let Some(brdf) = $cache
+                .get_measurement(measurement)
+                .unwrap()
+                .measured
+                .downcast_ref::<$brdf>()
+            {
+                measured_brdf_fitting(&$opts, brdf, &$cache.iors, $theta_limit);
+            }
+        }
+    };
+    (vgonio $opts:expr, $cache:expr, $config:expr, $inputs:expr, $theta_limit:expr) => {
+        for input in $inputs {
+            let measurement = $cache
+                .load_micro_surface_measurement(&$config, &input)
+                .unwrap();
+            if let Some(measured) = $cache
+                .get_measurement(measurement)
+                .unwrap()
+                .measured
+                .downcast_ref::<BsdfMeasurement>()
+            {
+                let brdf = measured.brdf_at(BrdfLevel::from($opts.level)).unwrap();
+                measured_brdf_fitting(&$opts, brdf, &$cache.iors, $theta_limit);
+            }
+        }
+    };
+}
+
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
-    println!(
-        "  {}>{} Fitting to model: {:?}@{:?}",
-        ansi::BRIGHT_YELLOW,
-        ansi::RESET,
-        opts.family,
-        opts.distro
+    cli::println(
+        '>',
+        2,
+        format_args!(
+            "Fitting to model {:?}@{:?}",
+            opts.family,
+            opts.distro.unwrap()
+        ),
+        ansi::Color::BrightYellow,
     );
     let theta_limit = opts
         .theta_limit
@@ -102,83 +142,20 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
         } else {
             match opts.kind {
                 MeasuredBrdfKind::Clausen => {
-                    for input in &opts.inputs {
-                        let measurement = cache
-                            .load_micro_surface_measurement(&config, &input)
-                            .unwrap();
-                        if let Some(brdf) = cache
-                            .get_measurement(measurement)
-                            .unwrap()
-                            .measured
-                            .downcast_ref::<ClausenBrdf>()
-                        {
-                            measured_brdf_fitting(&opts, brdf, &cache.iors, theta_limit);
-                        }
-                    }
+                    load_and_fit!(ClausenBrdf, opts, cache, config, &opts.inputs, theta_limit);
                 },
                 MeasuredBrdfKind::Merl => {
-                    for input in &opts.inputs {
-                        let measurement = cache
-                            .load_micro_surface_measurement(&config, &input)
-                            .unwrap();
-                        println!("Get merl measurement");
-                        if let Some(brdf) = cache
-                            .get_measurement(measurement)
-                            .unwrap()
-                            .measured
-                            .downcast_ref::<MerlBrdf>()
-                        {
-                            measured_brdf_fitting(&opts, brdf, &cache.iors, theta_limit);
-                        }
-                    }
+                    load_and_fit!(MerlBrdf, opts, cache, config, &opts.inputs, theta_limit);
                 },
                 MeasuredBrdfKind::Utia => {},
                 MeasuredBrdfKind::Vgonio => {
-                    for input in &opts.inputs {
-                        let measurement = cache
-                            .load_micro_surface_measurement(&config, &input)
-                            .unwrap();
-                        if let Some(measured) = cache
-                            .get_measurement(measurement)
-                            .unwrap()
-                            .measured
-                            .downcast_ref::<BsdfMeasurement>()
-                        {
-                            let brdf = measured.brdf_at(BrdfLevel::from(opts.level)).unwrap();
-                            measured_brdf_fitting(&opts, brdf, &cache.iors, theta_limit);
-                        }
-                    }
+                    load_and_fit!(vgonio opts, cache, config, &opts.inputs, theta_limit);
                 },
                 MeasuredBrdfKind::Yan2018 => {
-                    for input in &opts.inputs {
-                        let measurement = cache
-                            .load_micro_surface_measurement(&config, &input)
-                            .unwrap();
-                        if let Some(brdf) = cache
-                            .get_measurement(measurement)
-                            .unwrap()
-                            .measured
-                            .downcast_ref::<Yan18Brdf>()
-                        {
-                            measured_brdf_fitting(&opts, brdf, &cache.iors, theta_limit);
-                        }
-                    }
+                    load_and_fit!(Yan18Brdf, opts, cache, config, &opts.inputs, theta_limit);
                 },
                 MeasuredBrdfKind::Rgl => {
-                    for input in &opts.inputs {
-                        let measurement = cache
-                            .load_micro_surface_measurement(&config, &input)
-                            .unwrap();
-                        if let Some(brdf) = cache
-                            .get_measurement(measurement)
-                            .unwrap()
-                            .measured
-                            .downcast_ref::<RglBrdf>()
-                        {
-                            log::debug!("RGL BRDF fitting");
-                            measured_brdf_fitting(&opts, brdf, &cache.iors, theta_limit);
-                        }
-                    }
+                    load_and_fit!(RglBrdf, opts, cache, config, &opts.inputs, theta_limit);
                 },
                 MeasuredBrdfKind::Unknown => {
                     println!("Unknown measured BRDF kind specified, cannot fit!");
@@ -189,7 +166,12 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     })
 }
 
-fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, iors: &IorReg) {
+fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
+    brdf: &F,
+    opts: &FitOptions,
+    iors: &IorReg,
+    writer: Option<&mut BufWriter<File>>,
+) {
     println!(
         "      {} Fitting using brute force method... {}",
         ansi::YELLOW_GT,
@@ -204,44 +186,29 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, ior
     let reports = if opts.per_wavelength {
         let mut reports = Box::new_uninit_slice(brdf.spectrum().len());
         let wavelengths = brdf.spectrum();
-        let filename = format!(
-            "{}_{}_{:?}_{:?}.csv",
-            opts.inputs[0].file_stem().unwrap().display(),
-            opts.error_metric.unwrap(),
-            opts.distro.unwrap(),
-            opts.weighting,
-        );
-        let file = std::fs::File::create(filename).unwrap();
-        let mut writer = BufWriter::new(file);
-        writer
-            .write(b"surface,kind,weighing,distro,wavelength,alpha,error\n")
-            .unwrap();
         for (i, w) in wavelengths.iter().enumerate() {
             let proxy = full_proxy.per_wavelength(i);
             let report = brdf_fitting_brute_force_inner(proxy, opts, 0, Some(*w));
-            writer
-                .write(
-                    format!(
-                        "{},{:?},{:?},{:?},{},{},{}\n",
-                        opts.inputs[0].file_stem().unwrap().to_str().unwrap(),
-                        opts.kind,
-                        opts.weighting,
-                        opts.distro.unwrap(),
-                        w,
-                        report.best_model().unwrap().params()[0],
-                        report.best_model_report().unwrap().1.objective_fn
-                    )
-                    .as_bytes(),
-                )
-                .unwrap();
-            reports[i].write(report);
+            reports[i].write((Some(*w), report));
         }
         unsafe { reports.assume_init() }
     } else {
-        Box::new([brdf_fitting_brute_force_inner(full_proxy, opts, 4, None)])
+        Box::new([(
+            None,
+            brdf_fitting_brute_force_inner(full_proxy, opts, 4, None),
+        )])
     };
     let end = std::time::Instant::now();
     println!("    {} Took: {:?}", ansi::YELLOW_GT, end - start);
+
+    write_fitting_reports(
+        writer,
+        opts.inputs[0].file_stem().unwrap().to_str().unwrap(),
+        opts.kind,
+        opts.weighting,
+        opts.distro.unwrap(),
+        &reports,
+    );
 
     if opts.plot {
         // Per wavelength fitting
@@ -253,7 +220,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, ior
                 .collect::<Vec<_>>();
             let (alphas, errors): (Vec<_>, Vec<_>) = reports
                 .iter()
-                .map(|report| {
+                .map(|(_, report)| {
                     let best = report.best_model().unwrap();
                     let best_report = report.best_model_report().unwrap();
                     (best.params()[0], best_report.1.objective_fn)
@@ -267,7 +234,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, ior
             )
         }
 
-        for report in reports.iter() {
+        for (_, report) in reports.iter() {
             let mut alpha_error_pairs = report
                 .reports
                 .iter()
@@ -290,6 +257,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, ior
     ) -> FittingReport<Box<dyn AnalyticalBrdf<Params = [f64; 2]>>> {
         let report = proxy.brute_fit(
             opts.distro.unwrap(),
+            opts.symmetry,
             opts.error_metric.unwrap_or(ErrorMetric::Mse),
             opts.weighting,
             opts.theta_limit.map(|t| Radians::from_degrees(t)),
@@ -300,25 +268,41 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, ior
         if let Some(w) = w {
             print!("      {} λ = {:?}: ", ansi::YELLOW_GT, w);
         }
-        report.print_fitting_report(n);
+        report.print_fitting_report(n, 6);
         report
     }
 }
 
-fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, iors: &IorReg) {
+fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(
+    brdf: &F,
+    opts: &FitOptions,
+    iors: &IorReg,
+    writer: Option<&mut BufWriter<File>>,
+) {
     let full_proxy = brdf.proxy(iors);
-
-    let _reports = if opts.per_wavelength {
+    let reports = if opts.per_wavelength {
         let mut reports = Box::new_uninit_slice(brdf.spectrum().len());
         let wavelengths = brdf.spectrum();
         for (i, w) in wavelengths.iter().enumerate() {
             let proxy = full_proxy.per_wavelength(i);
-            reports[i].write(brdf_fitting_nllsq_inner(&proxy, opts, 0, Some(*w)));
+            reports[i].write((
+                Some(*w),
+                brdf_fitting_nllsq_inner(&proxy, opts, 0, Some(*w)),
+            ));
         }
         unsafe { reports.assume_init() }
     } else {
-        Box::new([brdf_fitting_nllsq_inner(&full_proxy, opts, 4, None)])
+        Box::new([(None, brdf_fitting_nllsq_inner(&full_proxy, opts, 4, None))])
     };
+
+    write_fitting_reports(
+        writer,
+        opts.inputs[0].file_stem().unwrap().to_str().unwrap(),
+        opts.kind,
+        opts.weighting,
+        opts.distro.unwrap(),
+        &reports,
+    );
 
     fn brdf_fitting_nllsq_inner(
         proxy: &BrdfProxy,
@@ -331,6 +315,7 @@ fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, iors: &Io
             Symmetry::Isotropic => {
                 let report = proxy.brute_fit(
                     opts.distro.unwrap(),
+                    opts.symmetry,
                     opts.error_metric.unwrap_or(ErrorMetric::Mse),
                     opts.weighting,
                     opts.theta_limit.map(|t| Radians::from_degrees(t)),
@@ -340,7 +325,7 @@ fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, iors: &Io
                 let mid = report.best_model().unwrap().params()[0];
                 StepRangeIncl::new(mid - 0.01, mid + 0.1, 0.001)
             },
-            Symmetry::Anisotropic => StepRangeIncl::new(0.0, 1.0, 0.01),
+            Symmetry::Anisotropic => StepRangeIncl::new(0.0, 1.0, 0.02),
         };
         let report = proxy.nllsq_fit(
             opts.distro.unwrap(),
@@ -353,7 +338,7 @@ fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(brdf: &F, opts: &FitOptions, iors: &Io
         if let Some(w) = w {
             println!("      {} λ = {:?}: ", ansi::YELLOW_GT, w);
         }
-        report.print_fitting_report(n);
+        report.print_fitting_report(n, 6);
         report
     }
 }
@@ -365,27 +350,114 @@ fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
     theta_limit: Option<Radians>,
 ) {
     let limit = theta_limit.unwrap_or(Radians::HALF_PI);
-    println!(
-        "    {} Fitting ({:?}) to model: {:?}, distro: {:?}, symmetry: {}, method: {:?}, error \
-         metric: {}, weighting: {:?}, θ < {}",
-        ansi::YELLOW_GT,
-        brdf.kind(),
-        opts.family,
-        opts.distro,
-        opts.symmetry,
-        opts.method,
-        if opts.method == FittingMethod::Brute {
-            opts.error_metric.unwrap_or(ErrorMetric::Mse)
-        } else {
-            ErrorMetric::Nllsq
-        },
-        opts.weighting,
-        limit.prettified()
+    cli::println(
+        '>',
+        4,
+        format_args!(
+            "Fitting ({:?}) to model: {:?}, distro: {:?}, symmetry: {}, method: {:?}, error \
+             metric: {}, weighting: {:?}, θ < {}",
+            brdf.kind(),
+            opts.family,
+            opts.distro,
+            opts.symmetry,
+            opts.method,
+            if opts.method == FittingMethod::Brute {
+                opts.error_metric.unwrap_or(ErrorMetric::Mse)
+            } else {
+                ErrorMetric::Nllsq
+            },
+            opts.weighting,
+            limit.prettified()
+        ),
+        ansi::Color::BrightGreen,
     );
 
+    let mut out = opts.output.as_ref().and_then(|output| {
+        let filepath = if output == "auto" {
+            format!(
+                "{}_{}_{:?}_{:?}.csv",
+                opts.inputs[0].file_stem().unwrap().display(),
+                opts.error_metric.unwrap(),
+                opts.distro.unwrap(),
+                opts.weighting,
+            )
+        } else {
+            output.clone()
+        };
+
+        let mut writer = BufWriter::new(
+            std::fs::OpenOptions::new()
+                .write(true)
+                .append(true)
+                .create(true)
+                .open(&filepath)
+                .expect("Failed to open the output file."),
+        );
+
+        if !Path::new(&filepath).exists() {
+            writer
+                .write(b"surface,kind,weighting,distro,wavelength,alphax,alphay,error,mse\n")
+                .unwrap();
+        }
+
+        Some(writer)
+    });
+
     match opts.method {
-        FittingMethod::Brute => brdf_fitting_brute_force(brdf, opts, iors),
-        FittingMethod::Nllsq => brdf_fitting_nllsq(brdf, opts, iors),
+        FittingMethod::Brute => brdf_fitting_brute_force(brdf, opts, iors, out.as_mut()),
+        FittingMethod::Nllsq => brdf_fitting_nllsq(brdf, opts, iors, out.as_mut()),
+    }
+}
+
+/// Write a fitting report into a file.
+///
+/// The output file is a CSV file with the following fields:
+///
+/// - [0] surface
+/// - [1] kind
+/// - [2] weighting
+/// - [3] distro
+/// - [4] wavelength
+/// - [5] alphax
+/// - [6] alphay
+/// - [7] error
+/// - [8] mse
+fn write_fitting_reports(
+    writer: Option<&mut BufWriter<File>>,
+    surface: &str,
+    kind: MeasuredBrdfKind,
+    weighting: Weighting,
+    distro: MicrofacetDistroKind,
+    reports: &[(
+        Option<Nanometres>,
+        FittingReport<Box<dyn AnalyticalBrdf<Params = [f64; 2]>>>,
+    )],
+) {
+    if let Some(writer) = writer {
+        for (wavelength, report) in reports.iter() {
+            let w = match wavelength {
+                None => String::from("none"),
+                Some(lambda) => lambda.to_string(),
+            };
+
+            writer
+                .write(
+                    format!(
+                        "{},{:?},{:?},{:?},{},{},{},{},{}\n",
+                        surface,
+                        kind,
+                        weighting,
+                        distro,
+                        w,
+                        report.best_model().unwrap().params()[0],
+                        report.best_model().unwrap().params()[1],
+                        report.best_model_report().unwrap().1.objective_fn,
+                        report.best_model_report().unwrap().1.mse()
+                    )
+                    .as_bytes(),
+                )
+                .unwrap();
+        }
     }
 }
 
@@ -419,8 +491,9 @@ pub struct FitOptions {
     #[clap(
         long,
         short,
-        help = "Output file to save the fitted data. If not specified, the fitted data will be \
-                written to the standard output."
+        help = "Specifies the output file for saving the fitted data. If omitted, the data is \
+                written to standard output. Use \"auto\" to automatically determine the output \
+                filename."
     )]
     pub output: Option<String>,
 

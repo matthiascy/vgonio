@@ -15,6 +15,7 @@ surf-obj = ["surf/surf-obj"]
 surf-gen = ["surf/surf-gen"]
 vdbg = []
 vvdbg = []
+cuda = ["vgonio-core/cuda", "vgonio-bxdf/cuda"]
 
 [dependencies]
 chrono.workspace = true

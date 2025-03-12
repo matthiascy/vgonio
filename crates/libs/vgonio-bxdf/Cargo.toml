@@ -14,10 +14,12 @@ default = []
 fitting = ["dep:levenberg-marquardt", "dep:nalgebra", "vgonio-core/fitting_api", "dep:indicatif", "dep:rayon"]
 cli = ["clap"]
 io = ["dep:serde_json", "dep:serde-pickle", "dep:exr", "dep:chrono"]
+cuda = ["vgonio-core/cuda", "dep:cust"]
 
 [dependencies]
 chrono = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
+cust = { workspace = true, optional = true }
 exr = { workspace = true, optional = true }
 indicatif = { workspace = true, optional = true }
 levenberg-marquardt = { workspace = true, optional = true }

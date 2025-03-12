@@ -12,3 +12,13 @@ pub const GREEN_CHECK: &str = "\u{001b}[32m✓\u{001b}[0m";
 pub const YELLOW_GT: &str = "\u{001b}[33m>\u{001b}[0m";
 
 pub const CYAN_MINUS: &str = "\u{001b}[36m-\u{001b}[0m";
+
+/// ANSI color codes.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
+pub enum Color {
+    BrightCyan = 36,
+    BrightRed = 31,
+    BrightGreen = 32,
+    BrightYellow = 33,
+}

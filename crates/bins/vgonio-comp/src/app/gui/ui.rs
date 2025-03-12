@@ -261,7 +261,7 @@ impl VgonioGui {
                                         None,
                                     )
                                 });
-                                report.print_fitting_report(16);
+                                report.print_fitting_report(16, 4);
                                 // TODO: update the fitted models
                             },
                             _ => unimplemented!("Fitting BxDF family: {:?}", family),
@@ -312,7 +312,7 @@ impl VgonioGui {
                                 None,
                             )
                         });
-                        report.print_fitting_report(16);
+                        report.print_fitting_report(16, 4);
                         if let Some(model) = report.best_model() {
                             fitted.push(FittedModel::Ndf(model.clone_box(), *scale));
                         } else {

@@ -185,6 +185,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
     fn brute_fit(
         &self,
         target: MicrofacetDistroKind,
+        symmetry: Symmetry,
         metric: ErrorMetric,
         weighting: Weighting,
         max_theta_i: Option<Radians>,

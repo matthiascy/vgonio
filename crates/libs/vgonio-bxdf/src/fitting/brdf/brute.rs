@@ -1,8 +1,15 @@
-use crate::brdf::analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR};
+use crate::{
+    brdf::analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
+    fitting::brdf::{init_cuda_context, load_modules},
+};
+#[cfg(feature = "cuda")]
+use cust::device::Device;
+use cust::{context::CurrentContext, device::DeviceAttribute, module::Module};
 use rayon::{
     iter::{IndexedParallelIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
+use std::task::Context;
 use vgonio_core::{
     bxdf::{AnalyticalBrdf, BrdfProxy, MicrofacetDistroKind},
     optics::IorReg,
@@ -21,6 +28,9 @@ pub fn compute_distance_between_measured_and_modelled(
     alphay: f64,
     max_theta_i: Radians,
     max_theta_o: Radians,
+    #[cfg(feature = "cuda")] threads_per_block: u32,
+    #[cfg(feature = "cuda")] diff_module: &Module,
+    #[cfg(feature = "cuda")] reduce_module: &Module,
 ) -> f64 {
     let m = match distro {
         MicrofacetDistroKind::Beckmann => Box::new(MicrofacetBrdfBK::new(alphax, alphay))
@@ -39,7 +49,17 @@ pub fn compute_distance_between_measured_and_modelled(
             max_theta_o.as_f32(),
         )
     } else {
-        measured.distance(&modelled, metric, weighting)
+        measured.distance(
+            &modelled,
+            metric,
+            weighting,
+            #[cfg(feature = "cuda")]
+            threads_per_block,
+            #[cfg(feature = "cuda")]
+            diff_module,
+            #[cfg(feature = "cuda")]
+            reduce_module,
+        )
     }
 }
 
@@ -59,9 +79,20 @@ pub fn brdf_fitting_brute_force_isotropic<F: AnyMeasuredBrdf>(
     let mut errs = Box::new_uninit_slice(count);
     let cpu_count = ((std::thread::available_parallelism().unwrap().get()) / 2).max(1);
     let chunk_size = errs.len().div_ceil(cpu_count);
+    #[cfg(feature = "cuda")]
+    let (context, device) = init_cuda_context();
+    #[cfg(feature = "cuda")]
+    let (diff_module, reduce_module) = load_modules();
+    #[cfg(feature = "cuda")]
+    let threads_per_block = device
+        .get_attribute(DeviceAttribute::MaxThreadsPerBlock)
+        .unwrap() as u32;
     errs.par_chunks_mut(chunk_size)
         .enumerate()
         .for_each(|(i, err_chunks)| {
+            #[cfg(feature = "cuda")]
+            CurrentContext::set_current(&context).unwrap();
+
             for j in 0..err_chunks.len() {
                 let alpha = (i * chunk_size + j) as f64 * alpha.step_size + alpha.start;
                 err_chunks[j].write(compute_distance_between_measured_and_modelled(
@@ -73,6 +104,12 @@ pub fn brdf_fitting_brute_force_isotropic<F: AnyMeasuredBrdf>(
                     alpha,
                     max_theta_i,
                     max_theta_o,
+                    #[cfg(feature = "cuda")]
+                    threads_per_block,
+                    #[cfg(feature = "cuda")]
+                    &diff_module,
+                    #[cfg(feature = "cuda")]
+                    &reduce_module,
                 ));
             }
         });
@@ -92,6 +129,7 @@ pub fn brdf_fitting_brute_force_anisotropic<F: AnyMeasuredBrdf>(
     alphax: StepRangeIncl<f64>,
     alphay: StepRangeIncl<f64>,
     iors: &IorReg,
+    #[cfg(feature = "cuda")] device: Device,
 ) -> Box<[f64]> {
     log::debug!("compute anisotropic distance");
     let count = alphax.step_count() * alphay.step_count();
@@ -100,9 +138,20 @@ pub fn brdf_fitting_brute_force_anisotropic<F: AnyMeasuredBrdf>(
     // occupying too many resources.
     let num_threads = ((std::thread::available_parallelism().unwrap().get()) / 2).max(1);
     let chunk_size = count / num_threads;
+    #[cfg(feature = "cuda")]
+    let (context, device) = init_cuda_context();
+    #[cfg(feature = "cuda")]
+    let (diff_module, reduce_module) = load_modules();
+    #[cfg(feature = "cuda")]
+    let threads_per_block = device
+        .get_attribute(DeviceAttribute::MaxThreadsPerBlock)
+        .unwrap() as u32;
     errs.par_chunks_mut(chunk_size)
         .enumerate()
         .for_each(|(i, err_chunks)| {
+            #[cfg(feature = "cuda")]
+            CurrentContext::set_current(&context).unwrap();
+
             for j in 0..err_chunks.len() {
                 let index = i * chunk_size + j;
                 let alpha_x_idx = index / alphay.step_count();
@@ -118,6 +167,12 @@ pub fn brdf_fitting_brute_force_anisotropic<F: AnyMeasuredBrdf>(
                     alpha_y,
                     max_theta_i,
                     max_theta_o,
+                    #[cfg(feature = "cuda")]
+                    threads_per_block,
+                    #[cfg(feature = "cuda")]
+                    &diff_module,
+                    #[cfg(feature = "cuda")]
+                    &reduce_module,
                 ));
             }
         });

@@ -6,9 +6,12 @@ use crate::{
     units::{rad, Nanometres, Radians},
     AnyMeasuredBrdf, ErrorMetric, Weighting,
 };
+use cust::module::Module;
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use std::borrow::Cow;
 use vgonio_jabr::array::{shape, DyArr, DynArr, MemLayout};
+
+// TODO: fix L1 distance
 
 /// The source of the proxy.
 ///
@@ -358,7 +361,15 @@ impl<'a> BrdfProxy<'a> {
 
     /// Computes the distance between two BRDF proxies derived from the same
     /// BRDF.
-    pub fn distance(&self, other: &BrdfProxy, metric: ErrorMetric, weighting: Weighting) -> f64 {
+    pub fn distance(
+        &self,
+        other: &BrdfProxy,
+        metric: ErrorMetric,
+        weighting: Weighting,
+        #[cfg(feature = "cuda")] threads_per_block: u32,
+        #[cfg(feature = "cuda")] diff_module: &Module,
+        #[cfg(feature = "cuda")] reduce_module: &Module,
+    ) -> f64 {
         assert!(
             self.same_params_p(other),
             "The two BRDFs must have the same parameters"
@@ -372,43 +383,112 @@ impl<'a> BrdfProxy<'a> {
         };
         let stride_theta_i = self.resampled.strides()[0];
 
-        let sum = self
-            .resampled
-            .as_slice()
-            .chunks(stride_theta_i)
-            .zip(other.resampled.as_slice().chunks(stride_theta_i))
-            .zip(self.i_thetas.iter())
-            .par_bridge()
-            .map(|((xs, ys), theta_i)| {
-                let cos_theta_i = theta_i.cos();
+        #[cfg(not(feature = "cuda"))]
+        {
+            let sum = self
+                .resampled
+                .as_slice()
+                .chunks(stride_theta_i)
+                .zip(other.resampled.as_slice().chunks(stride_theta_i))
+                .zip(self.i_thetas.iter())
+                .par_bridge()
+                .map(|((xs, ys), theta_i)| {
+                    let cos_theta_i = theta_i.cos();
+                    match weighting {
+                        Weighting::None => {
+                            xs.iter().zip(ys.iter()).fold(0.0, |acc, (x, y)| {
+                                if has_nan && (x.is_nan() || y.is_nan()) {
+                                    return acc;
+                                }
+                                let diff = *x as f64 - *y as f64;
+                                acc + math::sqr(diff)
+                            }) * factor
+                        },
+                        Weighting::LnCos => {
+                            xs.iter().zip(ys.iter()).fold(0.0, |acc, (x, y)| {
+                                if has_nan && (x.is_nan() || y.is_nan()) {
+                                    return acc;
+                                }
+                                let diff = (*x as f64 * cos_theta_i as f64 + 1.0).ln()
+                                    - (*y as f64 * cos_theta_i as f64 + 1.0).ln();
+                                acc + math::sqr(diff)
+                            }) * factor
+                        },
+                    }
+                })
+                .reduce(|| 0.0, |a, b| a + b);
+
+            if is_rmse {
+                sum.sqrt()
+            } else {
+                sum
+            }
+        }
+
+        #[cfg(feature = "cuda")]
+        {
+            use cust::prelude::*;
+            let stream = Stream::new(StreamFlags::NON_BLOCKING, None).unwrap();
+
+            let n = self.resampled.len();
+            let mut d_xs = DeviceBuffer::from_slice(self.resampled.as_slice()).unwrap();
+            let mut d_ys = DeviceBuffer::from_slice(other.resampled.as_slice()).unwrap();
+            let mut d_diffs = DeviceBuffer::<f32>::zeroed(n).unwrap();
+
+            let blocks = (n as u32 + threads_per_block - 1) / threads_per_block;
+
+            unsafe {
                 match weighting {
                     Weighting::None => {
-                        xs.iter().zip(ys.iter()).fold(0.0, |acc, (x, y)| {
-                            if has_nan && (x.is_nan() || y.is_nan()) {
-                                return acc;
-                            }
-                            let diff = *x as f64 - *y as f64;
-                            acc + math::sqr(diff)
-                        }) * factor
+                        let func = diff_module.get_function("difference_sqr").unwrap();
+                        launch!(
+                            func<<<(blocks, 1, 1), (threads_per_block, 1, 1), 0, stream>>>(
+                                d_xs.as_device_ptr(),
+                                d_ys.as_device_ptr(),
+                                d_diffs.as_device_ptr(),
+                                n as u32,
+                            )
+                        )
+                        .unwrap();
                     },
                     Weighting::LnCos => {
-                        xs.iter().zip(ys.iter()).fold(0.0, |acc, (x, y)| {
-                            if has_nan && (x.is_nan() || y.is_nan()) {
-                                return acc;
-                            }
-                            let diff = (*x as f64 * cos_theta_i as f64 + 1.0).ln()
-                                - (*y as f64 * cos_theta_i as f64 + 1.0).ln();
-                            acc + math::sqr(diff)
-                        }) * factor
+                        let cos_thetas_i =
+                            self.i_thetas.iter().map(|t| t.cos()).collect::<Box<_>>();
+                        let d_weights = DeviceBuffer::from_slice(&cos_thetas_i).unwrap();
+                        let func = diff_module.get_function("difference_sqr_lncos").unwrap();
+                        launch!(
+                            func<<<(blocks, 1, 1), (threads_per_block, 1, 1), 0, stream>>>(
+                                d_xs.as_device_ptr(),
+                                d_ys.as_device_ptr(),
+                                d_weights.as_device_ptr(),
+                                d_diffs.as_device_ptr(),
+                                stride_theta_i as u32,
+                                n as u32,
+                            )
+                        )
+                        .unwrap();
                     },
                 }
-            })
-            .reduce(|| 0.0, |a, b| a + b);
+            }
+            stream.synchronize().unwrap();
 
-        if is_rmse {
-            sum.sqrt()
-        } else {
-            sum
+            log::info!("-- CPU reduction");
+            let mut diffs_sqr: DyArr<f32, 1> = DyArr::zeros([n]);
+            d_diffs.copy_to(diffs_sqr.as_mut_slice()).unwrap();
+
+            let sum = diffs_sqr.iter().fold(0.0, |acc, x| {
+                if x.is_nan() && has_nan {
+                    return acc;
+                }
+
+                acc + *x as f64 * factor
+            });
+
+            if is_rmse {
+                sum.sqrt()
+            } else {
+                sum
+            }
         }
     }
 
