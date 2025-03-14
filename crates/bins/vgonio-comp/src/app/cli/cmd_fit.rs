@@ -2,7 +2,7 @@ use crate::{measure::bsdf::BsdfMeasurement, pyplot::plot_err};
 use dirs::cache_dir;
 use std::{
     fmt::{format, Debug},
-    fs::File,
+    fs::{File, OpenOptions},
     io::{BufWriter, Write},
     path::{Path, PathBuf},
 };
@@ -18,6 +18,7 @@ use vgonio_core::{
 };
 
 use crate::{app::cache::Cache, pyplot::plot_per_wavelength_err};
+use clap::builder::ValueParser;
 use vgonio_bxdf::{
     brdf::measured::{merl::MerlBrdf, rgl::RglBrdf, yan::Yan18Brdf, ClausenBrdf},
     fitting::{FittingProblem, FittingReport},
@@ -63,6 +64,13 @@ macro_rules! load_and_fit {
 }
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
+    if opts.inputs.is_empty() {
+        return Err(VgonioError::new(
+            "No input files specified or some files do not exist.",
+            None,
+        ));
+    }
+
     cli::println(
         '>',
         2,
@@ -172,14 +180,19 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
     iors: &IorReg,
     writer: Option<&mut BufWriter<File>>,
 ) {
-    println!(
-        "      {} Fitting using brute force method... {}",
-        ansi::YELLOW_GT,
-        if opts.per_wavelength {
-            "per wavelength"
-        } else {
-            ""
-        }
+    cli::println(
+        '>',
+        6,
+        format_args!(
+            "Fitting with brute force method... {} {}",
+            if opts.per_wavelength {
+                "per wavelength"
+            } else {
+                ""
+            },
+            if opts.cuda { " | GPU enabled" } else { "" },
+        ),
+        ansi::Color::BrightYellow,
     );
     let start = std::time::Instant::now();
     let full_proxy = brdf.proxy(iors);
@@ -263,6 +276,9 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
             opts.theta_limit.map(|t| Radians::from_degrees(t)),
             opts.theta_limit.map(|t| Radians::from_degrees(t)),
             opts.brute_precision,
+            opts.cuda,
+            opts.ax.map(|ax| StepRangeIncl::new(ax[0], ax[1], ax[2])),
+            opts.ay.map(|ay| StepRangeIncl::new(ay[0], ay[1], ay[2])),
         );
         // Print the fitting report
         if let Some(w) = w {
@@ -321,6 +337,9 @@ fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(
                     opts.theta_limit.map(|t| Radians::from_degrees(t)),
                     opts.theta_limit.map(|t| Radians::from_degrees(t)),
                     2,
+                    false,
+                    opts.ax.map(|ax| StepRangeIncl::new(ax[0], ax[1], ax[2])),
+                    opts.ay.map(|ay| StepRangeIncl::new(ay[0], ay[1], ay[2])),
                 );
                 let mid = report.best_model().unwrap().params()[0];
                 StepRangeIncl::new(mid - 0.01, mid + 0.1, 0.001)
@@ -386,7 +405,7 @@ fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
         };
 
         let mut writer = BufWriter::new(
-            std::fs::OpenOptions::new()
+            OpenOptions::new()
                 .write(true)
                 .append(true)
                 .create(true)
@@ -461,15 +480,54 @@ fn write_fitting_reports(
     }
 }
 
+/// Parse the roughness values from a string formatted as `START:END:STEP`.
+fn parse_roughness_values(arg: &str) -> Result<[f64; 3], &'static str> {
+    arg.split(':')
+        .map(|arg| {
+            arg.parse::<f64>()
+                .expect("roughness value is not a valid floating point number")
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .map_err(|_| "Must provide 3 values separated by ':'")
+}
+
 /// Options for the `fit` subcommand.
 #[derive(clap::Args, Debug, Clone)]
 #[clap(about = "Fits a micro-surface related measurement to a given model.")]
 pub struct FitOptions {
-    #[clap(num_args = 1.., value_delimiter = ' ', help = "Input files to fit the measurement to.")]
+    #[clap(num_args = 1.., value_delimiter = ',', help = "Input files to fit the measurement to.")]
     pub inputs: Vec<PathBuf>,
 
     #[clap(long, short, help = "Kind of the measured BRDF data.")]
     pub kind: MeasuredBrdfKind,
+
+    #[clap(
+        long = "ax",
+        value_name = "START:END:STEP",
+        value_parser = ValueParser::new(parse_roughness_values),
+        requires("ay"),
+        help = "Anisotropic roughness in x direction (inclusive)."
+    )]
+    pub ax: Option<[f64; 3]>,
+
+    #[clap(
+        long = "ay",
+        value_name = "START:END:STEP",
+        value_parser = ValueParser::new(parse_roughness_values),
+        requires("ax"),
+        help = "Anisotropic roughness in y direction (inclusive)."
+    )]
+    pub ay: Option<[f64; 3]>,
+
+    #[clap(
+        long = "a",
+        value_name = "START:END:STEP",
+        value_parser = ValueParser::new(parse_roughness_values),
+        conflicts_with_all(&["ax", "ay"]),
+        help = "Isotropic roughness (inclusive)."
+    )]
+    pub a: Option<[f64; 3]>,
 
     #[clap(
         long,
@@ -567,6 +625,10 @@ pub struct FitOptions {
         default_value = "false"
     )]
     pub plot: bool,
+
+    #[cfg(feature = "cuda")]
+    #[clap(long, help = "Enable CUDA acceleration for the fitting.")]
+    pub cuda: bool,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]

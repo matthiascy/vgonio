@@ -1,21 +1,12 @@
-use crate::{
-    brdf::analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-    fitting::brdf::{init_cuda_context, load_modules},
-};
+use crate::brdf::analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR};
+use std::collections::HashMap;
+
 #[cfg(feature = "cuda")]
-use cust::device::Device;
-use cust::{context::CurrentContext, device::DeviceAttribute, module::Module};
-use rayon::{
-    iter::{IndexedParallelIterator, ParallelIterator},
-    slice::ParallelSliceMut,
-};
-use std::task::Context;
+use cust::module::Module;
 use vgonio_core::{
     bxdf::{AnalyticalBrdf, BrdfProxy, MicrofacetDistroKind},
-    optics::IorReg,
     units::Radians,
-    utils::range::StepRangeIncl,
-    AnyMeasuredBrdf, ErrorMetric, Weighting,
+    ErrorMetric, Weighting,
 };
 
 /// Compute the distance between a measured BRDF and a modelled BRDF.
@@ -28,9 +19,8 @@ pub fn compute_distance_between_measured_and_modelled(
     alphay: f64,
     max_theta_i: Radians,
     max_theta_o: Radians,
-    #[cfg(feature = "cuda")] threads_per_block: u32,
-    #[cfg(feature = "cuda")] diff_module: &Module,
-    #[cfg(feature = "cuda")] reduce_module: &Module,
+    gpu_threads_per_block: Option<u32>,
+    gpu_modules: Option<&HashMap<&'static str, Module>>,
 ) -> f64 {
     let m = match distro {
         MicrofacetDistroKind::Beckmann => Box::new(MicrofacetBrdfBK::new(alphax, alphay))
@@ -53,130 +43,8 @@ pub fn compute_distance_between_measured_and_modelled(
             &modelled,
             metric,
             weighting,
-            #[cfg(feature = "cuda")]
-            threads_per_block,
-            #[cfg(feature = "cuda")]
-            diff_module,
-            #[cfg(feature = "cuda")]
-            reduce_module,
+            gpu_threads_per_block,
+            gpu_modules,
         )
     }
-}
-
-/// Brute force fitting for isotropic microfacet BRDFs.
-pub fn brdf_fitting_brute_force_isotropic<F: AnyMeasuredBrdf>(
-    measured: &F,
-    distro: MicrofacetDistroKind,
-    metric: ErrorMetric,
-    max_theta_i: Radians,
-    max_theta_o: Radians,
-    weighting: Weighting,
-    alpha: StepRangeIncl<f64>,
-    iors: &IorReg,
-) -> Box<[f64]> {
-    log::debug!("compute isotropic distance");
-    let count = alpha.step_count();
-    let mut errs = Box::new_uninit_slice(count);
-    let cpu_count = ((std::thread::available_parallelism().unwrap().get()) / 2).max(1);
-    let chunk_size = errs.len().div_ceil(cpu_count);
-    #[cfg(feature = "cuda")]
-    let (context, device) = init_cuda_context();
-    #[cfg(feature = "cuda")]
-    let (diff_module, reduce_module) = load_modules();
-    #[cfg(feature = "cuda")]
-    let threads_per_block = device
-        .get_attribute(DeviceAttribute::MaxThreadsPerBlock)
-        .unwrap() as u32;
-    errs.par_chunks_mut(chunk_size)
-        .enumerate()
-        .for_each(|(i, err_chunks)| {
-            #[cfg(feature = "cuda")]
-            CurrentContext::set_current(&context).unwrap();
-
-            for j in 0..err_chunks.len() {
-                let alpha = (i * chunk_size + j) as f64 * alpha.step_size + alpha.start;
-                err_chunks[j].write(compute_distance_between_measured_and_modelled(
-                    &measured.proxy(iors),
-                    distro,
-                    metric,
-                    weighting,
-                    alpha,
-                    alpha,
-                    max_theta_i,
-                    max_theta_o,
-                    #[cfg(feature = "cuda")]
-                    threads_per_block,
-                    #[cfg(feature = "cuda")]
-                    &diff_module,
-                    #[cfg(feature = "cuda")]
-                    &reduce_module,
-                ));
-            }
-        });
-
-    // Return the computed distances
-    unsafe { errs.assume_init() }
-}
-
-/// Brute force fitting for anisotropic microfacet BRDFs.
-pub fn brdf_fitting_brute_force_anisotropic<F: AnyMeasuredBrdf>(
-    measured: &F,
-    distro: MicrofacetDistroKind,
-    metric: ErrorMetric,
-    max_theta_i: Radians,
-    max_theta_o: Radians,
-    weighting: Weighting,
-    alphax: StepRangeIncl<f64>,
-    alphay: StepRangeIncl<f64>,
-    iors: &IorReg,
-    #[cfg(feature = "cuda")] device: Device,
-) -> Box<[f64]> {
-    log::debug!("compute anisotropic distance");
-    let count = alphax.step_count() * alphay.step_count();
-    let mut errs = Box::new_uninit_slice(count);
-    // Limit the number of threads to 1/2 of the available parallelism to avoid
-    // occupying too many resources.
-    let num_threads = ((std::thread::available_parallelism().unwrap().get()) / 2).max(1);
-    let chunk_size = count / num_threads;
-    #[cfg(feature = "cuda")]
-    let (context, device) = init_cuda_context();
-    #[cfg(feature = "cuda")]
-    let (diff_module, reduce_module) = load_modules();
-    #[cfg(feature = "cuda")]
-    let threads_per_block = device
-        .get_attribute(DeviceAttribute::MaxThreadsPerBlock)
-        .unwrap() as u32;
-    errs.par_chunks_mut(chunk_size)
-        .enumerate()
-        .for_each(|(i, err_chunks)| {
-            #[cfg(feature = "cuda")]
-            CurrentContext::set_current(&context).unwrap();
-
-            for j in 0..err_chunks.len() {
-                let index = i * chunk_size + j;
-                let alpha_x_idx = index / alphay.step_count();
-                let alpha_y_idx = index % alphay.step_count();
-                let alpha_x = alphax.start + alpha_x_idx as f64 * alphax.step_size;
-                let alpha_y = alphay.start + alpha_y_idx as f64 * alphay.step_size;
-                err_chunks[j].write(compute_distance_between_measured_and_modelled(
-                    &measured.proxy(iors),
-                    distro,
-                    metric,
-                    weighting,
-                    alpha_x,
-                    alpha_y,
-                    max_theta_i,
-                    max_theta_o,
-                    #[cfg(feature = "cuda")]
-                    threads_per_block,
-                    #[cfg(feature = "cuda")]
-                    &diff_module,
-                    #[cfg(feature = "cuda")]
-                    &reduce_module,
-                ));
-            }
-        });
-
-    // Return the computed distances
-    unsafe { errs.assume_init() }
 }

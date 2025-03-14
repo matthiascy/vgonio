@@ -6,7 +6,9 @@ extern "C" __global__ void reduce(const float *__restrict xs, float *__restrict 
     const unsigned i = blockIdx.x * (blockDim.x * 2) + threadIdx.x;
 
     // Store first partial result instead of just the elements
-    partial[threadIdx.x] = xs[i] * factor  + xs[i + blockDim.x] * factor;
+    const float x = isnan(xs[i])? 0.0f : xs[i];
+    const float y = isnan(xs[i + blockDim.x])? 0.0f : xs[i + blockDim.x];
+    partial[threadIdx.x] = x * factor  + y * factor;
     __syncthreads();
 
     // Start at 1/2 block stride and divide by two each iteration

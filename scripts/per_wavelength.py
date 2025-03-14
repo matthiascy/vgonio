@@ -118,6 +118,7 @@ if __name__ == "__main__":
                 errors.append(float(row[7]))
                 if len(row) > 8:
                     mses.append(float(row[8]))
+            print(f"x in {min(alphas_x):.8} ~ {max(alphas_x):.8}, y in {min(alphas_y):.8} ~ {max(alphas_y):.8}")
             plot_per_wavelength_err_anisotropic(f"{surface} {kind} {weighting} {distro}", wavelengths, alphas_x,
                                                 alphas_y, errors, mses)
         exit(0)

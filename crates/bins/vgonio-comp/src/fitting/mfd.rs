@@ -191,6 +191,9 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
         max_theta_i: Option<Radians>,
         max_theta_o: Option<Radians>,
         precision: u32,
+        on_gpu: bool,
+        alpha_x: Option<StepRangeIncl<f64>>,
+        alpha_y: Option<StepRangeIncl<f64>>,
     ) -> FittingReport<Self::Model> {
         todo!()
     }

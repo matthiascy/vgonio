@@ -162,8 +162,16 @@ pub struct FittingReport<M> {
 impl<M> FittingReport<M> {
     /// Creates a new fitting report from the results of the fitting process.
     pub fn new(results: Box<[(M, MinimisationReport)]>) -> Self {
-        let mut reports = results;
-        reports.sort_by(|(_, r1), (_, r2)| r1.objective_fn.partial_cmp(&r2.objective_fn).unwrap());
+        let mut reports = results
+            .into_vec()
+            .into_iter()
+            .filter(|x| !x.1.objective_fn.is_nan())
+            .collect::<Box<_>>();
+        reports.sort_by(|(_, r1), (_, r2)| {
+            r1.objective_fn
+                .partial_cmp(&r2.objective_fn)
+                .expect("NaN values in objective function")
+        });
         if reports.is_empty() {
             return FittingReport {
                 best: None,
@@ -295,6 +303,9 @@ pub trait FittingProblem {
         max_theta_i: Option<Radians>,
         max_theta_o: Option<Radians>,
         precision: u32,
+        on_gpu: bool,
+        alpha_x: Option<StepRangeIncl<f64>>,
+        alpha_y: Option<StepRangeIncl<f64>>,
     ) -> FittingReport<Self::Model>;
 }
 
@@ -306,19 +317,16 @@ pub mod brdf {
     pub mod nllsq;
 
     use super::{FittingProblem, FittingReport, MinimisationReport};
-    use crate::{
-        brdf::analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-        fitting::brdf::brute::brdf_fitting_brute_force_anisotropic,
-    };
+    use crate::brdf::analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR};
     use brute::compute_distance_between_measured_and_modelled;
     #[cfg(feature = "cuda")]
-    use cust::device::DeviceAttribute;
     use cust::{
         context::{Context, ContextFlags, CurrentContext},
-        device::Device,
+        device::{Device, DeviceAttribute},
         module::Module,
         CudaFlags,
     };
+    use indicatif::{MultiProgress, ProgressBar};
     use levenberg_marquardt::{LevenbergMarquardt, TerminationReason};
     use nllsq::{init_microfacet_brdf_models, NllsqBrdfFittingProxy};
     use rayon::{
@@ -334,24 +342,6 @@ pub mod brdf {
         utils::range::StepRangeIncl,
         ErrorMetric, Symmetry, Weighting,
     };
-
-    #[cfg(feature = "cuda")]
-    pub fn init_cuda_context() -> (Context, Device) {
-        cust::init(CudaFlags::empty()).unwrap();
-        let device = Device::get_device(0).unwrap();
-        let ctx = Context::new(device).unwrap();
-        ctx.set_flags(ContextFlags::SCHED_AUTO).unwrap();
-        (ctx, device)
-    }
-
-    #[cfg(feature = "cuda")]
-    pub fn load_modules() -> (Module, Module) {
-        let diff_kernel = include_str!("../../vgonio-bxdf/src/fitting/kernels/difference.ptx");
-        let reduce_kernel = include_str!("../../vgonio-bxdf/src/fitting/kernels/reduction.ptx");
-        let diff_module = Module::from_ptx(diff_kernel, &[]).unwrap();
-        let reduce_module = Module::from_ptx(reduce_kernel, &[]).unwrap();
-        (diff_module, reduce_module)
-    }
 
     impl<'a> FittingProblem for BrdfProxy<'a> {
         type Model = Box<dyn AnalyticalBrdf<Params = [f64; 2]>>;
@@ -464,6 +454,9 @@ pub mod brdf {
             max_theta_i: Option<Radians>,
             max_theta_o: Option<Radians>,
             precision: u32,
+            on_gpu: bool,
+            alpha_x: Option<StepRangeIncl<f64>>,
+            alpha_y: Option<StepRangeIncl<f64>>,
         ) -> FittingReport<Self::Model> {
             log::debug!("start brute force fitting");
             #[cfg(not(feature = "cuda"))]
@@ -472,6 +465,23 @@ pub mod brdf {
             let cpu_count = ((std::thread::available_parallelism().unwrap().get()) / 5 * 3).max(1);
 
             let n_filtered_samples = self.n_filtered_samples(max_theta_i, max_theta_o);
+
+            let (context, device, modules, threads_per_block) = if on_gpu {
+                let (context, device) =
+                    vgonio_core::cuda::init_cuda_context(ContextFlags::SCHED_AUTO).unwrap();
+                let modules = vgonio_core::cuda::load_ptx_modules().unwrap();
+                let threads_per_block = device
+                    .get_attribute(DeviceAttribute::MaxThreadsPerBlock)
+                    .unwrap() as u32;
+                (
+                    Some(context),
+                    Some(device),
+                    Some(modules),
+                    Some(threads_per_block),
+                )
+            } else {
+                (None, None, None, None)
+            };
 
             match symmetry {
                 Symmetry::Isotropic => {
@@ -484,14 +494,6 @@ pub mod brdf {
                     let n_times = (precision + 1) / 2;
                     log::debug!("Brute force fitting for {} times", n_times);
                     let mut records = Vec::with_capacity(n_times as usize * 256);
-                    #[cfg(feature = "cuda")]
-                    let (context, device) = init_cuda_context();
-                    #[cfg(feature = "cuda")]
-                    let (diff_module, reduce_module) = load_modules();
-                    #[cfg(feature = "cuda")]
-                    let threads_per_block = device
-                        .get_attribute(DeviceAttribute::MaxThreadsPerBlock)
-                        .unwrap() as u32;
 
                     for i in 0..n_times {
                         let chunk_size = alphas.len().div_ceil(cpu_count);
@@ -502,33 +504,17 @@ pub mod brdf {
                             alphas
                         );
 
-                        let multi_pb = indicatif::MultiProgress::new();
-                        let pbs = (0..alphas.len() / chunk_size)
-                            .map(|_| {
-                                let pb =
-                                    multi_pb.add(indicatif::ProgressBar::new(chunk_size as u64));
-                                pb.set_style(
-                                    indicatif::ProgressStyle::default_bar()
-                                        .template(
-                                            "      {spinner:.green} [{elapsed_precise}] \
-                                             [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
-                                        )
-                                        .unwrap()
-                                        .progress_chars("#>-"),
-                                );
-                                pb.set_position(0);
-                                pb
-                            })
-                            .collect::<Vec<_>>();
+                        let (_, pbs) =
+                            create_multi_progress_bar(alphas.len() as u64, cpu_count as u64);
                         alphas
                             .chunks(chunk_size)
                             .zip(errs.chunks_mut(chunk_size))
                             .zip(pbs.iter())
                             .par_bridge()
                             .for_each(|((alpha_chunks, err_chunks), pb)| {
-                                #[cfg(feature = "cuda")]
-                                CurrentContext::set_current(&context).unwrap();
-
+                                if on_gpu {
+                                    CurrentContext::set_current(context.as_ref().unwrap()).unwrap();
+                                }
                                 err_chunks.iter_mut().zip(alpha_chunks.iter()).for_each(
                                     |(err, alpha)| {
                                         *err = compute_distance_between_measured_and_modelled(
@@ -540,12 +526,8 @@ pub mod brdf {
                                             *alpha,
                                             max_theta_i.unwrap_or(Radians::HALF_PI),
                                             max_theta_o.unwrap_or(Radians::HALF_PI),
-                                            #[cfg(feature = "cuda")]
                                             threads_per_block,
-                                            #[cfg(feature = "cuda")]
-                                            &diff_module,
-                                            #[cfg(feature = "cuda")]
-                                            &reduce_module,
+                                            modules.as_ref(),
                                         );
                                         pb.inc(1);
                                     },
@@ -603,20 +585,12 @@ pub mod brdf {
                     FittingReport::new(records.into_boxed_slice())
                 },
                 Symmetry::Anisotropic => {
-                    let alpha_x = StepRangeIncl::new(0.1, 0.5, 0.001);
-                    let alpha_y = StepRangeIncl::new(0.1, 0.5, 0.001);
+                    let alpha_x = alpha_x.unwrap_or(StepRangeIncl::new(0.0, 1.0, 0.01));
+                    let alpha_y = alpha_y.unwrap_or(StepRangeIncl::new(0.0, 1.0, 0.01));
                     let count = alpha_x.step_count() * alpha_y.step_count();
                     let mut errs = Box::new_uninit_slice(count);
                     let chunk_size = count.div_ceil(cpu_count);
 
-                    #[cfg(feature = "cuda")]
-                    let (context, device) = init_cuda_context();
-                    #[cfg(feature = "cuda")]
-                    let (diff_module, reduce_module) = load_modules();
-                    #[cfg(feature = "cuda")]
-                    let threads_per_block = device
-                        .get_attribute(DeviceAttribute::MaxThreadsPerBlock)
-                        .unwrap() as u32;
                     let alphas = (0..count)
                         .map(|i| {
                             let alpha_x_idx = i / alpha_y.step_count();
@@ -627,23 +601,7 @@ pub mod brdf {
                         })
                         .collect::<Box<[(f64, f64)]>>();
 
-                    let multi_pb = indicatif::MultiProgress::new();
-                    let pbs = (0..alphas.len() / chunk_size)
-                        .map(|_| {
-                            let pb = multi_pb.add(indicatif::ProgressBar::new(chunk_size as u64));
-                            pb.set_style(
-                                indicatif::ProgressStyle::default_bar()
-                                    .template(
-                                        "      {spinner:.green} [{elapsed_precise}] \
-                                         [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
-                                    )
-                                    .unwrap()
-                                    .progress_chars("#>-"),
-                            );
-                            pb.set_position(0);
-                            pb
-                        })
-                        .collect::<Vec<_>>();
+                    let (_, pbs) = create_multi_progress_bar(count as u64, cpu_count as u64);
 
                     errs.chunks_mut(chunk_size)
                         .zip(alphas.chunks(chunk_size))
@@ -651,8 +609,9 @@ pub mod brdf {
                         .enumerate()
                         .par_bridge()
                         .for_each(|(i, ((err_chunks, alpha_chunks), pb))| {
-                            #[cfg(feature = "cuda")]
-                            CurrentContext::set_current(&context).unwrap();
+                            if on_gpu {
+                                CurrentContext::set_current(context.as_ref().unwrap()).unwrap();
+                            }
                             for j in 0..err_chunks.len() {
                                 let (alpha_x, alpha_y) = alpha_chunks[j];
                                 err_chunks[j].write(
@@ -665,12 +624,8 @@ pub mod brdf {
                                         alpha_y,
                                         max_theta_i.unwrap_or(Radians::HALF_PI),
                                         max_theta_o.unwrap_or(Radians::HALF_PI),
-                                        #[cfg(feature = "cuda")]
                                         threads_per_block,
-                                        #[cfg(feature = "cuda")]
-                                        &diff_module,
-                                        #[cfg(feature = "cuda")]
-                                        &reduce_module,
+                                        modules.as_ref(),
                                     ),
                                 );
                                 pb.inc(1);
@@ -707,5 +662,35 @@ pub mod brdf {
                 },
             }
         }
+    }
+
+    /// Creates a multi-progress bar.
+    ///
+    /// # Arguments
+    ///
+    /// * `n` - The number of total tasks to perform.
+    /// * `n_cpu` - The number of CPUs to use, each CPU will have a progress
+    ///   bar.
+    fn create_multi_progress_bar(n: u64, n_cpu: u64) -> (MultiProgress, Box<[ProgressBar]>) {
+        let n_tasks_per_cpu = n.div_ceil(n_cpu);
+        let multi_pb = MultiProgress::new();
+        let pbs = (0..n_cpu)
+            .map(|i| {
+                let n_tasks = n_tasks_per_cpu.min(n - i * n_tasks_per_cpu);
+                let pb = multi_pb.add(ProgressBar::new(n_tasks));
+                pb.set_style(
+                    indicatif::ProgressStyle::default_bar()
+                        .template(
+                            "      {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] \
+                             {pos}/{len} ({eta})",
+                        )
+                        .unwrap()
+                        .progress_chars("#>-"),
+                );
+                pb.set_position(0);
+                pb
+            })
+            .collect::<Box<_>>();
+        (multi_pb, pbs)
     }
 }

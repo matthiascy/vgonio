@@ -45,6 +45,38 @@ pub mod optics;
 
 pub mod bxdf;
 
+#[cfg(feature = "cuda")]
+pub mod cuda {
+    use cust::{error::CudaResult, prelude::*};
+    use std::collections::HashMap;
+
+    /// Initializes the CUDA context and returns it.
+    ///
+    /// The cust crate doesn't provide an accessor to the device, so we have to
+    /// return the device as well.
+    pub fn init_cuda_context(flags: ContextFlags) -> CudaResult<(Context, Device)> {
+        cust::init(CudaFlags::empty())?;
+        let device = Device::get_device(0)?;
+        let context = Context::new(device)?;
+        context.set_flags(flags)?;
+        Ok((context, device))
+    }
+
+    /// Loads the PTX kernel modules from the given paths.
+    ///
+    /// # Warning
+    /// User must ensure that the cuda context is initialised before calling
+    /// this function.
+    pub fn load_ptx_modules() -> CudaResult<HashMap<&'static str, Module>> {
+        let mut modules = HashMap::new();
+        let diff_kernel = include_str!("kernels/difference.ptx");
+        let reduce_kernel = include_str!("kernels/reduction.ptx");
+        modules.insert("diff", Module::from_ptx(diff_kernel, &[])?);
+        modules.insert("reduce", Module::from_ptx(reduce_kernel, &[])?);
+        Ok(modules)
+    }
+}
+
 /// Indicates whether something is uniform in all directions or not.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[derive(Debug, Copy, Clone, ConstParamTy)]

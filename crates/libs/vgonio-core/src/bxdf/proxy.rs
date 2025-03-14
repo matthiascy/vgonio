@@ -6,9 +6,16 @@ use crate::{
     units::{rad, Nanometres, Radians},
     AnyMeasuredBrdf, ErrorMetric, Weighting,
 };
-use cust::module::Module;
+#[cfg(feature = "cuda")]
+use cust::{
+    launch,
+    module::Module,
+    prelude::{CopyDestination, DeviceBuffer},
+    stream::Stream,
+};
+use num_traits::Float;
 use rayon::iter::{ParallelBridge, ParallelIterator};
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::HashMap};
 use vgonio_jabr::array::{shape, DyArr, DynArr, MemLayout};
 
 // TODO: fix L1 distance
@@ -366,9 +373,8 @@ impl<'a> BrdfProxy<'a> {
         other: &BrdfProxy,
         metric: ErrorMetric,
         weighting: Weighting,
-        #[cfg(feature = "cuda")] threads_per_block: u32,
-        #[cfg(feature = "cuda")] diff_module: &Module,
-        #[cfg(feature = "cuda")] reduce_module: &Module,
+        gpu_threads_per_block: Option<u32>,
+        gpu_modules: Option<&HashMap<&'static str, Module>>,
     ) -> f64 {
         assert!(
             self.same_params_p(other),
@@ -383,8 +389,7 @@ impl<'a> BrdfProxy<'a> {
         };
         let stride_theta_i = self.resampled.strides()[0];
 
-        #[cfg(not(feature = "cuda"))]
-        {
+        if gpu_threads_per_block.is_none() || gpu_modules.is_none() {
             let sum = self
                 .resampled
                 .as_slice()
@@ -423,10 +428,7 @@ impl<'a> BrdfProxy<'a> {
             } else {
                 sum
             }
-        }
-
-        #[cfg(feature = "cuda")]
-        {
+        } else {
             use cust::prelude::*;
             let stream = Stream::new(StreamFlags::NON_BLOCKING, None).unwrap();
 
@@ -435,12 +437,14 @@ impl<'a> BrdfProxy<'a> {
             let mut d_ys = DeviceBuffer::from_slice(other.resampled.as_slice()).unwrap();
             let mut d_diffs = DeviceBuffer::<f32>::zeroed(n).unwrap();
 
+            let threads_per_block = gpu_threads_per_block.unwrap();
             let blocks = (n as u32 + threads_per_block - 1) / threads_per_block;
+            let modules = gpu_modules.unwrap();
 
             unsafe {
                 match weighting {
                     Weighting::None => {
-                        let func = diff_module.get_function("difference_sqr").unwrap();
+                        let func = modules["diff"].get_function("difference_sqr").unwrap();
                         launch!(
                             func<<<(blocks, 1, 1), (threads_per_block, 1, 1), 0, stream>>>(
                                 d_xs.as_device_ptr(),
@@ -455,7 +459,9 @@ impl<'a> BrdfProxy<'a> {
                         let cos_thetas_i =
                             self.i_thetas.iter().map(|t| t.cos()).collect::<Box<_>>();
                         let d_weights = DeviceBuffer::from_slice(&cos_thetas_i).unwrap();
-                        let func = diff_module.get_function("difference_sqr_lncos").unwrap();
+                        let func = modules["diff"]
+                            .get_function("difference_sqr_lncos")
+                            .unwrap();
                         launch!(
                             func<<<(blocks, 1, 1), (threads_per_block, 1, 1), 0, stream>>>(
                                 d_xs.as_device_ptr(),
@@ -472,17 +478,29 @@ impl<'a> BrdfProxy<'a> {
             }
             stream.synchronize().unwrap();
 
-            log::info!("-- CPU reduction");
-            let mut diffs_sqr: DyArr<f32, 1> = DyArr::zeros([n]);
-            d_diffs.copy_to(diffs_sqr.as_mut_slice()).unwrap();
+            let sum = if n > 1 << 22 {
+                let mut diffs_sqr = vec![0.0; n].into_boxed_slice();
+                d_diffs.copy_to(&mut diffs_sqr).unwrap();
+                // TODO: update the CUDA kernel to handle large number of samples
+                diffs_sqr.iter().fold(0.0, |acc, x| {
+                    if x.is_nan() {
+                        return acc;
+                    }
 
-            let sum = diffs_sqr.iter().fold(0.0, |acc, x| {
-                if x.is_nan() && has_nan {
-                    return acc;
-                }
+                    acc + *x as f64 * factor
+                })
+            } else {
+                Self::reduce(
+                    &d_diffs,
+                    threads_per_block,
+                    factor as f32,
+                    stream,
+                    &modules["reduce"],
+                ) as f64
+            };
 
-                acc + *x as f64 * factor
-            });
+            assert!(!sum.is_nan(), "The sum of the differences is NaN");
+            assert_ne!(sum, 0.0, "The sum is zero");
 
             if is_rmse {
                 sum.sqrt()
@@ -679,7 +697,7 @@ impl<'a> BrdfProxy<'a> {
         }
     }
 
-    /// Computes the residuals between two BRDF proxies derived from the
+    /// Computes the residuals between two BRDF proxies derived from
     /// the same BRDF with a filtered range of incident and outgoing angles.
     /// Stores the individual residuals in a row-major array following the
     /// shape of the resampled data.
@@ -916,5 +934,188 @@ impl<'a> BrdfProxy<'a> {
             iors_i: self.iors_i.clone(),
             iors_t: self.iors_t.clone(),
         }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn reduce(
+        arr: &DeviceBuffer<f32>,
+        block_size: u32,
+        factor: f32,
+        stream: Stream,
+        module: &Module,
+    ) -> f32 {
+        let n = arr.len();
+        let d_sum = DeviceBuffer::<f32>::zeroed(n).unwrap();
+        let blocks = (n as u32 / block_size / 2).max(1);
+        let shared_mem = block_size * 4 * size_of::<f32>() as u32;
+
+        unsafe {
+            let kernel = module.get_function("reduce").unwrap();
+            launch!(
+                kernel<<<(blocks, 1, 1), (block_size, 1, 1), shared_mem, stream>>>(
+                    arr.as_device_ptr(),
+                    d_sum.as_device_ptr(),
+                    factor,
+                )
+            )
+            .unwrap();
+            launch!(
+                kernel<<<(1, 1, 1), (block_size, 1, 1), shared_mem, stream>>>(
+                    d_sum.as_device_ptr(),
+                    d_sum.as_device_ptr(),
+                    1.0f32,
+                )
+            )
+            .unwrap();
+        }
+
+        stream.synchronize().unwrap();
+        let mut sum = vec![0.0; n].into_boxed_slice();
+        d_sum.copy_to(&mut sum).unwrap();
+        sum[0]
+    }
+}
+
+#[cfg(feature = "cuda")]
+#[cfg(test)]
+mod tests {
+    use crate::cuda::{init_cuda_context, load_ptx_modules};
+    use cust::{
+        context::ContextFlags, device::DeviceAttribute, launch, memory::DeviceBuffer, prelude::*,
+        stream::Stream,
+    };
+
+    #[test]
+    fn test_array_difference() {
+        let (context, device) = init_cuda_context(ContextFlags::SCHED_AUTO).unwrap();
+        let stream = Stream::new(StreamFlags::NON_BLOCKING, None).unwrap();
+        let n = 1 << 16;
+        let xs = (0..n).map(|x| x as f32).collect::<Box<_>>();
+        let ys = (0..n).map(|x| x as f32 + 1.0).collect::<Box<_>>();
+
+        let d_xs = DeviceBuffer::from_slice(&xs).unwrap();
+        let d_ys = DeviceBuffer::from_slice(&ys).unwrap();
+        let d_diffs = DeviceBuffer::<f32>::zeroed(n).unwrap();
+
+        let block_size = device
+            .get_attribute(DeviceAttribute::MaxThreadsPerBlock)
+            .unwrap() as u32;
+        let blocks = (n as u32 + block_size - 1) / block_size;
+
+        let modules = load_ptx_modules().unwrap();
+
+        // Test the squared difference kernel
+        unsafe {
+            let kernel = modules["diff"].get_function("difference_sqr").unwrap();
+            launch!(
+                kernel<<<(blocks, 1, 1), (block_size, 1, 1), 0, stream>>>(
+                    d_xs.as_device_ptr(),
+                    d_ys.as_device_ptr(),
+                    d_diffs.as_device_ptr(),
+                    n as u32,
+                )
+            )
+            .unwrap();
+        }
+
+        stream.synchronize().unwrap();
+
+        let mut diffs: Vec<f32> = vec![0.0; n];
+        d_diffs.copy_to(diffs.as_mut_slice()).unwrap();
+
+        for i in 0..n {
+            assert_eq!(diffs[i], 1.0);
+        }
+
+        // Test the squared difference kernel with weighting
+        let weights = (0..n / 256).map(|x| (x as f32).cos()).collect::<Box<_>>();
+        let d_weights = DeviceBuffer::from_slice(&weights).unwrap();
+
+        unsafe {
+            let kernel = modules["diff"]
+                .get_function("difference_sqr_lncos")
+                .unwrap();
+            launch!(
+                kernel<<<(blocks, 1, 1), (block_size, 1, 1), 0, stream>>>(
+                    d_xs.as_device_ptr(),
+                    d_ys.as_device_ptr(),
+                    d_weights.as_device_ptr(),
+                    d_diffs.as_device_ptr(),
+                    256,
+                    n as u32,
+                )
+            )
+            .unwrap();
+        }
+
+        stream.synchronize().unwrap();
+
+        let mut diffs: Vec<f32> = vec![0.0; n];
+        d_diffs.copy_to(diffs.as_mut_slice()).unwrap();
+
+        for i in 0..n {
+            let x = xs[i] as f64;
+            let y = ys[i] as f64;
+            let w = weights[i / 256] as f64;
+            let diff = ((x * w + 1.0).ln() - (y * w + 1.0).ln()).powi(2);
+            if diff.is_nan() && diffs[i].is_nan() {
+                continue;
+            }
+
+            approx::assert_ulps_eq!(diffs[i], diff as f32);
+        }
+    }
+
+    #[test]
+    fn test_reduction() {
+        let (context, device) = init_cuda_context(ContextFlags::SCHED_AUTO).unwrap();
+        let modules = load_ptx_modules().unwrap();
+        let stream = Stream::new(StreamFlags::NON_BLOCKING, None).unwrap();
+        let n = 1 << 22;
+        let xs = (0..n)
+            .map(|x| {
+                if x == 0 || x == 2 || x == 4 {
+                    f32::NAN
+                } else {
+                    1.0f32
+                }
+            })
+            .collect::<Box<_>>();
+
+        let d_xs = DeviceBuffer::from_slice(&xs).unwrap();
+        let d_sum = DeviceBuffer::<f32>::zeroed(n).unwrap();
+
+        let block_size = device
+            .get_attribute(DeviceAttribute::MaxThreadsPerBlock)
+            .unwrap() as u32;
+        let blocks = (n as u32 / block_size / 2).max(1);
+        let shared_mem = block_size * 4 * size_of::<f32>() as u32;
+
+        unsafe {
+            let kernel = modules["reduce"].get_function("reduce").unwrap();
+            launch!(
+                kernel<<<(blocks, 1, 1), (block_size, 1, 1), shared_mem, stream>>>(
+                    d_xs.as_device_ptr(),
+                    d_sum.as_device_ptr(),
+                    0.5f32,
+                )
+            )
+            .unwrap();
+            launch!(
+                kernel<<<(1, 1, 1), (block_size, 1, 1), shared_mem, stream>>>(
+                    d_sum.as_device_ptr(),
+                    d_sum.as_device_ptr(),
+                    1.0f32,
+                )
+            )
+            .unwrap();
+        }
+
+        stream.synchronize().unwrap();
+        let mut sum = vec![0.0; n].into_boxed_slice();
+        d_sum.copy_to(&mut sum).unwrap();
+
+        let expected = (n - 3) as f32 * 0.5;
+        assert_eq!(sum[0], expected);
     }
 }
