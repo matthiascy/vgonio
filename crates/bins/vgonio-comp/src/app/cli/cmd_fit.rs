@@ -3,7 +3,7 @@ use dirs::cache_dir;
 use std::{
     fmt::{format, Debug},
     fs::{File, OpenOptions},
-    io::{BufWriter, Write},
+    io::{BufRead, BufWriter, Write},
     path::{Path, PathBuf},
 };
 use vgonio_core::{
@@ -21,7 +21,7 @@ use crate::{app::cache::Cache, pyplot::plot_per_wavelength_err};
 use clap::builder::ValueParser;
 use vgonio_bxdf::{
     brdf::measured::{merl::MerlBrdf, rgl::RglBrdf, yan::Yan18Brdf, ClausenBrdf},
-    fitting::{FittingProblem, FittingReport},
+    fitting::{FittingProblem, FittingReport, Roughness},
 };
 use vgonio_core::{
     bxdf::{AnalyticalBrdf, BrdfFamily, BrdfProxy, MeasuredBrdfKind, MicrofacetDistroKind},
@@ -174,6 +174,36 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     })
 }
 
+// TODO: error handling
+/// Read the roughness values from a file.
+/// The file should contain a list of triplets, each triplet is a range of
+/// roughness values for a wavelength. The number of triplets should be equal to
+/// the number of wavelengths. The values are separated by `:` and each triplet
+/// is separated by a newline.
+fn read_per_wavelength_roughness_values(
+    path: &Path,
+    n_wl: usize,
+) -> Result<Box<[StepRangeIncl<f64>]>, &'static str> {
+    let file = File::open(path).unwrap();
+    let reader = std::io::BufReader::new(file);
+    let values = reader
+        .lines()
+        .map(|line| {
+            let line = line.unwrap();
+            let values = line
+                .split(':')
+                .map(|v| v.parse::<f64>().unwrap())
+                .collect::<Vec<_>>();
+            let val: [f64; 3] = values.try_into().unwrap();
+            StepRangeIncl::new(val[0], val[1], val[2])
+        })
+        .collect::<Box<_>>();
+    if values.len() != n_wl {
+        return Err("The number of triplets should be equal to the number of wavelengths.");
+    }
+    Ok(values)
+}
+
 fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
     brdf: &F,
     opts: &FitOptions,
@@ -196,19 +226,52 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
     );
     let start = std::time::Instant::now();
     let full_proxy = brdf.proxy(iors);
+
     let reports = if opts.per_wavelength {
         let mut reports = Box::new_uninit_slice(brdf.spectrum().len());
         let wavelengths = brdf.spectrum();
+        // Read the roughness values from the file provided by
+        // --per-wl-ax and --per-wl-ay
+        let per_wl_ax = opts.per_wavelength_ax.as_ref().map(|path| {
+            read_per_wavelength_roughness_values(path, wavelengths.len())
+                .expect("Failed to read the roughness values for the anisotropic roughness in x.")
+        });
+        let per_wl_ay = opts.per_wavelength_ay.as_ref().map(|path| {
+            read_per_wavelength_roughness_values(path, wavelengths.len())
+                .expect("Failed to read the roughness values for the anisotropic roughness in y.")
+        });
+
         for (i, w) in wavelengths.iter().enumerate() {
             let proxy = full_proxy.per_wavelength(i);
-            let report = brdf_fitting_brute_force_inner(proxy, opts, 0, Some(*w));
+            let ax = per_wl_ax.as_ref().map(|ax| ax[i]);
+            let ay = per_wl_ay.as_ref().map(|ay| ay[i]);
+            cli::println(
+                '>',
+                6,
+                format_args!(
+                    "Fitting for wavelength: {:?}, in range ax: {:?}, ay: {:?}",
+                    w, ax, ay
+                ),
+                ansi::Color::BrightYellow,
+            );
+            let a = ax.zip(ay).map(|(ax, ay)| Roughness::Anisotropic { ax, ay });
+            let report = brdf_fitting_brute_force_inner(proxy, opts, 0, Some(*w), a);
             reports[i].write((Some(*w), report));
         }
         unsafe { reports.assume_init() }
     } else {
+        let alpha = match opts.symmetry {
+            Symmetry::Isotropic => opts.a.map(|a| Roughness::Isotropic {
+                a: StepRangeIncl::new(a[0], a[1], a[2]),
+            }),
+            Symmetry::Anisotropic => opts.ax.zip(opts.ay).map(|(ax, ay)| Roughness::Anisotropic {
+                ax: StepRangeIncl::new(ax[0], ax[1], ax[2]),
+                ay: StepRangeIncl::new(ay[0], ay[1], ay[2]),
+            }),
+        };
         Box::new([(
             None,
-            brdf_fitting_brute_force_inner(full_proxy, opts, 4, None),
+            brdf_fitting_brute_force_inner(full_proxy, opts, 4, None, alpha),
         )])
     };
     let end = std::time::Instant::now();
@@ -267,6 +330,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
         opts: &FitOptions,
         n: usize,
         w: Option<Nanometres>,
+        alpha: Option<Roughness>,
     ) -> FittingReport<Box<dyn AnalyticalBrdf<Params = [f64; 2]>>> {
         let report = proxy.brute_fit(
             opts.distro.unwrap(),
@@ -277,8 +341,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
             opts.theta_limit.map(|t| Radians::from_degrees(t)),
             opts.brute_precision,
             opts.cuda,
-            opts.ax.map(|ax| StepRangeIncl::new(ax[0], ax[1], ax[2])),
-            opts.ay.map(|ay| StepRangeIncl::new(ay[0], ay[1], ay[2])),
+            alpha,
         );
         // Print the fitting report
         if let Some(w) = w {
@@ -338,8 +401,7 @@ fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(
                     opts.theta_limit.map(|t| Radians::from_degrees(t)),
                     2,
                     false,
-                    opts.ax.map(|ax| StepRangeIncl::new(ax[0], ax[1], ax[2])),
-                    opts.ay.map(|ay| StepRangeIncl::new(ay[0], ay[1], ay[2])),
+                    None,
                 );
                 let mid = report.best_model().unwrap().params()[0];
                 StepRangeIncl::new(mid - 0.01, mid + 0.1, 0.001)
@@ -521,13 +583,45 @@ pub struct FitOptions {
     pub ay: Option<[f64; 3]>,
 
     #[clap(
+        long = "per-wl-ax",
+        requires("per_wavelength_ay"),
+        requires("per_wavelength"),
+        conflicts_with_all(&["ax", "a", "per_wavelength_a"]),
+        help = "Anisotropic roughness in y direction for each wavelength. The values are \
+                specified as a list of triplets, each triplet is a range of roughness values for \
+                a wavelength. The number of triplets should be equal to the number of wavelengths."
+    )]
+    pub per_wavelength_ax: Option<PathBuf>,
+
+    #[clap(
+        long = "per-wl-ay",
+        requires("per_wavelength_ax"),
+        requires("per_wavelength"),
+        conflicts_with_all(&["ay", "a", "per_wavelength_a"]),
+        help = "Anisotropic roughness in y direction for each wavelength. The values are \
+                specified as a list of triplets, each triplet is a range of roughness values for \
+                a wavelength. The number of triplets should be equal to the number of wavelengths."
+    )]
+    pub per_wavelength_ay: Option<PathBuf>,
+
+    #[clap(
         long = "a",
         value_name = "START:END:STEP",
         value_parser = ValueParser::new(parse_roughness_values),
-        conflicts_with_all(&["ax", "ay"]),
+        conflicts_with_all(&["ax", "ay", "per_wavelength_ax", "per_wavelength_ay", "per_wavelength_a"]),
         help = "Isotropic roughness (inclusive)."
     )]
     pub a: Option<[f64; 3]>,
+
+    // TODO: Add support for per-wavelength isotropic roughness
+    #[clap(
+        long = "per-wl-a",
+        conflicts_with_all(&["per_wavelength_ax", "per_wavelength_ay", "ax", "ay", "a"]),
+        help = "Isotropic roughness for each wavelength. The values are specified as a list of \
+                triplets, each triplet is a range of roughness values for a wavelength. The \
+                number of triplets should be equal to the number of wavelengths."
+    )]
+    pub per_wavelength_a: Option<PathBuf>,
 
     #[clap(
         long,
@@ -613,7 +707,7 @@ pub struct FitOptions {
     pub weighting: Weighting,
 
     #[clap(
-        long,
+        long = "per-wl",
         help = "Whether to fit the measured data per wavelength.",
         default_value = "false"
     )]

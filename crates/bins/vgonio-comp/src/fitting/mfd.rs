@@ -7,7 +7,7 @@ use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use std::fmt::Display;
 use vgonio_bxdf::{
     distro::{BeckmannDistribution, TrowbridgeReitzDistribution},
-    fitting::{FittingProblem, FittingReport, MinimisationReport},
+    fitting::{FittingProblem, FittingReport, MinimisationReport, Roughness},
 };
 use vgonio_core::{
     bxdf::{MicrofacetDistribution, MicrofacetDistroKind},
@@ -192,8 +192,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
         max_theta_o: Option<Radians>,
         precision: u32,
         on_gpu: bool,
-        alpha_x: Option<StepRangeIncl<f64>>,
-        alpha_y: Option<StepRangeIncl<f64>>,
+        alpha: Option<Roughness>,
     ) -> FittingReport<Self::Model> {
         todo!()
     }

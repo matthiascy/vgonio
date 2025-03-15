@@ -34,6 +34,18 @@ pub enum FittingProblemKind {
     },
 }
 
+/// Roughness values for the isotropic and anisotropic cases.
+#[derive(Debug, Clone, Copy)]
+pub enum Roughness {
+    Isotropic {
+        a: StepRangeIncl<f64>,
+    },
+    Anisotropic {
+        ax: StepRangeIncl<f64>,
+        ay: StepRangeIncl<f64>,
+    },
+}
+
 /// A model after fitting.
 #[derive(Debug, Clone)]
 pub enum FittedModel {
@@ -304,8 +316,7 @@ pub trait FittingProblem {
         max_theta_o: Option<Radians>,
         precision: u32,
         on_gpu: bool,
-        alpha_x: Option<StepRangeIncl<f64>>,
-        alpha_y: Option<StepRangeIncl<f64>>,
+        alpha: Option<Roughness>,
     ) -> FittingReport<Self::Model>;
 }
 
@@ -316,7 +327,7 @@ pub mod brdf {
     /// Fitting for BRDFs using non-linear least squares.
     pub mod nllsq;
 
-    use super::{FittingProblem, FittingReport, MinimisationReport};
+    use super::{FittingProblem, FittingReport, MinimisationReport, Roughness};
     use crate::brdf::analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR};
     use brute::compute_distance_between_measured_and_modelled;
     #[cfg(feature = "cuda")]
@@ -455,8 +466,7 @@ pub mod brdf {
             max_theta_o: Option<Radians>,
             precision: u32,
             on_gpu: bool,
-            alpha_x: Option<StepRangeIncl<f64>>,
-            alpha_y: Option<StepRangeIncl<f64>>,
+            alpha: Option<Roughness>, // TODO: use in isotropic case
         ) -> FittingReport<Self::Model> {
             log::debug!("start brute force fitting");
             #[cfg(not(feature = "cuda"))]
@@ -585,18 +595,24 @@ pub mod brdf {
                     FittingReport::new(records.into_boxed_slice())
                 },
                 Symmetry::Anisotropic => {
-                    let alpha_x = alpha_x.unwrap_or(StepRangeIncl::new(0.0, 1.0, 0.01));
-                    let alpha_y = alpha_y.unwrap_or(StepRangeIncl::new(0.0, 1.0, 0.01));
-                    let count = alpha_x.step_count() * alpha_y.step_count();
+                    let Roughness::Anisotropic { ax, ay } =
+                        alpha.unwrap_or(Roughness::Anisotropic {
+                            ax: StepRangeIncl::new(0.0, 1.0, 0.01),
+                            ay: StepRangeIncl::new(0.0, 1.0, 0.01),
+                        })
+                    else {
+                        unreachable!("Anisotropic roughness must be provided");
+                    };
+                    let count = ax.step_count() * ay.step_count();
                     let mut errs = Box::new_uninit_slice(count);
                     let chunk_size = count.div_ceil(cpu_count);
 
                     let alphas = (0..count)
                         .map(|i| {
-                            let alpha_x_idx = i / alpha_y.step_count();
-                            let alpha_y_idx = i % alpha_y.step_count();
-                            let alpha_x = alpha_x.start + alpha_x_idx as f64 * alpha_x.step_size;
-                            let alpha_y = alpha_y.start + alpha_y_idx as f64 * alpha_y.step_size;
+                            let alpha_x_idx = i / ay.step_count();
+                            let alpha_y_idx = i % ay.step_count();
+                            let alpha_x = ax.start + alpha_x_idx as f64 * ax.step_size;
+                            let alpha_y = ay.start + alpha_y_idx as f64 * ay.step_size;
                             (alpha_x, alpha_y)
                         })
                         .collect::<Box<[(f64, f64)]>>();
