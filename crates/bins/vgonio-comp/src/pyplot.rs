@@ -1,25 +1,40 @@
 use core::f64;
 
-use crate::measure::{
-    mfd::{MeasuredGafData, MeasuredNdfData},
-    params::NdfMeasurementMode,
-    DataCarriedOnHemisphereSampler,
+use crate::{
+    app::args::OutputFormat,
+    measure::{
+        mfd::{MeasuredGafData, MeasuredNdfData},
+        params::NdfMeasurementMode,
+        DataCarriedOnHemisphereSampler,
+    },
 };
 use exr::{
     image::{FlatImage, FlatSamples},
     prelude::Text,
 };
 use jabr::array::{shape, DyArr, DynArr};
+use nalgebra::ComplexField;
 use numpy::{PyArray, PyArray1, PyArray2, PyArrayMethods};
 use pyo3::{ffi::c_str, prelude::*, types::PyList};
-use std::{ffi::CString, fs::File, io::Read, path::Path};
+use std::{
+    ffi::CString,
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+};
 use surf::MicroSurface;
-use vgonio_bxdf::brdf::{
-    analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-    measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, MerlBrdfParam, VgonioBrdf, Yan18Brdf},
+use vgonio_bxdf::{
+    brdf::{
+        analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
+        measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, MerlBrdfParam, VgonioBrdf, Yan18Brdf},
+    },
+    distro::BeckmannDistribution,
 };
 use vgonio_core::{
-    bxdf::{AnalyticalBrdf, MeasuredBrdfKind, MicrofacetDistroKind, OutgoingDirs, Scattering},
+    bxdf::{
+        AnalyticalBrdf, MeasuredBrdfKind, MicrofacetDistribution, MicrofacetDistroKind,
+        OutgoingDirs, Scattering,
+    },
     error::VgonioError,
     math::{self, Sph2, Vec2, Vec3},
     optics::IorReg,
@@ -212,13 +227,17 @@ pub fn plot_brdf_vgonio_clausen(
 /// * `phi` - The azimuthal angle of the slice.
 /// * `spectrum` - The spectrum of the BRDF.
 pub fn plot_brdf_slice(
-    brdf: &[(&VgonioBrdf, String)],
+    // BRDF, Label, Name
+    brdf: &[(&VgonioBrdf, String, String)],
     wi: Sph2,
     phi_o: Radians,
     legend: bool,
     cmap: String,
     scale: f32,
     log: bool,
+    multi_wl: bool,
+    figsize: Option<(f32, f32)>,
+    output_dir: Option<PathBuf>,
 ) -> PyResult<()> {
     let opposite_phi_o = (phi_o + Radians::PI).wrap_to_tau();
     Python::with_gil(|py| {
@@ -233,7 +252,7 @@ pub fn plot_brdf_slice(
         let brdfs = PyList::new(
             py,
             brdf.iter()
-                .map(|(brdf, label)| {
+                .map(|(brdf, label, name)| {
                     let sampler = DataCarriedOnHemisphereSampler::new(*brdf).unwrap();
                     let theta = brdf
                         .params
@@ -270,6 +289,7 @@ pub fn plot_brdf_slice(
                         PyArray1::from_vec(py, theta),
                         spectrum,
                         label,
+                        name,
                     )
                 })
                 .collect::<Vec<_>>(),
@@ -282,6 +302,9 @@ pub fn plot_brdf_slice(
             cmap,
             scale,
             log,
+            multi_wl,
+            figsize,
+            output_dir,
         );
         fun.call1(py, args)?;
         Ok(())
@@ -360,6 +383,9 @@ pub fn plot_ndf(
     phi: Radians,
     labels: Vec<String>,
     ylim: Option<f32>,
+    figsize: Option<(f32, f32)>,
+    filename: String,
+    output: Option<PathBuf>,
 ) -> PyResult<()> {
     Python::with_gil(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
@@ -424,6 +450,125 @@ pub fn plot_ndf(
             (phi + Radians::PI).wrap_to_tau().as_f32(),
             slices,
             ylim,
+            filename,
+            output,
+            figsize,
+        );
+        fun.call1(py, args)?;
+        Ok(())
+    })
+}
+
+pub fn plot_ndf_fitting(
+    ndf: &[&MeasuredNdfData],
+    fitted_bk: &[f32],
+    fitted_tr: &[f32],
+    phi: Radians,
+    labels: Vec<String>,
+    ylim: Option<f32>,
+    figsize: Option<(f32, f32)>,
+    names: Vec<String>,
+    output: Option<PathBuf>,
+) -> PyResult<()> {
+    assert_eq!(
+        ndf.len(),
+        fitted_bk.len(),
+        "The number of NDFs must be equal to the number of fitted BK models."
+    );
+    assert_eq!(
+        ndf.len(),
+        fitted_tr.len(),
+        "The number of NDFs must be equal to the number of fitted TR models."
+    );
+    Python::with_gil(|py| {
+        let fun: Py<PyAny> = PyModule::from_code(
+            py,
+            c_str!(include_str!("./pyplot/pyplot.py")),
+            c_str!("pyplot.py"),
+            c_str!("vgp"),
+        )?
+        .getattr("plot_ndf_fitting_slice")?
+        .into();
+        let phi_opp = phi.wrap_to_tau().opposite();
+        // Get NDF slices for each NDF at the given azimuthal angle.
+
+        let extracted = ndf
+            .iter()
+            .enumerate()
+            .zip(fitted_bk)
+            .zip(fitted_tr)
+            .map(|(((i, &ndf), bk), tr)| {
+                let label = labels
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| format!("NDF {}", i));
+                match ndf.params.mode {
+                    NdfMeasurementMode::ByPoints { zenith, .. } => {
+                        let theta = zenith
+                            .values_wrapped()
+                            .map(|x| x.as_f32())
+                            .collect::<Vec<_>>();
+                        let (spls, opp_spls) = ndf.slice_at(phi);
+                        let bk_model = BeckmannDistribution::new(*bk as f64, *bk as f64);
+                        let tr_model = BeckmannDistribution::new(*tr as f64, *tr as f64);
+                        let (spls_bk, opp_spls_bk): (Vec<f64>, Vec<f64>) = theta
+                            .iter()
+                            .map(|t| {
+                                (
+                                    bk_model.eval_ndf(t.cos() as f64, phi.cos() as f64),
+                                    bk_model.eval_ndf(t.cos() as f64, phi_opp.cos() as f64),
+                                )
+                            })
+                            .unzip();
+                        let (spls_tr, opp_spls_tr): (Vec<f64>, Vec<f64>) = theta
+                            .iter()
+                            .map(|t| {
+                                (
+                                    tr_model.eval_ndf(t.cos() as f64, phi.cos() as f64),
+                                    tr_model.eval_ndf(t.cos() as f64, phi_opp.cos() as f64),
+                                )
+                            })
+                            .unzip();
+                        (
+                            label,
+                            theta,
+                            spls,
+                            opp_spls.unwrap(),
+                            spls_bk,
+                            opp_spls_bk,
+                            spls_tr,
+                            opp_spls_tr,
+                        )
+                    },
+                    NdfMeasurementMode::ByPartition { .. } => {
+                        todo!("implement NDF fitting for partitioned NDFs")
+                    },
+                }
+            })
+            .collect::<Vec<_>>();
+        let ndf = PyList::new(
+            py,
+            extracted.into_iter().map(|e| {
+                (
+                    e.0,
+                    PyArray1::from_vec(py, e.1),
+                    PyArray1::from_slice(py, e.2),
+                    PyArray1::from_slice(py, e.3),
+                    PyArray1::from_vec(py, e.4),
+                    PyArray1::from_vec(py, e.5),
+                    PyArray1::from_vec(py, e.6),
+                    PyArray1::from_vec(py, e.7),
+                )
+            }),
+        )?;
+        let args = (
+            phi.as_f32(),
+            (phi + Radians::PI).wrap_to_tau().as_f32(),
+            ndf,
+            ylim,
+            names,
+            output,
+            figsize,
         );
         fun.call1(py, args)?;
         Ok(())
@@ -498,7 +643,9 @@ pub fn plot_brdf_map(
     fc: String,
     pstep: Degrees,
     tstep: Degrees,
-    save: Option<String>,
+    figsize: (f32, f32),
+    output_format: String,
+    output_dir: Option<PathBuf>,
 ) -> PyResult<()> {
     let theta_i_str = format!("{:4.2}", theta_i.as_f32()).replace(".", "_");
     let phi_i_str = format!("{:4.2}", phi_i.as_f32()).replace(".", "_");
@@ -569,7 +716,9 @@ pub fn plot_brdf_map(
             fc,
             pstep.as_f32(),
             tstep.as_f32(),
-            save,
+            figsize,
+            output_format,
+            output_dir,
         );
         fun.call1(py, args).unwrap();
         Ok(())

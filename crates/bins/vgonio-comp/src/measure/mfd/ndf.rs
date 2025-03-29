@@ -81,6 +81,7 @@ impl MeasuredNdfData {
             )
         } else {
             todo!("Implement slice_at for the partition mode.")
+            // TODO: check implementation in cmd_plot -> ndf
         }
     }
 

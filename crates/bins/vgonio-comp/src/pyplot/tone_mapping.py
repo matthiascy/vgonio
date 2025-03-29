@@ -1,10 +1,10 @@
 import argparse
 
-import OpenEXR
 import Imath
-import numpy as np
-import matplotlib.pyplot as plt
+import OpenEXR
 import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 def load_exr_channel(exr_file, channel, size):
@@ -58,7 +58,7 @@ def draw_polar_grid(ax, size, pstep=45.0, tstep=30.0, color='k', ac='m'):
 
 
 def tone_mapping(pixels, size, cmap='BuPu', cbar=False, coord=False, cbar_label='NDF [$sr^{-1}$]', color='k',
-                 pstep=45.0, tstep=30.0, ac='m'):
+                 pstep=45.0, tstep=30.0, ac='m', figsize=(4, 4)):
     min_val = np.min(pixels)
     max_val = np.max(pixels)
     normalized = (pixels - min_val) / (max_val - min_val)
@@ -66,7 +66,7 @@ def tone_mapping(pixels, size, cmap='BuPu', cbar=False, coord=False, cbar_label=
     mapped = cmap(normalized)
 
     # Plot the image
-    fig = plt.figure(figsize=(8, 8))
+    fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111)
     ax.imshow(mapped, extent=(-size[0] / 2, size[0] / 2, -size[1] / 2, size[1] / 2), origin='upper')
 
@@ -108,6 +108,7 @@ if __name__ == "__main__":
     parser.add_argument('--save', type=str, help='Save the plot to a file')
     parser.add_argument('--diff', action='store_true', help='Plot the difference between two images')
     parser.add_argument('--fc', type=str, help='Font color', default='k')
+    parser.add_argument('--figsize', type=int, nargs=2, help='Figure size', default=(4, 4))
     args = parser.parse_args()
 
     if args.diff:

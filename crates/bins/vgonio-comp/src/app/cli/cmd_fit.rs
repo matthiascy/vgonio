@@ -17,8 +17,14 @@ use vgonio_core::{
     AnyMeasuredBrdf, BrdfLevel, ErrorMetric, Symmetry, Weighting,
 };
 
-use crate::{app::cache::Cache, pyplot::plot_per_wavelength_err};
+use crate::{
+    app::cache::Cache,
+    fitting::{MfdFittingData, MicrofacetDistributionFittingProblem},
+    measure::mfd::MeasuredNdfData,
+    pyplot::plot_per_wavelength_err,
+};
 use clap::builder::ValueParser;
+use egui::debug_text::print;
 use vgonio_bxdf::{
     brdf::measured::{merl::MerlBrdf, rgl::RglBrdf, yan::Yan18Brdf, ClausenBrdf},
     fitting::{FittingProblem, FittingReport, Roughness},
@@ -71,6 +77,47 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
         ));
     }
 
+    // Load the data from the cache if the fitting is BxDF
+    let cache = Cache::new(config.cache_dir());
+
+    // Temporary fix for adding the NDF fitting
+    if opts.ndf {
+        cli::println(
+            '>',
+            2,
+            format_args!("Fitting to distribution @{:?}", opts.distro.unwrap()),
+            ansi::Color::BrightYellow,
+        );
+        // Load the data from the cache if the fitting is NDF
+        cache.write(|cache| {
+            cache.load_ior_database(&config);
+            for input in opts.inputs.iter() {
+                let handle = cache
+                    .load_micro_surface_measurement(&config, input)
+                    .unwrap();
+                let measurement = cache.get_measurement(handle).unwrap();
+                let ndf = measurement
+                    .measured
+                    .downcast_ref::<MeasuredNdfData>()
+                    .unwrap();
+                let model = opts.distro.unwrap();
+                let problem =
+                    MicrofacetDistributionFittingProblem::new(MfdFittingData::Ndf(ndf), model, 1.0);
+                let report = problem.nllsq_fit(
+                    model,
+                    Symmetry::Isotropic,
+                    Weighting::None,
+                    StepRangeIncl::new(0.0001, 1.0, 0.001),
+                    None,
+                    None,
+                );
+                report.print_fitting_report(0, 4);
+            }
+        });
+
+        return Ok(());
+    }
+
     cli::println(
         '>',
         2,
@@ -84,8 +131,6 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     let theta_limit = opts
         .theta_limit
         .and_then(|t| Some(Radians::from_degrees(t)));
-    // Load the data from the cache if the fitting is BxDF
-    let cache = Cache::new(config.cache_dir());
     cache.write(|cache| {
         cache.load_ior_database(&config);
         if opts.kind == MeasuredBrdfKind::Vgonio && opts.clausen {
@@ -554,11 +599,13 @@ fn parse_roughness_values(arg: &str) -> Result<[f64; 3], &'static str> {
         .map_err(|_| "Must provide 3 values separated by ':'")
 }
 
+// TODO: separate the NDF fitting & the BRDF fitting
+
 /// Options for the `fit` subcommand.
 #[derive(clap::Args, Debug, Clone)]
 #[clap(about = "Fits a micro-surface related measurement to a given model.")]
 pub struct FitOptions {
-    #[clap(num_args = 1.., value_delimiter = ',', help = "Input files to fit the measurement to.")]
+    #[clap(num_args = 1.., value_delimiter = ' ', help = "Input files to fit the measurement to.")]
     pub inputs: Vec<PathBuf>,
 
     #[clap(long, short, help = "Kind of the measured BRDF data.")]
@@ -723,6 +770,10 @@ pub struct FitOptions {
     #[cfg(feature = "cuda")]
     #[clap(long, help = "Enable CUDA acceleration for the fitting.")]
     pub cuda: bool,
+
+    // Temporary fix for adding the NDF fitting
+    #[clap(long, help = "NDF fitting.")]
+    pub ndf: bool,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]

@@ -307,7 +307,7 @@ impl VgonioGui {
                                 *model,
                                 *symmetry,
                                 Weighting::None,
-                                StepRangeIncl::new(0.001, 2.0, 0.01),
+                                StepRangeIncl::new(0.0001, 1.0, 0.01),
                                 None,
                                 None,
                             )

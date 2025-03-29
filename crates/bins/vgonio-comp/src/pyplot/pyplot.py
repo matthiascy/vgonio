@@ -1,3 +1,4 @@
+import os
 from typing import Tuple
 
 import matplotlib.pyplot as plt
@@ -302,8 +303,8 @@ def plot_brdf_comparison(
     plt.show()
 
 
-def new_polar_brdf_plot():
-    fig, ax = plt.subplots(subplot_kw={"projection": "polar"}, figsize=(8, 8))
+def new_polar_brdf_plot(figsize=(4, 4)):
+    fig, ax = plt.subplots(subplot_kw={"projection": "polar"}, figsize=figsize)
     configure_polar_brdf_plot(ax)
     return fig, ax
 
@@ -313,7 +314,9 @@ def configure_polar_brdf_plot(ax):
     ax.set_theta_direction(-1)
     ax.set_thetamin(-90)
     ax.set_thetamax(90)
-    ax.set_thetagrids(range(-90, 91, 15))
+    angles = np.arange(-90, 91, 15)
+    ax.set_thetagrids(angles)
+    ax.set_xticklabels([f"{abs(a)}°" for a in angles])
     # Custom grid
     ax.grid(True, linestyle="--", linewidth=0.5, color="gray", alpha=0.5)
     ax.xaxis.grid(True, linestyle="--", linewidth=0.5, color="gray", alpha=0.5)
@@ -352,49 +355,79 @@ def add_polar_brdf_plot_phi_o_text(ax, ymax, phi_o_deg, phi_o_deg_opp):
 def plot_brdf_slice(
         phi_o_deg,
         phi_o_deg_opp,
-        brdf_slices: list[tuple[np.ndarray, np.ndarray, np.ndarray, str]],
+        brdf_slices: list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, str, str]],
         legend=False,
         cmap="tab10",
         scale=1.0,
         use_log=False,
+        multi_wl=False,
+        figsize=(4, 4),
+        output_dir=None,
 ):
     sns.set_theme(style="whitegrid", color_codes=True)
 
-    fig_polar, ax_polar = new_polar_brdf_plot()
+    fig_polar, ax_polar = new_polar_brdf_plot(figsize)
 
     cm = plt.get_cmap(cmap)
 
-    ymax = 0
-    for i, (slice_phi_o, slice_phi_o_opp, theta, wavelengths, label) in enumerate(
-            brdf_slices
-    ):
-        xs = np.append(np.flip(-np.radians(theta)), np.radians(theta))
-        if use_log:
-            for l in range(1):
-                ys = np.log10(
-                    np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l]) * scale
-                )
-                ax_polar.plot(xs, ys, label=f"{label}", linewidth=1.8, color=cm(i))
-                # λ = {wavelengths[l]:.0f} nm
+    if multi_wl:
+        for i, (slice_phi_o, slice_phi_o_opp, theta, wavelengths, label, name) in enumerate(brdf_slices):
+            # for each wavelength, plot the slice
+            ymax = 0.0
+            xs = np.append(np.flip(-np.radians(theta)), np.radians(theta))
+            for l in range(len(wavelengths)):
+                ys = np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l])
+                ax_polar.plot(xs, ys, label=f"{label} λ={wavelengths[l]:.0f} nm", linestyle="dashed",
+                              linewidth=1.2,
+                              color=cm(l), alpha=0.75)
                 ymax = max(ymax, np.max(ys))
-        else:
-            for l in range(1):
-                ys = (
+
+            add_polar_brdf_plot_phi_o_text(ax_polar, ymax, phi_o_deg, phi_o_deg_opp)
+            custom_polar_brdf_plot_radial_ticks(ax_polar, ymax)
+
+            if legend:
+                ax_polar.legend(loc="upper right", fontsize=12)
+
+            plt.tight_layout()
+            if output_dir is not None:
+                plt.savefig(os.path.join(output_dir, f"brdf_slice_wl_{name}.pdf"), format="pdf", bbox_inches="tight")
+            else:
+                plt.show()
+
+    else:
+        ymax = 0
+        for i, (slice_phi_o, slice_phi_o_opp, theta, wavelengths, label) in enumerate(
+                brdf_slices
+        ):
+            xs = np.append(np.flip(-np.radians(theta)), np.radians(theta))
+            if use_log:
+                for l in range(1):
+                    ys = np.log10(
                         np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l]) * scale
-                )
-                ax_polar.plot(xs, ys, label=f"{label}", linewidth=1.8, color=cm(i))
-                # λ = {wavelengths[l]:.0f} nm
-                ymax = max(ymax, np.max(ys))
+                    )
+                    ax_polar.plot(xs, ys, label=f"{label}", linewidth=1.8, color=cm(i))
+                    # λ = {wavelengths[l]:.0f} nm
+                    ymax = max(ymax, np.max(ys))
+            else:
+                for l in range(1):
+                    ys = (
+                            np.append(np.flip(slice_phi_o_opp[:, l]), slice_phi_o[:, l]) * scale
+                    )
+                    ax_polar.plot(xs, ys, label=f"{label}", linewidth=1.8, color=cm(i))
+                    # λ = {wavelengths[l]:.0f} nm
+                    ymax = max(ymax, np.max(ys))
 
-    add_polar_brdf_plot_phi_o_text(ax_polar, ymax, phi_o_deg, phi_o_deg_opp)
-    custom_polar_brdf_plot_radial_ticks(ax_polar, ymax)
+        add_polar_brdf_plot_phi_o_text(ax_polar, ymax, phi_o_deg, phi_o_deg_opp)
+        custom_polar_brdf_plot_radial_ticks(ax_polar, ymax)
 
-    if legend:
-        ax_polar.legend(loc="upper right", fontsize=12)
+        if legend:
+            ax_polar.legend(loc="upper right", fontsize=12)
 
-    plt.tight_layout()
-    plt.savefig("./brdf_slice.pdf", format="pdf", bbox_inches="tight")
-    plt.show()
+        plt.tight_layout()
+        if output_dir is not None:
+            plt.savefig(os.path.join(output_dir, "brdf_slice.pdf"), format="pdf", bbox_inches="tight")
+        else:
+            plt.show()
 
 
 def plot_brdf_slice_in_plane(phi_deg, phi_opp_deg, slices):
@@ -572,7 +605,8 @@ linestyles = ["solid", "dashed", "dashdot", "dotted"]
 
 
 def plot_ndf_slice(
-        phi, phi_opp, ndf_slices: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]], ylim
+        phi, phi_opp, ndf_slices: list[tuple[str, np.ndarray, np.ndarray, np.ndarray]], ylim, filename, output_dir,
+        figsize=(4, 4)
 ):
     # Angles are in radians
     print(f"Plotting NDF slice with wm = ({np.degrees(phi)}, {np.degrees(phi_opp)})")
@@ -580,8 +614,6 @@ def plot_ndf_slice(
     rad_ticks = np.radians(deg_ticks)
     # each slice is a tuple of (slice, slice_opp, theta) of one measurement
     sns.set_theme(style="whitegrid", color_codes=True)
-
-    figsize = (8, 8) if len(ndf_slices) == 1 else (8, 6)
 
     fig, ax = plt.subplots(figsize=figsize)
 
@@ -594,14 +626,14 @@ def plot_ndf_slice(
     ax.spines["bottom"].set_visible(False)
     ax.grid(True, which="both", linestyle="--", linewidth=0.5)
     ax.set_xticks(rad_ticks)
-    ax.set_xticklabels([f"{int(deg)}°" for deg in deg_ticks])
+    ax.set_xticklabels([f"{int(np.abs(deg))}°" for deg in deg_ticks])
 
     for i, (label, theta, slice, slice_opp) in enumerate(ndf_slices):
         # Combine theta and its filpped negative counterpart for x-axis
         xs = np.append(np.flip(-np.array(theta)), np.array(theta))
         ys = np.append(np.flip(slice_opp), slice)
         if len(ndf_slices) > 1:
-            ax.plot(xs, ys, linestyle=linestyles[i], linewidth=2, label=label)
+            ax.plot(xs, ys, linestyle=linestyles[i], linewidth=1, label=label)
         else:
             ax.plot(xs, ys, color="b", linestyle="-", linewidth=2)
 
@@ -638,8 +670,86 @@ def plot_ndf_slice(
 
     plt.tight_layout()
     # save as pdf
-    plt.savefig("./ndf_slice.pdf", format="pdf", bbox_inches="tight")
-    plt.show()
+    if output_dir is not None:
+        plt.savefig(os.path.join(output_dir, f"{filename}.pdf"), format="pdf", bbox_inches="tight", dpi=300)
+    else:
+        plt.show()
+
+
+def plot_ndf_fitting_slice(
+        phi, phi_opp,
+        ndf_slices: list[
+            # Each slice is a tuple of (label, theta, slice, slice_opp, slice_bk, slice_bk_opp, slice_tr, slice_tr_opp)
+            tuple[str, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]],
+        ylim, names, output_dir,
+        figsize=(4, 4)
+):
+    # Angles are in radians
+    print(f"Plotting NDF slice with wm = ({np.degrees(phi)}, {np.degrees(phi_opp)})")
+    deg_ticks = np.arange(-90, 91, 30)
+    rad_ticks = np.radians(deg_ticks)
+    # each slice is a tuple of (slice, slice_opp, theta) of one measurement
+    sns.set_theme(style="whitegrid", color_codes=True)
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    ax.set_aspect("auto")
+    ax.set_xlabel(r"$θ_m$", fontsize=18)
+    ax.set_ylabel(r"$NDF\;[sr^{-1}]$", fontsize=18)
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.grid(True, which="both", linestyle="--", linewidth=0.5)
+
+    for i, (label, theta, slice, slice_opp, slice_bk, slice_bk_opp, slice_tr, slice_tr_opp) in enumerate(ndf_slices):
+        ax.clear()
+        name = names[i]
+        # Combine theta and its filpped negative counterpart for x-axis
+        xs = np.append(np.flip(-np.array(theta)), np.array(theta))
+        ys = np.append(np.flip(slice_opp), slice)
+        ys_bk = np.append(np.flip(slice_bk_opp), slice_bk)
+        ys_tr = np.append(np.flip(slice_tr_opp), slice_tr)
+        ax.plot(xs, ys, "k-", linewidth=2, label="Measured")
+        ax.plot(xs, ys_bk, "g--", linewidth=1.5, label="Beckmann")
+        ax.plot(xs, ys_tr, color="orange", linestyle="-.", linewidth=1.5, label="Trowbridge-Reitz")
+        ax.set_xticks(rad_ticks)
+        ax.set_xticklabels([f"{int(np.abs(deg))}°" for deg in deg_ticks])
+        ax.legend()
+
+        # Annotation
+        ax.annotate(
+            rf"$\phi_m={np.degrees(phi_opp):.0f}\degree$",
+            xy=(xs[0], ys[0]),
+            xycoords="data",
+            xytext=(-10, 20),
+            textcoords="offset points",
+            arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.5"),
+            fontsize=14,
+            color="k",
+            fontweight="bold",
+        )
+        ax.annotate(
+            rf"$\phi_m={np.degrees(phi):.0f}\degree$",
+            xy=(xs[-1], ys[-1]),
+            xycoords="data",
+            xytext=(-40, 20),
+            textcoords="offset points",
+            arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=-.5"),
+            fontsize=14,
+            color="k",
+            fontweight="bold",
+        )
+        plt.tight_layout()
+
+        if ylim is not None:
+            ax.set_ylim(0, ylim)
+
+        # save as pdf
+        if output_dir is not None:
+            plt.savefig(os.path.join(output_dir, f"{name}_fitting.pdf"), format="pdf", bbox_inches="tight")
+        else:
+            plt.show()
 
 
 def plot_gaf_slice(
@@ -723,7 +833,9 @@ def plot_brdf_map(
         fc="black",
         pstep=45,
         tstep=30,
-        save=None,
+        figsize=(4, 4),
+        output_fmt="pdf",
+        output_dir=None,
 ):
     print("params: ", cmap, cbar, coord, diff, fc, pstep, tstep)
     from tone_mapping import tone_mapping
@@ -756,19 +868,14 @@ def plot_brdf_map(
                 va="center",
                 alpha=0.8,
             )
-            if save is not None:
-                if save.endswith(".pdf"):
-                    fig.savefig(
-                        f"{name1}_{name2}_diff.pdf", format="pdf", bbox_inches="tight"
-                    )
-                elif save.endswith(".png"):
-                    fig.savefig(
-                        f"{name1}_{name2}_diff.png",
-                        format="png",
-                        bbox_inches="tight",
-                        dpi=100,
-                    )
-            plt.show()
+            if output_dir is not None:
+                filename = os.path.join(output_dir, f"{name1}_{name2}_diff")
+                if output_fmt == "pdf":
+                    fig.savefig(f"{filename}.pdf", format="pdf", bbox_inches="tight")
+                elif output_fmt == "png":
+                    fig.savefig(f"{filename}.png", format="png", bbox_inches="tight", dpi=100)
+            else:
+                plt.show()
     else:
         for i, (name, size, pixels) in enumerate(images):
             fig, ax = tone_mapping(
@@ -782,15 +889,16 @@ def plot_brdf_map(
                 pstep=pstep,
                 tstep=tstep,
                 ac="o",
+                figsize=figsize,
             )
-            if save is not None:
-                if save.endswith(".pdf"):
-                    fig.savefig(f"{name}.pdf", format="pdf", bbox_inches="tight")
-                elif save.endswith(".png"):
-                    fig.savefig(
-                        f"{name}.png", format="png", bbox_inches="tight", dpi=100
-                    )
-            plt.show()
+            if output_dir is not None:
+                filename = os.path.join(output_dir, f"{name}")
+                if output_fmt == "pdf":
+                    fig.savefig(f"{filename}.pdf", format="pdf", bbox_inches="tight")
+                elif output_fmt == "png":
+                    fig.savefig(f"{filename}.png", format="png", bbox_inches="tight", dpi=100)
+            else:
+                plt.show()
 
 
 def downsample_surface(xx, yy, surface, factor):

@@ -10,7 +10,8 @@ use crate::{
     },
 };
 
-use crate::app::cache::Cache;
+use crate::app::cache::{Cache, RawCache};
+use egui::ahash::{HashMap, HashMapExt};
 use std::path::PathBuf;
 use surf::subdivision::{Subdivision, SubdivisionKind};
 use vgonio_bxdf::brdf::measured::ClausenBrdf;
@@ -68,6 +69,9 @@ pub enum PlotKind {
     /// Plot the NDF from saved *.vgmo file
     #[clap(name = "ndf")]
     Ndf,
+    #[clap(name = "ndf-fitting")]
+    /// Plot the NDF fitting for the given input *.vgmo file
+    NdfFitting,
     /// Plot the GAF from saved *.vgmo file
     #[clap(name = "gaf")]
     Gaf,
@@ -81,6 +85,17 @@ pub enum PlotKind {
 pub struct PlotOptions {
     #[clap(num_args = 1.., value_delimiter = ' ', help = "Input files to plot.")]
     pub inputs: Vec<PathBuf>,
+
+    #[clap(short, long, help = "The output directory to save the plot.")]
+    pub output: Option<PathBuf>,
+
+    #[clap(
+        long = "out-img-fmt",
+        help = "The output image format. Can be png, jpg, exr, pdf, etc.",
+        default_value = "pdf",
+        value_enum
+    )]
+    pub output_image_format: String,
 
     #[clap(short, long, help = "The kind of plot to generate.")]
     pub kind: PlotKind,
@@ -165,7 +180,8 @@ pub struct PlotOptions {
         required_if_eq("kind", "brdf-slice"),
         required_if_eq("kind", "brdf-map"),
         required_if_eq("kind", "brdf-3d"),
-        required_if_eq("kind", "ndf")
+        required_if_eq("kind", "ndf"),
+        required_if_eq("kind", "ndf-fitting")
     )]
     pub phi_i: f32,
 
@@ -300,6 +316,28 @@ pub struct PlotOptions {
         default_value = "false"
     )]
     pub interactive: bool,
+
+    #[clap(
+        long,
+        help = "The size of the figure in inches.",
+        value_delimiter = ',',
+        num_args = 2
+    )]
+    pub figsize: Option<Vec<f32>>,
+
+    #[clap(
+        long,
+        help = "The NDF fitting results in a csv file.",
+        required_if_eq("kind", "ndf-fitting")
+    )]
+    pub ndf_fitting_results: Option<PathBuf>,
+
+    #[clap(
+        long,
+        help = "Whether to plot multiple wavelengths in the BRDF slice.",
+        required_if_eq("kind", "brdf-slice")
+    )]
+    pub multi_wl: Option<bool>,
 }
 
 pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
@@ -354,6 +392,20 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     .iter()
                     .map(|input| cache.load_micro_surface_measurement(&config, input))
                     .collect::<Result<Vec<_>, _>>()?;
+                let brdf_surface_names = opts
+                    .inputs
+                    .iter()
+                    .map(|input| {
+                        let file_name = input.file_name().unwrap().to_str().unwrap();
+                        file_name
+                            .split('_')
+                            .skip(1)
+                            .next()
+                            .unwrap_or(file_name)
+                            .to_string()
+                    })
+                    .collect::<Vec<_>>();
+                println!("brdf_surface_names: {brdf_surface_names:?}");
                 let phi_i = Rads::from_degrees(opts.phi_i);
                 let theta_i = Rads::from_degrees(opts.theta_i);
                 let wi = Sph2::new(theta_i, phi_i);
@@ -367,13 +419,16 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     let brdfs = brdf_hdls
                         .into_iter()
                         .zip(labels)
-                        .filter_map(|(hdl, label)| {
+                        .zip(brdf_surface_names)
+                        .filter_map(|((hdl, label), name)| {
                             cache
                                 .get_measurement(hdl)
                                 .unwrap()
                                 .measured
                                 .downcast_ref::<BsdfMeasurement>()
-                                .and_then(|meas| meas.brdf_at(opts.level).map(|brdf| (brdf, label)))
+                                .and_then(|meas| {
+                                    meas.brdf_at(opts.level).map(|brdf| (brdf, label, name))
+                                })
                         })
                         .collect::<Vec<_>>();
                     plot_brdf_slice(
@@ -384,6 +439,9 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         opts.cmap.unwrap_or("Set3".to_string()),
                         opts.scale.unwrap_or(1.0),
                         opts.log,
+                        opts.multi_wl.unwrap_or(false),
+                        opts.figsize.map(|sz| (sz[0], sz[1])),
+                        opts.output,
                     )
                     .unwrap();
                 } else {
@@ -403,27 +461,89 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 Ok(())
             },
             PlotKind::Ndf => {
-                // TODO: unload if the input is not ndf
-                let hdls = opts
-                    .inputs
-                    .iter()
-                    .map(|input| cache.load_micro_surface_measurement(&config, input))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let ndfs = hdls
-                    .into_iter()
-                    .filter_map(|hdl| {
-                        cache
-                            .get_measurement(hdl)
-                            .unwrap()
-                            .measured
-                            .downcast_ref::<MeasuredNdfData>()
-                    })
-                    .collect::<Vec<_>>();
+                let (ndfs, names): (Vec<&MeasuredNdfData>, Vec<String>) =
+                    load_ndfs(&opts.inputs, cache, &config)?.unzip();
+                let filename = if ndfs.len() == 1 {
+                    format!("{}_slice", names[0])
+                } else {
+                    "ndf_multi".to_string()
+                };
                 plot_ndf(
                     &ndfs,
                     Radians::from_degrees(opts.phi_i),
                     opts.labels,
                     opts.ylim,
+                    opts.figsize.map(|sz| (sz[0], sz[1])),
+                    filename,
+                    opts.output,
+                )
+                .unwrap();
+                Ok(())
+            },
+            PlotKind::NdfFitting => {
+                // Load the NDF fitting results from a csv file in the format:
+                // surface, distro, alpha, mse
+                let file = std::fs::read_to_string(&opts.ndf_fitting_results.unwrap())
+                    .map_err(|e| VgonioError::from_io_error(e, "can't read file"))?;
+                let mut fitting_results =
+                    HashMap::<String, Vec<(MicrofacetDistroKind, f32)>>::new();
+                for line in file.lines().skip(1) {
+                    if line.is_empty() {
+                        continue;
+                    }
+                    let mut parts = line.split(',');
+                    let surface = parts.next().unwrap();
+                    let distro = match parts.next().unwrap() {
+                        "bk" => MicrofacetDistroKind::Beckmann,
+                        "tr" => MicrofacetDistroKind::TrowbridgeReitz,
+                        _ => unreachable!(),
+                    };
+                    let alpha = parts.next().unwrap().parse::<f32>().unwrap();
+
+                    fitting_results
+                        .entry(surface.to_string())
+                        .or_insert_with(Vec::new)
+                        .push((distro, alpha));
+                }
+
+                println!("{:#?}", fitting_results);
+
+                // For each input file, load the NDF and try to find the fitting
+                // results and plot them.
+                let (ndfs, names): (Vec<&MeasuredNdfData>, Vec<String>) =
+                    load_ndfs(&opts.inputs, cache, &config)?.unzip();
+                let (fitted_bk, fitted_tr): (Vec<f32>, Vec<f32>) = ndfs
+                    .iter()
+                    .zip(names.iter())
+                    .map(|(ndf, name)| {
+                        let r = fitting_results
+                            .iter()
+                            .find(|rec| name.contains(rec.0))
+                            .unwrap();
+                        let bk =
+                            r.1.iter()
+                                .find(|(d, _)| d == &MicrofacetDistroKind::Beckmann)
+                                .unwrap()
+                                .1;
+                        let tr =
+                            r.1.iter()
+                                .find(|(d, _)| d == &MicrofacetDistroKind::TrowbridgeReitz)
+                                .unwrap()
+                                .1;
+                        (bk, tr)
+                    })
+                    .unzip();
+
+                crate::pyplot::plot_ndf_fitting(
+                    &ndfs,
+                    &fitted_bk,
+                    &fitted_tr,
+                    Radians::from_degrees(opts.phi_i),
+                    opts.labels,
+                    opts.ylim,
+                    opts.figsize.map(|sz| (sz[0], sz[1])),
+                    names,
+                    opts.output,
                 )
                 .unwrap();
                 Ok(())
@@ -465,7 +585,8 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     .iter()
                     .map(|input| {
                         (
-                            read_all_flat_layers_from_file(input).unwrap(),
+                            read_all_flat_layers_from_file(input)
+                                .expect(&format!("failed to read {}", input.display())),
                             input.file_name().unwrap().to_str().unwrap().to_string(),
                         )
                     })
@@ -483,7 +604,10 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     opts.fc.unwrap_or("w".to_string()),
                     Degs::new(opts.pstep),
                     Degs::new(opts.tstep),
-                    opts.save,
+                    opts.figsize
+                        .map_or_else(|| (10.0, 10.0), |sz| (sz[0], sz[1])),
+                    opts.output_image_format,
+                    opts.output,
                 )
                 .unwrap();
 
@@ -660,4 +784,32 @@ fn extract_alphas(alphas: &[f64], symmetry: Symmetry) -> Result<Box<[(f64, f64)]
         // Sort first by the first element, then by the second element
         a1.partial_cmp(b1).unwrap().then_with(|| a2.partial_cmp(b2).unwrap()));
     Ok(processed)
+}
+
+fn load_ndfs<'a>(
+    inputs: &[PathBuf],
+    cache: &'a mut RawCache,
+    config: &Config,
+) -> Result<impl Iterator<Item = (&'a MeasuredNdfData, String)>, VgonioError> {
+    // TODO: unload if the input is not ndf
+    let handles = inputs
+        .iter()
+        .map(|input| {
+            cache
+                .load_micro_surface_measurement(&config, input)
+                .and_then(|hdl| {
+                    let stem = input.file_stem().unwrap().to_str().unwrap();
+                    // remove timestamp from the stem: ndf_al0_2025-03-31T17-00-37 -> ndf_al0
+                    Ok((hdl, stem.split_at(stem.rfind('_').unwrap()).0.into()))
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(handles.into_iter().filter_map(|(hdl, name)| {
+        cache
+            .get_measurement(hdl)
+            .unwrap()
+            .measured
+            .downcast_ref::<MeasuredNdfData>()
+            .map(|ndf| (ndf, name))
+    }))
 }
