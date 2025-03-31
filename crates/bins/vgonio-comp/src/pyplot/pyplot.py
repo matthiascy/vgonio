@@ -712,7 +712,7 @@ def plot_ndf_fitting_slice(
         ys_tr = np.append(np.flip(slice_tr_opp), slice_tr)
         ax.plot(xs, ys, "k-", linewidth=2, label="Measured")
         ax.plot(xs, ys_bk, "g--", linewidth=1.5, label="Beckmann")
-        ax.plot(xs, ys_tr, color="orange", linestyle="-.", linewidth=1.5, label="Trowbridge-Reitz")
+        ax.plot(xs, ys_tr, "r-.", linewidth=1.5, label="Trowbridge-Reitz")
         ax.set_xticks(rad_ticks)
         ax.set_xticklabels([f"{int(np.abs(deg))}°" for deg in deg_ticks])
         ax.legend()
@@ -987,7 +987,7 @@ def plot_surfaces(surfaces, cmap, ds_factor=4):
         # plt.show()
 
 
-def plot_brdf_fitting(
+def plot_brdf_fitting_interactive(
         samples: np.ndarray,
         incoming: Tuple[np.ndarray, np.ndarray],
         outgoing: Tuple[np.ndarray, np.ndarray],
@@ -1210,3 +1210,113 @@ def plot_brdf_coverage(points: np.ndarray):
     ax.plot(points[:, 0], points[:, 1], "o", markersize=1)
 
     plt.show()
+
+
+def plot_brdf_fitting_slice(
+        angles: tuple[float, float, float, float, np.ndarray],
+        # theta_i_deg, phi_i_deg, phi_o_deg, phi_o_deg_opp, thetas_o in degrees
+        brdf: tuple[np.ndarray, np.ndarray, str],
+        alphas: list[(float, float)],
+        fitted_bk: (np.ndarray, np.ndarray),  # 0 is fitted, 1 is fitted_opp
+        fitted_tr: (np.ndarray, np.ndarray),  # 0 is fitted, 1 is fitted_opp
+        # fitted_tr[0] is the alpha, fitted_tr[1] is the fitted brdf for phi_o, fitted_tr[2] is the fitted brdf for phi_o_opp
+        wavelength: float,  # wavelength in nm
+        cmap="tab10",
+        legend=False,
+        figsize=(4, 4),
+        output_dir=None,
+        polar_p=False,
+        model="bk",  # "bk" or "tr" or "both"
+):
+    theta_i_deg, phi_i_deg, phi_o_deg, phi_o_deg_opp, thetas_o = angles
+    """Plot BRDF slices in polar or cartesian coordinates together with the fitted model"""
+
+    sns.set_theme(style="whitegrid", color_codes=True)
+    deg_ticks = np.arange(-90, 91, 30)
+    rad_ticks = np.radians(deg_ticks)
+
+    xs = np.append(np.flip(-np.radians(thetas_o)), np.radians(thetas_o))
+    ys = np.append(np.flip(brdf[1]), brdf[0])
+
+    brdf_bk, brdf_bk_opp = fitted_bk
+    brdf_tr, brdf_tr_opp = fitted_tr
+    ymax = max(np.max(brdf_bk), np.max(brdf_bk_opp), np.max(brdf_tr), np.max(brdf_tr_opp))
+
+    alphas_txt = [f"α = {alpha[0]:.5f}" if alpha[0] == alpha[1] else f"α = {alpha[0]:.5f}-{alpha[1]:.5f}" for alpha in
+                  alphas]
+
+    yss = []
+    if model == "both":
+        print("Alpha values: ", alphas)
+        yss.append((f"Beckmann {alphas_txt[0]}", "g--", np.append(np.flip(brdf_bk_opp[0, :]), brdf_bk[0, :])))
+        yss.append(
+            (f"Trowbridge-Reitz {alphas_txt[1]}", "r-.", np.append(np.flip(brdf_tr_opp[0, :]), brdf_tr[0, :])))
+    elif model == "none":
+        print("none model")
+    else:
+        for i, alpha in enumerate(alphas_txt):
+            if model == "bk":
+                yss.append((f"Beckmann {alpha}", "g--", np.append(np.flip(brdf_bk_opp[i, :]), brdf_bk[i, :])))
+            else:
+                yss.append(
+                    (f"Trowbridge-Reitz {alpha}", "r-.", np.append(np.flip(brdf_tr_opp[i, :]), brdf_tr[i, :])))
+
+    if polar_p:
+        fig, ax = new_polar_brdf_plot(figsize)
+        add_polar_brdf_plot_phi_o_text(ax, ymax, phi_o_deg, phi_o_deg_opp)
+        custom_polar_brdf_plot_radial_ticks(ax, ymax)
+    else:
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.spines["right"].set_visible(False)
+        ax.spines["top"].set_visible(False)
+        ax.spines["left"].set_visible(False)
+        ax.spines["bottom"].set_visible(False)
+
+    ax.set_aspect("auto")
+    ax.set_xlabel(r"$θ_o$", fontsize=18)
+    ax.set_ylabel(r"$BRDF\;[sr^{-1}]$", fontsize=18)
+    ax.grid(True, which="both", linestyle="--", linewidth=0.5)
+
+    ax.plot(xs, ys, "k-", label=f"{brdf[2]} λ = {wavelength:.2f} nm",
+            linewidth=1.2, alpha=0.8)
+
+    for ys in yss:
+        ax.plot(xs, ys[2], ys[1], label=ys[0], linewidth=1.5, alpha=0.8)
+
+    ax.set_xticks(rad_ticks)
+    ax.set_xticklabels([f"{int(np.abs(deg))}°" for deg in deg_ticks])
+    ax.annotate(
+        rf"$\phi_m={phi_o_deg_opp:.0f}\degree$",
+        xy=(xs[0], 0.01),
+        xycoords="data",
+        xytext=(-10, 20),
+        textcoords="offset points",
+        arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.5"),
+        fontsize=14,
+        color="k",
+        fontweight="bold",
+    )
+    ax.annotate(
+        rf"$\phi_m={phi_o_deg:.0f}\degree$",
+        xy=(xs[-1], 0.01),
+        xycoords="data",
+        xytext=(-40, 20),
+        textcoords="offset points",
+        arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=-.5"),
+        fontsize=14,
+        color="k",
+        fontweight="bold",
+    )
+
+    if legend:
+        ax.legend(loc="upper right", fontsize=12)
+
+    plt.tight_layout()
+    if output_dir is not None:
+        plt.savefig(
+            os.path.join(output_dir,
+                         f"brdf_fitting_λ{wavelength:.2f}_{brdf[2]}θ{theta_i_deg:.0f}φ{phi_i_deg:.0f}φo{phi_o_deg:.0f}_{model}.pdf"),
+            format="pdf",
+            bbox_inches="tight")
+    else:
+        plt.show()

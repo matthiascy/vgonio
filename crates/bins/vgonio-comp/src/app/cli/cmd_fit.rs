@@ -739,7 +739,7 @@ pub struct FitOptions {
 
     #[clap(
         long = "err",
-        help = "Error metric to use ONLY for the brute force fitting.",
+        help = "Error metric used during calculation of objective function (residuals).",
         default_value = "mse",
         required_if_eq("method", "brute")
     )]

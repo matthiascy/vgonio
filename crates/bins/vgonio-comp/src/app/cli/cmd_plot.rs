@@ -16,12 +16,14 @@ use std::path::PathBuf;
 use surf::subdivision::{Subdivision, SubdivisionKind};
 use vgonio_bxdf::brdf::measured::ClausenBrdf;
 use vgonio_core::{
-    bxdf::{MicrofacetDistribution, MicrofacetDistroKind},
+    bxdf::MicrofacetDistroKind,
     config::Config,
     error::VgonioError,
     math::Sph2,
+    res::Handle,
     units::{Degs, Nanometres, Radians, Rads},
-    BrdfLevel, ErrorMetric, MeasurementKind, Symmetry, TriangulationPattern, Weighting,
+    AnyMeasured, BrdfLevel, ErrorMetric, MeasurementKind, Symmetry, TriangulationPattern,
+    Weighting,
 };
 
 #[rustfmt::skip]
@@ -66,6 +68,9 @@ pub enum PlotKind {
     /// Plot everything related to the fitting process.
     #[clap(name = "brdf-fitting")]
     BrdfFitting,
+    /// Plot the BRDF fitting per slice.
+    #[clap(name = "brdf-fitting-slice")]
+    BrdfFittingSlice,
     /// Plot the NDF from saved *.vgmo file
     #[clap(name = "ndf")]
     Ndf,
@@ -168,7 +173,8 @@ pub struct PlotOptions {
         default_value = "0.0",
         required_if_eq("kind", "brdf-slice"),
         required_if_eq("kind", "brdf-map"),
-        required_if_eq("kind", "brdf-3d")
+        required_if_eq("kind", "brdf-3d"),
+        required_if_eq("kind", "brdf-fitting-slice")
     )]
     pub theta_i: f32,
 
@@ -181,7 +187,8 @@ pub struct PlotOptions {
         required_if_eq("kind", "brdf-map"),
         required_if_eq("kind", "brdf-3d"),
         required_if_eq("kind", "ndf"),
-        required_if_eq("kind", "ndf-fitting")
+        required_if_eq("kind", "ndf-fitting"),
+        required_if_eq("kind", "brdf-fitting-slice")
     )]
     pub phi_i: f32,
 
@@ -189,7 +196,8 @@ pub struct PlotOptions {
         long = "po",
         help = "The azimuthal angle to plot the BRDF at.",
         default_value = "0.0",
-        required_if_eq("kind", "brdf-slice")
+        required_if_eq("kind", "brdf-slice"),
+        required_if_eq("kind", "brdf-fitting-slice")
     )]
     pub phi_o: f32,
 
@@ -335,134 +343,137 @@ pub struct PlotOptions {
     #[clap(
         long,
         help = "Whether to plot multiple wavelengths in the BRDF slice.",
+        default_value = "false",
         required_if_eq("kind", "brdf-slice")
     )]
-    pub multi_wl: Option<bool>,
+    pub multi_wl: bool,
+
+    #[clap(
+        long = "polar",
+        help = "Whether to plot the polar plot.",
+        default_value = "false"
+    )]
+    pub polar_plot_p: bool,
+
+    #[clap(long, help = "Whether to plot multiple distro of the same type.")]
+    pub distro: Option<MicrofacetDistroKind>,
 }
 
 pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
     let cache = Cache::new(config.cache_dir());
     cache.write(|cache| {
         cache.load_ior_database(&config);
-        match opts.kind {
-            PlotKind::ComparisonVgonioClausen => {
-                if opts.inputs.len() % 2 != 0 {
-                    return Err(VgonioError::new(
-                        "The number of input files must be even.",
-                        None,
-                    ));
-                }
-                for input in opts.inputs.chunks(2) {
-                    let simulated_hdl = cache.load_micro_surface_measurement(&config, &input[0])?;
-                    // Measured by Clausen
-                    let measured_hdl = cache.load_micro_surface_measurement(&config, &input[1])?;
-                    let simulated = cache
-                        .get_measurement(simulated_hdl)
-                        .unwrap()
-                        .measured
-                        .downcast_ref::<BsdfMeasurement>()
-                        .unwrap();
-                    let meas = cache
-                        .get_measurement(measured_hdl)
-                        .unwrap()
-                        .measured
-                        .downcast_ref::<ClausenBrdf>()
-                        .expect("Expected BSDF measured by Clausen");
+    });
+    match opts.kind {
+        PlotKind::ComparisonVgonioClausen => {
+            if opts.inputs.len() % 2 != 0 {
+                return Err(VgonioError::new(
+                    "The number of input files must be even.",
+                    None,
+                ));
+            }
+            for input in opts.inputs.chunks(2) {
+                let (measured_hdl, simulated_hdl) = cache.write(|c| {
+                    (
+                        c.load_micro_surface_measurement(&config, &input[0])
+                            .unwrap(),
+                        c.load_micro_surface_measurement(&config, &input[1])
+                            .unwrap(),
+                    )
+                });
+                cache.read(|c| {
+                    let (measured, simulated) = (
+                        c.get_measurement(simulated_hdl)
+                            .unwrap()
+                            .measured
+                            .downcast_ref::<ClausenBrdf>()
+                            .expect("Expected BSDF measurement by Clausen"),
+                        c.get_measurement(measured_hdl)
+                            .unwrap()
+                            .measured
+                            .downcast_ref::<BsdfMeasurement>()
+                            .expect("Expected BSDF measured by Vgonio"),
+                    );
                     let phi_offset = std::env::var("PHI_OFFSET")
                         .ok()
                         .map(|s| s.parse::<f32>().unwrap())
                         .unwrap_or(0.0)
                         .to_radians();
                     let itrp = simulated.resample(
-                        &meas.params,
+                        &measured.params,
                         opts.level,
                         opts.dense,
                         Rads::new(phi_offset),
                     );
-                    plot_brdf_vgonio_clausen(&itrp, meas, opts.dense).unwrap();
-                }
-                Ok(())
-            },
-            PlotKind::ComparisonVgonio => {
-                todo!("Implement comparison between VgonioBrdf and VgonioBrdf.")
-            },
-            slc @ (PlotKind::BrdfSlice | PlotKind::BrdfSliceInPlane) => {
-                let brdf_hdls = opts
-                    .inputs
+                    plot_brdf_vgonio_clausen(&itrp, measured, opts.dense).unwrap();
+                })
+            }
+            Ok(())
+        },
+        PlotKind::ComparisonVgonio => {
+            todo!("Implement comparison between VgonioBrdf and VgonioBrdf.")
+        },
+        slc @ (PlotKind::BrdfSlice | PlotKind::BrdfSliceInPlane) => {
+            let (handles, names) = load_measurements(&opts.inputs, &cache, &config, |stem| {
+                stem.split_at(stem.rfind(' ').unwrap()).0.into()
+            })?;
+            cache.read(|c| {
+                let brdfs = load_measured_downcast::<BsdfMeasurement>(&handles, c)?
                     .iter()
-                    .map(|input| cache.load_micro_surface_measurement(&config, input))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let brdf_surface_names = opts
-                    .inputs
-                    .iter()
-                    .map(|input| {
-                        let file_name = input.file_name().unwrap().to_str().unwrap();
-                        file_name
-                            .split('_')
-                            .skip(1)
-                            .next()
-                            .unwrap_or(file_name)
-                            .to_string()
-                    })
+                    .map(|brdf| brdf.brdf_at(opts.level).unwrap())
                     .collect::<Vec<_>>();
-                println!("brdf_surface_names: {brdf_surface_names:?}");
+
                 let phi_i = Rads::from_degrees(opts.phi_i);
                 let theta_i = Rads::from_degrees(opts.theta_i);
                 let wi = Sph2::new(theta_i, phi_i);
                 let phi_o = Rads::from_degrees(opts.phi_o);
                 if slc == PlotKind::BrdfSlice {
                     let labels = if opts.labels.is_empty() {
-                        vec!["".to_string(); brdf_hdls.len()]
+                        vec!["".to_string(); brdfs.len()]
                     } else {
                         opts.labels.clone()
                     };
-                    let brdfs = brdf_hdls
+                    let combined = brdfs
                         .into_iter()
-                        .zip(labels)
-                        .zip(brdf_surface_names)
-                        .filter_map(|((hdl, label), name)| {
-                            cache
-                                .get_measurement(hdl)
-                                .unwrap()
-                                .measured
-                                .downcast_ref::<BsdfMeasurement>()
-                                .and_then(|meas| {
-                                    meas.brdf_at(opts.level).map(|brdf| (brdf, label, name))
-                                })
-                        })
+                        .zip(labels.into_iter())
+                        .zip(names.into_iter())
+                        .map(|((brdf, label), name)| (brdf, label, name))
                         .collect::<Vec<_>>();
                     plot_brdf_slice(
-                        &brdfs,
+                        &combined,
                         wi,
                         phi_o,
                         opts.legend,
                         opts.cmap.unwrap_or("Set3".to_string()),
                         opts.scale.unwrap_or(1.0),
                         opts.log,
-                        opts.multi_wl.unwrap_or(false),
+                        opts.multi_wl,
                         opts.figsize.map(|sz| (sz[0], sz[1])),
                         opts.output,
                     )
-                    .unwrap();
+                    .map_err(|pyerr| {
+                        VgonioError::new(
+                            format!("Failed to plot the BRDF slice: {}", pyerr),
+                            Some(Box::new(pyerr)),
+                        )
+                    })
                 } else {
-                    let brdfs = brdf_hdls
-                        .into_iter()
-                        .filter_map(|hdl| {
-                            cache
-                                .get_measurement(hdl)
-                                .unwrap()
-                                .measured
-                                .downcast_ref::<BsdfMeasurement>()
-                                .and_then(|meas| meas.brdf_at(opts.level))
-                        })
-                        .collect::<Vec<_>>();
-                    plot_brdf_slice_in_plane(&brdfs, phi_i).unwrap();
+                    plot_brdf_slice_in_plane(&brdfs, phi_i).map_err(|pyerr| {
+                        VgonioError::new(
+                            format!("Failed to plot the BRDF slice in plane: {}", pyerr),
+                            Some(Box::new(pyerr)),
+                        )
+                    })
                 }
-                Ok(())
-            },
-            PlotKind::Ndf => {
-                let (ndfs, names): (Vec<&MeasuredNdfData>, Vec<String>) =
-                    load_ndfs(&opts.inputs, cache, &config)?.unzip();
+            })
+        },
+        PlotKind::Ndf => {
+            let (handles, names): (Vec<Handle>, Vec<String>) =
+                load_measurements(&opts.inputs, &cache, &config, |stem| {
+                    stem.split_at(stem.rfind('_').unwrap()).0.into()
+                })?;
+            cache.read(|c| {
+                let ndfs = load_measured_downcast::<MeasuredNdfData>(&handles, c)?;
                 let filename = if ndfs.len() == 1 {
                     format!("{}_slice", names[0])
                 } else {
@@ -477,41 +488,50 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     filename,
                     opts.output,
                 )
-                .unwrap();
-                Ok(())
-            },
-            PlotKind::NdfFitting => {
-                // Load the NDF fitting results from a csv file in the format:
-                // surface, distro, alpha, mse
-                let file = std::fs::read_to_string(&opts.ndf_fitting_results.unwrap())
-                    .map_err(|e| VgonioError::from_io_error(e, "can't read file"))?;
-                let mut fitting_results =
-                    HashMap::<String, Vec<(MicrofacetDistroKind, f32)>>::new();
-                for line in file.lines().skip(1) {
-                    if line.is_empty() {
-                        continue;
-                    }
-                    let mut parts = line.split(',');
-                    let surface = parts.next().unwrap();
-                    let distro = match parts.next().unwrap() {
-                        "bk" => MicrofacetDistroKind::Beckmann,
-                        "tr" => MicrofacetDistroKind::TrowbridgeReitz,
-                        _ => unreachable!(),
-                    };
-                    let alpha = parts.next().unwrap().parse::<f32>().unwrap();
-
-                    fitting_results
-                        .entry(surface.to_string())
-                        .or_insert_with(Vec::new)
-                        .push((distro, alpha));
+                .map_err(|pyerr| {
+                    VgonioError::new(
+                        format!("Failed to plot the NDF: {}", pyerr),
+                        Some(Box::new(pyerr)),
+                    )
+                })
+            })
+        },
+        PlotKind::NdfFitting => {
+            // Load the NDF fitting results from a csv file in the format:
+            // surface, distro, alpha, mse
+            let file = std::fs::read_to_string(&opts.ndf_fitting_results.unwrap())
+                .map_err(|e| VgonioError::from_io_error(e, "can't read file"))?;
+            let mut fitting_results = HashMap::<String, Vec<(MicrofacetDistroKind, f32)>>::new();
+            for line in file.lines().skip(1) {
+                if line.is_empty() {
+                    continue;
                 }
+                let mut parts = line.split(',');
+                let surface = parts.next().unwrap();
+                let distro = match parts.next().unwrap() {
+                    "bk" => MicrofacetDistroKind::Beckmann,
+                    "tr" => MicrofacetDistroKind::TrowbridgeReitz,
+                    _ => unreachable!(),
+                };
+                let alpha = parts.next().unwrap().parse::<f32>().unwrap();
 
-                println!("{:#?}", fitting_results);
+                fitting_results
+                    .entry(surface.to_string())
+                    .or_insert_with(Vec::new)
+                    .push((distro, alpha));
+            }
 
-                // For each input file, load the NDF and try to find the fitting
-                // results and plot them.
-                let (ndfs, names): (Vec<&MeasuredNdfData>, Vec<String>) =
-                    load_ndfs(&opts.inputs, cache, &config)?.unzip();
+            println!("{:#?}", fitting_results);
+
+            // For each input file, load the NDF and try to find the fitting
+            // results and plot them.
+            let (handles, names): (Vec<Handle>, Vec<String>) =
+                load_measurements(&opts.inputs, &cache, &config, |stem| {
+                    stem.split_at(stem.rfind('_').unwrap()).0.into()
+                })?;
+            cache.read(|c| {
+                let ndfs = load_measured_downcast::<MeasuredNdfData>(&handles, c)?;
+
                 let (fitted_bk, fitted_tr): (Vec<f32>, Vec<f32>) = ndfs
                     .iter()
                     .zip(names.iter())
@@ -545,25 +565,23 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     names,
                     opts.output,
                 )
-                .unwrap();
-                Ok(())
-            },
-            PlotKind::Gaf => {
-                let hdls = opts
-                    .inputs
-                    .iter()
-                    .map(|input| cache.load_micro_surface_measurement(&config, input))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let gafs = hdls
-                    .into_iter()
-                    .filter_map(|hdl| {
-                        cache
-                            .get_measurement(hdl)
-                            .unwrap()
-                            .measured
-                            .downcast_ref::<MeasuredGafData>()
-                    })
-                    .collect::<Vec<_>>();
+                .map_err(|pyerr| {
+                    VgonioError::new(
+                        format!("Failed to plot the NDF fitting: {}", pyerr),
+                        Some(Box::new(pyerr)),
+                    )
+                })
+            })
+        },
+        PlotKind::Gaf => {
+            let (handles, _): (Vec<Handle>, Vec<String>) =
+                load_measurements(&opts.inputs, &cache, &config, |stem| {
+                    stem.split_at(stem.rfind(' ').unwrap()).0.into()
+                })?;
+            cache.read(|c| {
+                let gafs: Box<[&MeasuredGafData]> =
+                    load_measured_downcast::<MeasuredGafData>(&handles, c)?;
+
                 let wm = Sph2::new(
                     Radians::from_degrees(opts.theta_m),
                     Radians::from_degrees(opts.phi_m),
@@ -575,61 +593,59 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     opts.labels,
                     opts.save,
                 )
-                .unwrap();
-                Ok(())
-            },
-            PlotKind::BrdfMap => {
-                use exr::prelude::*;
-                let imgs = opts
-                    .inputs
+                .map_err(|pyerr| {
+                    VgonioError::new(
+                        format!("Failed to plot the GAF: {}", pyerr),
+                        Some(Box::new(pyerr)),
+                    )
+                })
+            })
+        },
+        PlotKind::BrdfMap => {
+            use exr::prelude::*;
+            let imgs = opts
+                .inputs
+                .iter()
+                .map(|input| {
+                    (
+                        read_all_flat_layers_from_file(input)
+                            .expect(&format!("failed to read {}", input.display())),
+                        input.file_name().unwrap().to_str().unwrap().to_string(),
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            plot_brdf_map(
+                &imgs,
+                Degs::new(opts.theta_i),
+                Degs::new(opts.phi_i),
+                Nanometres::new(opts.lambda),
+                opts.cmap.unwrap_or("viridis".to_string()),
+                opts.cbar,
+                opts.coord,
+                opts.diff,
+                opts.fc.unwrap_or("w".to_string()),
+                Degs::new(opts.pstep),
+                Degs::new(opts.tstep),
+                opts.figsize
+                    .map_or_else(|| (10.0, 10.0), |sz| (sz[0], sz[1])),
+                opts.output_image_format,
+                opts.output,
+            )
+            .unwrap();
+
+            Ok(())
+        },
+        PlotKind::Brdf3D => {
+            let (handles, _) = load_measurements(&opts.inputs, &cache, &config, |stem| {
+                stem.split_at(stem.rfind(' ').unwrap()).0.into()
+            })?;
+            cache.read(|c| {
+                let brdfs = load_measured_downcast::<BsdfMeasurement>(&handles, c)?
                     .iter()
-                    .map(|input| {
-                        (
-                            read_all_flat_layers_from_file(input)
-                                .expect(&format!("failed to read {}", input.display())),
-                            input.file_name().unwrap().to_str().unwrap().to_string(),
-                        )
-                    })
+                    .map(|brdf| brdf.brdf_at(opts.level).unwrap())
                     .collect::<Vec<_>>();
 
-                plot_brdf_map(
-                    &imgs,
-                    Degs::new(opts.theta_i),
-                    Degs::new(opts.phi_i),
-                    Nanometres::new(opts.lambda),
-                    opts.cmap.unwrap_or("viridis".to_string()),
-                    opts.cbar,
-                    opts.coord,
-                    opts.diff,
-                    opts.fc.unwrap_or("w".to_string()),
-                    Degs::new(opts.pstep),
-                    Degs::new(opts.tstep),
-                    opts.figsize
-                        .map_or_else(|| (10.0, 10.0), |sz| (sz[0], sz[1])),
-                    opts.output_image_format,
-                    opts.output,
-                )
-                .unwrap();
-
-                Ok(())
-            },
-            PlotKind::Brdf3D => {
-                let hdls = opts
-                    .inputs
-                    .iter()
-                    .map(|input| cache.load_micro_surface_measurement(&config, input))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let brdfs = hdls
-                    .into_iter()
-                    .filter_map(|hdl| {
-                        cache
-                            .get_measurement(hdl)
-                            .unwrap()
-                            .measured
-                            .downcast_ref::<BsdfMeasurement>()
-                            .and_then(|meas| meas.brdf_at(opts.level))
-                    })
-                    .collect::<Vec<_>>();
                 let lambda = Nanometres::new(opts.lambda);
                 for brdf in &brdfs {
                     if !brdf.spectrum.iter().any(|&l| l == lambda) {
@@ -651,35 +667,37 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     .unwrap();
                 }
                 Ok(())
-            },
-            PlotKind::Surface => {
-                let surfaces = opts
-                    .inputs
-                    .iter()
-                    .map(|path| SurfacePath {
-                        path: path.clone(),
-                        subdivision: match (opts.subdiv_kind, opts.subdiv_level) {
-                            (Some(SubdivisionKind::Curved), Some(level)) => {
-                                Some(Subdivision::Curved(level))
-                            },
-                            (Some(SubdivisionKind::Wiggly), Some(level)) => {
-                                Some(Subdivision::Wiggly {
-                                    level,
-                                    offset: opts.subdiv_offset.unwrap(),
-                                })
-                            },
-                            _ => None,
+            })
+        },
+        PlotKind::Surface => {
+            let surfaces = opts
+                .inputs
+                .iter()
+                .map(|path| SurfacePath {
+                    path: path.clone(),
+                    subdivision: match (opts.subdiv_kind, opts.subdiv_level) {
+                        (Some(SubdivisionKind::Curved), Some(level)) => {
+                            Some(Subdivision::Curved(level))
                         },
-                    })
-                    .collect::<Box<_>>();
-                let hdls = cache.load_micro_surfaces(
+                        (Some(SubdivisionKind::Wiggly), Some(level)) => Some(Subdivision::Wiggly {
+                            level,
+                            offset: opts.subdiv_offset.unwrap(),
+                        }),
+                        _ => None,
+                    },
+                })
+                .collect::<Box<_>>();
+            let hdls = cache.write(|c| {
+                c.load_micro_surfaces(
                     &config,
                     &surfaces,
                     TriangulationPattern::BottomLeftToTopRight,
-                )?;
+                )
+            })?;
+            cache.read(|c| {
                 let surfaces = hdls
                     .into_iter()
-                    .map(|hdl| cache.get_micro_surface(hdl).unwrap())
+                    .map(|hdl| c.get_micro_surface(hdl).unwrap())
                     .collect::<Vec<_>>();
 
                 plot_surfaces(
@@ -688,37 +706,47 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     opts.cmap.unwrap_or("viridis".to_string()),
                 )
                 .unwrap();
-
-                Ok(())
-            },
-            PlotKind::BrdfFitting => {
-                if opts.interactive {
-                    if opts.inputs.len() != 1 {
-                        return Err(VgonioError::new(
-                            "Only one input file is allowed for plotting the BRDF fitting.",
-                            None,
-                        ));
+            });
+            Ok(())
+        },
+        PlotKind::BrdfFitting => {
+            if opts.interactive {
+                if opts.inputs.len() != 1 {
+                    return Err(VgonioError::new(
+                        "Only one input file is allowed for plotting the BRDF fitting.",
+                        None,
+                    ));
+                }
+                let (handles, _) = load_measurements(&opts.inputs, &cache, &config, |stem| {
+                    if stem.contains('_') {
+                        stem.split_at(stem.rfind('_').unwrap()).0.into()
+                    } else {
+                        stem.strip_suffix("bar").unwrap().into()
                     }
-                    let hdl = cache.load_micro_surface_measurement(&config, &opts.inputs[0])?;
-                    let measured = &cache.get_measurement(hdl).unwrap().measured;
-                    if measured.kind() != MeasurementKind::Bsdf {
-                        return Err(VgonioError::new(
-                            "The input file is not a BSDF measurement.",
-                            None,
-                        ));
-                    }
-                    let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
-                    let brdf = measured.as_any_brdf(opts.level).unwrap();
-                    BrdfFittingPlotter::plot_interactive(brdf, &alphas, &cache.iors).unwrap();
-                } else {
-                    if opts.inputs.len() != 1 {
-                        return Err(VgonioError::new(
-                            "Only one input file is allowed for plotting the BRDF error map.",
-                            None,
-                        ));
-                    }
-                    let hdl = cache.load_micro_surface_measurement(&config, &opts.inputs[0])?;
-                    let measured = &cache.get_measurement(hdl).unwrap().measured;
+                })?;
+                println!("handles: {:?}", handles);
+                cache.read(|c| {
+                    let measured = load_measured(&handles, c)?;
+                    let alphas = extract_alphas(&opts.alpha, opts.symmetry, true)?;
+                    let brdf = measured[0].as_any_brdf(opts.level).unwrap();
+                    BrdfFittingPlotter::plot_interactive(brdf, &alphas, &c.iors).map_err(|pyerr| {
+                        VgonioError::new(
+                            format!("Failed to plot the BRDF fitting: {}", pyerr),
+                            Some(Box::new(pyerr)),
+                        )
+                    })
+                })?;
+            } else {
+                if opts.inputs.len() != 1 {
+                    return Err(VgonioError::new(
+                        "Only one input file is allowed for plotting the BRDF error map.",
+                        None,
+                    ));
+                }
+                let hdl =
+                    cache.write(|c| c.load_micro_surface_measurement(&config, &opts.inputs[0]))?;
+                cache.read(|c| {
+                    let measured = &c.get_measurement(hdl).unwrap().measured;
                     if measured.kind() != MeasurementKind::Bsdf {
                         return Err(VgonioError::new(
                             "The input file is not a BSDF measurement.",
@@ -726,16 +754,15 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         ));
                     }
                     let name = opts.inputs[0].file_name().unwrap().to_str().unwrap();
-                    let alphas = extract_alphas(&opts.alpha, opts.symmetry)?;
+                    let alphas = extract_alphas(&opts.alpha, opts.symmetry, true)?;
                     let error_metric = opts.error_metric.unwrap_or(ErrorMetric::Mse);
                     BrdfFittingPlotter::plot_non_interactive(
                         name,
                         &measured,
                         &alphas,
                         error_metric,
-                        opts.weighting.unwrap(),
-                        &cache.iors,
-                        opts.model.unwrap(),
+                        &c.iors,
+                        &opts,
                         opts.parallel,
                     )
                     .map_err(|pyerr| {
@@ -743,12 +770,52 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                             format!("Failed to plot the BRDF error map: {}", pyerr),
                             Some(Box::new(pyerr)),
                         )
-                    })?;
+                    })
+                })?;
+            }
+            Ok(())
+        },
+        PlotKind::BrdfFittingSlice => {
+            let (hdls, names) = load_measurements(&opts.inputs, &cache, &config, |stem| {
+                let trimmed = stem
+                    .trim_start_matches("bsdf_")
+                    .split('_')
+                    .next()
+                    .unwrap()
+                    .trim_end_matches("bar100");
+                match trimmed {
+                    "al65" => "al6.5",
+                    _ => trimmed,
                 }
-                Ok(())
-            },
-        }
-    })
+                .into()
+            })?;
+            cache.read(|c| {
+                let measured = load_measured(&hdls, c)?;
+                let name = &names[0];
+                let alphas = extract_alphas(&opts.alpha, opts.symmetry, false)?;
+                BrdfFittingPlotter::plot_brdf_fitting_slice(
+                    name,
+                    measured[0],
+                    opts.distro,
+                    &alphas,
+                    Sph2::new(
+                        Radians::from_degrees(opts.theta_i),
+                        Radians::from_degrees(opts.phi_i),
+                    ),
+                    Radians::from_degrees(opts.phi_o),
+                    opts.lambda,
+                    &c.iors,
+                    &opts,
+                )
+                .map_err(|pyerr| {
+                    VgonioError::new(
+                        format!("Failed to plot the BRDF fitting slice: {}", pyerr),
+                        Some(Box::new(pyerr)),
+                    )
+                })
+            })
+        },
+    }
 }
 
 /// Extracts alpha values from the command-line arguments as a vector of `f64`
@@ -759,12 +826,16 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
 ///
 /// * `alphas` - The roughness parameters provided by the user.
 /// * `symmetry` - The symmetry of the surface.
+/// * `ordered` - Whether to sort the roughness parameters.
 ///
 /// # Returns
 ///
-/// An array of roughness parameters as pairs of `f64` values sorted by the
-/// roughness parameter.
-fn extract_alphas(alphas: &[f64], symmetry: Symmetry) -> Result<Box<[(f64, f64)]>, VgonioError> {
+/// An array of roughness parameters as pairs of `f64` values.
+fn extract_alphas(
+    alphas: &[f64],
+    symmetry: Symmetry,
+    ordered: bool,
+) -> Result<Box<[(f64, f64)]>, VgonioError> {
     let mut processed = if symmetry.is_isotropic() {
         alphas.iter().map(|&a| (a, a)).collect::<Box<_>>()
     } else {
@@ -780,36 +851,67 @@ fn extract_alphas(alphas: &[f64], symmetry: Symmetry) -> Result<Box<[(f64, f64)]
             .map_windows(|alpha: &[_; 2]| (*alpha[0], *alpha[1]))
             .collect::<Box<_>>()
     };
-    processed.sort_by(|(a1, a2), (b1, b2)|
-        // Sort first by the first element, then by the second element
-        a1.partial_cmp(b1).unwrap().then_with(|| a2.partial_cmp(b2).unwrap()));
+
+    if ordered {
+        processed.sort_by(|(a1, a2), (b1, b2)|
+            // Sort first by the first element, then by the second element
+            a1.partial_cmp(b1).unwrap().then_with(|| a2.partial_cmp(b2).unwrap()));
+    }
+
     Ok(processed)
 }
 
-fn load_ndfs<'a>(
+fn load_measurements(
     inputs: &[PathBuf],
-    cache: &'a mut RawCache,
+    cache: &Cache,
     config: &Config,
-) -> Result<impl Iterator<Item = (&'a MeasuredNdfData, String)>, VgonioError> {
-    // TODO: unload if the input is not ndf
-    let handles = inputs
+    name_fn: impl Fn(&str) -> String,
+) -> Result<(Vec<Handle>, Vec<String>), VgonioError> {
+    if inputs.is_empty() {
+        return Err(VgonioError::new("No input files provided.", None));
+    }
+    inputs
         .iter()
         .map(|input| {
-            cache
-                .load_micro_surface_measurement(&config, input)
-                .and_then(|hdl| {
-                    let stem = input.file_stem().unwrap().to_str().unwrap();
-                    // remove timestamp from the stem: ndf_al0_2025-03-31T17-00-37 -> ndf_al0
-                    Ok((hdl, stem.split_at(stem.rfind('_').unwrap()).0.into()))
-                })
+            cache.write(|c| {
+                c.load_micro_surface_measurement(&config, input)
+                    .and_then(|hdl| {
+                        let stem = input.file_stem().unwrap().to_str().unwrap();
+                        Ok((hdl, name_fn(stem)))
+                    })
+            })
         })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(handles.into_iter().filter_map(|(hdl, name)| {
-        cache
-            .get_measurement(hdl)
-            .unwrap()
-            .measured
-            .downcast_ref::<MeasuredNdfData>()
-            .map(|ndf| (ndf, name))
-    }))
+        .collect::<Result<Vec<_>, _>>()
+        .map(|handles| {
+            let (handles, names): (Vec<_>, Vec<_>) = handles.into_iter().unzip();
+            (handles, names)
+        })
+}
+
+/// Loads any measured data from the given input files.
+///
+/// # Arguments
+///
+/// * `inputs` - The input files to load.
+/// * `cache` - The cache to use.
+fn load_measured<'a>(
+    inputs: &[Handle],
+    cache: &'a RawCache,
+) -> Result<Box<[&'a Box<dyn AnyMeasured>]>, VgonioError> {
+    Ok(inputs
+        .iter()
+        .filter_map(|hdl| cache.get_measurement(*hdl).map(|m| &m.measured))
+        .collect())
+}
+
+/// Loads any measured data from the given input files and downcasts it to
+/// the specified type.
+fn load_measured_downcast<'a, T: AnyMeasured + 'static>(
+    inputs: &[Handle],
+    cache: &'a RawCache,
+) -> Result<Box<[&'a T]>, VgonioError> {
+    Ok(load_measured(inputs, cache)?
+        .iter()
+        .filter_map(|m| m.downcast_ref::<T>())
+        .collect::<Box<_>>())
 }

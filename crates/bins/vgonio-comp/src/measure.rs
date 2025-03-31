@@ -797,7 +797,8 @@ impl<'a> DataCarriedOnHemisphereSampler<'a, VgonioBrdf> {
     /// # Returns
     ///
     /// The BSDF values for each polar angle and each wavelength at the given
-    /// azimuthal angle.
+    /// azimuthal angle. The returned data is row-major with shape [n_theta,
+    /// n_spectrum].
     pub fn sample_slice_at(&self, wi: Sph2, phi: Radians) -> Option<Box<[f32]>> {
         let n_theta = self.data.params.outgoing.n_rings();
         let n_spectrum = self.data.n_spectrum();

@@ -1,7 +1,5 @@
-use core::f64;
-
 use crate::{
-    app::args::OutputFormat,
+    app::cli::PlotOptions,
     measure::{
         mfd::{MeasuredGafData, MeasuredNdfData},
         params::NdfMeasurementMode,
@@ -13,9 +11,12 @@ use exr::{
     prelude::Text,
 };
 use jabr::array::{shape, DyArr, DynArr};
-use nalgebra::ComplexField;
-use numpy::{PyArray, PyArray1, PyArray2, PyArrayMethods};
-use pyo3::{ffi::c_str, prelude::*, types::PyList};
+use numpy::{PyArray, PyArray1, PyArray2, PyArrayMethods, PyUntypedArrayMethods};
+use pyo3::{
+    ffi::c_str,
+    prelude::*,
+    types::{PyList, PyNone, PyTuple},
+};
 use std::{
     ffi::CString,
     fs::File,
@@ -25,8 +26,8 @@ use std::{
 use surf::MicroSurface;
 use vgonio_bxdf::{
     brdf::{
-        analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
-        measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, MerlBrdfParam, VgonioBrdf, Yan18Brdf},
+        analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR, TrowbridgeReitzBrdfModel},
+        measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan18Brdf},
     },
     distro::BeckmannDistribution,
 };
@@ -35,10 +36,11 @@ use vgonio_core::{
         AnalyticalBrdf, MeasuredBrdfKind, MicrofacetDistribution, MicrofacetDistroKind,
         OutgoingDirs, Scattering,
     },
+    cli::println,
     error::VgonioError,
     math::{self, Sph2, Vec2, Vec3},
     optics::IorReg,
-    units::{rad, Degrees, Nanometres, Radians, Rads},
+    units::{nm, rad, Degrees, Nanometres, Radians, Rads},
     utils::range::{StepRangeExcl, StepRangeIncl},
     AnyMeasured, AnyMeasuredBrdf, BrdfLevel, ErrorMetric, MeasurementKind, Weighting,
 };
@@ -850,7 +852,7 @@ impl BrdfFittingPlotter {
                 c_str!("pyplot.py"),
                 c_str!("vgp"),
             )?
-            .getattr("plot_brdf_fitting")?
+            .getattr("plot_brdf_fitting_interactive")?
             .into();
             let alphas = PyArray1::from_vec(
                 py,
@@ -1638,17 +1640,31 @@ impl BrdfFittingPlotter {
         measured: &Box<dyn AnyMeasured>,
         alphas: &[(f64, f64)],
         metric: ErrorMetric,
-        weighting: Weighting,
         iors: &IorReg,
-        model: MicrofacetDistroKind,
-        parallel: bool,
+        opts: &PlotOptions,
+        parallel_p: bool,
     ) -> PyResult<()> {
         assert_eq!(
             measured.kind(),
             MeasurementKind::Bsdf,
             "Invalid data passed to the function!"
         );
+
+        let brdf = measured.as_any_brdf(BrdfLevel::L0).unwrap();
+        let proxy = brdf.proxy(iors);
+        let shape = proxy.samples().shape();
+
+        let n_spectrum = brdf.spectrum().len();
+
         log::info!("Plotting BRDF error map...");
+        let n_theta_i = proxy.i_thetas.len();
+        let n_phi_i = proxy.i_phis.len();
+        let i_count = n_theta_i * n_phi_i;
+        let (o_count, is_grid) = match &proxy.o_dirs {
+            OutgoingDirs::List { o_phis, .. } => (o_phis.len(), false),
+            OutgoingDirs::Grid { o_thetas, o_phis } => (o_thetas.len() * o_phis.len(), true),
+        };
+
         let top_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         let src_path = Path::new(&top_dir).join("src/pyplot/brdf_fitting_non_interactive.py");
         let src_code = load_python_source_code(&src_path)
@@ -1665,25 +1681,13 @@ impl BrdfFittingPlotter {
         })?;
         let models: Box<[Box<dyn AnalyticalBrdf<Params = [f64; 2]>>]> = alphas
             .iter()
-            .map(|(x, y)| match model {
+            .map(|(x, y)| match opts.model.unwrap() {
                 MicrofacetDistroKind::Beckmann => Box::new(MicrofacetBrdfBK::new(*x, *y))
                     as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
                 MicrofacetDistroKind::TrowbridgeReitz => Box::new(MicrofacetBrdfTR::new(*x, *y))
                     as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
             })
             .collect();
-        let brdf = measured.as_any_brdf(BrdfLevel::L0).unwrap();
-        let proxy = brdf.proxy(iors);
-        let shape = proxy.samples().shape();
-
-        let n_spectrum = brdf.spectrum().len();
-        let n_theta_i = proxy.i_thetas.len();
-        let n_phi_i = proxy.i_phis.len();
-        let i_count = n_theta_i * n_phi_i;
-        let (o_count, is_grid) = match &proxy.o_dirs {
-            OutgoingDirs::List { o_phis, .. } => (o_phis.len(), false),
-            OutgoingDirs::Grid { o_thetas, o_phis } => (o_thetas.len() * o_phis.len(), true),
-        };
 
         let mut residuals = DynArr::<f64>::splat(f64::NAN, shape);
         // Residual maps per wavelength
@@ -1719,15 +1723,15 @@ impl BrdfFittingPlotter {
             for model in models.iter() {
                 println!("Fitting model: {:?}", model.params());
                 let modelled = proxy.generate_analytical(model.as_ref());
-                proxy.residuals(&modelled, weighting, residuals.as_mut_slice());
+                proxy.residuals(&modelled, opts.weighting.unwrap(), residuals.as_mut_slice());
                 drop(modelled);
 
                 // Rearrange the residuals to the shape of the residual maps per wavelength
                 // In case of the grid: ϑi, ϕi, ϑo, ϕo, λ -> λ, (ϑi, ϕi), (ϑo, ϕo)
                 // In case of the list: ϑi, ϕi, ωo, λ -> λ, (ϑi, ϕi), ωo
                 if is_grid {
-                    let n_theta_o = o_thetas.len().unwrap();
-                    let n_phi_o = o_phis.len().unwrap();
+                    let n_theta_o = o_thetas.len();
+                    let n_phi_o = o_phis.len();
                     for i in 0..n_spectrum {
                         for j in 0..n_theta_i {
                             for k in 0..n_phi_i {
@@ -1763,7 +1767,8 @@ impl BrdfFittingPlotter {
                                 temp[k] = r.powi(2);
                             }
                         }
-                        // Use pairwise summation to compute the MSE to avoid numerical instability
+                        // Use pairwise summation to compute the MSE to avoid numerical
+                        // instability
                         mmaps[[i, j]] = math::pairwise_sum(&temp.as_slice()) * rcp_o_count;
                     }
                 }
@@ -1800,7 +1805,7 @@ impl BrdfFittingPlotter {
                         &o_phis,
                         offsets.as_ref(),
                         &spectrum,
-                        parallel,
+                        parallel_p,
                     ),
                 );
                 drop(mmaps_py);
@@ -1812,6 +1817,291 @@ impl BrdfFittingPlotter {
                 rmaps.fill(f32::NAN);
                 mmaps.fill(f32::NAN);
             }
+        });
+
+        return Ok(());
+    }
+
+    pub fn plot_brdf_fitting_slice(
+        name: &str,
+        measured: &Box<dyn AnyMeasured>,
+        distro: Option<MicrofacetDistroKind>,
+        alphas: &[(f64, f64)],
+        wi: Sph2,
+        phi_o: Radians,
+        lambda: f32,
+        iors: &IorReg,
+        opts: &PlotOptions,
+    ) -> PyResult<()> {
+        let phi_i = wi.phi;
+        let theta_i = wi.theta;
+
+        let brdf = measured.as_any_brdf(BrdfLevel::L0).unwrap();
+        let proxy = brdf.proxy(iors);
+
+        let iors_i = iors
+            .ior_of_spectrum(brdf.incident_medium(), brdf.spectrum())
+            .unwrap();
+        let iors_t = iors
+            .ior_of_spectrum(brdf.transmitted_medium(), brdf.spectrum())
+            .unwrap();
+        println!("BRDF wavelengths: {:?}", brdf.spectrum());
+        let lambda_idx = brdf
+            .spectrum()
+            .iter()
+            .position(|x| (x.as_f32() - lambda).abs() < 1e-6)
+            .expect(&format!("Wavelength {} not found in the spectrum!", lambda));
+
+        let n_spectrum = brdf.spectrum().len();
+
+        // Plot the BRDF slice with the fitted model
+        log::info!("Plotting BRDF fitting slice...");
+        Python::with_gil(|py| {
+            let func: Py<PyAny> = PyModule::from_code(
+                py,
+                c_str!(include_str!("./pyplot/pyplot.py")),
+                c_str!("pyplot.py"),
+                c_str!("vgp"),
+            )
+            .unwrap()
+            .getattr("plot_brdf_fitting_slice")
+            .unwrap()
+            .into();
+            let wi = Sph2::new(theta_i, phi_i);
+            let phi_o_opp = phi_o.wrap_to_tau().opposite();
+
+            let mut tr_models: Option<Vec<Box<dyn AnalyticalBrdf<Params = [f64; 2]>>>> = None;
+            let mut bk_models: Option<Vec<Box<dyn AnalyticalBrdf<Params = [f64; 2]>>>> = None;
+
+            // Construct multiple microfacet models
+            if let Some(model) = distro {
+                match model {
+                    MicrofacetDistroKind::Beckmann => {
+                        let _ = bk_models.replace(
+                            alphas
+                                .iter()
+                                .map(|(ax, ay)| {
+                                    Box::new(MicrofacetBrdfBK::new(*ax, *ay))
+                                        as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>
+                                })
+                                .collect(),
+                        );
+                    },
+                    MicrofacetDistroKind::TrowbridgeReitz => {
+                        let _ = tr_models.replace(
+                            alphas
+                                .iter()
+                                .map(|(ax, ay)| {
+                                    Box::new(MicrofacetBrdfTR::new(*ax, *ay))
+                                        as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>
+                                })
+                                .collect(),
+                        );
+                    },
+                };
+            } else {
+                assert_eq!(
+                    alphas.len(),
+                    2,
+                    "Alphas should be of length 2, one for BK and one for TR"
+                );
+                bk_models.replace(vec![Box::new(MicrofacetBrdfBK::new(
+                    alphas[0].0,
+                    alphas[0].1,
+                ))]);
+                tr_models.replace(vec![Box::new(MicrofacetBrdfTR::new(
+                    alphas[1].0,
+                    alphas[1].1,
+                ))]);
+            }
+
+            let model = if tr_models.is_some() && bk_models.is_some() {
+                "both"
+            } else if bk_models.is_some() {
+                "bk"
+            } else if tr_models.is_some() {
+                "tr"
+            } else {
+                "none"
+            };
+
+            let n_bk_models = bk_models.as_ref().map(|ms| ms.len()).unwrap_or(1);
+            let n_tr_models = tr_models.as_ref().map(|ms| ms.len()).unwrap_or(1);
+
+            let (n_theta_o, o_thetas, samples, samples_opp) = match brdf.kind() {
+                // MeasuredBrdfKind::Clausen => {}
+                // MeasuredBrdfKind::Rgl => {}
+                MeasuredBrdfKind::Vgonio => {
+                    let brdf = brdf.as_any().downcast_ref::<VgonioBrdf>().unwrap();
+                    let sampler = DataCarriedOnHemisphereSampler::new(brdf).unwrap();
+                    let o_thetas = brdf
+                        .params
+                        .outgoing
+                        .rings
+                        .iter()
+                        .map(|r| r.zenith_center().as_f32())
+                        .collect::<Vec<_>>();
+                    let n_theta_o = o_thetas.len();
+                    let samples = PyArray1::zeros(py, [n_theta_o], false);
+                    let samples_opp = PyArray1::zeros(py, [n_theta_o], false);
+
+                    unsafe {
+                        for i in 0..o_thetas.len() {
+                            samples.as_slice_mut().unwrap()[i] =
+                                sampler.sample_slice_at(wi, phi_o).unwrap()[i * n_spectrum] as f64;
+                            samples_opp.as_slice_mut().unwrap()[i] =
+                                sampler.sample_slice_at(wi, phi_o_opp).unwrap()[i * n_spectrum]
+                                    as f64;
+                        }
+                        (n_theta_o, o_thetas, samples, samples_opp)
+                    }
+                },
+
+                MeasuredBrdfKind::Clausen => {
+                    let brdf = brdf.as_any().downcast_ref::<ClausenBrdf>().unwrap();
+                    let proxy = brdf.proxy(iors);
+                    let lambda_idx = proxy
+                        .spectrum
+                        .iter()
+                        .position(|x| (x.as_f32() - lambda).abs() < 1e-6)
+                        .unwrap();
+                    let (o_thetas, phi_o_idx, phi_o_opp_idx) = match proxy.o_dirs {
+                        OutgoingDirs::Grid {
+                            ref o_thetas,
+                            ref o_phis,
+                        } => (
+                            o_thetas.iter().map(|x| *x).collect::<Vec<_>>(),
+                            o_phis
+                                .iter()
+                                .position(|x| (*x - phi_i.as_f32()).abs() < 1e-6)
+                                .unwrap(),
+                            o_phis
+                                .iter()
+                                .position(|x| (*x - phi_o_opp.as_f32()).abs() < 1e-6)
+                                .unwrap(),
+                        ),
+                        OutgoingDirs::List { .. } => {
+                            unreachable!()
+                        },
+                    };
+                    let phi_i_idx = proxy
+                        .i_phis
+                        .iter()
+                        .position(|x| (*x - phi_i.as_f32()).abs() < 1e-6)
+                        .unwrap();
+                    let theta_i_idx = proxy
+                        .i_thetas
+                        .iter()
+                        .position(|x| (*x - theta_i.as_f32()).abs() < 1e-6)
+                        .unwrap();
+                    let n_theta_o = o_thetas.len();
+                    let samples = PyArray1::zeros(py, [n_theta_o], false);
+                    let samples_opp = PyArray1::zeros(py, [n_theta_o], false);
+
+                    unsafe {
+                        let samples_mut = samples.as_slice_mut().unwrap();
+                        let samples_opp_mut = samples_opp.as_slice_mut().unwrap();
+                        let proxy_samples = proxy.samples();
+                        for i in 0..n_theta_o {
+                            samples_mut[i] = proxy_samples
+                                [[theta_i_idx, phi_i_idx, i, phi_o_idx, lambda_idx]]
+                                as f64;
+
+                            // When wi == (0, 0), Olaf doesn't have the data for
+                            // phi == 180, we populate the data with the
+                            // opposite direction.
+                            if (theta_i_idx == 0 && phi_i_idx == 0) || i == 0 {
+                                samples_opp_mut[i] = proxy_samples
+                                    [[theta_i_idx, phi_i_idx, i, phi_o_idx, lambda_idx]]
+                                    as f64
+                            } else {
+                                samples_opp_mut[i] = proxy_samples
+                                    [[theta_i_idx, phi_i_idx, i, phi_o_opp_idx, lambda_idx]]
+                                    as f64;
+                            }
+                        }
+                        println!("samples: {:?}", samples.as_slice());
+                        println!("samples_opp: {:?}", samples_opp.as_slice());
+                    }
+                    (n_theta_o, o_thetas, samples, samples_opp)
+                },
+                _ => {
+                    log::error!("The BRDF kind is unknown!");
+                    return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                        "The BRDF kind is unknown!",
+                    ));
+                },
+            };
+
+            let fitted_bk = PyArray2::zeros(py, [n_bk_models, n_theta_o], false);
+            let fitted_tr = PyArray2::zeros(py, [n_tr_models, n_theta_o], false);
+            let fitted_bk_opp = PyArray2::zeros(py, [n_bk_models, n_theta_o], false);
+            let fitted_tr_opp = PyArray2::zeros(py, [n_tr_models, n_theta_o], false);
+
+            for models in [bk_models, tr_models] {
+                if let Some(models) = models {
+                    for (i, m) in models.iter().enumerate() {
+                        for (j, theta_o) in o_thetas.iter().enumerate() {
+                            let sampled = Scattering::eval_reflectance_spectrum(
+                                m.as_ref(),
+                                &wi.to_cartesian(),
+                                &Sph2::new(rad!(*theta_o), phi_o).to_cartesian(),
+                                &iors_i,
+                                &iors_t,
+                            );
+                            let sampled_opp = Scattering::eval_reflectance_spectrum(
+                                m.as_ref(),
+                                &wi.to_cartesian(),
+                                &Sph2::new(rad!(*theta_o), phi_o_opp).to_cartesian(),
+                                &iors_i,
+                                &iors_t,
+                            );
+                            let offset = i * n_theta_o + j;
+                            unsafe {
+                                match m.distro() {
+                                    Some(MicrofacetDistroKind::Beckmann) => {
+                                        fitted_bk.as_slice_mut().unwrap()[offset] =
+                                            sampled[lambda_idx];
+                                        fitted_bk_opp.as_slice_mut().unwrap()[offset] =
+                                            sampled_opp[lambda_idx];
+                                    },
+                                    Some(MicrofacetDistroKind::TrowbridgeReitz) => {
+                                        fitted_tr.as_slice_mut().unwrap()[offset] =
+                                            sampled[lambda_idx];
+                                        fitted_tr_opp.as_slice_mut().unwrap()[offset] =
+                                            sampled_opp[lambda_idx];
+                                    },
+                                    _ => {},
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            func.call1(
+                py,
+                (
+                    (
+                        theta_i.as_f32().to_degrees(),
+                        phi_i.as_f32().to_degrees(),
+                        phi_o.as_f32().to_degrees(),
+                        phi_o_opp.as_f32().to_degrees(),
+                        PyArray1::from_iter(py, o_thetas.iter().map(|t| t.to_degrees())),
+                    ),
+                    (samples, samples_opp, name),
+                    alphas.to_vec(),
+                    (fitted_bk, fitted_bk_opp),
+                    (fitted_tr, fitted_tr_opp),
+                    lambda,
+                    opts.cmap.clone().unwrap_or(String::from("tab10")),
+                    opts.legend,
+                    opts.figsize.as_ref().map(|sz| (sz[0], sz[1])),
+                    opts.output.clone(),
+                    opts.polar_plot_p,
+                    model,
+                ),
+            )?;
             Ok(())
         })
     }
