@@ -14,9 +14,12 @@ use crate::app::cache::{Cache, RawCache};
 use egui::ahash::{HashMap, HashMapExt};
 use std::path::PathBuf;
 use surf::subdivision::{Subdivision, SubdivisionKind};
-use vgonio_bxdf::brdf::measured::ClausenBrdf;
+use vgonio_bxdf::brdf::{
+    analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
+    measured::ClausenBrdf,
+};
 use vgonio_core::{
-    bxdf::MicrofacetDistroKind,
+    bxdf::{AnalyticalBrdf, MicrofacetDistroKind},
     config::Config,
     error::VgonioError,
     math::Sph2,
@@ -83,6 +86,10 @@ pub enum PlotKind {
     /// Plot the micro-surfaces from saved *.vgmo file
     #[clap(name = "surf")]
     Surface,
+    // Temporary option to calculate the MSE between the fitted and the original BRDF
+    /// Compute the MSE between the fitted and the original BRDF.
+    #[clap(name = "mse")]
+    Mse,
 }
 
 /// Options for the `plot` command.
@@ -364,6 +371,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
     cache.write(|cache| {
         cache.load_ior_database(&config);
     });
+
     match opts.kind {
         PlotKind::ComparisonVgonioClausen => {
             if opts.inputs.len() % 2 != 0 {
@@ -814,6 +822,51 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     )
                 })
             })
+        },
+        PlotKind::Mse => {
+            let (handles, names) = load_measurements(&opts.inputs, &cache, &config, |stem| {
+                let trimmed = stem
+                    .trim_start_matches("bsdf_")
+                    .split('_')
+                    .next()
+                    .unwrap()
+                    .trim_end_matches("bar100");
+                match trimmed {
+                    "al65" => "al6.5",
+                    _ => trimmed,
+                }
+                .into()
+            })?;
+            cache.read(|c| {
+                let brdfs = load_measured(&handles, c)
+                    .unwrap()
+                    .iter()
+                    .map(|m| m.as_any_brdf(BrdfLevel::L0).unwrap())
+                    .collect::<Box<_>>();
+
+                let alphas = extract_alphas(&opts.alpha, opts.symmetry, false).unwrap();
+                let distro = opts.distro.unwrap();
+
+                for brdf in brdfs {
+                    let proxy = brdf.proxy(&c.iors);
+                    for (ax, ref ay) in alphas.iter() {
+                        let model: Box<dyn AnalyticalBrdf<Params = [f64; 2]>> = match distro {
+                            MicrofacetDistroKind::Beckmann => {
+                                Box::new(MicrofacetBrdfBK::new(*ax, *ay)) as _
+                            },
+                            MicrofacetDistroKind::TrowbridgeReitz => {
+                                Box::new(MicrofacetBrdfTR::new(*ax, *ay)) as _
+                            },
+                        };
+                        let fitted = proxy.generate_analytical(model.as_ref());
+
+                        let mse =
+                            proxy.distance(&fitted, ErrorMetric::Mse, Weighting::None, None, None);
+                        println!("{}: MSE#{:?} = {}", names[0], distro, mse);
+                    }
+                }
+            });
+            Ok(())
         },
     }
 }
