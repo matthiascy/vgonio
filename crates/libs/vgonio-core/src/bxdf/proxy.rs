@@ -13,9 +13,12 @@ use cust::{
     prelude::{CopyDestination, DeviceBuffer},
     stream::Stream,
 };
-use num_traits::Float;
 use rayon::iter::{ParallelBridge, ParallelIterator};
-use std::{borrow::Cow, collections::HashMap};
+use std::borrow::Cow;
+#[cfg(feature = "cuda")]
+use std::cmp::{max, min};
+#[cfg(feature = "cuda")]
+use std::collections::HashMap;
 use vgonio_jabr::array::{shape, DyArr, DynArr, MemLayout};
 
 // TODO: fix L1 distance
@@ -373,7 +376,9 @@ impl<'a> BrdfProxy<'a> {
         other: &BrdfProxy,
         metric: ErrorMetric,
         weighting: Weighting,
+        #[cfg(feature = "cuda")]
         gpu_threads_per_block: Option<u32>,
+        #[cfg(feature = "cuda")]
         gpu_modules: Option<&HashMap<&'static str, Module>>,
     ) -> f64 {
         assert!(
@@ -382,13 +387,56 @@ impl<'a> BrdfProxy<'a> {
         );
         let has_nan = self.has_nan || other.has_nan;
         let is_rmse = metric == ErrorMetric::Rmse;
+        let effective_n = self.resampled.iter().filter(|&x| !x.is_nan()).count();
         let factor = match metric {
             ErrorMetric::Nllsq => 0.5,
             ErrorMetric::L1 | ErrorMetric::L2 => 1.0,
-            ErrorMetric::Mse | ErrorMetric::Rmse => math::rcp_f64(self.resampled.len() as f64),
+            ErrorMetric::Mse | ErrorMetric::Rmse => math::rcp_f64(effective_n as f64),
         };
         let stride_theta_i = self.resampled.strides()[0];
 
+        #[cfg(not(feature = "cuda"))]
+        let sum = self
+            .resampled
+            .as_slice()
+            .chunks(stride_theta_i)
+            .zip(other.resampled.as_slice().chunks(stride_theta_i))
+            .zip(self.i_thetas.iter())
+            .par_bridge()
+            .map(|((xs, ys), theta_i)| {
+                let cos_theta_i = theta_i.cos();
+                match weighting {
+                    Weighting::None => {
+                        xs.iter().zip(ys.iter()).fold(0.0, |acc, (x, y)| {
+                            if has_nan && (x.is_nan() || y.is_nan()) {
+                                return acc;
+                            }
+                            let diff = *x as f64 - *y as f64;
+                            acc + math::sqr(diff)
+                        }) * factor
+                    },
+                    Weighting::LnCos => {
+                        xs.iter().zip(ys.iter()).fold(0.0, |acc, (x, y)| {
+                            if has_nan && (x.is_nan() || y.is_nan()) {
+                                return acc;
+                            }
+                            let diff = (*x as f64 * cos_theta_i as f64 + 1.0).ln()
+                                - (*y as f64 * cos_theta_i as f64 + 1.0).ln();
+                            acc + math::sqr(diff)
+                        }) * factor
+                    },
+                }
+            })
+            .reduce(|| 0.0, |a, b| a + b);
+
+        #[cfg(not(feature = "cuda"))]
+        if is_rmse {
+            sum.sqrt()
+        } else {
+            sum
+        }
+
+        #[cfg(feature = "cuda")]
         if gpu_threads_per_block.is_none() || gpu_modules.is_none() {
             let sum = self
                 .resampled
@@ -478,6 +526,7 @@ impl<'a> BrdfProxy<'a> {
             }
             stream.synchronize().unwrap();
 
+            #[cfg(feature = "cuda")]
             let sum = if n > 1 << 22 {
                 let mut diffs_sqr = vec![0.0; n].into_boxed_slice();
                 d_diffs.copy_to(&mut diffs_sqr).unwrap();
@@ -492,12 +541,26 @@ impl<'a> BrdfProxy<'a> {
             } else {
                 Self::reduce(
                     &d_diffs,
-                    threads_per_block,
                     factor as f32,
                     stream,
                     &modules["reduce"],
                 ) as f64
             };
+
+            #[cfg(not(feature = "cuda"))]
+            let sum = {
+                let mut diffs_sqr = vec![0.0; n].into_boxed_slice();
+                d_diffs.copy_to(&mut diffs_sqr).unwrap();
+                // TODO: update the CUDA kernel to handle large number of samples
+                diffs_sqr.iter().fold(0.0, |acc, x| {
+                    if x.is_nan() {
+                        return acc;
+                    }
+
+                    acc + *x as f64 * factor
+                })
+            };
+
 
             assert!(!sum.is_nan(), "The sum of the differences is NaN");
             assert_ne!(sum, 0.0, "The sum is zero");
@@ -830,7 +893,11 @@ impl<'a> BrdfProxy<'a> {
     /// angles for the given analytical BRDF.
     pub fn generate_analytical(&self, model: &dyn AnalyticalBrdf<Params = [f64; 2]>) -> Self {
         let n_spectrum = self.spectrum.len();
-        let mut resampled = DynArr::zeros(self.resampled.shape());
+        let mut resampled = if self.has_nan {
+            DynArr::splat(f32::NAN, self.resampled.shape())
+        } else {
+            DynArr::zeros(self.resampled.shape())
+        };
         let i_thetas = self.i_thetas.as_slice();
         let i_phis = self.i_phis.as_slice();
         let strides = self.resampled.strides();
@@ -939,40 +1006,54 @@ impl<'a> BrdfProxy<'a> {
     #[cfg(feature = "cuda")]
     fn reduce(
         arr: &DeviceBuffer<f32>,
-        block_size: u32,
         factor: f32,
         stream: Stream,
         module: &Module,
     ) -> f32 {
+        let block_size = 256;
         let n = arr.len();
-        let d_sum = DeviceBuffer::<f32>::zeroed(n).unwrap();
-        let blocks = (n as u32 / block_size / 2).max(1);
-        let shared_mem = block_size * 4 * size_of::<f32>() as u32;
+        let blocks = {
+            let numer = n + (block_size as usize * 2) - 1;
+            let denom = block_size as usize * 2;
+            max(1, min((numer / denom) as u32, 65_535))
+        };
+
+        let shared_mem = block_size * size_of::<f32>() as u32;
+        let mut block_sums: DeviceBuffer<f64> = unsafe { DeviceBuffer::uninitialized(blocks as usize).unwrap() };
 
         unsafe {
             let kernel = module.get_function("reduce").unwrap();
             launch!(
                 kernel<<<(blocks, 1, 1), (block_size, 1, 1), shared_mem, stream>>>(
                     arr.as_device_ptr(),
-                    d_sum.as_device_ptr(),
-                    factor,
-                )
-            )
-            .unwrap();
-            launch!(
-                kernel<<<(1, 1, 1), (block_size, 1, 1), shared_mem, stream>>>(
-                    d_sum.as_device_ptr(),
-                    d_sum.as_device_ptr(),
-                    1.0f32,
+                    block_sums.as_device_ptr(),
+                    n
                 )
             )
             .unwrap();
         }
 
+        let shared_mem2 = block_size * size_of::<f64>() as u32;
+        let mut d_sum: DeviceBuffer<f64> = unsafe { DeviceBuffer::uninitialized(1).unwrap() };
+
+        unsafe {
+            let k2 = module.get_function("reduce").unwrap();
+            launch!(
+                k2<<<(1, 1, 1), (block_size, 1, 1), shared_mem2, stream>>>(
+                    block_sums.as_device_ptr(),  // const double* block_sums
+                    d_sum.as_device_ptr(),       // double* result
+                    blocks as usize,                      // size_t num_blocks
+                    factor as f64                       // double factor
+                )
+            )
+                .unwrap();
+        }
+
         stream.synchronize().unwrap();
-        let mut sum = vec![0.0; n].into_boxed_slice();
+
+        let mut sum = [0.0f64; 1];
         d_sum.copy_to(&mut sum).unwrap();
-        sum[0]
+        sum[0] as f32
     }
 }
 
@@ -984,12 +1065,13 @@ mod tests {
         context::ContextFlags, device::DeviceAttribute, launch, memory::DeviceBuffer, prelude::*,
         stream::Stream,
     };
+    use std::cmp::{max, min};
 
     #[test]
     fn test_array_difference() {
-        let (context, device) = init_cuda_context(ContextFlags::SCHED_AUTO).unwrap();
+        let (_context, device) = init_cuda_context(ContextFlags::SCHED_AUTO).unwrap();
         let stream = Stream::new(StreamFlags::NON_BLOCKING, None).unwrap();
-        let n = 1 << 16;
+        let n = 1 << 26;
         let xs = (0..n).map(|x| x as f32).collect::<Box<_>>();
         let ys = (0..n).map(|x| x as f32 + 1.0).collect::<Box<_>>();
 
@@ -1026,6 +1108,30 @@ mod tests {
         for i in 0..n {
             assert_eq!(diffs[i], 1.0);
         }
+
+        // Test the squared difference kernel with vec4
+        unsafe {
+            let kernel = modules["diff"].get_function("difference_sqr_vec4").unwrap();
+            launch!(
+                kernel<<<(blocks, 1, 1), (block_size, 1, 1), 0, stream>>>(
+                    d_xs.as_device_ptr(),
+                    d_ys.as_device_ptr(),
+                    d_diffs.as_device_ptr(),
+                    n / 4,
+                )
+            )
+                .unwrap();
+        }
+
+        stream.synchronize().unwrap();
+
+        let mut diffs: Vec<f32> = vec![0.0; n];
+        d_diffs.copy_to(diffs.as_mut_slice()).unwrap();
+
+        for i in 0..n {
+            assert_eq!(diffs[i], 1.0);
+        }
+
 
         // Test the squared difference kernel with weighting
         let weights = (0..n / 256).map(|x| (x as f32).cos()).collect::<Box<_>>();
@@ -1068,10 +1174,10 @@ mod tests {
 
     #[test]
     fn test_reduction() {
-        let (context, device) = init_cuda_context(ContextFlags::SCHED_AUTO).unwrap();
+        let (_context, _device) = init_cuda_context(ContextFlags::SCHED_AUTO).unwrap();
         let modules = load_ptx_modules().unwrap();
         let stream = Stream::new(StreamFlags::NON_BLOCKING, None).unwrap();
-        let n = 1 << 22;
+        let n = 1 << 26;
         let xs = (0..n)
             .map(|x| {
                 if x == 0 || x == 2 || x == 4 {
@@ -1083,39 +1189,62 @@ mod tests {
             .collect::<Box<_>>();
 
         let d_xs = DeviceBuffer::from_slice(&xs).unwrap();
-        let d_sum = DeviceBuffer::<f32>::zeroed(n).unwrap();
 
-        let block_size = device
-            .get_attribute(DeviceAttribute::MaxThreadsPerBlock)
-            .unwrap() as u32;
-        let blocks = (n as u32 / block_size / 2).max(1);
-        let shared_mem = block_size * 4 * size_of::<f32>() as u32;
+        let block_size = 256u32;
+        let blocks = {
+            let numer = n + (block_size as usize * 2) - 1;
+            let denom = block_size as usize * 2;
+            max(1, min((numer / denom) as u32, 65_535))
+        };
+        let shared_mem = block_size * size_of::<f64>() as u32;
+        let mut block_sums: DeviceBuffer<f64> = unsafe { DeviceBuffer::uninitialized(blocks as usize).unwrap() };
 
+        // Pass 1: block-wise partials
         unsafe {
-            let kernel = modules["reduce"].get_function("reduce").unwrap();
+            let kernel = modules["reduce"].get_function("reduce_blocks").unwrap();
             launch!(
                 kernel<<<(blocks, 1, 1), (block_size, 1, 1), shared_mem, stream>>>(
-                    d_xs.as_device_ptr(),
-                    d_sum.as_device_ptr(),
-                    0.5f32,
-                )
-            )
-            .unwrap();
-            launch!(
-                kernel<<<(1, 1, 1), (block_size, 1, 1), shared_mem, stream>>>(
-                    d_sum.as_device_ptr(),
-                    d_sum.as_device_ptr(),
-                    1.0f32,
+                    d_xs.as_device_ptr(),  // const float* xs
+                    block_sums.as_device_ptr(),  // double* block_sums
+                    n  // size_t n
                 )
             )
             .unwrap();
         }
 
-        stream.synchronize().unwrap();
-        let mut sum = vec![0.0; n].into_boxed_slice();
-        d_sum.copy_to(&mut sum).unwrap();
+        // Pass 2: finalize to a single value
+        let blocks2: u32 = 1;
+        let shared_mem2: u32 = block_size * size_of::<f64>() as u32;
+        eprintln!("blocks={}, block_size={}, blocks2={}", blocks, block_size, blocks2);
 
-        let expected = (n - 3) as f32 * 0.5;
-        assert_eq!(sum[0], expected);
+        let mut d_sum: DeviceBuffer<f64> = unsafe { DeviceBuffer::uninitialized(1).unwrap() };
+
+        unsafe {
+            let k2 = modules["reduce"].get_function("reduce").unwrap();
+            launch!(
+                k2<<<(blocks2, 1, 1), (block_size, 1, 1), shared_mem2, stream>>>(
+                    block_sums.as_device_ptr(),  // const double* block_sums
+                    d_sum.as_device_ptr(),       // double* result
+                    blocks as usize,                      // size_t num_blocks
+                    0.5f64                       // double factor
+                )
+            )
+                .unwrap();
+        }
+
+        stream.synchronize().unwrap();
+
+        let mut host_out = [0.0f64; 1];
+        d_sum.copy_to(&mut host_out).unwrap();
+        let sum = host_out[0];
+
+        // Expected: NaNs treated as zero => (n-3) ones, scaled by 0.5
+        let expected = (n as f64 - 3.0) * 0.5;
+        assert_eq!(
+            sum, expected,
+            "sum={} expected={}",
+            sum,
+            expected
+        );
     }
 }
