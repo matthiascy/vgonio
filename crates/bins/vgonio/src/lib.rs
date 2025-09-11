@@ -44,26 +44,30 @@ pub fn is_executable<P: AsRef<Path>>(path: P) -> bool {
 
 /// Search path for external commands.
 pub fn search_paths() -> Vec<PathBuf> {
-    let exe_path = std::env::current_exe().expect("Failed to get current executable path");
-    let exe_dir = exe_path
-        .parent()
-        .expect("Failed to get parent directory of executable");
-    let path = format!(
-        "{}:{}",
-        exe_dir.to_str().unwrap(),
-        std::env::var("PATH").unwrap_or_default()
-    );
+    let exe_dir =
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| std::env::current_dir().unwrap());
+    let mut paths: Vec<PathBuf> = std::env::var_os("PATH")
+        .as_deref()
+        .map(std::env::split_paths)
+        .map(|it| it.collect())
+        .unwrap_or_default();
 
-    std::env::split_paths(&path).collect()
+    // Search first in the directory where the executable is located.
+    paths.insert(0, exe_dir);
+    paths
 }
 
-/// List all external commands starting with vgonio- in the PATH.
+/// List all external commands starting with vgn- in the PATH.
 ///
 /// The search path includes the directories listed in the PATH environment
 /// variable and the current working directory where the executable is located.
 ///
 /// The listed commands are the full path to the executable.
 pub fn list_all_external_commands(paths: &[PathBuf]) -> BTreeMap<String, PathBuf> {
+    const PREFIXES: &[&str] = &["vgn-", "vgonio-"];
     let mut commands = BTreeMap::new();
 
     for dir in paths {
@@ -71,13 +75,16 @@ pub fn list_all_external_commands(paths: &[PathBuf]) -> BTreeMap<String, PathBuf
             for entry in entries {
                 if let Ok(entry) = entry {
                     let path = entry.path();
-                    if is_executable(&path) {
-                        if let Some(name) = path.file_name() {
-                            if let Some(name) = name.to_str() {
-                                if name.starts_with("vgonio-") {
-                                    commands.insert(name.to_string(), path);
-                                }
-                            }
+                    if !is_executable(&path) {
+                        continue;
+                    }
+                    let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    let stem = path.file_stem().and_then(|n| n.to_str()).unwrap_or(file_name);
+
+                    if PREFIXES.iter().any(|prefix| stem.starts_with(prefix)) {
+                        // key by canonical subcommand name without prefix & extension
+                        if let Some((_, cmd)) = PREFIXES.iter().find_map(|prefix| stem.strip_prefix(prefix).map(|c| (prefix, c))) {
+                            commands.entry(cmd.to_string()).or_insert(path);
                         }
                     }
                 }

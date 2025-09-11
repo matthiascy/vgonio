@@ -6,6 +6,10 @@ edition.workspace = true
 description = "Microscopic level light transport simulation."
 publish = false
 
+[[bin]]
+name = "vgn"
+path = "src/main.rs"
+
 [lints]
 workspace = true
 
@@ -14,4 +18,3 @@ default = []
 
 [dependencies]
 clap.workspace = true
-which.workspace = true
