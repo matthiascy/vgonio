@@ -1,14 +1,14 @@
 """
 The normal distribution function (microfacet distribution)
 """
+import argparse
 import io
 import os.path
 import struct
 
-import argparse
+import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sb
-import matplotlib.pyplot as plt
 
 
 class MicrofacetDistribution:
@@ -86,8 +86,8 @@ def read_data(filename):
         print(f"sample_count = {sample_count}")
 
         if sample_count != azimuth_bin_count * zenith_bin_count:
-            raise Exception('Invalid file format, {} samples expected, but {} samples found.'.format(
-                azimuth_bin_count * zenith_bin_count, sample_count))
+            raise Exception(
+                f'Invalid file format, {azimuth_bin_count * zenith_bin_count} samples expected, but {sample_count} samples found.')
 
         print('azimuth_start = {}, azimuth_stop = {}, azimuth_bin_size = {}, azimuth_bin_count = {}'
               .format(azimuth_start, azimuth_stop, azimuth_bin_size, azimuth_bin_count))

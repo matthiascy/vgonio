@@ -1,0 +1,44 @@
+[package]
+name = "vgonio-bxdf"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[lib]
+name = "vgn_bxdf"
+
+[lints]
+workspace = true
+
+[features]
+default = ["cli"]
+fitting = [
+    "dep:levenberg-marquardt",
+    "dep:nalgebra",
+    "vgn_core/fitting_api",
+    "dep:indicatif",
+    "dep:rayon",
+]
+cli = ["clap", "vgn_core/cli"]
+
+io = ["dep:serde_json", "dep:serde-pickle", "dep:exr", "dep:chrono"]
+cuda = ["vgn_core/cuda", "dep:cust"]
+
+[dependencies]
+chrono = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+cust = { workspace = true, optional = true }
+exr = { workspace = true, optional = true }
+indicatif = { workspace = true, optional = true }
+levenberg-marquardt = { workspace = true, optional = true }
+nalgebra = { workspace = true, optional = true }
+libm.workspace = true
+log.workspace = true
+rayon = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true, optional = true }
+serde-pickle = { workspace = true, optional = true }
+powitacq = { package = "vgonio-powitacq", path = "../vgonio-powitacq" }
+vgn_core.workspace = true
+vgn_jabr.workspace = true

@@ -1,0 +1,16 @@
+[package]
+name = "vgonio-jabr"
+authors.workspace = true
+edition.workspace = true
+version.workspace = true
+
+[lib]
+name = "vgn_jabr"
+
+[features]
+default = []
+packed = []
+simd = []
+
+[dependencies]
+num-traits = { version = "0.2" }

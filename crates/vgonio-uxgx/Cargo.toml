@@ -1,0 +1,47 @@
+[package]
+name = "vgonio-uxgx"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[lib]
+name = "vgn_uxgx"
+
+[dependencies]
+wgpu = { workspace = true, optional = true }
+bytemuck = { workspace = true, optional = true }
+futures-intrusive = { workspace = true, optional = true }
+image = { workspace = true, optional = true }
+pollster = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
+winit = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+
+egui = { workspace = true, optional = true }
+log = { workspace = true, optional = true }
+puffin = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+type-map = { workspace = true, optional = true }
+vgn_core = { workspace = true, optional = true }
+vgn_io = { workspace = true, optional = true }
+
+[lints]
+workspace = true
+
+[features]
+default = ["gfx"]
+gfx = [
+    "wgpu",
+    "bytemuck",
+    "vgn_core/winit",
+    "vgn_io",
+    "futures-intrusive",
+    "image",
+    "log",
+    "pollster",
+    "rayon",
+    "winit",
+    "uuid",
+]
+gui = ["egui", "gfx", "puffin", "thiserror", "type-map"]

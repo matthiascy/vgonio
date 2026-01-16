@@ -1,6 +1,6 @@
 [workspace]
+members = ["crates/*"]
 resolver = "2"
-members = ["crates/bins/*", "crates/libs/*"]
 
 [workspace.package]
 authors = ["Yang Chen <matthiasychen@gmail.com>"]
@@ -99,12 +99,13 @@ web-sys = "0.3.70"
 which = "4.4"
 winit = "~0.30"
 wgpu = { version = "22", features = ["wgsl"] }
-vgonio-core = { path = "crates/libs/vgonio-core" }
-vgonio-surf = { path = "crates/libs/vgonio-surf" }
+vgn_jabr = { path = "crates/vgonio-jabr", package = "vgonio-jabr" }
+vgn_core = { path = "crates/vgonio-core", package = "vgonio-core" }
+vgn_io = { path = "crates/vgonio-io", package = "vgonio-io" }
+vgn_powitacq = { path = "crates/vgonio-powitacq", package = "vgonio-powitacq" }
+vgn_uxgx = { path = "crates/vgonio-uxgx", package = "vgonio-uxgx" }
+vgn_bxdf = { path = "crates/vgonio-bxdf", package = "vgonio-bxdf" }
 
-vgonio-jabr = { path = "crates/libs/vgonio-jabr" }
-vgonio-powitacq = { path = "crates/libs/vgonio-powitacq" }
-vgonio-gxtk = { path = "crates/libs/vgonio-gxtk" }
 
 [workspace.lints.clippy]
 missing_docs = "warn"

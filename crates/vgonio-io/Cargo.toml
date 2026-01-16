@@ -1,0 +1,38 @@
+[package]
+name = "vgonio-io"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Library for manipulating, reading and writing micro-surfaces."
+
+[features]
+default = []
+bench = []
+embree = ["dep:embree"]
+surf-gen = []
+surf-obj = ["dep:tobj", "dep:ahash"]
+pybind = ["dep:pyo3"]
+
+[lib]
+name = "vgn_io"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ahash = { workspace = true, optional = true }
+byteorder.workspace = true
+chrono.workspace = true
+clap.workspace = true
+exr.workspace = true
+flate2.workspace = true
+glam.workspace = true
+log.workspace = true
+nohash-hasher.workspace = true
+pyo3 = { workspace = true, optional = true, features = ["extension-module"] }
+rand.workspace = true
+rayon.workspace = true
+serde.workspace = true
+tobj = { workspace = true, optional = true }
+uuid.workspace = true
+embree = { workspace = true, optional = true }
+vgonio-core = { path = "../vgonio-core", features = ["serde"] }

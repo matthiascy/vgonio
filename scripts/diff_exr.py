@@ -54,11 +54,11 @@ if __name__ == '__main__':
     img2 = load_exr_image(args.b)
 
     # Compute absolute difference
-diff_abs = compute_difference(img1, img2, False)
-    diff_a_minus_b = compute_difference(img1, img2, True)
-    diff_b_minus_a = compute_difference(img1, img2, True)
+    diff_abs = compute_difference(img1, img2, False)
+    # diff_a_minus_b = compute_difference(img1, img2, True)
+    # diff_b_minus_a = compute_difference(img1, img2, True)
 
     # Save as a PNG for easy viewing
     save_difference_as_image(diff_abs, f"{args.o}-abs.png")
-    save_difference_as_image(diff_a_minus_b, f"{args.o}-a_minus_b.png")
-    save_difference_as_image(diff_b_minus_a, f"{args.o}-b_minus_a.png")
+    # save_difference_as_image(diff_a_minus_b, f"{args.o}-a_minus_b.png")
+    # save_difference_as_image(diff_b_minus_a, f"{args.o}-b_minus_a.png")

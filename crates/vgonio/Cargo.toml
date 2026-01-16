@@ -1,0 +1,25 @@
+[package]
+name = "vgonio"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Microscopic level light transport simulation."
+publish = false
+
+[lib]
+name = "vgn"
+
+[[bin]]
+name = "vgn"
+path = "src/bins/vgn.rs"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+
+[dependencies]
+vgn_core.workspace = true
+vgn_io.workspace = true
+clap.workspace = true
