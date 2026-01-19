@@ -1097,6 +1097,7 @@ fn sample_difference_sum(
 #[cfg(feature = "cuda")]
 #[cfg(test)]
 mod tests {
+    use approx;
     use cust::{
         context::ContextFlags, device::DeviceAttribute, launch, memory::DeviceBuffer, prelude::*,
         stream::Stream,

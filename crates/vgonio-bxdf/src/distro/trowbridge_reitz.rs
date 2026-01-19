@@ -230,12 +230,9 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
 
 #[cfg(test)]
 mod test {
-    use crate::distro::TrowbridgeReitzDistribution;
-    use vgn_core::{
-        bxdf::MicrofacetDistribution,
-        math::{sph_to_cart, Vec3},
-        units::{Degs, Rads},
-    };
+    use crate::distro::{MicrofacetDistribution, TrowbridgeReitzDistribution};
+    use vgn_core::math::{sph_to_cart, Vec3};
+    use vgn_core::units::{Degs, Rads};
 
     #[test]
     fn test_msf1_trowbridge_reitz() {

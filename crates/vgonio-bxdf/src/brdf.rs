@@ -127,6 +127,21 @@ pub trait AnalyticalBrdf: Send + Sync + Debug + 'static {
     /// Computes the partial derivatives of the BRDF model with respect to the
     /// roughness parameters of the model for a single incident and outgoing
     /// direction pair.
+    ///
+    /// The calculated derivatives are Jacobian entries corresponding to the
+    /// roughness parameters.
+    ///
+    /// # Arguments
+    ///
+    /// * `vi` - The incident direction.
+    /// * `vo` - The outgoing direction.
+    /// * `ior_i` - The refractive index of the incident medium.
+    /// * `ior_t` - The refractive index of the transmitted medium.
+    ///
+    /// # Returns
+    ///
+    /// The partial derivatives of the BRDF model with respect to the roughness
+    /// parameters of the model.
     #[cfg(feature = "fitting")]
     fn pd(&self, vi: &Vec3, vo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> [f64; 2];
 

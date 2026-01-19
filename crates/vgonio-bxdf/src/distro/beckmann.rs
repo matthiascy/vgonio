@@ -257,12 +257,9 @@ impl MicrofacetDistribution for BeckmannDistribution {
 
 #[cfg(test)]
 mod test {
-    use crate::distro::BeckmannDistribution;
-    use vgn_core::{
-        bxdf::MicrofacetDistribution,
-        math::{sph_to_cart, Vec3},
-        units::{Degs, Rads},
-    };
+    use crate::distro::{BeckmannDistribution, MicrofacetDistribution};
+    use vgn_core::math::{sph_to_cart, Vec3};
+    use vgn_core::units::{Degs, Rads};
 
     #[test]
     fn test_msf1_beckmann() {

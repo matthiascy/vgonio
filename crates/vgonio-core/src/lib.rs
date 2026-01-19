@@ -65,8 +65,8 @@ pub mod cuda {
     /// this function.
     pub fn load_ptx_modules() -> CudaResult<HashMap<&'static str, Module>> {
         let mut modules = HashMap::new();
-        let diff_kernel = include_str!("kernels/difference.ptx");
-        let reduce_kernel = include_str!("kernels/reduction.ptx");
+        let diff_kernel = include_str!("./kernels/difference.ptx");
+        let reduce_kernel = include_str!("./kernels/reduction.ptx");
         modules.insert("diff", Module::from_ptx(diff_kernel, &[])?);
         modules.insert("reduce", Module::from_ptx(reduce_kernel, &[])?);
         Ok(modules)

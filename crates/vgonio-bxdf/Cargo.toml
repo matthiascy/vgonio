@@ -42,3 +42,6 @@ serde-pickle = { workspace = true, optional = true }
 powitacq = { package = "vgonio-powitacq", path = "../vgonio-powitacq" }
 vgn_core.workspace = true
 vgn_jabr.workspace = true
+
+[dev-dependencies]
+approx.workspace = true

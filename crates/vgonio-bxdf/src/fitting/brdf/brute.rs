@@ -6,6 +6,8 @@ use crate::{
 
 #[cfg(feature = "cuda")]
 use cust::module::Module;
+#[cfg(feature = "cuda")]
+use std::collections::HashMap;
 use vgn_core::{units::Radians, ErrorMetric, Weighting};
 
 /// Compute the distance between a measured BRDF and a modelled BRDF.

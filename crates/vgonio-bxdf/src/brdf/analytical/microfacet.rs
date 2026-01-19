@@ -1,4 +1,18 @@
 //! Microfacet BRDF models.
+//!
+//! Implements Torrance-Sparrow style microfacet reflectance:
+//! `f_r(i,o) = F(i,h) * D(h) * G(i,o,h) / (4 * cos_theta_i * cos_theta_o)`.
+//!
+//! Here, `i` is the incident direction, `o` is the outgoing direction, and
+//! `h` is the half-vector between them. `F` is the Fresnel reflectance,
+//! `D` is the microfacet normal distribution function (NDF), and
+//! `G` is the geometry (shadowing-masking) function.
+//!
+//! The runtime BRDF evaluation keeps Fresnel separate so callers can decide
+//! how to evaluate/weight spectra (see `Scattering::eval_reflectance`), while
+//! the fitting/derivative helpers do include the Fresnel reflectance they are
+//! passed. See Torrance and Sparrow (1967), Cook and Torrance (1982), Walter
+//! et al. (2007), and Heitz (2014) for derivation and sampling guidance.
 mod beckmann;
 mod trowbridge_reitz;
 

@@ -1,16 +1,42 @@
-use std::fmt::Debug;
+#[rustfmt::skip]
+//! Trowbridge-Reitz (GGX) microfacet BRDF implementation.
+//!
+//! Normal distribution:
+//!
+//! $$
+//! D(m) = \\frac{\\alpha_x \\alpha_y}{\\pi \\cos^4(\\theta_m) \\left( \\alpha_x^2 \\cos^2(\\phi_m) + \\alpha_y^2 \\sin^2(\\phi_m) \\right) \\left( 1 + \\tan^2(\\theta_m) \\right)^2}
+//! $$
+//!
+//! with Smith masking-shadowing `G1` and half-vector sampling per Heitz (2014).
+
+use std::{f64::consts::PI, fmt::Debug};
 use vgn_core::math::{cart_to_sph, cos_theta, Vec3};
 
-use crate::brdf::AnalyticalBrdf;
-use crate::distro::{MicrofacetDistribution, MicrofacetDistroKind};
-use crate::{brdf::analytical::microfacet::MicrofacetBrdf, distro::TrowbridgeReitzDistribution, BrdfFamily};
+use crate::{
+    brdf::{analytical::microfacet::MicrofacetBrdf, hd2io, AnalyticalBrdf},
+    distro::{MicrofacetDistribution, MicrofacetDistroKind, TrowbridgeReitzDistribution},
+    BrdfFamily,
+};
 #[cfg(feature = "fitting")]
 use vgn_core::{
     math::{rcp_f64, sqr},
     optics::{fresnel, Ior},
 };
 
-/// Microfacet BRDF model
+#[rustfmt::skip]
+/// Microfacet BRDF model using the Trowbridge-Reitz (GGX) normal distribution.
+///
+/// Evaluates
+///
+/// $$
+/// f_r(i,o) = \\frac{D(h) * G(i,o,h)}{4 * cos(\\theta_i) * cos(\\theta_o)}
+/// $$
+///
+/// use `Scattering::eval_reflectance` (or multiply by Fresnel manually) for
+/// full energy conservation.
+///
+/// Based on Trowbridge and Reitz (1975) with Smith masking-shadowing (1967) and
+/// sampling from Heitz (2014) / Walter et al.
 pub type MicrofacetBrdfTR = MicrofacetBrdf<TrowbridgeReitzDistribution>;
 
 impl MicrofacetBrdfTR {
@@ -51,17 +77,61 @@ impl AnalyticalBrdf for MicrofacetBrdfTR {
         (d * g) / (4.0 * cos_theta_io)
     }
 
-    fn eval_hd(&self, h: &Vec3, d: &Vec3) -> f64 { todo!() }
+    fn eval_hd(&self, h: &Vec3, d: &Vec3) -> f64 {
+        let (i, o) = hd2io(h, d);
+        self.eval(&i, &o)
+    }
 
-    fn evalp(&self, i: &Vec3, o: &Vec3) -> f64 { todo!() }
+    fn evalp(&self, i: &Vec3, o: &Vec3) -> f64 { self.eval(i, o) * cos_theta(i) as f64 }
 
-    fn evalp_hd(&self, h: &Vec3, d: &Vec3) -> f64 { todo!() }
+    fn evalp_hd(&self, h: &Vec3, d: &Vec3) -> f64 {
+        let (i, o) = hd2io(h, d);
+        self.evalp(&i, &o)
+    }
 
-    fn evalp_is(&self, u: f32, v: f32, o: &Vec3, i: &mut Vec3, pdf: &mut f32) -> f64 { todo!() }
+    fn evalp_is(&self, u: f32, v: f32, o: &Vec3, i: &mut Vec3, pdf: &mut f32) -> f64 {
+        let wh = sample_half_ggx(self.distro.params(), u, v);
+        let wo = *o;
+        if wo.z <= 0.0 {
+            *pdf = 0.0;
+            return 0.0;
+        }
+        let wi = (2.0 * wo.dot(wh)) * wh - wo;
+        if wi.z <= 0.0 {
+            *pdf = 0.0;
+            return 0.0;
+        }
+        *i = wi;
+        *pdf = self.pdf(&wi, o) as f32;
+        self.evalp(&wi, o)
+    }
 
-    fn sample(&self, u: f32, v: f32, o: &Vec3) -> f64 { todo!() }
+    fn sample(&self, u: f32, v: f32, o: &Vec3) -> f64 {
+        let mut wi = Vec3::ZERO;
+        let mut pdf = 0.0;
+        self.evalp_is(u, v, o, &mut wi, &mut pdf)
+    }
 
-    fn pdf(&self, i: &Vec3, o: &Vec3) -> f64 { todo!() }
+    fn pdf(&self, i: &Vec3, o: &Vec3) -> f64 {
+        if i.z <= 0.0 || o.z <= 0.0 {
+            return 0.0;
+        }
+        let wh = (*i + *o).normalize();
+        let cos_theta_h = wh.z as f64;
+        if cos_theta_h <= 0.0 {
+            return 0.0;
+        }
+        let wh_sph = cart_to_sph(wh);
+        let d = self
+            .distro
+            .eval_ndf(wh_sph.theta.as_f64().cos(), wh_sph.phi.as_f64().cos());
+        let pdf_wh = d * cos_theta_h;
+        let denom = 4.0 * o.dot(wh) as f64;
+        if denom.abs() < 1.0e-9 {
+            return 0.0;
+        }
+        pdf_wh / denom
+    }
 
     #[cfg(feature = "fitting")]
     fn pds(&self, i: &[Vec3], o: &[Vec3], ior_i: &Ior, ior_t: &Ior) -> Box<[f64]> {
@@ -94,7 +164,6 @@ impl AnalyticalBrdf for MicrofacetBrdfTR {
         if tan_theta_h2.is_infinite() {
             return [0.0, 0.0];
         }
-        let f = fresnel::reflectance(cos_theta(&-*i), ior_i, ior_t) as f64;
         let cos_theta_i = cos_theta(&i);
         let cos_theta_o = cos_theta(&o);
         let alpha_x2 = sqr(alpha_x);
@@ -160,7 +229,7 @@ impl AnalyticalBrdf for MicrofacetBrdfTR {
             * cos_theta_i as f64
             * cos_theta_o as f64;
 
-        let coeff_dfr_dalpha_x = f * rcp_f64(common * alpha_y);
+        let coeff_dfr_dalpha_x = rcp_f64(common * alpha_y);
 
         let cos_phi_h2 = sqr(cos_phi_h);
         let rcp_aho = if aho.abs() < 1.0e-6 { 0.0 } else { 1.0 / aho };
@@ -172,7 +241,7 @@ impl AnalyticalBrdf for MicrofacetBrdfTR {
                     * one_plus_ahi
                     * one_plus_aho);
 
-        let coeff_dfr_dalpha_y = f * rcp_f64(common * alpha_x);
+        let coeff_dfr_dalpha_y = rcp_f64(common * alpha_x);
         let sin_phi_h2 = sqr(sin_phi_h);
         let dfr_dalpha_y = coeff_dfr_dalpha_y
             * (-sin_phi_ho * b * one_plus_ahi * tan_theta_ho2 * rcp_aho
@@ -180,7 +249,8 @@ impl AnalyticalBrdf for MicrofacetBrdfTR {
                 + (4.0 * sin_phi_h2 * tan_theta_h2 * rcp_f64(alpha_y4) - b * rcp_f64(alpha_y2))
                     * one_plus_ahi
                     * one_plus_aho);
-        [dfr_dalpha_x, dfr_dalpha_y]
+        let f = fresnel::reflectance(cos_theta(&-*i), ior_i, ior_t) as f64;
+        [f * dfr_dalpha_x, f * dfr_dalpha_y]
     }
 
     #[cfg(feature = "fitting")]
@@ -217,8 +287,6 @@ impl AnalyticalBrdf for MicrofacetBrdfTR {
             return 0.0;
         }
 
-        let f = fresnel::reflectance(cos_theta(&-*i), ior_i, ior_t) as f64;
-
         let alpha = self.params()[0];
         let alpha2 = sqr(alpha);
 
@@ -237,6 +305,7 @@ impl AnalyticalBrdf for MicrofacetBrdfTR {
         let one_plus_ai2 = sqr(one_plus_ai);
         let one_plus_ao2 = sqr(one_plus_ao);
 
+        let f = fresnel::reflectance(cos_theta(&-*i), ior_i, ior_t) as f64;
         let part_one = -f
             * rcp_f64(
                 std::f64::consts::PI * cos_theta_h4 * cos_theta_i as f64 * cos_theta_o as f64,
@@ -256,6 +325,116 @@ impl AnalyticalBrdf for MicrofacetBrdfTR {
     fn clone_box(&self) -> Box<dyn AnalyticalBrdf<Params = Self::Params>> { Box::new(self.clone()) }
 
     fn name(&self) -> &str { "Microfacet@TrowbridgeReitz" }
+}
+
+/// Samples a GGX half-vector by drawing isotropic slopes and stretching
+/// them with `alpha_x/alpha_y`, following Heitz (2014).
+fn sample_half_ggx([alpha_x, alpha_y]: [f64; 2], u1: f32, u2: f32) -> Vec3 {
+    let u1 = u1.clamp(1.0e-6, 1.0 - 1.0e-6) as f64;
+    let u2 = u2 as f64;
+    let tan_theta2 = u1 / (1.0 - u1);
+    let cos_theta = 1.0 / (1.0 + tan_theta2).sqrt();
+    let sin_theta = (1.0 - cos_theta * cos_theta).max(0.0).sqrt();
+    let phi = 2.0 * PI * u2;
+    let (sin_phi, cos_phi) = phi.sin_cos();
+    let slope_x = sin_theta * cos_phi / cos_theta;
+    let slope_y = sin_theta * sin_phi / cos_theta;
+    let mut wh = Vec3::new((alpha_x * slope_x) as f32, (alpha_y * slope_y) as f32, 1.0).normalize();
+    if wh.z < 0.0 {
+        wh = -wh;
+    }
+    wh
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::brdf::io2hd;
+    use vgn_core::math::{cart_to_sph, cos_theta, Vec3};
+
+    #[test]
+    fn evalp_matches_eval_with_cos() {
+        let brdf = MicrofacetBrdfTR::new(0.45, 0.45);
+        let i = Vec3::new(0.0, 0.4, 0.916).normalize();
+        let o = Vec3::new(0.2, 0.0, 0.98).normalize();
+        let eval = brdf.eval(&i, &o);
+        assert!((brdf.evalp(&i, &o) - eval * i.z as f64).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn eval_hd_matches_eval() {
+        let brdf = MicrofacetBrdfTR::new(0.25, 0.25);
+        let i = Vec3::new(0.35, 0.15, 0.92).normalize();
+        let o = Vec3::new(-0.15, 0.25, 0.95).normalize();
+        let (h, d) = io2hd(&i, &o);
+        assert!((brdf.eval_hd(&h, &d) - brdf.eval(&i, &o)).abs() < 1.0e-6);
+        assert!((brdf.evalp_hd(&h, &d) - brdf.evalp(&i, &o)).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn sampling_returns_valid_pdf() {
+        let brdf = MicrofacetBrdfTR::new(0.5, 0.5);
+        let o = Vec3::new(0.0, 0.3, 0.954).normalize();
+        let mut wi = Vec3::ZERO;
+        let mut pdf = 0.0;
+        let value = brdf.evalp_is(0.21, 0.73, &o, &mut wi, &mut pdf);
+        assert!(wi.z > 0.0);
+        assert!(pdf > 0.0);
+        assert!((wi.length_squared() - 1.0).abs() < 1.0e-4);
+        assert!((value - brdf.evalp(&wi, &o)).abs() < 1.0e-6);
+        let pdf_direct = brdf.pdf(&wi, &o);
+        assert!((pdf_direct - pdf as f64).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn eval_matches_manual_without_fresnel() {
+        let brdf = MicrofacetBrdfTR::new(0.35, 0.55);
+        let i = Vec3::new(0.25, -0.35, 0.9).normalize();
+        let o = Vec3::new(-0.18, 0.32, 0.93).normalize();
+        let h = (i + o).normalize();
+        let wh = cart_to_sph(h);
+        let d = brdf
+            .distro
+            .eval_ndf(wh.theta.as_f64().cos(), wh.phi.as_f64().cos());
+        let g = brdf.distro.eval_msf1(h, i) * brdf.distro.eval_msf1(h, o);
+        let expected = d * g / (4.0 * cos_theta(&i) as f64 * cos_theta(&o) as f64);
+        let eval = brdf.eval(&i, &o);
+        assert!((eval - expected).abs() < 1.0e-8);
+    }
+
+    #[test]
+    fn eval_is_symmetric() {
+        let brdf = MicrofacetBrdfTR::new(0.28, 0.63);
+        let i = Vec3::new(0.22, 0.15, 0.962).normalize();
+        let o = Vec3::new(-0.31, 0.05, 0.95).normalize();
+        let f_io = brdf.eval(&i, &o);
+        let f_oi = brdf.eval(&o, &i);
+        assert!((f_io - f_oi).abs() < 1.0e-10);
+    }
+
+    #[test]
+    fn anisotropic_sampling_pdf_consistent() {
+        let brdf = MicrofacetBrdfTR::new(0.22, 0.67);
+        let o = Vec3::new(0.12, -0.18, 0.975).normalize();
+        let mut wi = Vec3::ZERO;
+        let mut pdf = 0.0;
+        let value = brdf.evalp_is(0.19, 0.81, &o, &mut wi, &mut pdf);
+        assert!(wi.z > 0.0);
+        assert!(pdf > 0.0);
+        assert!((wi.length_squared() - 1.0).abs() < 1.0e-4);
+        assert!((value - brdf.evalp(&wi, &o)).abs() < 1.0e-6);
+        let pdf_direct = brdf.pdf(&wi, &o);
+        assert!((pdf_direct - pdf as f64).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn returns_zero_when_below_horizon() {
+        let brdf = MicrofacetBrdfTR::new(0.3, 0.4);
+        let o = Vec3::new(0.2, 0.1, 0.97).normalize();
+        let i = Vec3::new(0.1, -0.2, -0.95).normalize();
+        assert_eq!(0.0, brdf.pdf(&i, &o));
+        assert_eq!(0.0, brdf.eval(&i, &o));
+    }
 }
 
 /// Trowbridge-Reitz (GGX) microfacet BRDF model.
