@@ -26,6 +26,8 @@
 - Remove `AnalyticalFit` trait
 - New `AnyMeasuredBrdf` trait
 - Rename `RawMeasuredBsdfData` to `RawBsdfMeasurement`
+- Overhaul the project structure and module organization
+- Update dependencies
 
 ## 0.3.2 - 2024-08-16
 

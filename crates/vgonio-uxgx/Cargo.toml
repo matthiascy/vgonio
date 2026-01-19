@@ -45,3 +45,4 @@ gfx = [
     "uuid",
 ]
 gui = ["egui", "gfx", "puffin", "thiserror", "type-map"]
+profile = ["puffin"]
