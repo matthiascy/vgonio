@@ -42,6 +42,7 @@ pub mod config;
 pub mod optics;
 
 #[cfg(feature = "cuda")]
+/// CUDA utilities.
 pub mod cuda {
     use cust::{error::CudaResult, prelude::*};
     use std::collections::HashMap;

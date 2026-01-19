@@ -1,11 +1,12 @@
-#[rustfmt::skip]
 //! Beckmann microfacet BRDF implementation.
 //!
 //! Uses the Gaussian slope-based NDF
 //!
+//! ```text
 //! $$
 //! D(m) = \\frac{e^{-\\tan^2(\\theta_m) \\left(\\frac{\\cos^2(\\phi)}{\\alpha_x^2} + \\frac{\\sin^2(\\phi)}{\\alpha_y^2}\\right)}}{\\pi \\alpha_x \\alpha_y \\cos^4(\\theta_m)}
 //! $$
+//! ```
 //!
 //! with Smith masking-shadowing and Heitz (2014) slope sampling.
 
@@ -24,15 +25,15 @@ use vgn_core::{
     optics::{fresnel, Ior},
 };
 
-#[rustfmt::skip]
 /// Microfacet BRDF model based on Beckmann distribution.
 ///
 /// Evaluates
 ///
+/// ```text
 /// $$
 /// f_r(i,o) = \\frac{D(h) * G(i,o,h)}{4 * cos(\\theta_i) * cos(\\theta_o)}
 /// $$
-///
+/// ```
 /// without the Fresnel factor; callers can apply `F` separately. Uses the
 /// Beckmann slope distribution from Beckmann and Spizzichino (1963),
 /// Smith masking (1967), and sampling guidance from Heitz (2014).

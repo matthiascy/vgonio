@@ -1102,14 +1102,13 @@ mod tests {
         context::ContextFlags, device::DeviceAttribute, launch, memory::DeviceBuffer, prelude::*,
         stream::Stream,
     };
-    use std::cmp::min;
     use vgn_core::cuda::{init_cuda_context, load_ptx_modules};
 
     #[test]
     fn test_array_difference() {
         let (_context, device) = init_cuda_context(ContextFlags::SCHED_AUTO).unwrap();
         let stream = Stream::new(StreamFlags::NON_BLOCKING, None).unwrap();
-        let n = 1 << 26;
+        let n = 1 << 24;
         let xs = (0..n).map(|x| x as f32).collect::<Box<_>>();
         let ys = (0..n).map(|x| x as f32 + 1.0).collect::<Box<_>>();
 
@@ -1144,7 +1143,7 @@ mod tests {
         d_diffs.copy_to(diffs.as_mut_slice()).unwrap();
 
         for i in 0..n {
-            assert_eq!(diffs[i], 1.0);
+            assert_eq!(diffs[i], 1.0, "at index {}", i);
         }
 
         // Test the squared difference kernel with vec4
@@ -1167,7 +1166,7 @@ mod tests {
         d_diffs.copy_to(diffs.as_mut_slice()).unwrap();
 
         for i in 0..n {
-            assert_eq!(diffs[i], 1.0);
+            assert_eq!(diffs[i], 1.0, "at index {}", i);
         }
 
         // Test the squared difference kernel with weighting

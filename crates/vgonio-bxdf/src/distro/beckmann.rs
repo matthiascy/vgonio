@@ -73,12 +73,15 @@ impl MicrofacetDistribution for BeckmannDistribution {
         }
     }
 
-    #[rustfmt::skip]
     /// Under the assumption that there is no correlation of heights of the
     /// nearby points on the surface, the lambda function for the
     /// Beckmann-Spizzichino distribution has the analytical form:
     ///
-    /// $$\Lambda(\mathbf{\omega})=\frac{erf(a)-1+\frac{e^{-a^2}}{a\sqrt{\pi}}}{2}$$
+    /// ```text
+    /// $$
+    /// \Lambda(\mathbf{\omega})=\frac{erf(a)-1+\frac{e^{-a^2}}{a\sqrt{\pi}}}{2}
+    /// $$
+    /// ```
     fn eval_lambda(&self, w: Vec3) -> f64 {
         let alpha = if self.is_isotropic() {
             self.alpha_x
@@ -258,8 +261,10 @@ impl MicrofacetDistribution for BeckmannDistribution {
 #[cfg(test)]
 mod test {
     use crate::distro::{BeckmannDistribution, MicrofacetDistribution};
-    use vgn_core::math::{sph_to_cart, Vec3};
-    use vgn_core::units::{Degs, Rads};
+    use vgn_core::{
+        math::{sph_to_cart, Vec3},
+        units::{Degs, Rads},
+    };
 
     #[test]
     fn test_msf1_beckmann() {

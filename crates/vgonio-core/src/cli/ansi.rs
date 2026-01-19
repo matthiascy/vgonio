@@ -1,4 +1,4 @@
-/// ANSI color codes.
+//! ANSI color codes.
 pub const BRIGHT_CYAN: &str = "\u{001b}[36m";
 pub const BRIGHT_RED: &str = "\u{001b}[31m";
 pub const BRIGHT_GREEN: &str = "\u{001b}[32m";

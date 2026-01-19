@@ -1,11 +1,12 @@
-#[rustfmt::skip]
 //! Trowbridge-Reitz (GGX) microfacet BRDF implementation.
 //!
 //! Normal distribution:
 //!
+//! ```text
 //! $$
 //! D(m) = \\frac{\\alpha_x \\alpha_y}{\\pi \\cos^4(\\theta_m) \\left( \\alpha_x^2 \\cos^2(\\phi_m) + \\alpha_y^2 \\sin^2(\\phi_m) \\right) \\left( 1 + \\tan^2(\\theta_m) \\right)^2}
 //! $$
+//! ```
 //!
 //! with Smith masking-shadowing `G1` and half-vector sampling per Heitz (2014).
 
@@ -23,14 +24,15 @@ use vgn_core::{
     optics::{fresnel, Ior},
 };
 
-#[rustfmt::skip]
 /// Microfacet BRDF model using the Trowbridge-Reitz (GGX) normal distribution.
 ///
 /// Evaluates
 ///
+/// ```text
 /// $$
 /// f_r(i,o) = \\frac{D(h) * G(i,o,h)}{4 * cos(\\theta_i) * cos(\\theta_o)}
 /// $$
+/// ```
 ///
 /// use `Scattering::eval_reflectance` (or multiply by Fresnel manually) for
 /// full energy conservation.

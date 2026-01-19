@@ -31,7 +31,7 @@ pub fn max_axis(v: Vec3) -> u32 {
 ///
 /// As an improvement over the original algorithm (1), the algorithm is
 /// implemented in a way that some factors are precalculated and the
-/// calculations are differently factorized to allow precalculating the 
+/// calculations are differently factorized to allow precalculating the
 /// cross-product e1 x e2 which is similar to the algorithm in (2).
 ///
 /// # Algorithm
@@ -42,7 +42,7 @@ pub fn max_axis(v: Vec3) -> u32 {
 ///   + by barycentric coordinates $(u, v, w)$:
 ///
 ///     $P = wA + uB + vC = A + u(B - A) + v(C - A) = (1-u-v)A + uB + vC$
-///   
+///
 ///   + or by ray parameter t:
 ///
 ///     $P = O + tD$
@@ -62,16 +62,16 @@ pub fn max_axis(v: Vec3) -> u32 {
 ///
 /// then, we have
 ///
-/// $det = \begin{vmatrix}-D & E0 & E1\end{vmatrix} = -(-D \times E1) \cdot E0 = (D \times E1) \cdot E0$ 
-/// 
-/// $det_t = \begin{vmatrix}T & E0 & E1\end{vmatrix} = -(T \times E1) \cdot E0 = -(T \times E1) \cdot E0 = (T \times E0) \cdot E1$ 
-/// 
-/// $det_u = \begin{vmatrix}-D & T & E1\end{vmatrix} = -(-D \times E1) \cdot T = (D \times E1) \cdot T$ 
-/// 
+/// $det = \begin{vmatrix}-D & E0 & E1\end{vmatrix} = -(-D \times E1) \cdot E0 = (D \times E1) \cdot E0$
+///
+/// $det_t = \begin{vmatrix}T & E0 & E1\end{vmatrix} = -(T \times E1) \cdot E0 = -(T \times E1) \cdot E0 = (T \times E0) \cdot E1$
+///
+/// $det_u = \begin{vmatrix}-D & T & E1\end{vmatrix} = -(-D \times E1) \cdot T = (D \times E1) \cdot T$
+///
 /// $det_v = \begin{vmatrix}-D & E0 & T\end{vmatrix} = -(T \times E0) \cdot -D = (T \times E0) \cdot D$
 ///
-/// and finally we have 
-/// 
+/// and finally we have
+///
 /// $$t = \frac{det_t}{det}, u = \frac{det_u}{det}, v = \frac{det_v}{det}$$
 ///
 /// # References
@@ -112,7 +112,7 @@ pub fn ray_tri_intersect_moller_trumbore(ray: &Ray, triangle: &[Vec3; 3]) -> Opt
         return None;
     }
 
-    let inv_det = math::rcp_f32(det); 
+    let inv_det = math::rcp_f32(det);
     let tvec = ray_o - p0; // O - A
 
     let u = d_cross_e1.dot(tvec) as f32 * inv_det; // (D x E1) . T / det

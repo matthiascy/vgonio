@@ -51,15 +51,16 @@ pub trait AnalyticalBrdf: Send + Sync + Debug + 'static {
     /// * `vo` - The outgoing direction (normalised).
     fn eval(&self, vi: &Vec3, vo: &Vec3) -> f64;
 
-    #[rustfmt::skip]
     /// Evaluates the BRDF ($f_r$) with the Rusinkiewicz parametrisation.
     ///
     /// Szymon M Rusinkiewicz. A new change of variables for efficient BRDF
-    /// representation. In Rendering Techniques '98, pages 11-22. Springer, 1998.
+    /// representation. In Rendering Techniques '98, pages 11-22. Springer,
+    /// 1998.
     ///
-    /// See [`hd2io`] and [`io2hd`] for conversion between the incident and outgoing direction and
-    /// the half and difference vector (incident direction in the frame of reference in which the
-    /// halfway vector is at the North Pole).
+    /// See [`hd2io`] and [`io2hd`] for conversion between the incident and
+    /// outgoing direction and the half and difference vector (incident
+    /// direction in the frame of reference in which the halfway vector is
+    /// at the North Pole).
     ///
     /// # Arguments
     ///

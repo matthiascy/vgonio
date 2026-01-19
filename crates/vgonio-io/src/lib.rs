@@ -1273,7 +1273,6 @@ pub enum MicroSurfaceOrigin {
 
 impl MicroSurface {
     // TODO: unify the reading functions, either all by filepath or all by reader.
-    #[rustfmt::skip]
     /// Creates micro-geometry height field by reading the samples stored in
     /// different file format. Supported formats are
     ///
@@ -1284,10 +1283,11 @@ impl MicroSurface {
     ///
     /// 3. Micro-surface height field file (binary format, ends with *.vgms).
     ///
-    /// 4. Micro-surface height field cache file (binary format, ends with *.vgcc).
+    /// 4. Micro-surface height field cache file (binary format, ends with
+    ///    *.vgcc).
     ///
-    /// 5. Micro-geometry height field from EXR file, only read the first channel of
-    ///    the first part.
+    /// 5. Micro-geometry height field from EXR file, only read the first
+    ///    channel of the first part.
     pub fn read_from_file(
         filepath: &Path,
         origin: Option<MicroSurfaceOrigin>,
@@ -1299,7 +1299,8 @@ impl MicroSurface {
         let file = File::open(filepath).map_err(|err| {
             VgonioError::from_io_error(
                 err,
-                format!("Failed to open micro-surface file: {}", filepath.display()))
+                format!("Failed to open micro-surface file: {}", filepath.display()),
+            )
         })?;
         let extension = filepath.extension().and_then(|ext| ext.to_str()).unwrap();
         let mut reader = BufReader::new(file);
@@ -1316,23 +1317,32 @@ impl MicroSurface {
             if extension == "exr" {
                 return surf::read_exr(&filepath);
             }
-            // Otherwise, try to figure out the file format by reading the first several bytes.
+            // Otherwise, try to figure out the file format by reading the first several
+            // bytes.
             let mut buf = [0_u8; 4];
             reader.read_exact(&mut buf).map_err(|err| {
                 VgonioError::from_io_error(
                     err,
-                    format!("Failed to read first 4 bytes of file: {}", filepath.display()))
+                    format!(
+                        "Failed to read first 4 bytes of file: {}",
+                        filepath.display()
+                    ),
+                )
             })?;
             reader.seek(std::io::SeekFrom::Start(0)).unwrap(); // Reset the cursor to the beginning of the file.
             match std::str::from_utf8(&buf).unwrap() {
                 "Asci" => surf::read_ascii_dong2015(&mut reader, filepath),
                 "DATA" => surf::read_ascii_usurf(&mut reader, filepath),
                 "VGMS" => {
-                    let (header, samples) = surf::vgms::read(&mut reader)
-                        .map_err(|err| VgonioError::from_read_file_error(ReadFileError {
-                            path: filepath.to_owned().into_boxed_path(),
-                            kind: err,
-                        }, "Failed to read VGMS file."))?;
+                    let (header, samples) = surf::vgms::read(&mut reader).map_err(|err| {
+                        VgonioError::from_read_file_error(
+                            ReadFileError {
+                                path: filepath.to_owned().into_boxed_path(),
+                                kind: err,
+                            },
+                            "Failed to read VGMS file.",
+                        )
+                    })?;
                     Ok(MicroSurface::from_samples(
                         header.extra.rows as usize,
                         header.extra.cols as usize,
@@ -1344,18 +1354,18 @@ impl MicroSurface {
                             .and_then(|name| name.to_str().map(|name| name.to_owned())),
                         Some(filepath.to_owned()),
                     ))
-                }
+                },
                 "Omni" => surf::read_omni_surf_3d(&mut reader, filepath),
-                _ => Err(VgonioError::new("Unknown file format.", None))
+                _ => Err(VgonioError::new("Unknown file format.", None)),
             }
         }
-            .map(|mut ms| {
-                log::debug!("Loaded micro-surface from file: {}", filepath.display());
-                log::debug!("- Resolution: {} x {}", ms.rows, ms.cols);
-                log::debug!("- Spacing: {} x {}", ms.du, ms.dv);
-                ms.repair();
-                ms
-            })
+        .map(|mut ms| {
+            log::debug!("Loaded micro-surface from file: {}", filepath.display());
+            log::debug!("- Resolution: {} x {}", ms.rows, ms.cols);
+            log::debug!("- Spacing: {} x {}", ms.du, ms.dv);
+            ms.repair();
+            ms
+        })
     }
 
     #[cfg(feature = "surf-obj")]

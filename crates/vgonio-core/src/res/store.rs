@@ -216,6 +216,6 @@ mod tests {
             .unwrap();
         assert_eq!(store.get_store::<TestAsset>().unwrap().len(), 2);
         store.clear_assets::<TestAsset>();
-        assert_eq!(store.get_store::<TestAsset>().unwrap().len(), 0);
+        assert!(store.get_store::<TestAsset>().is_none());
     }
 }

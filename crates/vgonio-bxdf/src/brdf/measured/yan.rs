@@ -18,7 +18,9 @@ use vgn_core::{
     utils::medium::Medium,
     MeasurementKind,
 };
-use vgn_jabr::array::{DyArr, DynArr};
+use vgn_jabr::array::{DyArr};
+#[cfg(feature = "fitting")]
+use vgn_jabr::array::DynArr;
 
 /// Parameterisation of the BRDF simulated from the paper "Rendering Specular
 /// Microgeometry with Wave Optics" by Yan et al. 2018.

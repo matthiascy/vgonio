@@ -79,16 +79,22 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
         }
     }
 
-    #[rustfmt::skip]
     /// Under the uncorrelated height assumption, the lambda function for the
     /// Trowbridge-Reitz distribution has the analytical form:
     ///
-    /// $$\Lambda(\mathbf{\omega})=\frac{\sqrt{1+\alpha^2\tan^2\theta}-1}{2}$$
+    /// ```text
+    /// $$
+    /// \Lambda(\mathbf{\omega})=\frac{\sqrt{1+\alpha^2\tan^2\theta}-1}{2}
+    /// $$
+    /// ```
     ///
     /// where $\alpha$ is the roughness parameter of the distribution in case of
-    /// isotropic distribution. In case of anisotropic distribution, the $\alpha$
-    /// parameter is replaced by $\sqrt{\alpha_x^2\cos^2\phi +
-    /// \alpha_y^2\sin^2\phi}$.
+    /// isotropic distribution. In case of anisotropic distribution, the
+    /// $\alpha$ parameter is replaced by
+    ///
+    /// ```text
+    /// $\sqrt{\alpha_x^2\cos^2\phi + \alpha_y^2\sin^2\phi}$.
+    /// ```
     fn eval_lambda(&self, w: Vec3) -> f64 {
         let cos_theta2 = cos_theta2(&w) as f64;
         let tan_theta2 = (1.0 - cos_theta2) * rcp_f64(cos_theta2);
@@ -231,8 +237,10 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
 #[cfg(test)]
 mod test {
     use crate::distro::{MicrofacetDistribution, TrowbridgeReitzDistribution};
-    use vgn_core::math::{sph_to_cart, Vec3};
-    use vgn_core::units::{Degs, Rads};
+    use vgn_core::{
+        math::{sph_to_cart, Vec3},
+        units::{Degs, Rads},
+    };
 
     #[test]
     fn test_msf1_trowbridge_reitz() {

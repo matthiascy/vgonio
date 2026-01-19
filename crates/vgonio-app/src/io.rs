@@ -1497,9 +1497,10 @@ mod tests {
         io::{BufReader, BufWriter, Cursor},
         mem::MaybeUninit,
     };
-    use vgn_bxdf::brdf::measured::{VgonioBrdf, VgonioBrdfParameterisation};
+    use vgn_bxdf::brdf::measured::{
+        MeasuredBrdfKind, Origin, VgonioBrdf, VgonioBrdfParameterisation,
+    };
     use vgn_core::{
-        bxdf::{MeasuredBrdfKind, Origin},
         io::{CompressionScheme, FileEncoding},
         math::Sph2,
         units::{nm, rad, Rads},
