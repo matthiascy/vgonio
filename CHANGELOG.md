@@ -28,6 +28,7 @@
 - Rename `RawMeasuredBsdfData` to `RawBsdfMeasurement`
 - Overhaul the project structure and module organization
 - Update dependencies
+- Development facilities improvements (xtask)
 
 ## 0.3.2 - 2024-08-16
 

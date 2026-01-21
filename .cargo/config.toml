@@ -1,4 +1,6 @@
 [alias]
+x = "run -p xtask --"
+
 b = "build"
 bef = "build --features fitting"
 bdbg = "build --features debug,fitting,verbose-dbg"
