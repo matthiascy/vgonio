@@ -4,12 +4,8 @@ use crate::fitting::FittedModels;
 use crate::{app::cache::RawCache, measure::MeasurementSource};
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
+use vgn_core::{res::Handle, units::LengthUnit, MeasurementKind};
 use vgn_io::subdivision::{Subdivision, SubdivisionKind};
-use vgn_core::{
-    res::Handle,
-    units::LengthUnit,
-    MeasurementKind,
-};
 
 /// Micro surface properties.
 #[derive(Clone, Debug)]

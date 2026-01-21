@@ -10,10 +10,10 @@ use crate::{
         params::{BsdfMeasurementParams, SimulationKind},
     },
 };
+use std::hash::Hash;
 use vgn_core::utils::{medium::Medium, partition::SphericalDomain};
 #[cfg(feature = "vdbg")]
 use vgn_core::{math::Sph2, units::Rads};
-use std::hash::Hash;
 use vgn_uxgx::gui::widgets::ToggleSwitch;
 
 impl BsdfKind {

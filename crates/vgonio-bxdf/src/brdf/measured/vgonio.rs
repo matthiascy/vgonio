@@ -1,7 +1,10 @@
 //! BRDF from the VGonio simulator.
-use crate::brdf::measured::{BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin};
-use crate::AnyMeasured;
-use crate::{impl_any_measured_trait, AnyMeasuredBrdf, MeasuredBrdfKind};
+use crate::{
+    brdf::measured::{
+        BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
+    },
+    impl_any_measured_trait, AnyMeasured, AnyMeasuredBrdf, MeasuredBrdfKind,
+};
 use vgn_core::BrdfLevel;
 
 use vgn_core::{

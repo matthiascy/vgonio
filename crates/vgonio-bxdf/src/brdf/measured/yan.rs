@@ -1,24 +1,25 @@
 //! BRDF data measured by Yan et al. 2018.
-use crate::brdf::measured::{BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin};
 #[cfg(feature = "fitting")]
 use crate::fitting::proxy::{BrdfProxy, OutgoingDirs, ProxySource};
-use crate::AnyMeasured;
-use crate::MeasuredBrdfKind;
-use crate::{impl_any_measured_trait, AnyMeasuredBrdf};
+use crate::{
+    brdf::measured::{
+        BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
+    },
+    impl_any_measured_trait, AnyMeasured, AnyMeasuredBrdf, MeasuredBrdfKind,
+};
 #[cfg(feature = "io")]
 use std::path::Path;
 use std::{borrow::Cow, fmt::Debug};
 #[cfg(feature = "io")]
 use vgn_core::error::VgonioError;
-use vgn_core::BrdfLevel;
 use vgn_core::{
     math::{compute_bicubic_spline_coefficients, Sph2, Vec3},
     optics::IorReg,
     units::{rad, Nanometres},
     utils::medium::Medium,
-    MeasurementKind,
+    BrdfLevel, MeasurementKind,
 };
-use vgn_jabr::array::{DyArr};
+use vgn_jabr::array::DyArr;
 #[cfg(feature = "fitting")]
 use vgn_jabr::array::DynArr;
 

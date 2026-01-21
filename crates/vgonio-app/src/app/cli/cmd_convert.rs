@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use vgn_io::{HeightOffset, MicroSurface};
 #[cfg(feature = "surf-obj")]
 use vgn_core::units::LengthUnit;
 use vgn_core::{
@@ -9,6 +8,7 @@ use vgn_core::{
     io::{CompressionScheme, FileEncoding},
     math::Axis,
 };
+use vgn_io::{HeightOffset, MicroSurface};
 
 #[derive(clap::Args, Debug)]
 #[clap(

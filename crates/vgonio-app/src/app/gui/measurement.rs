@@ -21,13 +21,13 @@ use crate::{
     measure::{bsdf::receiver::ReceiverParams, params::MeasurementParams},
 };
 use egui::Widget;
-use vgn_uxgx::gui::widgets::{SurfaceSelector, ToggleSwitch};
 use vgn_core::{
     io::{CompressionScheme, FileEncoding},
     res::Handle,
     utils::partition::{PartitionScheme, SphericalDomain},
     MeasurementKind,
 };
+use vgn_uxgx::gui::widgets::{SurfaceSelector, ToggleSwitch};
 
 impl ReceiverParams {
     /// UI for detector parameters.

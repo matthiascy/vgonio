@@ -13,15 +13,15 @@ use crate::{
         rtc::Ray,
     },
 };
-use vgn_uxgx::gfx::{context::GpuContext, render_pass::RenderPass, vertex::VertexLayout};
 use std::sync::Arc;
-use vgn_io::{MicroSurface, MicroSurfaceMesh};
 use uuid::Uuid;
 use vgn_core::{
     math::{Mat4, Sph2, Vec3},
     res::{DataStore, Handle},
     utils::partition::SphericalPartition,
 };
+use vgn_io::{MicroSurface, MicroSurfaceMesh};
+use vgn_uxgx::gfx::{context::GpuContext, render_pass::RenderPass, vertex::VertexLayout};
 use wgpu::util::DeviceExt;
 
 pub const DEBUG_DRAWING_SHADER: &str = r#"

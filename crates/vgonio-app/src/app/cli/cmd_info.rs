@@ -9,8 +9,8 @@ use std::{
     fmt::{Display, Formatter},
     path::PathBuf,
 };
-use vgn_io::subdivision::Subdivision;
 use vgn_core::{config::Config, error::VgonioError};
+use vgn_io::subdivision::Subdivision;
 
 impl Display for NdfMeasurementParams {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

@@ -25,13 +25,10 @@ use crate::{
     },
 };
 use egui_file_dialog::{DialogMode, FileDialog};
-use vgn_uxgx::gfx::{context::GpuContext, mesh::RenderableMesh};
 use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use vgn_io::{HeightOffset, MicroSurface, MicroSurfaceMesh};
-use vgn_uxgx::gui::{theme::ThemeKind, UiRenderer};
 #[cfg(feature = "fitting")]
 use vgn_bxdf::fitting::{FittedModel, FittingProblem, FittingProblemKind, FittingReport};
 #[cfg(feature = "fitting")]
@@ -41,6 +38,11 @@ use vgn_core::{
     io::{CompressionScheme, FileEncoding},
     res::{DataStore, Handle},
     BrdfLevel, MeasurementKind, Weighting,
+};
+use vgn_io::{HeightOffset, MicroSurface, MicroSurfaceMesh};
+use vgn_uxgx::{
+    gfx::{context::GpuContext, mesh::RenderableMesh},
+    gui::{theme::ThemeKind, UiRenderer},
 };
 
 /// Implementation of the GUI for vgonio application.

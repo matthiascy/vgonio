@@ -1,10 +1,10 @@
 use crate::app::{cli::ansi, Config};
+use std::path::PathBuf;
 use vgn_core::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
     units::LengthUnit,
 };
-use std::path::PathBuf;
 use vgn_io::{MicroSurface, RandomGenMethod, SurfGenKind};
 
 #[derive(clap::Args, Debug)]

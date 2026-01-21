@@ -1,11 +1,12 @@
 //! BRDF measured in the paper "Investigation and Simulation of Diffraction on
 //! Rough Surfaces" by O. Clausen, Y. Chen, A. Fuhrmann and R. Marroquim.
-use crate::brdf::measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin};
 #[cfg(feature = "fitting")]
 use crate::fitting::proxy::{BrdfProxy, OutgoingDirs, ProxySource};
-use crate::AnyMeasured;
-use crate::{any_measured_brdf_trait_common_impl, AnyMeasuredBrdf};
-use crate::{impl_any_measured_trait, MeasuredBrdfKind};
+use crate::{
+    any_measured_brdf_trait_common_impl,
+    brdf::measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
+    impl_any_measured_trait, AnyMeasured, AnyMeasuredBrdf, MeasuredBrdfKind,
+};
 use std::{
     borrow::Cow,
     f32,
@@ -13,14 +14,13 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
 };
-use vgn_core::BrdfLevel;
 use vgn_core::{
     error::VgonioError,
     math::Sph2,
     optics::IorReg,
     units::{nm, Nanometres, Radians},
     utils::medium::Medium,
-    MeasurementKind,
+    BrdfLevel, MeasurementKind,
 };
 use vgn_jabr::array::{DyArr, DynArr};
 

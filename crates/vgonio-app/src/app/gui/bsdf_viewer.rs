@@ -1,18 +1,20 @@
 use crate::app::gui::event::EventLoopProxy;
-use vgn_core::{
-    math,
-    math::{Mat4, Vec3},
-};
-use vgn_uxgx::gfx::{
-    camera::{Camera, Projection, ProjectionKind},
-    context::GpuContext,
-    texture::Texture,
-};
 use std::{
     borrow::Cow,
     sync::{Arc, RwLock},
 };
-use vgn_uxgx::gui::UiRenderer;
+use vgn_core::{
+    math,
+    math::{Mat4, Vec3},
+};
+use vgn_uxgx::{
+    gfx::{
+        camera::{Camera, Projection, ProjectionKind},
+        context::GpuContext,
+        texture::Texture,
+    },
+    gui::UiRenderer,
+};
 
 pub const SHADER: &str = r#"
 @group(0) @binding(0)

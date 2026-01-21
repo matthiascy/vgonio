@@ -4,13 +4,13 @@ use crate::measure::{bsdf::rtc::Ray, SphericalTransform};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
-use vgn_io::MicroSurfaceMesh;
 use vgn_core::{
     cli::ansi,
     math::{Sph2, Vec3},
     units::{deg, nm, rad, Nanometres, Radians, Rads},
     utils::range::StepRangeIncl,
 };
+use vgn_io::MicroSurfaceMesh;
 
 /// Parameters for the emitter.
 ///

@@ -11,9 +11,7 @@ use crate::{
     },
 };
 use std::path::PathBuf;
-use vgn_io::subdivision::Subdivision;
 use uuid::Uuid;
-use vgn_uxgx::gui::theme::ThemeKind;
 #[cfg(feature = "fitting")]
 use vgn_bxdf::fitting::FittingProblemKind;
 use vgn_core::{
@@ -23,6 +21,8 @@ use vgn_core::{
     utils::partition::SphericalPartition,
     MeasurementKind,
 };
+use vgn_io::subdivision::Subdivision;
+use vgn_uxgx::gui::theme::ThemeKind;
 
 /// Event loop proxy with Vgonio events.
 #[derive(Clone, Debug)]

@@ -13,12 +13,14 @@ use vgn_core::{
     math::{Mat4, Vec3},
     units::{deg, Rads},
 };
-use vgn_uxgx::gfx::{
-    camera::{Camera, Projection, ProjectionKind},
-    context::GpuContext,
-    texture::Texture,
+use vgn_uxgx::{
+    gfx::{
+        camera::{Camera, Projection, ProjectionKind},
+        context::GpuContext,
+        texture::Texture,
+    },
+    gui::UiRenderer,
 };
-use vgn_uxgx::gui::UiRenderer;
 use wgpu::util::DeviceExt;
 
 // TODO: use paint callback in the future

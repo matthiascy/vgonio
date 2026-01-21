@@ -12,7 +12,8 @@ use std::{
     author,
     version,
     name = "vgn",
-    about = "Micro-geometry level light transport simulation tool.", arg_required_else_help(true),
+    about = "Micro-geometry level light transport simulation tool.",
+    arg_required_else_help(true),
     allow_external_subcommands(true)
 )]
 pub struct Args {
@@ -35,24 +36,23 @@ pub fn is_executable<P: AsRef<Path>>(path: P) -> bool {
         use std::os::unix::fs::PermissionsExt;
         p.is_file()
             && p.metadata()
-            .map_or(false, |m| m.permissions().mode() & 0o111 != 0)
+                .map_or(false, |m| m.permissions().mode() & 0o111 != 0)
     }
 
     #[cfg(target_os = "windows")]
     {
         p.is_file()
             && p.extension()
-            .map_or(false, |ext| ext == "exe" || ext == "bat" || ext == "cmd")
+                .map_or(false, |ext| ext == "exe" || ext == "bat" || ext == "cmd")
     }
 }
 
 /// Search path for external commands.
 pub fn search_paths() -> Vec<PathBuf> {
-    let exe_dir =
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| std::env::current_dir().unwrap());
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| std::env::current_dir().unwrap());
     let mut paths: Vec<PathBuf> = std::env::var_os("PATH")
         .as_deref()
         .map(std::env::split_paths)
@@ -83,11 +83,17 @@ pub fn list_all_external_commands(paths: &[PathBuf]) -> BTreeMap<String, PathBuf
                         continue;
                     }
                     let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                    let stem = path.file_stem().and_then(|n| n.to_str()).unwrap_or(file_name);
+                    let stem = path
+                        .file_stem()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or(file_name);
 
                     if PREFIXES.iter().any(|prefix| stem.starts_with(prefix)) {
                         // key by canonical subcommand name without prefix & extension
-                        if let Some((_, cmd)) = PREFIXES.iter().find_map(|prefix| stem.strip_prefix(prefix).map(|c| (prefix, c))) {
+                        if let Some((_, cmd)) = PREFIXES
+                            .iter()
+                            .find_map(|prefix| stem.strip_prefix(prefix).map(|c| (prefix, c)))
+                        {
                             commands.entry(cmd.to_string()).or_insert(path);
                         }
                     }
@@ -137,9 +143,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             let subcmds = list_all_external_commands(&search_paths());
 
             if let Some(path) = subcmds.get(wanted) {
-                let status = std::process::Command::new(path)
-                    .args(&args[2..])
-                    .status()?;
+                let status = std::process::Command::new(path).args(&args[2..]).status()?;
                 std::process::exit(status.code().unwrap_or(1));
             } else {
                 err.print()?;

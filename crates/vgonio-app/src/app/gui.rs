@@ -35,9 +35,11 @@ use crate::{
     error::RuntimeError,
     measure,
 };
-use vgn_uxgx::gfx::context::{GpuContext, WgpuConfig, WindowSurface};
-use vgn_uxgx::gui::theme::{DarkTheme, LightTheme, Theme, ThemeKind};
 use vgn_core::{error::VgonioError, utils::input::InputState};
+use vgn_uxgx::{
+    gfx::context::{GpuContext, WgpuConfig, WindowSurface},
+    gui::theme::{DarkTheme, LightTheme, Theme, ThemeKind},
+};
 use winit::{
     dpi::PhysicalSize,
     event::{Event, KeyEvent, WindowEvent},

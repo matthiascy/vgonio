@@ -15,7 +15,6 @@ use crate::{
     },
 };
 use std::sync::{Arc, RwLock};
-use vgn_io::subdivision::SubdivisionKind;
 use uuid::Uuid;
 #[cfg(feature = "fitting")]
 use vgn_bxdf::fitting::FittingProblemKind;
@@ -25,6 +24,7 @@ use vgn_core::{
     Symmetry,
 };
 use vgn_core::{utils::partition::beckers, MeasurementKind};
+use vgn_io::subdivision::SubdivisionKind;
 
 /// The property inspector.
 ///
@@ -194,9 +194,9 @@ impl PropertyInspector {
                                 ui.end_row();
 
                                 ui.add(egui::Label::new("Timestamp:"));
-                                ui.add(egui::Label::new(
-                                    vgn_core::utils::iso_timestamp_display(&state.timestamp),
-                                ));
+                                ui.add(egui::Label::new(vgn_core::utils::iso_timestamp_display(
+                                    &state.timestamp,
+                                )));
                                 ui.end_row();
 
                                 ui.add(egui::Label::new("Kind:"));

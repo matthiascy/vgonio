@@ -12,10 +12,9 @@ pub mod yan;
 pub use clausen::*;
 pub use merl::*;
 pub use utia::*;
-pub use vgonio::*;
 use vgn_jabr::array::DyArr;
+pub use vgonio::*;
 pub use yan::*;
-
 
 /// The kind of the measured BRDF.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]

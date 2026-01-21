@@ -16,7 +16,6 @@ use embree::{
 };
 use rayon::prelude::*;
 use std::sync::Arc;
-use vgn_io::MicroSurfaceMesh;
 #[cfg(not(feature = "vdbg"))]
 use vgn_core::optics::Ior;
 use vgn_core::{
@@ -24,6 +23,7 @@ use vgn_core::{
     math::{Sph2, Vec3A},
     optics::fresnel,
 };
+use vgn_io::MicroSurfaceMesh;
 
 /// SoA ray stream data for the whole ray stream.
 #[derive(Debug, Clone)]
@@ -585,8 +585,8 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
 
     #[cfg(not(feature = "vdbg"))]
     {
-        use vgn_jabr::array::DyArr;
         use vgn_core::math::{Vec3, Vec3A};
+        use vgn_jabr::array::DyArr;
         // Unpack the stream data into a single result.
         let dirs = stream_data
             .last_hit

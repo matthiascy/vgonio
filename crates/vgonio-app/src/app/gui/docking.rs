@@ -16,8 +16,8 @@ use std::{
     sync::{Arc, RwLock},
 };
 use uuid::Uuid;
-use vgn_uxgx::gui::UiRenderer;
 use vgn_core::res::DataStore;
+use vgn_uxgx::gui::UiRenderer;
 
 /// Docking space for widgets.
 pub struct DockSpace {

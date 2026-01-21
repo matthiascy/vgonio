@@ -8,8 +8,8 @@ use std::{
     io::BufReader,
     path::{Path, PathBuf},
 };
-use vgn_io::subdivision::Subdivision;
 use vgn_core::error::VgonioError;
+use vgn_io::subdivision::Subdivision;
 
 /// Describes the different kind of measurements with parameters.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

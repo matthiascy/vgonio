@@ -1,5 +1,4 @@
 use crate::measure::{params::SurfacePath, Measurement};
-use vgn_uxgx::gfx::{context::GpuContext, mesh::RenderableMesh};
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -7,7 +6,6 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-use vgn_io::{subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh};
 use vgn_core::{
     cli::ansi,
     config::Config,
@@ -17,6 +15,8 @@ use vgn_core::{
     utils::medium::Medium,
     TriangulationPattern,
 };
+use vgn_io::{subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh};
+use vgn_uxgx::gfx::{context::GpuContext, mesh::RenderableMesh};
 
 /// A record inside the cache for a micro-surface.
 #[derive(Clone, Debug)]

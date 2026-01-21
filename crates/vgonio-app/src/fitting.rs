@@ -28,8 +28,8 @@ macro_rules! impl_least_squares_problem_common_methods {
 mod mfd;
 
 pub use mfd::*;
-use vgn_core::Symmetry;
 use vgn_bxdf::fitting::{FittedModel, FittingProblemKind};
+use vgn_core::Symmetry;
 
 use std::fmt::Debug;
 

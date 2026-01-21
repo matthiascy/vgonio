@@ -1,9 +1,11 @@
-use vgn_uxgx::gfx::{
-    camera::ViewProjUniform, context::GpuContext, render_pass::DEFAULT_BIND_GROUP_LAYOUT_DESC,
-    texture::Texture,
-};
-use vgn_uxgx::gui::theme::ThemeKind;
 use vgn_core::math::{Mat4, Vec3, IDENTITY_MAT4};
+use vgn_uxgx::{
+    gfx::{
+        camera::ViewProjUniform, context::GpuContext, render_pass::DEFAULT_BIND_GROUP_LAYOUT_DESC,
+        texture::Texture,
+    },
+    gui::theme::ThemeKind,
+};
 // TODO: unify VisualGrid and VisualGridState
 
 pub struct VisualGrid {

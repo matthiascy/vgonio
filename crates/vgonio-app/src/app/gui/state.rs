@@ -8,17 +8,19 @@ pub(crate) mod debug;
 pub use context::RawGuiContext;
 use egui_winit::EventResponse;
 
-use vgn_uxgx::gfx::{
-    context::{GpuContext, ScreenDescriptor, WindowSurface},
-    render_pass::remap_depth,
-    texture::Texture,
-};
 use std::{
     ops::Deref,
     path::Path,
     sync::{Arc, RwLock},
 };
-use vgn_uxgx::gui::UiRenderer;
+use vgn_uxgx::{
+    gfx::{
+        context::{GpuContext, ScreenDescriptor, WindowSurface},
+        render_pass::remap_depth,
+        texture::Texture,
+    },
+    gui::UiRenderer,
+};
 use winit::{event::WindowEvent, window::Window};
 
 pub const AZIMUTH_BIN_SIZE_DEG: usize = 5;

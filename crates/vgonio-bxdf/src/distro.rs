@@ -6,9 +6,7 @@ mod trowbridge_reitz;
 pub use beckmann::*;
 use std::fmt::Debug;
 pub use trowbridge_reitz::*;
-use vgn_core::math::Vec3;
-use vgn_core::Symmetry;
-
+use vgn_core::{math::Vec3, Symmetry};
 
 /// Different kinds of microfacet distribution functions.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
@@ -91,7 +89,7 @@ pub trait MicrofacetDistribution: Debug + Send + Sync {
     }
 
     /// Clones the distribution model into a boxed trait object.
-    fn clone_box(&self) -> Box<dyn MicrofacetDistribution<Params=Self::Params>>;
+    fn clone_box(&self) -> Box<dyn MicrofacetDistribution<Params = Self::Params>>;
 
     // TODO: do not need provide full pair of directions
     #[cfg(feature = "fitting")]
@@ -167,6 +165,6 @@ pub trait MicrofacetDistribution: Debug + Send + Sync {
     fn pd_msf1(&self, wms: &[Vec3], w: &[Vec3]) -> Box<[f64]>;
 }
 
-impl<P: Clone> Clone for Box<dyn MicrofacetDistribution<Params=P>> {
+impl<P: Clone> Clone for Box<dyn MicrofacetDistribution<Params = P>> {
     fn clone(&self) -> Self { self.clone_box() }
 }

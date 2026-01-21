@@ -1,13 +1,13 @@
 //! BRDF data from the MERL database.
-use crate::brdf::measured::BrdfParamKind;
-use crate::brdf::{
-    io2hd_sph,
-    measured::{BrdfParam, MeasuredBrdf, Origin},
-};
 #[cfg(feature = "fitting")]
 use crate::fitting::proxy::{BrdfProxy, OutgoingDirs, ProxySource};
-use crate::AnyMeasured;
-use crate::{impl_any_measured_trait, AnyMeasuredBrdf, MeasuredBrdfKind};
+use crate::{
+    brdf::{
+        io2hd_sph,
+        measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
+    },
+    impl_any_measured_trait, AnyMeasured, AnyMeasuredBrdf, MeasuredBrdfKind,
+};
 use std::borrow::Cow;
 #[cfg(feature = "io")]
 use std::path::Path;

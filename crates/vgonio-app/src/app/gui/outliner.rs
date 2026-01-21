@@ -8,11 +8,11 @@ use crate::{
 };
 use egui::WidgetText;
 use std::sync::{Arc, RwLock};
+use vgn_core::res::Handle;
 use vgn_io::{
     subdivision::{Subdivision, SubdivisionKind},
     MicroSurface,
 };
-use vgn_core::res::Handle;
 
 /// Outliner is a widget that displays the scene graph of the current scene.
 ///
