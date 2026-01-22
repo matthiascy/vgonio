@@ -1,7 +1,7 @@
 //! Xtask to run cargo commands using the repository Python virtual environment.
 //!
-//! This sets `PYO3_PYTHON` to the repo `.venv` Python executable and ensures the
-//! virtualenv's library directory is exposed to the dynamic loader:
+//! This sets `PYO3_PYTHON` to the repo `.venv` Python executable and ensures
+//! the virtualenv's library directory is exposed to the dynamic loader:
 //! - `LD_LIBRARY_PATH` on Linux
 //! - `DYLD_FALLBACK_LIBRARY_PATH` on macOS
 //! - `PATH` on Windows
@@ -11,8 +11,8 @@
 //! cargo run --package xtask -- <cargo-args>
 //! ```
 //!
-//! Optional Cargo alias (add to `~/.cargo/config.toml` or repo `.cargo/config.toml`):
-//! ```toml
+//! Optional Cargo alias (add to `~/.cargo/config.toml` or repo
+//! `.cargo/config.toml`): ```toml
 //! [alias]
 //! x = "run --package xtask --"
 //! ```
@@ -117,12 +117,15 @@ fn run_cargo_commands(
     }
 
     if cfg!(windows) {
-        if let Some(ld) = lib_py_path {
-            let ld = ld.parent().map(|p| p.to_string_lossy()).ok_or("Failed to get libpython parent dir")?;
-            prepend_env(&mut command, "PATH", ld.as_ref());
-        }
         let py_dir = py_path.parent().unwrap().to_string_lossy().to_string();
         prepend_env(&mut command, "PATH", &py_dir);
+        if let Some(ld) = lib_py_path {
+            let ld = ld
+                .parent()
+                .map(|p| p.to_string_lossy())
+                .ok_or("Failed to get libpython parent dir")?;
+            prepend_env(&mut command, "PATH", ld.as_ref());
+        }
     } else if cfg!(target_os = "macos") {
         if let Some(ld) = lib_py_path {
             prepend_env(
@@ -132,11 +135,11 @@ fn run_cargo_commands(
             );
         }
     } else if let Some(ld) = lib_py_path {
-            prepend_env(
-                &mut command,
-                "LD_LIBRARY_PATH",
-                ld.to_string_lossy().as_ref(),
-            );
+        prepend_env(
+            &mut command,
+            "LD_LIBRARY_PATH",
+            ld.to_string_lossy().as_ref(),
+        );
     }
 
     println!("Running {:?}", command);
