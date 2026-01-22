@@ -14,7 +14,7 @@ use vgn_core::{
     res::DataStore,
     units::{Radians, Rads},
     utils::range::StepRangeIncl,
-    AnyMeasuredBrdf, BrdfLevel, ErrorMetric, Symmetry, Weighting,
+    BrdfLevel, ErrorMetric, Symmetry, Weighting,
 };
 
 use crate::{
@@ -26,14 +26,15 @@ use crate::{
 use clap::builder::ValueParser;
 use egui::debug_text::print;
 use vgn_bxdf::{
-    brdf::measured::{merl::MerlBrdf, rgl::RglBrdf, yan::Yan18Brdf, ClausenBrdf},
-    fitting::{FittingProblem, FittingReport, Roughness},
+    brdf::{
+        measured::{merl::MerlBrdf, rgl::RglBrdf, yan::Yan18Brdf, ClausenBrdf, MeasuredBrdfKind},
+        AnalyticalBrdf,
+    },
+    distro::MicrofacetDistroKind,
+    fitting::{proxy::BrdfProxy, FittingProblem, FittingReport, Roughness},
+    AnyMeasuredBrdf, BrdfFamily,
 };
-use vgn_core::{
-    bxdf::{AnalyticalBrdf, BrdfFamily, BrdfProxy, MeasuredBrdfKind, MicrofacetDistroKind},
-    cli::ansi,
-    units::Nanometres,
-};
+use vgn_core::{cli::ansi, units::Nanometres};
 
 macro_rules! load_and_fit {
     ($brdf:ty, $opts:expr, $cache:expr, $config:expr, $inputs:expr, $theta_limit:expr) => {

@@ -142,7 +142,7 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgn_core::units::LengthUnit;
-    /// # use vgonio_surf::MicroSurface;
+    /// # use vgn_io::MicroSurface;
     /// let height_field = MicroSurface::new(10, 10, 0.11, 0.11, 0.12, LengthUnit::UM);
     /// assert_eq!(height_field.samples_count(), 100);
     /// assert_eq!(height_field.cells_count(), 81);
@@ -183,7 +183,7 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgn_core::units::LengthUnit;
-    /// # use vgonio_surf::MicroSurface;
+    /// # use vgn_io::MicroSurface;
     /// let msurf = MicroSurface::new_by(4, 4, 0.1, 0.1, LengthUnit::UM, |row, col| {
     ///     (row + col) as f32
     /// });
@@ -254,7 +254,7 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgn_core::units::LengthUnit;
-    /// # use vgonio_surf::MicroSurface;
+    /// # use vgn_io::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let height_field =
     ///     MicroSurface::from_samples(3, 3, (0.5, 0.5), LengthUnit::UM, &samples, None, None);
@@ -323,7 +323,7 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgn_core::units::LengthUnit;
-    /// # use vgonio_surf::MicroSurface;
+    /// # use vgn_io::MicroSurface;
     /// let msurf = MicroSurface::new(100, 100, 0.1, 0.1, 0.1, LengthUnit::UM);
     /// assert_eq!(msurf.dimension(), (10.0, 10.0));
     /// ```
@@ -337,7 +337,7 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgn_core::units::LengthUnit;
-    /// # use vgonio_surf::MicroSurface;
+    /// # use vgn_io::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, (0.2, 0.2), LengthUnit::UM, samples, None, None);
     /// assert_eq!(msurf.samples_count(), 9);
@@ -350,7 +350,7 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgn_core::units::LengthUnit;
-    /// # use vgonio_surf::MicroSurface;
+    /// # use vgn_io::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, (0.2, 0.2), LengthUnit::UM, samples, None, None);
     /// assert_eq!(msurf.cells_count(), 4);
@@ -374,7 +374,7 @@ impl MicroSurface {
     ///
     /// ```
     /// # use vgn_core::units::LengthUnit;
-    /// # use vgonio_surf::MicroSurface;
+    /// # use vgn_io::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, (0.2, 0.2), LengthUnit::MM, samples, None, None);
     /// assert_eq!(msurf.sample_at(2, 2), 0.1);
@@ -382,7 +382,7 @@ impl MicroSurface {
     ///
     /// ```should_panic
     /// # use vgn_core::units::LengthUnit;
-    /// # use vgonio_surf::MicroSurface;
+    /// # use vgn_io::MicroSurface;
     /// let samples = vec![0.1, 0.2, 0.1, 0.15, 0.11, 0.23, 0.15, 0.1, 0.1];
     /// let msurf = MicroSurface::from_samples(3, 3, (0.2, 0.3), LengthUnit::MM, samples, None, None);
     /// let h = msurf.sample_at(4, 4);
@@ -1563,7 +1563,7 @@ mod pybind {
     fn sum_as_string(a: i32, b: i32) -> PyResult<String> { Ok((a + b).to_string()) }
 
     #[pymodule]
-    fn vgonio_surf(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    fn vgn_io(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_function(wrap_pyfunction!(sum_as_string, module)?)?;
         module.add_class::<MicroSurface>()?;
         Ok(())

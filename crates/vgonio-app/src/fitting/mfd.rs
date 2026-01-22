@@ -6,11 +6,13 @@ use levenberg_marquardt::{LeastSquaresProblem, LevenbergMarquardt, TerminationRe
 use nalgebra::{Dyn, Matrix, OMatrix, Owned, VecStorage, Vector, U1, U2};
 use std::fmt::Display;
 use vgn_bxdf::{
-    distro::{BeckmannDistribution, TrowbridgeReitzDistribution},
+    distro::{
+        BeckmannDistribution, MicrofacetDistribution, MicrofacetDistroKind,
+        TrowbridgeReitzDistribution,
+    },
     fitting::{FittingProblem, FittingReport, MinimisationReport, Roughness},
 };
 use vgn_core::{
-    bxdf::{MicrofacetDistribution, MicrofacetDistroKind},
     math::sph_to_cart,
     units::Radians,
     utils::{

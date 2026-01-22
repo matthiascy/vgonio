@@ -35,4 +35,4 @@ serde.workspace = true
 tobj = { workspace = true, optional = true }
 uuid.workspace = true
 embree = { workspace = true, optional = true }
-vgonio-core = { path = "../vgonio-core", features = ["serde"] }
+vgn_core = { workspace = true, features = ["serde"] }

@@ -30,9 +30,12 @@ use std::{
     sync::{Arc, RwLock},
 };
 #[cfg(feature = "fitting")]
-use vgn_bxdf::fitting::{FittedModel, FittingProblem, FittingProblemKind, FittingReport};
+use vgn_bxdf::{
+    fitting::{FittedModel, FittingProblem, FittingProblemKind, FittingReport},
+    AnyMeasuredBrdf, BrdfFamily,
+};
 #[cfg(feature = "fitting")]
-use vgn_core::{bxdf::BrdfFamily, utils::range::StepRangeIncl, AnyMeasuredBrdf};
+use vgn_core::utils::range::StepRangeIncl;
 use vgn_core::{
     config::Config,
     io::{CompressionScheme, FileEncoding},

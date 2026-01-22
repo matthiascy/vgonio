@@ -17,12 +17,9 @@ use crate::{
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 #[cfg(feature = "fitting")]
-use vgn_bxdf::fitting::FittingProblemKind;
+use vgn_bxdf::{distro::MicrofacetDistroKind, fitting::FittingProblemKind, BrdfFamily};
 #[cfg(feature = "fitting")]
-use vgn_core::{
-    bxdf::{BrdfFamily, MicrofacetDistroKind},
-    Symmetry,
-};
+use vgn_core::Symmetry;
 use vgn_core::{utils::partition::beckers, MeasurementKind};
 use vgn_io::subdivision::SubdivisionKind;
 

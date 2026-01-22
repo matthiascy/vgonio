@@ -12,9 +12,8 @@ use crate::{
 };
 use egui::{Align, Ui};
 use std::any::Any;
-use vgn_bxdf::fitting::FittedModel;
 #[cfg(feature = "fitting")]
-use vgn_core::bxdf::MicrofacetDistribution;
+use vgn_bxdf::{distro::MicrofacetDistribution, fitting::FittedModel};
 use vgn_core::{
     res::Handle,
     units::{rad, Radians},

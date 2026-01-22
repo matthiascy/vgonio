@@ -1,9 +1,11 @@
-use crate::app::{cli::ansi, Config};
 use std::path::PathBuf;
 use vgn_core::{
+    cli::ansi,
+    config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
     units::LengthUnit,
+    utils,
 };
 use vgn_io::{MicroSurface, RandomGenMethod, SurfGenKind};
 
@@ -154,13 +156,13 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
             "msurf_{:?}_{:?}_{}.vgms",
             opts.kind,
             opts.method.unwrap(),
-            base::utils::iso_timestamp_short(chrono::Local::now()),
+            utils::iso_timestamp_short(chrono::Local::now()),
         )
     } else {
         format!(
             "msurf_{:?}_{}.vgms",
             opts.kind,
-            base::utils::iso_timestamp_short(chrono::Local::now()),
+            utils::iso_timestamp_short(chrono::Local::now()),
         )
     };
 

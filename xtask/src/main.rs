@@ -116,11 +116,10 @@ fn run_cargo_commands(
         command.env("RUST_BACKTRACE", "1");
     }
 
-    println!("args: {args:?}");
-
     if cfg!(windows) {
         if let Some(ld) = lib_py_path {
-            prepend_env(&mut command, "PATH", ld.to_string_lossy().as_ref());
+            let ld = ld.parent().map(|p| p.to_string_lossy()).ok_or("Failed to get libpython parent dir")?;
+            prepend_env(&mut command, "PATH", ld.as_ref());
         }
         let py_dir = py_path.parent().unwrap().to_string_lossy().to_string();
         prepend_env(&mut command, "PATH", &py_dir);
