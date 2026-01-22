@@ -42,7 +42,6 @@ impl AssetTypeRegistry {
             .lock()
             .unwrap()
             .iter()
-            .find(|(i, _)| i == &&id)
-            .is_some()
+            .any(|(i, _)| i == &id)
     }
 }

@@ -79,7 +79,7 @@ impl AssetLoader for IorRegLoader {
         let own_excluded = self
             .excluded
             .as_ref()
-            .and_then(|ss| Some(ss.iter().map(|s| s.as_str()).collect::<Vec<_>>()));
+            .map(|ss| ss.iter().map(|s| s.as_str()).collect::<Vec<_>>());
         let excluded = own_excluded.as_deref().unwrap_or(&[]);
         match path {
             Some(path) => {

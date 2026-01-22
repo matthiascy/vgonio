@@ -1311,11 +1311,11 @@ impl MicroSurface {
                 MicroSurfaceOrigin::Dong2015 => surf::read_ascii_dong2015(&mut reader, filepath),
                 MicroSurfaceOrigin::Usurf => surf::read_ascii_usurf(&mut reader, filepath),
                 MicroSurfaceOrigin::OmniSurf3D => surf::read_omni_surf_3d(&mut reader, filepath),
-                MicroSurfaceOrigin::Exr => surf::read_exr(&filepath),
+                MicroSurfaceOrigin::Exr => surf::read_exr(filepath),
             }
         } else {
             if extension == "exr" {
-                return surf::read_exr(&filepath);
+                return surf::read_exr(filepath);
             }
             // Otherwise, try to figure out the file format by reading the first several
             // bytes.

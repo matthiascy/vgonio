@@ -60,10 +60,7 @@ impl AssetsStorage {
     pub fn insert_asset(&mut self, asset: Box<dyn Asset>) -> Result<Handle, Error> {
         let asset_type_id = asset.own_type_id();
         let handle = Handle::new_with_asset_id(asset_type_id);
-        let store = self
-            .assets
-            .entry(asset_type_id)
-            .or_insert_with(HashMap::new);
+        let store = self.assets.entry(asset_type_id).or_default();
         store.insert(handle, asset);
         Ok(handle)
     }
@@ -81,8 +78,8 @@ impl AssetsStorage {
                 .ok_or(Error::AssetTypeNotFound(
                     AssetTypeRegistry::asset_type_name(handle.asset_type_id().0).unwrap(),
                 ))?;
-        if store.contains_key(&handle) {
-            store.insert(handle, asset);
+        if let Entry::Occupied(mut e) = store.entry(handle) {
+            e.insert(asset);
             Ok(())
         } else {
             Err(Error::AssetNotFound(handle))
@@ -108,10 +105,11 @@ impl AssetsStorage {
     }
 
     /// Gets an asset from the storage by handle.
-    pub fn get_asset(&self, handle: Handle) -> Option<&Box<dyn Asset>> {
+    pub fn get_asset(&self, handle: Handle) -> Option<&dyn Asset> {
         self.assets
             .get(&handle.asset_type_id())
             .and_then(|store| store.get(&handle))
+            .map(|asset| asset.as_ref())
     }
 
     /// Gets an asset from the storage by handle and type.
@@ -143,8 +141,10 @@ impl AssetsStorage {
     }
 
     /// Gets a loader for a specific asset type if it exists.
-    pub fn get_loader<T: Asset>(&self) -> Option<&Box<dyn AssetLoader>> {
-        self.loaders.get(&T::asset_type_id())
+    pub fn get_loader<T: Asset>(&self) -> Option<&dyn AssetLoader> {
+        self.loaders
+            .get(&T::asset_type_id())
+            .map(|loader| loader.as_ref())
     }
 
     /// Gets a mutable store for a specific asset type if it exists.
