@@ -117,9 +117,9 @@ where
             && self.incident_medium == other.incident_medium
             && self.transmitted_medium == other.transmitted_medium
             && self.params == other.params
+            && self.kind == other.kind
             && self.spectrum == other.spectrum
             && self.samples == other.samples
-            && self.kind == other.kind
     }
 }
 

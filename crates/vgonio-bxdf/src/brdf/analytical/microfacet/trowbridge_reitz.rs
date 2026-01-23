@@ -48,8 +48,10 @@ impl MicrofacetBrdfTR {
     }
 }
 
-impl AnalyticalBrdf for MicrofacetBrdfTR {
-    type Params = <TrowbridgeReitzDistribution as MicrofacetDistribution>::Params;
+impl AnalyticalBrdf<<TrowbridgeReitzDistribution as MicrofacetDistribution>::Params>
+for MicrofacetBrdfTR
+{
+    fn name(&self) -> &str { "Microfacet@TrowbridgeReitz" }
 
     fn family(&self) -> BrdfFamily { BrdfFamily::Microfacet }
 
@@ -57,10 +59,16 @@ impl AnalyticalBrdf for MicrofacetBrdfTR {
 
     fn is_isotropic(&self) -> bool { self.distro.is_isotropic() }
 
-    fn params(&self) -> Self::Params { self.distro.params() }
+    fn params(&self) -> <TrowbridgeReitzDistribution as MicrofacetDistribution>::Params {
+        self.distro.params()
+    }
 
-    fn set_params(&mut self, params: &Self::Params) { self.distro.set_params(params) }
-
+    fn set_params(
+        &mut self,
+        params: &<TrowbridgeReitzDistribution as MicrofacetDistribution>::Params,
+    ) {
+        self.distro.set_params(params)
+    }
     fn eval(&self, i: &Vec3, o: &Vec3) -> f64 {
         debug_assert!(i.is_normalized(), "Incident direction is not normalized.");
         debug_assert!(o.is_normalized(), "Outgoing direction is not normalized.");
@@ -323,11 +331,10 @@ impl AnalyticalBrdf for MicrofacetBrdfTR {
         let denominator = one_plus_ai2 * one_plus_ao2 * (alpha2 + tan_theta_h2).powi(3) * ai * ao;
         part_one * nominator * rcp_f64(denominator)
     }
-
-    fn clone_box(&self) -> Box<dyn AnalyticalBrdf<Params = Self::Params>> { Box::new(self.clone()) }
-
-    fn name(&self) -> &str { "Microfacet@TrowbridgeReitz" }
 }
+
+// // Automatically provides clone_box via the helper trait
+// impl AnalyticalBrdfClone for MicrofacetBrdfTR {}
 
 /// Samples a GGX half-vector by drawing isotropic slopes and stretching
 /// them with `alpha_x/alpha_y`, following Heitz (2014).

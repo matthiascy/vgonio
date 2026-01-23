@@ -178,7 +178,7 @@ impl Scattering {
     /// * `ior_i` - The refractive index of the incident medium.
     /// * `ior_t` - The refractive index of the transmitted medium.
     pub fn eval_reflectance<P: 'static>(
-        brdf: &dyn AnalyticalBrdf<Params = P>,
+        brdf: &dyn AnalyticalBrdf<P>,
         vi: &Vec3,
         vo: &Vec3,
         ior_i: &Ior,
@@ -199,7 +199,7 @@ impl Scattering {
     /// * `iors_i` - The refractive indices of the incident media.
     /// * `iors_t` - The refractive indices of the transmitted media.
     pub fn eval_reflectance_spectrum<P: 'static>(
-        brdf: &dyn AnalyticalBrdf<Params = P>,
+        brdf: &dyn AnalyticalBrdf<P>,
         vi: &Vec3,
         vo: &Vec3,
         iors_i: &[Ior],

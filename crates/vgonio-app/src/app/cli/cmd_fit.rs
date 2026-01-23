@@ -415,7 +415,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
         n: usize,
         w: Option<Nanometres>,
         alpha: Option<Roughness>,
-    ) -> FittingReport<Box<dyn AnalyticalBrdf<Params = [f64; 2]>>> {
+    ) -> FittingReport<Box<dyn AnalyticalBrdf<[f64; 2]>>> {
         let report = proxy.brute_fit(
             opts.distro.unwrap(),
             opts.symmetry,
@@ -472,7 +472,7 @@ fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(
         opts: &FitOptions,
         n: usize,
         w: Option<Nanometres>,
-    ) -> FittingReport<Box<dyn AnalyticalBrdf<Params = [f64; 2]>>> {
+    ) -> FittingReport<Box<dyn AnalyticalBrdf<[f64; 2]>>> {
         // Adjust the alpha range only if the model is isotropic
         let alpha = match opts.symmetry {
             Symmetry::Isotropic => {
@@ -595,7 +595,7 @@ fn write_fitting_reports(
     distro: MicrofacetDistroKind,
     reports: &[(
         Option<Nanometres>,
-        FittingReport<Box<dyn AnalyticalBrdf<Params = [f64; 2]>>>,
+        FittingReport<Box<dyn AnalyticalBrdf<[f64; 2]>>>,
     )],
 ) {
     if let Some(writer) = writer {

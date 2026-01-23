@@ -24,10 +24,12 @@ pub fn compute_distance_between_measured_and_modelled(
     #[cfg(feature = "cuda")] gpu_modules: Option<&HashMap<&'static str, Module>>,
 ) -> f64 {
     let m = match distro {
-        MicrofacetDistroKind::Beckmann => Box::new(MicrofacetBrdfBK::new(alphax, alphay))
-            as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
-        MicrofacetDistroKind::TrowbridgeReitz => Box::new(MicrofacetBrdfTR::new(alphax, alphay))
-            as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
+        MicrofacetDistroKind::Beckmann => {
+            Box::new(MicrofacetBrdfBK::new(alphax, alphay)) as Box<dyn AnalyticalBrdf<[f64; 2]>>
+        },
+        MicrofacetDistroKind::TrowbridgeReitz => {
+            Box::new(MicrofacetBrdfTR::new(alphax, alphay)) as Box<dyn AnalyticalBrdf<[f64; 2]>>
+        },
     };
     let modelled = measured.generate_analytical(&*m);
     let filtering = !(max_theta_i >= Radians::HALF_PI && max_theta_o >= Radians::HALF_PI);

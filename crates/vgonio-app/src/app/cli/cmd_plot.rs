@@ -864,7 +864,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                 for brdf in brdfs {
                     let proxy = brdf.proxy(&c.iors);
                     for (ax, ref ay) in alphas.iter() {
-                        let model: Box<dyn AnalyticalBrdf<Params = [f64; 2]>> = match distro {
+                        let model: Box<dyn AnalyticalBrdf<[f64; 2]>> = match distro {
                             MicrofacetDistroKind::Beckmann => {
                                 Box::new(MicrofacetBrdfBK::new(*ax, *ay)) as _
                             },
@@ -925,7 +925,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     let proxy_per_wl = proxy.per_wavelength(wl_idx);
                     println!("Alphas: {:?}", alphas);
                     for (ax, ref ay) in alphas.iter() {
-                        let model: Box<dyn AnalyticalBrdf<Params = [f64; 2]>> = match distro {
+                        let model: Box<dyn AnalyticalBrdf<[f64; 2]>> = match distro {
                             MicrofacetDistroKind::Beckmann => {
                                 Box::new(MicrofacetBrdfBK::new(*ax, *ay)) as _
                             },

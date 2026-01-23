@@ -14,10 +14,11 @@ pub mod lambert;
 pub mod measured;
 
 /// Common interface for BRDFs (analytical BRDF models).
-pub trait AnalyticalBrdf: Send + Sync + Debug + 'static {
-    /// The type of BRDF model's parameters.
-    type Params;
-
+///
+/// # Type Parameters
+///
+/// * `P` - The type of BRDF model's parameters.
+pub trait AnalyticalBrdf<P>: Send + Sync + Debug + AnalyticalBrdfClone<P> + 'static {
     /// The name of the BRDF model.
     fn name(&self) -> &str;
 
@@ -37,10 +38,10 @@ pub trait AnalyticalBrdf: Send + Sync + Debug + 'static {
     }
 
     /// Returns the parameters of the BRDF model.
-    fn params(&self) -> Self::Params;
+    fn params(&self) -> P;
 
     /// Sets the parameters of the BRDF model.
-    fn set_params(&mut self, params: &Self::Params);
+    fn set_params(&mut self, params: &P);
 
     /// Evaluates the BRDF ($f_r$) with the classical parametrisation for any
     /// incident and outgoing direction located on the hemisphere.
@@ -173,18 +174,39 @@ pub trait AnalyticalBrdf: Send + Sync + Debug + 'static {
     /// direction pair for isotropic materials.
     #[cfg(feature = "fitting")]
     fn pd_iso(&self, vi: &Vec3, vo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> f64;
-
-    /// Enables cloning the BRDF model from a Boxed trait object.
-    ///
-    /// # Note
-    ///
-    /// This method is used to implement the `Clone` trait for the `Box<dyn
-    /// Bxdf>` type.
-    fn clone_box(&self) -> Box<dyn AnalyticalBrdf<Params = Self::Params>>;
 }
 
-impl<P: 'static + Clone> Clone for Box<dyn AnalyticalBrdf<Params = P>> {
-    fn clone(&self) -> Box<dyn AnalyticalBrdf<Params = P>> { self.clone_box() }
+/// Trait to enable cloning of boxed AnalyticalBrdf trait objects.
+///
+/// # Type Parameters
+///
+/// * `P` - The type of BRDF model's parameters.
+pub trait AnalyticalBrdfClone<P> {
+    /// Creates a boxed clone of this BRDF model.
+    ///
+    /// # Returns
+    ///
+    /// A boxed clone of this BRDF model.
+    fn clone_box(&self) -> Box<dyn AnalyticalBrdf<P>>;
+}
+
+/// Blanket implementation: automatically provides `clone_box` for any type
+impl<T, P> AnalyticalBrdfClone<P> for T
+where
+    T: AnalyticalBrdf<P> + Clone + 'static,
+{
+    fn clone_box(&self) -> Box<dyn AnalyticalBrdf<P>> { Box::new(self.clone()) }
+}
+
+/// Enables cloning of boxed AnalyticalBrdf trait objects.
+///
+/// This implementation allows `Box<dyn AnalyticalBrdf<Params = P>>` to be
+/// cloned by delegating to the `clone_box` method provided by the trait.
+impl<P> Clone for Box<dyn AnalyticalBrdf<P>>
+where
+    P: 'static + Clone,
+{
+    fn clone(&self) -> Self { self.as_ref().clone_box() }
 }
 
 #[rustfmt::skip]

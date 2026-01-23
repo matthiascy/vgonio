@@ -52,7 +52,7 @@ pub enum Roughness {
 #[derive(Debug, Clone)]
 pub enum FittedModel {
     /// Bidirectional scattering distribution function.
-    Bsdf(Box<dyn AnalyticalBrdf<Params = [f64; 2]>>),
+    Bsdf(Box<dyn AnalyticalBrdf<[f64; 2]>>),
     /// Microfacet area distribution function with the scaling factor applied to
     /// the measured data.
     Ndf(Box<dyn MicrofacetDistribution<Params = [f64; 2]>>, f32),
@@ -350,17 +350,15 @@ pub mod brdf {
     use levenberg_marquardt::TerminationReason;
     use nllsq::{init_microfacet_brdf_models, NllsqBrdfFittingProxy};
     use rayon::{
-        iter::{IndexedParallelIterator, ParallelBridge, ParallelIterator},
-        prelude::ParallelSliceMut,
-        slice::ParallelSlice,
+        iter::{ParallelBridge, ParallelIterator},
     };
     use vgn_core::{units::Radians, utils::range::StepRangeIncl, ErrorMetric, Symmetry, Weighting};
 
     #[cfg(feature = "cli")]
     use vgn_core::cli::{self, ansi};
 
-    impl<'a> FittingProblem for BrdfProxy<'a> {
-        type Model = Box<dyn AnalyticalBrdf<Params = [f64; 2]>>;
+    impl FittingProblem for BrdfProxy<'_> {
+        type Model = Box<dyn AnalyticalBrdf<[f64; 2]>>;
 
         fn nllsq_fit(
             &self,
@@ -416,7 +414,7 @@ pub mod brdf {
                                 Symmetry::Isotropic => {
                                     let nllsq =
                                         NllsqBrdfFittingProxy::<'_, { Symmetry::Isotropic }>::new(
-                                            &self,
+                                            self,
                                             model.clone(),
                                             weighting,
                                             max_theta_i,
@@ -429,7 +427,7 @@ pub mod brdf {
                                         '_,
                                         { Symmetry::Anisotropic },
                                     >::new(
-                                        &self,
+                                        self,
                                         model.clone(),
                                         weighting,
                                         max_theta_i,
@@ -536,7 +534,7 @@ pub mod brdf {
                                 err_chunks.iter_mut().zip(alpha_chunks.iter()).for_each(
                                     |(err, alpha)| {
                                         *err = compute_distance_between_measured_and_modelled(
-                                            &self,
+                                            self,
                                             target,
                                             metric,
                                             weighting,
@@ -562,11 +560,11 @@ pub mod brdf {
                             let m = match target {
                                 MicrofacetDistroKind::Beckmann => {
                                     Box::new(MicrofacetBrdfBK::new(*alpha, *alpha))
-                                        as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>
+                                        as Box<dyn AnalyticalBrdf<[f64; 2]>>
                                 },
                                 MicrofacetDistroKind::TrowbridgeReitz => {
                                     Box::new(MicrofacetBrdfTR::new(*alpha, *alpha))
-                                        as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>
+                                        as Box<dyn AnalyticalBrdf<[f64; 2]>>
                                 },
                             };
                             records.push((
@@ -600,7 +598,7 @@ pub mod brdf {
                         .values()
                         .collect::<Box<[f64]>>();
                         errs.fill(f64::NAN);
-                        step_size = step_size * 0.01;
+                        step_size *= 0.01;
                     }
 
                     // Convert the records to FittingReport
@@ -645,7 +643,7 @@ pub mod brdf {
                                 let (alpha_x, alpha_y) = alpha_chunks[j];
                                 err_chunks[j].write(
                                     compute_distance_between_measured_and_modelled(
-                                        &self,
+                                        self,
                                         target,
                                         metric,
                                         weighting,
@@ -671,11 +669,11 @@ pub mod brdf {
                             let m = match target {
                                 MicrofacetDistroKind::Beckmann => {
                                     Box::new(MicrofacetBrdfBK::new(alpha.0, alpha.1))
-                                        as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>
+                                        as Box<dyn AnalyticalBrdf<[f64; 2]>>
                                 },
                                 MicrofacetDistroKind::TrowbridgeReitz => {
                                     Box::new(MicrofacetBrdfTR::new(alpha.0, alpha.1))
-                                        as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>
+                                        as Box<dyn AnalyticalBrdf<[f64; 2]>>
                                 },
                             };
                             (

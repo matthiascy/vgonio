@@ -33,6 +33,7 @@ pub struct CommonArgs {
         help = "The log level. 0 = Error, 1 = Warn, 2 = Info, 3 = Debug, 4 = Trace",
         default_value = "0"
     )]
+    /// The log level.
     pub log_level: u8,
 }
 

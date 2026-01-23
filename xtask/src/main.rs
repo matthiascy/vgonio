@@ -16,7 +16,7 @@
 //! [alias]
 //! x = "run --package xtask --"
 //! ```
-//!
+//! 
 //! Then invoke the task with:
 //! ```sh
 //! cargo x <cargo-args>

@@ -102,9 +102,9 @@ pub trait MicrofacetDistribution: Debug + Send + Sync {
     /// # Arguments
     ///
     /// * `cos_thetas` - The cosines of the polar angles of the microfacet
-    ///  normals.
+    ///   normals.
     /// * `cos_phis` - The cosines of the azimuthal angles of the microfacet
-    ///  normals.
+    ///   normals.
     ///
     /// # Returns
     ///

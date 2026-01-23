@@ -316,19 +316,19 @@ impl AnyMeasuredBrdf for MerlBrdf {
         let phi_res = MerlBrdfParam::RES_PHI_D as usize;
         let i_thetas = Cow::Owned(DyArr::from_iterator(
             [-1],
-            (0..theta_res).into_iter().map(|i| (i as f32).to_radians()),
+            (0..theta_res).map(|i| (i as f32).to_radians()),
         ));
         let o_thetas = Cow::Owned(DyArr::from_iterator(
             [-1],
-            (0..theta_res).into_iter().map(|i| (i as f32).to_radians()),
+            (0..theta_res).map(|i| (i as f32).to_radians()),
         ));
         let i_phis = Cow::Owned(DyArr::from_iterator(
             [-1],
-            (0..phi_res).into_iter().map(|i| (i as f32).to_radians()),
+            (0..phi_res).map(|i| (i as f32).to_radians()),
         ));
         let o_phis = Cow::Owned(DyArr::from_iterator(
             [-1],
-            (0..phi_res).into_iter().map(|i| (i as f32).to_radians()),
+            (0..phi_res).map(|i| (i as f32).to_radians()),
         ));
 
         let mut resampled = DynArr::zeros(&[theta_res, phi_res, theta_res, phi_res, 3]);

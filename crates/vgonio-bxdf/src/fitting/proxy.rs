@@ -113,7 +113,7 @@ impl<'a> OutgoingDirs<'a> {
 ///
 /// This is needed to check if two [`BrdfFittingProxy`] have the same
 /// parameters.
-impl<'a> PartialEq for OutgoingDirs<'a> {
+impl PartialEq for OutgoingDirs<'_> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (
@@ -495,7 +495,7 @@ impl<'a> BrdfProxy<'a> {
                                 d_xs.as_device_ptr(),
                                 d_ys.as_device_ptr(),
                                 d_diffs.as_device_ptr(),
-                                n as u32,
+                                n,
                             )
                         )
                         .unwrap();
@@ -514,7 +514,7 @@ impl<'a> BrdfProxy<'a> {
                                 d_weights.as_device_ptr(),
                                 d_diffs.as_device_ptr(),
                                 stride_theta_i as u32,
-                                n as u32,
+                                n,
                             )
                         )
                         .unwrap();
@@ -882,7 +882,7 @@ impl<'a> BrdfProxy<'a> {
     // filtered incident and outgoing angles
     /// Generate the data points following the same incident and outgoing
     /// angles for the given analytical BRDF.
-    pub fn generate_analytical(&self, model: &dyn AnalyticalBrdf<Params = [f64; 2]>) -> Self {
+    pub fn generate_analytical(&self, model: &dyn AnalyticalBrdf<[f64; 2]>) -> Self {
         let n_spectrum = self.spectrum.len();
         let mut resampled = if self.has_nan {
             DynArr::splat(f32::NAN, self.resampled.shape())
@@ -1131,7 +1131,7 @@ mod tests {
                     d_xs.as_device_ptr(),
                     d_ys.as_device_ptr(),
                     d_diffs.as_device_ptr(),
-                    n as u32,
+                    n,
                 )
             )
             .unwrap();
@@ -1183,8 +1183,8 @@ mod tests {
                     d_ys.as_device_ptr(),
                     d_weights.as_device_ptr(),
                     d_diffs.as_device_ptr(),
-                    256,
-                    n as u32,
+                    256u32,
+                    n,
                 )
             )
             .unwrap();

@@ -209,7 +209,7 @@ impl MicrofacetDistribution for BeckmannDistribution {
             for (i, _) in wms.iter().enumerate() {
                 for (j, w) in ws.iter().enumerate() {
                     let idx = (i * ws.len() + j) * idx_mul;
-                    let tan_theta2 = tan_theta2(&w) as f64;
+                    let tan_theta2 = tan_theta2(w) as f64;
                     if tan_theta2.is_infinite() {
                         results[idx].write(0.0);
                     } else if tan_theta2 < 1.0e-8 {
@@ -232,7 +232,7 @@ impl MicrofacetDistribution for BeckmannDistribution {
             for (i, wm) in wms.iter().enumerate() {
                 for (j, w) in ws.iter().enumerate() {
                     let idx = (i * ws.len() + j) * idx_mul;
-                    let tan_theta2 = tan_theta2(&w) as f64;
+                    let tan_theta2 = tan_theta2(w) as f64;
                     if tan_theta2.is_infinite() {
                         results[idx].write(0.0);
                     } else if tan_theta2 < 1.0e-8 {

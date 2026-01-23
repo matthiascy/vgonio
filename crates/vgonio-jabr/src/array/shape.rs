@@ -26,24 +26,24 @@ where
     M: ShapeMetadata,
 {
     let dimension = meta.dimension();
-    assert_eq!(
-        index.len(),
-        dimension,
-        "Index dimension mismatch: expected {}, got {}",
-        dimension,
-        index.len()
-    );
+    if index.len() != dimension {
+        panic!(
+            "Index dimension mismatch: expected {}, got {}",
+            dimension,
+            index.len()
+        );
+    }
     let shape = meta.shape();
     let strides = meta.strides::<L>();
     for i in 0..dimension {
-        assert!(
-            index[i] < shape[i],
-            "Index out of bounds: index[{}] = {} is >= shape[{}] = {}",
-            i,
-            index[i],
-            i,
-            shape[i]
-        );
+        if shape[i] == 0 {
+            panic!("Invalid shape: shape[{}] = 0, cannot compute index", i);
+        } else if shape[i] <= index[i] {
+            panic!(
+                "Index out of bounds: index[{}] = {} is >= shape[{}] = {}",
+                i, index[i], i, shape[i]
+            );
+        }
     }
     let mut i = 0;
     let mut idx = 0;

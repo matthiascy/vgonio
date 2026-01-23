@@ -1678,13 +1678,15 @@ impl BrdfFittingPlotter {
             .getattr("plot_brdf_fitting_errors")
             .map(|x| x.into())
         })?;
-        let models: Box<[Box<dyn AnalyticalBrdf<Params = [f64; 2]>>]> = alphas
+        let models: Box<[Box<dyn AnalyticalBrdf<[f64; 2]>>]> = alphas
             .iter()
             .map(|(x, y)| match opts.model.unwrap() {
-                MicrofacetDistroKind::Beckmann => Box::new(MicrofacetBrdfBK::new(*x, *y))
-                    as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
-                MicrofacetDistroKind::TrowbridgeReitz => Box::new(MicrofacetBrdfTR::new(*x, *y))
-                    as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
+                MicrofacetDistroKind::Beckmann => {
+                    Box::new(MicrofacetBrdfBK::new(*x, *y)) as Box<dyn AnalyticalBrdf<[f64; 2]>>
+                },
+                MicrofacetDistroKind::TrowbridgeReitz => {
+                    Box::new(MicrofacetBrdfTR::new(*x, *y)) as Box<dyn AnalyticalBrdf<[f64; 2]>>
+                },
             })
             .collect();
 
@@ -1848,7 +1850,7 @@ impl BrdfFittingPlotter {
             .spectrum()
             .iter()
             .position(|x| (x.as_f32() - lambda).abs() < 1e-6)
-            .expect(&format!("Wavelength {} not found in the spectrum!", lambda));
+            .unwrap_or_else(|| panic!("Wavelength {} not found in the spectrum!", lambda));
 
         let n_spectrum = brdf.spectrum().len();
 
@@ -1868,8 +1870,8 @@ impl BrdfFittingPlotter {
             let wi = Sph2::new(theta_i, phi_i);
             let phi_o_opp = phi_o.wrap_to_tau().opposite();
 
-            let mut tr_models: Option<Vec<Box<dyn AnalyticalBrdf<Params = [f64; 2]>>>> = None;
-            let mut bk_models: Option<Vec<Box<dyn AnalyticalBrdf<Params = [f64; 2]>>>> = None;
+            let mut tr_models: Option<Vec<Box<dyn AnalyticalBrdf<[f64; 2]>>>> = None;
+            let mut bk_models: Option<Vec<Box<dyn AnalyticalBrdf<[f64; 2]>>>> = None;
 
             // Construct multiple microfacet models
             if let Some(model) = distro {
@@ -1880,7 +1882,7 @@ impl BrdfFittingPlotter {
                                 .iter()
                                 .map(|(ax, ay)| {
                                     Box::new(MicrofacetBrdfBK::new(*ax, *ay))
-                                        as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>
+                                        as Box<dyn AnalyticalBrdf<[f64; 2]>>
                                 })
                                 .collect(),
                         );
@@ -1891,7 +1893,7 @@ impl BrdfFittingPlotter {
                                 .iter()
                                 .map(|(ax, ay)| {
                                     Box::new(MicrofacetBrdfTR::new(*ax, *ay))
-                                        as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>
+                                        as Box<dyn AnalyticalBrdf<[f64; 2]>>
                                 })
                                 .collect(),
                         );

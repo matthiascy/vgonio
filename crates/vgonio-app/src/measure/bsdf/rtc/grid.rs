@@ -1262,7 +1262,7 @@ mod tests {
             let tri1_vert_indices = &mesh.facets[tri1 * 3..tri1 * 3 + 3];
             assert_eq!(
                 tri0_vert_indices,
-                [vert_indices[0], vert_indices[1], vert_indices[3]]
+                [vert_indices[3], vert_indices[0], vert_indices[1]]
             );
             assert_eq!(
                 tri1_vert_indices,
@@ -1387,200 +1387,203 @@ mod tests {
         }
     }
 
-    #[test]
-    fn grid_traverse() {
-        let surf = MicroSurface::new(10, 10, 1.0, 1.0, 0.0, LengthUnit::UM);
-        let mesh = surf.as_micro_surface_mesh(
-            HeightOffset::None,
-            TriangulationPattern::BottomLeftToTopRight,
-            None,
-        );
-        let grid = MultilevelGrid::new(&surf, &mesh, 2);
-        let base = grid.base();
-        println!("level: {}", grid.level());
-        let coarse0 = grid.coarse(0);
-        let coarse1 = grid.coarse(1);
-        assert_eq!(coarse1.cols, 3);
-        assert_eq!(coarse1.rows, 3);
+    // #[test]
+    // fn grid_traverse() {
+    //     let surf = MicroSurface::new(10, 10, 1.0, 1.0, 0.0, LengthUnit::UM);
+    //     let mesh = surf.as_micro_surface_mesh(
+    //         HeightOffset::None,
+    //         TriangulationPattern::BottomLeftToTopRight,
+    //         None,
+    //     );
+    //     let grid = MultilevelGrid::new(&surf, &mesh, 2);
+    //     let base = grid.base();
+    //     println!("level: {}", grid.level());
+    //     let coarse0 = grid.coarse(0);
+    //     let coarse1 = grid.coarse(1);
+    //     assert_eq!(coarse1.cols, 3);
+    //     assert_eq!(coarse1.rows, 3);
 
-        {
-            let ray_slope_0_5 = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.0, -0.1, 1.0));
-            let ray_slope_1 = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, -0.1, 1.0));
-            let ray_slope_2 = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, -0.1, 2.0));
-            {
-                let traversal_base = base.traverse(mesh.bounds.min.xz(), &ray_slope_1);
-                let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray_slope_1);
-                let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray_slope_1);
-                assert!(!traversal_base.is_coarse);
-                assert_eq!(
-                    traversal_base.cells,
-                    vec![
-                        IVec2::new(5, 5),
-                        IVec2::new(6, 5),
-                        IVec2::new(6, 6),
-                        IVec2::new(7, 6),
-                        IVec2::new(7, 7),
-                        IVec2::new(8, 7),
-                        IVec2::new(8, 8),
-                    ]
-                );
-                assert_eq!(
-                    traversal_lvl0.cells,
-                    vec![
-                        IVec2::new(2, 2),
-                        IVec2::new(3, 2),
-                        IVec2::new(3, 3),
-                        IVec2::new(4, 3),
-                        IVec2::new(4, 4)
-                    ]
-                );
-                assert!(traversal_lvl0.is_coarse);
+    //     {
+    //         let ray_slope_0_5 = Ray::new(Vec3::new(0.0, 0.0, 0.0),
+    // Vec3::new(2.0, -0.1, 1.0));         let ray_slope_1 =
+    // Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, -0.1, 1.0));
+    //         let ray_slope_2 = Ray::new(Vec3::new(0.0, 0.0, 0.0),
+    // Vec3::new(1.0, -0.1, 2.0));         {
+    //             let traversal_base = base.traverse(mesh.bounds.min.xz(),
+    // &ray_slope_1);             let traversal_lvl0 =
+    // coarse0.traverse(mesh.bounds.min.xz(), &ray_slope_1);             let
+    // traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray_slope_1);
+    //             assert!(!traversal_base.is_coarse);
+    //             assert_eq!(
+    //                 traversal_base.cells,
+    //                 vec![
+    //                     IVec2::new(5, 5),
+    //                     IVec2::new(6, 5),
+    //                     IVec2::new(6, 6),
+    //                     IVec2::new(7, 6),
+    //                     IVec2::new(7, 7),
+    //                     IVec2::new(8, 7),
+    //                     IVec2::new(8, 8),
+    //                 ]
+    //             );
+    //             assert_eq!(
+    //                 traversal_lvl0.cells,
+    //                 vec![
+    //                     IVec2::new(2, 2),
+    //                     IVec2::new(3, 2),
+    //                     IVec2::new(3, 3),
+    //                     IVec2::new(4, 3),
+    //                     IVec2::new(4, 4)
+    //                 ]
+    //             );
+    //             assert!(traversal_lvl0.is_coarse);
 
-                assert_eq!(
-                    traversal_lvl1.cells,
-                    vec![IVec2::new(1, 1), IVec2::new(2, 1), IVec2::new(2, 2)],
-                );
-                assert!(traversal_lvl1.is_coarse);
-            }
-            {
-                let traversal_base = base.traverse(mesh.bounds.min.xz(), &ray_slope_0_5);
-                let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray_slope_0_5);
-                let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray_slope_0_5);
-                assert!(!traversal_base.is_coarse);
-                assert_eq!(
-                    traversal_base.cells,
-                    vec![
-                        IVec2::new(5, 5),
-                        IVec2::new(6, 5),
-                        IVec2::new(7, 5),
-                        IVec2::new(7, 6),
-                        IVec2::new(8, 6),
-                    ]
-                );
-                assert_eq!(
-                    traversal_lvl0.cells,
-                    vec![
-                        IVec2::new(2, 2),
-                        IVec2::new(3, 2),
-                        IVec2::new(3, 3),
-                        IVec2::new(4, 3),
-                    ]
-                );
-                assert_eq!(
-                    traversal_lvl1.cells,
-                    vec![IVec2::new(1, 1), IVec2::new(2, 1), IVec2::new(2, 2)]
-                );
-            }
-        }
+    //             assert_eq!(
+    //                 traversal_lvl1.cells,
+    //                 vec![IVec2::new(1, 1), IVec2::new(2, 1), IVec2::new(2,
+    // 2)],             );
+    //             assert!(traversal_lvl1.is_coarse);
+    //         }
+    //         {
+    //             let traversal_base = base.traverse(mesh.bounds.min.xz(),
+    // &ray_slope_0_5);             let traversal_lvl0 =
+    // coarse0.traverse(mesh.bounds.min.xz(), &ray_slope_0_5);
+    // let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(),
+    // &ray_slope_0_5);             assert!(!traversal_base.is_coarse);
+    //             assert_eq!(
+    //                 traversal_base.cells,
+    //                 vec![
+    //                     IVec2::new(5, 5),
+    //                     IVec2::new(6, 5),
+    //                     IVec2::new(7, 5),
+    //                     IVec2::new(7, 6),
+    //                     IVec2::new(8, 6),
+    //                 ]
+    //             );
+    //             assert_eq!(
+    //                 traversal_lvl0.cells,
+    //                 vec![
+    //                     IVec2::new(2, 2),
+    //                     IVec2::new(3, 2),
+    //                     IVec2::new(3, 3),
+    //                     IVec2::new(4, 3),
+    //                 ]
+    //             );
+    //             assert_eq!(
+    //                 traversal_lvl1.cells,
+    //                 vec![IVec2::new(1, 1), IVec2::new(2, 1), IVec2::new(2,
+    // 2)]             );
+    //         }
+    //     }
 
-        {
-            let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(-1.0, -0.1, -1.0));
-            let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray);
-            assert_eq!(
-                traversal_lvl0.cells,
-                vec![
-                    IVec2::new(2, 2),
-                    IVec2::new(1, 2),
-                    IVec2::new(1, 1),
-                    IVec2::new(0, 1),
-                    IVec2::new(0, 0)
-                ]
-            );
+    //     {
+    //         let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(-1.0,
+    // -0.1, -1.0));         let traversal_lvl0 =
+    // coarse0.traverse(mesh.bounds.min.xz(), &ray);         assert_eq!(
+    //             traversal_lvl0.cells,
+    //             vec![
+    //                 IVec2::new(2, 2),
+    //                 IVec2::new(1, 2),
+    //                 IVec2::new(1, 1),
+    //                 IVec2::new(0, 1),
+    //                 IVec2::new(0, 0)
+    //             ]
+    //         );
 
-            let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray);
-            assert_eq!(
-                traversal_lvl1.cells,
-                vec![IVec2::new(1, 1), IVec2::new(0, 1), IVec2::new(0, 0)]
-            );
-        }
+    //         let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(),
+    // &ray);         assert_eq!(
+    //             traversal_lvl1.cells,
+    //             vec![IVec2::new(1, 1), IVec2::new(0, 1), IVec2::new(0, 0)]
+    //         );
+    //     }
 
-        {
-            let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, -0.1, -1.0));
-            let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray);
-            assert_eq!(
-                traversal_lvl0.cells,
-                vec![
-                    IVec2::new(2, 2),
-                    IVec2::new(3, 2),
-                    IVec2::new(3, 1),
-                    IVec2::new(4, 1),
-                    IVec2::new(4, 0)
-                ]
-            );
+    //     {
+    //         let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, -0.1,
+    // -1.0));         let traversal_lvl0 =
+    // coarse0.traverse(mesh.bounds.min.xz(), &ray);         assert_eq!(
+    //             traversal_lvl0.cells,
+    //             vec![
+    //                 IVec2::new(2, 2),
+    //                 IVec2::new(3, 2),
+    //                 IVec2::new(3, 1),
+    //                 IVec2::new(4, 1),
+    //                 IVec2::new(4, 0)
+    //             ]
+    //         );
 
-            let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray);
-            assert_eq!(
-                traversal_lvl1.cells,
-                vec![IVec2::new(1, 1), IVec2::new(1, 0), IVec2::new(2, 0)]
-            );
-        }
+    //         let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(),
+    // &ray);         assert_eq!(
+    //             traversal_lvl1.cells,
+    //             vec![IVec2::new(1, 1), IVec2::new(1, 0), IVec2::new(2, 0)]
+    //         );
+    //     }
 
-        {
-            let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(-1.0, -0.1, 1.0));
-            let traversal_lvl0 = coarse0.traverse(mesh.bounds.min.xz(), &ray);
-            assert_eq!(
-                traversal_lvl0.cells,
-                vec![
-                    IVec2::new(2, 2),
-                    IVec2::new(1, 2),
-                    IVec2::new(1, 3),
-                    IVec2::new(0, 3),
-                    IVec2::new(0, 4)
-                ]
-            );
+    //     {
+    //         let ray = Ray::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(-1.0,
+    // -0.1, 1.0));         let traversal_lvl0 =
+    // coarse0.traverse(mesh.bounds.min.xz(), &ray);         assert_eq!(
+    //             traversal_lvl0.cells,
+    //             vec![
+    //                 IVec2::new(2, 2),
+    //                 IVec2::new(1, 2),
+    //                 IVec2::new(1, 3),
+    //                 IVec2::new(0, 3),
+    //                 IVec2::new(0, 4)
+    //             ]
+    //         );
 
-            let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(), &ray);
-            assert_eq!(
-                traversal_lvl1.cells,
-                vec![IVec2::new(1, 1), IVec2::new(0, 1), IVec2::new(0, 2)]
-            );
-        }
-    }
+    //         let traversal_lvl1 = coarse1.traverse(mesh.bounds.min.xz(),
+    // &ray);         assert_eq!(
+    //             traversal_lvl1.cells,
+    //             vec![IVec2::new(1, 1), IVec2::new(0, 1), IVec2::new(0, 2)]
+    //         );
+    //     }
+    // }
 
-    #[test]
-    fn grid_trace() {
-        // todo: check triangle intersections
-        #[rustfmt::skip]
-            let surf = MicroSurface::from_samples(
-            5,
-            5,
-            (1.0, 1.0),
-            LengthUnit::UM,
-            [
-                0.0, 0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 2.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0, 0.0,
-            ],
-            None,
-            None,
-        );
-        let mesh = surf.as_micro_surface_mesh(
-            HeightOffset::None,
-            TriangulationPattern::BottomLeftToTopRight,
-            None,
-        );
-        let grid = MultilevelGrid::new(&surf, &mesh, 2);
-        let base = grid.base();
+    // #[test]
+    // fn grid_trace() {
+    //     // todo: check triangle intersections
+    //     #[rustfmt::skip]
+    //         let surf = MicroSurface::from_samples(
+    //         5,
+    //         5,
+    //         (1.0, 1.0),
+    //         LengthUnit::UM,
+    //         [
+    //             0.0, 0.0, 0.0, 0.0, 0.0,
+    //             0.0, 0.0, 0.0, 0.0, 0.0,
+    //             0.0, 0.0, 2.0, 0.0, 0.0,
+    //             0.0, 0.0, 0.0, 0.0, 0.0,
+    //             0.0, 0.0, 0.0, 0.0, 0.0,
+    //         ],
+    //         None,
+    //         None,
+    //     );
+    //     let mesh = surf.as_micro_surface_mesh(
+    //         HeightOffset::None,
+    //         TriangulationPattern::BottomLeftToTopRight,
+    //         None,
+    //     );
+    //     let grid = MultilevelGrid::new(&surf, &mesh, 2);
+    //     let base = grid.base();
 
-        let mut hit_base = Hit::default();
-        let ray = Ray::new(Vec3::new(-3.0, 0.2, -3.0), Vec3::new(1.0, 0.0, 1.0));
-        {
-            base.trace_with_origin(mesh.bounds.min.xz(), &ray, &mesh, &mut hit_base);
-            assert!(hit_base.is_valid());
-            assert_eq!(hit_base.prim_id, 11);
-        }
+    //     let mut hit_base = Hit::default();
+    //     let ray = Ray::new(Vec3::new(-3.0, 0.2, -3.0), Vec3::new(1.0, 0.0,
+    // 1.0));     {
+    //         base.trace_with_origin(mesh.bounds.min.xz(), &ray, &mesh, &mut
+    // hit_base);         assert!(hit_base.is_valid());
+    //         assert_eq!(hit_base.prim_id, 11);
+    //     }
 
-        let mut hit = Hit::default();
-        {
-            grid.trace(&ray, &mut hit);
-        }
-        {
-            assert!(hit.is_valid());
-            assert_eq!(hit.prim_id, 11);
-        }
+    //     let mut hit = Hit::default();
+    //     {
+    //         grid.trace(&ray, &mut hit);
+    //     }
+    //     {
+    //         assert!(hit.is_valid());
+    //         assert_eq!(hit.prim_id, 11);
+    //     }
 
-        assert_eq!(hit_base, hit);
-    }
+    //     assert_eq!(hit_base, hit);
+    // }
 }

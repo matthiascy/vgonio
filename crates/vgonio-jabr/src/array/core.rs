@@ -200,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "Index dimension mismatch: expected 4, got 5"]
     fn test_arr_core_index_panic_dimension_mismatch() {
         let data = (0..48).into_iter().map(|x| x as f32).collect::<Vec<f32>>();
         let dynarr: ArrCore<DynSized<f32>, Vec<usize>, { MemLayout::RowMajor }> =

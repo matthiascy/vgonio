@@ -25,10 +25,12 @@ use vgn_jabr::array::{
 macro_rules! create_analytical_brdf_instance {
     ($model:ident, $ax:expr, $ay:expr) => {
         match $model {
-            MicrofacetDistroKind::TrowbridgeReitz => Box::new(MicrofacetBrdfTR::new($ax, $ay))
-                as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
-            MicrofacetDistroKind::Beckmann => Box::new(MicrofacetBrdfBK::new($ax, $ay))
-                as Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
+            MicrofacetDistroKind::TrowbridgeReitz => {
+                Box::new(MicrofacetBrdfTR::new($ax, $ay)) as Box<dyn AnalyticalBrdf<[f64; 2]>>
+            },
+            MicrofacetDistroKind::Beckmann => {
+                Box::new(MicrofacetBrdfBK::new($ax, $ay)) as Box<dyn AnalyticalBrdf<[f64; 2]>>
+            },
         }
     };
 }
@@ -45,7 +47,7 @@ pub(crate) fn init_microfacet_brdf_models(
     range: StepRangeIncl<f64>,
     target: MicrofacetDistroKind,
     symmetry: Symmetry,
-) -> Box<[Box<dyn AnalyticalBrdf<Params = [f64; 2]>>]> {
+) -> Box<[Box<dyn AnalyticalBrdf<[f64; 2]>>]> {
     let count = range.step_count();
     match symmetry {
         Symmetry::Isotropic => (0..count)
@@ -75,7 +77,7 @@ pub struct NllsqBrdfFittingProxy<'a, const I: Symmetry> {
     /// Cached IORs for the transmitted medium.
     iors_t: &'a [Ior],
     /// The target model being fitted to the measured data.
-    pub(crate) model: Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
+    pub(crate) model: Box<dyn AnalyticalBrdf<[f64; 2]>>,
     /// The weighting function.
     weighting: Weighting,
     /// The maximum incident angle.
@@ -89,7 +91,7 @@ impl<'a, const I: Symmetry> NllsqBrdfFittingProxy<'a, I> {
     /// algorithm.
     pub fn new(
         proxy: &'a BrdfProxy,
-        model: Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
+        model: Box<dyn AnalyticalBrdf<[f64; 2]>>,
         weighting: Weighting,
         max_theta_i: Option<Radians>,
         max_theta_o: Option<Radians>,
@@ -111,7 +113,7 @@ impl<'a, const I: Symmetry> NllsqBrdfFittingProxy<'a, I> {
     pub fn filtered(&self) -> bool { self.max_theta_i.is_some() || self.max_theta_o.is_some() }
 
     /// Returns the fitted model.
-    pub fn fitted_model(&self) -> &Box<dyn AnalyticalBrdf<Params = [f64; 2]>> { &self.model }
+    pub fn fitted_model(&self) -> &Box<dyn AnalyticalBrdf<[f64; 2]>> { &self.model }
 
     /// Computes the residuals between the measured and modelled BRDF data.
     fn residuals(&self) -> Vector<f64, Dyn, VecStorage<f64, Dyn, U1>> {
@@ -586,12 +588,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
 macro_rules! impl_minimise_method {
     () => {
         /// Runs the NLLSQ algorithm to fit the BRDF model to the measured data.
-        pub fn minimise(
-            self,
-        ) -> (
-            Box<dyn AnalyticalBrdf<Params = [f64; 2]>>,
-            MinimisationReport,
-        ) {
+        pub fn minimise(self) -> (Box<dyn AnalyticalBrdf<[f64; 2]>>, MinimisationReport) {
             let solver = LevenbergMarquardt::new();
             let n_data_points = self
                 .proxy

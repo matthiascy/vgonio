@@ -57,7 +57,9 @@ pub mod vgmo {
     };
     use vgn_jabr::array::DyArr;
 
-    use vgn_bxdf::brdf::measured::{Origin, VgonioBrdf, VgonioBrdfParameterisation};
+    use vgn_bxdf::brdf::measured::{
+        MeasuredBrdfKind, Origin, VgonioBrdf, VgonioBrdfParameterisation,
+    };
 
     /// The VGMO header extension.
     #[derive(Debug, Clone, PartialEq)]
@@ -1422,6 +1424,7 @@ pub mod vgmo {
                                 .write(params.incident_medium);
                             ptr::addr_of_mut!((*bsdf_ptr).transmitted_medium)
                                 .write(params.transmitted_medium);
+                            ptr::addr_of_mut!((*bsdf_ptr).kind).write(MeasuredBrdfKind::Vgonio);
                             ptr::addr_of_mut!((*bsdf_ptr).params)
                                 .write(Box::new(parameterisation.clone()));
                             ptr::addr_of_mut!((*bsdf_ptr).spectrum).write(DyArr::from_iterator(
@@ -1869,9 +1872,22 @@ mod tests {
                 compression,
             )
             .unwrap();
-            assert_eq!(measured.params, data2.params, "Params mismatch under compression {:?}", compression);
-            assert_eq!(measured.raw, data2.raw, "Raw data mismatch under compression {:?}", compression);
-            assert_eq!(measured.bsdfs, data2.bsdfs, "BSDFs mismatch under compression {:?}", compression);
+            assert_eq!(
+                measured.params, data2.params,
+                "Params mismatch under compression {:?}",
+                compression
+            );
+            assert_eq!(
+                measured.raw, data2.raw,
+                "Raw data mismatch under compression {:?}",
+                compression
+            );
+
+            assert_eq!(
+                data2.bsdfs, data2.bsdfs,
+                "BSDFs data mismatch under compression {:?}",
+                compression
+            );
         }
     }
 }

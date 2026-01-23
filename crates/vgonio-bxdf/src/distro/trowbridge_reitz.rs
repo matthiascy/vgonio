@@ -208,7 +208,7 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
             for (i, _) in wms.iter().enumerate() {
                 for (j, w) in ws.iter().enumerate() {
                     let idx = (i * ws.len() + j) * idx_mul;
-                    let tan_theta2 = tan_theta2(&w) as f64;
+                    let tan_theta2 = tan_theta2(w) as f64;
                     let a = (1.0 + sqr(self.alpha_x) * tan_theta2).sqrt();
                     results[idx].write(-2.0 * self.alpha_x / sqr(1.0 + a));
                 }
@@ -217,9 +217,9 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
             for (i, wm) in wms.iter().enumerate() {
                 for (j, w) in ws.iter().enumerate() {
                     let idx = (i * ws.len() + j) * idx_mul;
-                    let tan_theta2 = tan_theta2(&w) as f64;
-                    let cos_phi2 = sqr(cos_phi(&wm)) as f64;
-                    let sin_phi2 = sqr(sin_phi(&wm)) as f64;
+                    let tan_theta2 = tan_theta2(w) as f64;
+                    let cos_phi2 = sqr(cos_phi(wm)) as f64;
+                    let sin_phi2 = sqr(sin_phi(wm)) as f64;
                     let a = 1.0
                         + (sqr(self.alpha_x) * cos_phi2 + sqr(self.alpha_y) * sin_phi2)
                             * tan_theta2;

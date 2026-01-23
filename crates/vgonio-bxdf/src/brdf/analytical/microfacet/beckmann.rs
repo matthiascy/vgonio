@@ -46,9 +46,7 @@ impl MicrofacetBrdfBK {
     }
 }
 
-impl AnalyticalBrdf for MicrofacetBrdfBK {
-    type Params = <BeckmannDistribution as MicrofacetDistribution>::Params;
-
+impl AnalyticalBrdf<<BeckmannDistribution as MicrofacetDistribution>::Params> for MicrofacetBrdfBK {
     fn name(&self) -> &str { "Microfacet@Beckmann" }
 
     fn family(&self) -> BrdfFamily { BrdfFamily::Microfacet }
@@ -57,9 +55,13 @@ impl AnalyticalBrdf for MicrofacetBrdfBK {
 
     fn is_isotropic(&self) -> bool { self.distro.is_isotropic() }
 
-    fn params(&self) -> Self::Params { self.distro.params() }
+    fn params(&self) -> <BeckmannDistribution as MicrofacetDistribution>::Params {
+        self.distro.params()
+    }
 
-    fn set_params(&mut self, params: &Self::Params) { self.distro.set_params(params); }
+    fn set_params(&mut self, params: &<BeckmannDistribution as MicrofacetDistribution>::Params) {
+        self.distro.set_params(params);
+    }
 
     fn eval(&self, i: &Vec3, o: &Vec3) -> f64 {
         debug_assert!(i.is_normalized(), "Incident direction is not normalized");
@@ -296,8 +298,8 @@ impl AnalyticalBrdf for MicrofacetBrdfBK {
         let cos_theta_h = cos_theta(&h).abs();
         let cos_theta_h2 = sqr(cos_theta_h as f64);
         let cos_theta_h4 = sqr(cos_theta_h2);
-        let cos_theta_i = cos_theta(&i).abs();
-        let cos_theta_o = cos_theta(&o).abs();
+        let cos_theta_i = cos_theta(i).abs();
+        let cos_theta_o = cos_theta(o).abs();
         if cos_theta_h4 < 1e-16 || cos_theta_i < 1e-16 || cos_theta_o < 1e-16 {
             return 0.0;
         }
@@ -333,9 +335,10 @@ impl AnalyticalBrdf for MicrofacetBrdfBK {
         let denominator = cbr(sqrt_pi) * alpha5 * sqr(bhi) * sqr(bho) * cos_theta_h4_i_o;
         nominator * rcp_f64(denominator)
     }
-
-    fn clone_box(&self) -> Box<dyn AnalyticalBrdf<Params = Self::Params>> { Box::new(self.clone()) }
 }
+
+// Automatically provides clone_box via the helper trait
+// impl AnalyticalBrdfClone for MicrofacetBrdfBK {}
 
 /// Samples a Beckmann half-vector by drawing isotropic slopes and stretching
 /// them with `alpha_x/alpha_y`, following the slope remapping of Heitz (2014).
