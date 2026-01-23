@@ -25,10 +25,29 @@ pub fn compute_index<M, const L: MemLayout>(meta: &M, index: &[usize]) -> usize
 where
     M: ShapeMetadata,
 {
+    let dimension = meta.dimension();
+    assert_eq!(
+        index.len(),
+        dimension,
+        "Index dimension mismatch: expected {}, got {}",
+        dimension,
+        index.len()
+    );
+    let shape = meta.shape();
     let strides = meta.strides::<L>();
+    for i in 0..dimension {
+        assert!(
+            index[i] < shape[i],
+            "Index out of bounds: index[{}] = {} is >= shape[{}] = {}",
+            i,
+            index[i],
+            i,
+            shape[i]
+        );
+    }
     let mut i = 0;
     let mut idx = 0;
-    while i < meta.dimension() {
+    while i < dimension {
         idx += index[i] * strides[i];
         i += 1;
     }

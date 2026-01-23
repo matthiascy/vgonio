@@ -99,7 +99,7 @@ Depending on the measurement mode, the header part of the file is different.
       |--------------------|---------|-------|-------------------------------------------------------------|
       | 0 - 0x00           | 4 bytes | f32   | Minimum colatitude of the annulus.                          |
       | 4 - 0x04           | 4 bytes | f32   | Maximum colatitude of the annulus.                          |
-      | 8 - 0x08           | 4 bytes | u32   | Step size of the longitude inside the annulus.              |
+      | 8 - 0x08           | 4 bytes | f32   | Step size of the longitude inside the annulus (in radians). |
       | 12 - 0x0C          | 4 bytes | u32   | Number of patches in the annulus.                           |
       | 16 - 0x10          | 4 bytes | u32   | Base index of the patch of the annulus in the patches data. |
 
@@ -164,7 +164,7 @@ Depending on the measurement mode, the header part of the file is different.
   |--------------------|---------|-------|-------------------------------------------------------------|
   | 0 - 0x00           | 4 bytes | f32   | Minimum colatitude of the annulus.                          |
   | 4 - 0x04           | 4 bytes | f32   | Maximum colatitude of the annulus.                          |
-  | 8 - 0x08           | 4 bytes | u32   | Step size of the longitude inside the annulus.              |
+  | 8 - 0x08           | 4 bytes | f32   | Step size of the longitude inside the annulus (in radians). |
   | 12 - 0x0C          | 4 bytes | u32   | Number of patches in the annulus.                           |
   | 16 - 0x10          | 4 bytes | u32   | Base index of the patch of the annulus in the patches data. |
 
@@ -216,47 +216,55 @@ The raw measurement data contains:
 The `BounceAndEnergy` is a struct that contains the number of rays and the energy of rays hitting the patch per bounce.
 Depending on the data type of the number of rays, the size of the struct is different.
 
-| Size         | Value               | Purpose                                      |
-|--------------|---------------------|----------------------------------------------|
-| 4 bytes      | u32                 | Maximum bounces of rays hitting the patch.   |
-| 4 * Nb bytes | [u32; 4 * (Nb + 1)] | Number of rays per bounce                    |
-| 4 * Nb bytes | [f32; 4 * (Nb + 1)] | Energy of rays hitting the patch per bounce. |
+When `nrays64` is false (u32/f32):
 
-| Size         | Value               | Purpose                                      |
-|--------------|---------------------|----------------------------------------------|
-| 4 bytes      | u32                 | Maximum bounces of rays hitting the patch.   |
-| 8 * Nb bytes | [u64; 8 * (Nb + 1)] | Number of rays per bounce                    |
-| 8 * Nb bytes | [f64; 8 * (Nb + 1)] | Energy of rays hitting the patch per bounce. |
+| Size               | Value         | Purpose                                        |
+|--------------------|---------------|------------------------------------------------|
+| 4 bytes            | u32           | Maximum bounces of rays hitting the patch (Nb) |
+| 4 * (Nb + 1) bytes | [u32; Nb + 1] | Number of rays per bounce (0 to Nb bounces)    |
+| 4 * (Nb + 1) bytes | [f32; Nb + 1] | Energy of rays hitting the patch per bounce    |
+
+When `nrays64` is true (u64/f64):
+
+| Size               | Value         | Purpose                                        |
+|--------------------|---------------|------------------------------------------------|
+| 4 bytes            | u32           | Maximum bounces of rays hitting the patch (Nb) |
+| 8 * (Nb + 1) bytes | [u64; Nb + 1] | Number of rays per bounce (0 to Nb bounces)    |
+| 8 * (Nb + 1) bytes | [f64; Nb + 1] | Energy of rays hitting the patch per bounce    |
 
 ##### BsdfMeasurementStatsPoint
 
-| Size              | Value          | Purpose                                                              |
-|-------------------|----------------|----------------------------------------------------------------------|
-| 4 bytes           | u32            | Actual maximum bounce at one measurement point. (Nb)                 |
-| 4 bytes           | u32            | Number of rays hitting the surface. (n_received)                     |
-| 4 bytes           | u32            | Number of rays missed the surface. (n_missed)                        |
-| 4 * Ns bytes      | [u32; Ns]      | Number of absorbed rays per wavelength. (n_absorbed)                 |
-| 4 * Ns bytes      | [u32; Ns]      | Number of reflected rays per wavelength. (n_reflected)               |
-| 4 * Ns bytes      | [u32; Ns]      | Number of rays captured by the receiver per wavelength. (n_captured) |
-| 4 * Ns bytes      | [u32; Ns]      | Number of rays escaped from the receiver per wavelength. (n_escaped) |
-| 4 * Ns bytes      | [f32; Ns]      | Energy captured by the receiver per wavelength. (e_captured)         |
-| 4 * Ns * Nb bytes | [u32; Ns * Nb] | Number of reflected rays per wavelength per bounce [[u32; Nb]; Ns]   |
-| 4 * Ns * Nb bytes | [u32; Ns * Nb] | Energy of reflected rays per wavelength per bounce [[u32; Nb]; Ns]   |
+Statistics collected at a single measurement point (incident direction).
+
+When `nrays64` is false (u32/f32):
+
+| Size              | Value          | Purpose                                                                                      |
+|-------------------|----------------|----------------------------------------------------------------------------------------------|
+| 4 bytes           | u32            | Actual maximum bounce at one measurement point. (Nb)                                         |
+| 4 bytes           | u32            | Number of rays hitting the surface. (n_received)                                             |
+| 4 bytes           | u32            | Number of rays missed the surface. (n_missed)                                                |
+| 4 * Ns bytes      | [u32; Ns]      | Number of absorbed rays per wavelength. (n_absorbed)                                         |
+| 4 * Ns bytes      | [u32; Ns]      | Number of reflected rays per wavelength. (n_reflected)                                       |
+| 4 * Ns bytes      | [u32; Ns]      | Number of rays captured by the receiver per wavelength. (n_captured)                         |
+| 4 * Ns bytes      | [u32; Ns]      | Number of rays escaped from the receiver per wavelength. (n_escaped)                         |
+| 4 * Ns bytes      | [f32; Ns]      | Energy captured by the receiver per wavelength. (e_captured)                                 |
+| 4 * Ns * Nb bytes | [u32; Ns * Nb] | Number of reflected rays per wavelength per bounce, stored row-major as [wavelength][bounce] |
+| 4 * Ns * Nb bytes | [f32; Ns * Nb] | Energy of reflected rays per wavelength per bounce, stored row-major as [wavelength][bounce] |
 
 In case the number of rays is `u64`:
 
-| Size              | Value          | Purpose                                                              |
-|-------------------|----------------|----------------------------------------------------------------------|
-| 4 bytes           | u32            | Actual maximum bounce at one measurement point. (Nb)                 |
-| 8 bytes           | u64            | Number of rays hitting the surface. (n_received)                     |
-| 8 bytes           | u64            | Number of rays missed the surface. (n_missed)                        |
-| 8 * Ns bytes      | [u64; Ns]      | Number of absorbed rays per wavelength. (n_absorbed)                 |
-| 8 * Ns bytes      | [u64; Ns]      | Number of reflected rays per wavelength. (n_reflected)               |
-| 8 * Ns bytes      | [u64; Ns]      | Number of rays captured by the receiver per wavelength. (n_captured) |
-| 8 * Ns bytes      | [u64; Ns]      | Number of rays escaped from the receiver per wavelength. (n_escaped) |
-| 8 * Ns bytes      | [f64; Ns]      | Energy captured by the receiver per wavelength. (e_captured)         |
-| 8 * Ns * Nb bytes | [u64; Ns * Nb] | Number of reflected rays per wavelength per bounce [[u64; Nb]; Ns]   |
-| 4 * Ns * Nb bytes | [f64; Ns * Nb] | Energy of reflected rays per wavelength per bounce [[f64; Nb]; Ns]   |
+| Size              | Value          | Purpose                                                                                      |
+|-------------------|----------------|----------------------------------------------------------------------------------------------|
+| 4 bytes           | u32            | Actual maximum bounce at one measurement point. (Nb)                                         |
+| 8 bytes           | u64            | Number of rays hitting the surface. (n_received)                                             |
+| 8 bytes           | u64            | Number of rays missed the surface. (n_missed)                                                |
+| 8 * Ns bytes      | [u64; Ns]      | Number of absorbed rays per wavelength. (n_absorbed)                                         |
+| 8 * Ns bytes      | [u64; Ns]      | Number of reflected rays per wavelength. (n_reflected)                                       |
+| 8 * Ns bytes      | [u64; Ns]      | Number of rays captured by the receiver per wavelength. (n_captured)                         |
+| 8 * Ns bytes      | [u64; Ns]      | Number of rays escaped from the receiver per wavelength. (n_escaped)                         |
+| 8 * Ns bytes      | [f64; Ns]      | Energy captured by the receiver per wavelength. (e_captured)                                 |
+| 8 * Ns * Nb bytes | [u64; Ns * Nb] | Number of reflected rays per wavelength per bounce, stored row-major as [wavelength][bounce] |
+| 8 * Ns * Nb bytes | [f64; Ns * Nb] | Energy of reflected rays per wavelength per bounce, stored row-major as [wavelength][bounce] |
 
 ##### VgonioBrdf
 

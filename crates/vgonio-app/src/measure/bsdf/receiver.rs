@@ -30,7 +30,12 @@ use vgn_core::{
 ///
 /// A receiver is defined by its domain, the precision of the
 /// measurements and the partitioning scheme.
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+///
+///
+/// Receiver partition is based on the given partitioning scheme, domain, and
+/// precision. In the case of the Beckers partitioning scheme, only the
+/// theta precision is used.
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct ReceiverParams {
     /// Domain of the collector.
     pub domain: SphericalDomain,
@@ -81,6 +86,17 @@ impl ReceiverParams {
     /// the azimuth angle first, then the zenith angle.
     pub fn partitioning(&self) -> SphericalPartition {
         SphericalPartition::new(self.scheme, self.domain, self.precision)
+    }
+}
+
+impl PartialEq for ReceiverParams {
+    fn eq(&self, other: &Self) -> bool {
+        self.scheme == other.scheme
+            && self.domain == other.domain
+            && match self.scheme {
+                PartitionScheme::Beckers => self.precision.theta == other.precision.theta,
+                _ => self.precision == other.precision,
+            }
     }
 }
 

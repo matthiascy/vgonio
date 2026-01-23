@@ -1012,6 +1012,7 @@ pub mod vgmo {
                     &self.e_captured,
                     &mut buf[offset_in_bytes..offset_in_bytes + 4 * n_spectrum],
                 );
+                offset_in_bytes += 4 * n_spectrum;
 
                 write_u64_slice_as_u32_to_buf(
                     &self.n_ray_per_bounce,
@@ -1770,7 +1771,7 @@ mod tests {
                 incident_medium: Medium::Vacuum,
                 transmitted_medium: Medium::Aluminium,
                 params: Box::new(VgonioBrdfParameterisation {
-                    n_zenith_i: 4,
+                    n_zenith_i: emitter_params.measurement_points_zenith_count(),
                     incoming: incoming.clone(),
                     outgoing: partition.clone(),
                 }),
@@ -1797,7 +1798,7 @@ mod tests {
                 fresnel: false,
             },
             raw: RawBsdfMeasurement {
-                n_zenith_in: 4,
+                n_zenith_in: emitter_params.measurement_points_zenith_count(),
                 spectrum,
                 incoming,
                 outgoing: partition,
@@ -1868,9 +1869,9 @@ mod tests {
                 compression,
             )
             .unwrap();
-            assert_eq!(measured.params, data2.params);
-            assert_eq!(measured.raw, data2.raw);
-            assert_eq!(measured.bsdfs, data2.bsdfs);
+            assert_eq!(measured.params, data2.params, "Params mismatch under compression {:?}", compression);
+            assert_eq!(measured.raw, data2.raw, "Raw data mismatch under compression {:?}", compression);
+            assert_eq!(measured.bsdfs, data2.bsdfs, "BSDFs mismatch under compression {:?}", compression);
         }
     }
 }

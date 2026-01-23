@@ -1,5 +1,6 @@
 use crate::res::{loader::AssetLoader, Asset, AssetTypeId, AssetTypeRegistry, Error, Handle};
 use std::{collections::HashMap, path::Path};
+use std::collections::hash_map::Entry;
 
 /// Container for assets of the same type.
 pub type AssetsContainer = HashMap<Handle, Box<dyn Asset>>;

@@ -150,9 +150,10 @@ impl PartitionScheme {
 }
 
 /// Partitioned patches of the collector.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct SphericalPartition {
     /// Precision of the partitioning scheme.
+    /// Only the theta precision is used in the Beckers scheme.
     pub precision: Sph2,
     /// The partitioning scheme of the collector.
     pub scheme: PartitionScheme,
