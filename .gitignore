@@ -17,3 +17,4 @@ rustc-ice-**.txt
 .vscode/
 rvbrdf/*
 interim/
+.zed/
