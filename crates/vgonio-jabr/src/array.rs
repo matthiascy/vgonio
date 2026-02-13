@@ -30,6 +30,7 @@ macro_rules! forward_array_core_common_methods {
             order -> MemLayout, #[doc = "Returns the layout of the array."];
             dimension -> usize, #[doc = "Returns the number of dimensions of the array."];
             len -> usize, #[doc = "Returns the total number of elements in the array."];
+            is_empty -> bool, #[doc = "Returns true if the array has no elements."];
         );
     }
 }

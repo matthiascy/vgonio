@@ -54,6 +54,10 @@ where
     /// Returns the total number of elements in the array.
     #[inline]
     pub fn len(&self) -> usize { shape::compute_n_elems(self.meta.shape()) }
+
+    /// Returns true if the array has no elements.
+    #[inline]
+    pub fn is_empty(&self) -> bool { self.len() == 0 }
 }
 
 impl<D, S, const L: MemLayout> Clone for ArrCore<D, S, L>
