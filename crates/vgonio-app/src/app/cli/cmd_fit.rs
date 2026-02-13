@@ -252,6 +252,7 @@ fn read_per_wavelength_roughness_values(
     Ok(values)
 }
 
+// TODO: add intermediate fitting results output, and add error handling
 fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
     brdf: &F,
     opts: &FitOptions,
@@ -268,14 +269,18 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
             } else {
                 ""
             },
-            if opts.cuda { " | GPU enabled" } else { "" },
+            if opts.on_cpu() { "on CPU" } else { "on GPU" }
         ),
         ansi::Color::BrightYellow,
     );
     let start = std::time::Instant::now();
+    log::debug!("BRDF proxy created, starting fitting. Number of wavelengths: {}, {:?}", brdf.spectrum().len(), brdf.spectrum());
     let full_proxy = brdf.proxy(iors);
 
     let reports = if opts.per_wavelength {
+        // Use Box<[MaybeUninit<_>]> to store the reports for each wavelength to avoid
+        // unnecessary initialization, since the number of wavelengths can be large
+        // and the fitting process can be time-consuming.
         let mut reports = Box::new_uninit_slice(brdf.spectrum().len());
         let wavelengths = brdf.spectrum();
         // Read the roughness values from the file provided by
@@ -344,6 +349,8 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
         }
         unsafe { reports.assume_init() }
     } else {
+        // For the non-per-wavelength fitting, we only need to fit once, so we can
+        // directly compute the roughness range without reading from a file.
         let alpha = match opts.symmetry {
             Symmetry::Isotropic => opts.a.map(|a| Roughness::Isotropic {
                 a: StepRangeIncl::new(a[0], a[1], a[2]),
@@ -424,6 +431,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
             opts.theta_limit.map(|t| Radians::from_degrees(t)),
             opts.theta_limit.map(|t| Radians::from_degrees(t)),
             opts.brute_precision,
+            #[cfg(feature = "cuda")]
             opts.cuda,
             alpha,
         );
@@ -484,6 +492,7 @@ fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(
                     opts.theta_limit.map(|t| Radians::from_degrees(t)),
                     opts.theta_limit.map(|t| Radians::from_degrees(t)),
                     2,
+                    #[cfg(feature = "cuda")]
                     false,
                     None,
                 );
@@ -813,6 +822,23 @@ pub struct FitOptions {
     // Temporary fix for adding the NDF fitting
     #[clap(long, help = "NDF fitting.")]
     pub ndf: bool,
+}
+
+impl FitOptions {
+    #[inline]
+    pub fn on_gpu(&self) -> bool {
+        #[cfg(feature = "cuda")]
+        {
+            self.cuda
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            false
+        }
+    }
+
+    #[inline]
+    pub fn on_cpu(&self) -> bool { !self.on_gpu() }
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]

@@ -349,9 +349,7 @@ pub mod brdf {
     use indicatif::{MultiProgress, ProgressBar};
     use levenberg_marquardt::TerminationReason;
     use nllsq::{init_microfacet_brdf_models, NllsqBrdfFittingProxy};
-    use rayon::{
-        iter::{ParallelBridge, ParallelIterator},
-    };
+    use rayon::iter::{ParallelBridge, ParallelIterator};
     use vgn_core::{units::Radians, utils::range::StepRangeIncl, ErrorMetric, Symmetry, Weighting};
 
     #[cfg(feature = "cli")]
@@ -509,6 +507,13 @@ pub mod brdf {
                     let n_times = (precision + 1) / 2;
                     log::debug!("Brute force fitting for {} times", n_times);
                     let mut records = Vec::with_capacity(n_times as usize * 256);
+
+                    log::debug!(
+                        "Source: {:?}, kind: {:?}, spectrum: {:?}",
+                        self.source,
+                        self.brdf.kind(),
+                        self.spectrum
+                    );
 
                     for i in 0..n_times {
                         let chunk_size = alphas.len().div_ceil(cpu_count);

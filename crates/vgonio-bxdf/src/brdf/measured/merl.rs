@@ -21,6 +21,24 @@ use vgn_core::{
 };
 use vgn_jabr::array::{s, DArr, DyArr, DynArr};
 
+/// The wavelengths of the RGB channels in the MERL BRDF data, in nanometres.
+///
+/// In the MERL BRDF data, the RGB channels are **not single-wavelength measurements**.
+/// Instead, they come from an RGB Bayer filter camera, so each channel is a broad,
+/// overlapping spectral sensitivity band integrated against the lamp spectrum (not a
+/// monochromatic wavelength). In Wojciech Matusik's measurement setup, the BRDFs
+/// were captured with a QImaging Retiga 1300 color CCD, under a xenon lamp (which has a continuous
+/// spectrum).
+///
+/// According to paper "Recovering Spectral Data from Natural Scenes with an RGB Digital Camera and
+/// Colored Filters" by Eva M. Valero, Juan L. Nieves et al., the spectral sensitivity curves for
+/// the Retiga 1300 show approximate peaks around:
+///
+/// - Blue channel: ~470nm (broadly ~400-550nm)
+/// - Green channel: ~540-550nm (broadly ~450-600nm)
+/// - Red channel: ~610-620nm (broadly ~520-700nm)
+const MERL_BRDF_SPECTRUM: [Nanometres; 3] = [nm!(470.0), nm!(545.0), nm!(620.0)];
+
 /// Parametrisation for a measured BRDF from the MERL database: <http://www.merl.com/brdf/>
 #[derive(Debug, Clone, PartialEq)]
 pub struct MerlBrdfParam {
@@ -279,7 +297,7 @@ impl MerlBrdf {
             }
         }
 
-        let spectrum = DyArr::from_vec_1d(vec![nm!(435.8), nm!(546.1), nm!(700.0)]);
+        let spectrum = DyArr::from_slice_1d(&MERL_BRDF_SPECTRUM);
         let params = Box::new(MerlBrdfParam::default());
 
         Ok(Self {

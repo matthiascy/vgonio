@@ -193,7 +193,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
         max_theta_i: Option<Radians>,
         max_theta_o: Option<Radians>,
         precision: u32,
-        on_gpu: bool,
+        #[cfg(feature = "cuda")] on_gpu: bool,
         alpha: Option<Roughness>,
     ) -> FittingReport<Self::Model> {
         todo!()
