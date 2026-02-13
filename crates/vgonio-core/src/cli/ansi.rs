@@ -1,45 +1,65 @@
-//! ANSI color codes.
+//! ANSI color codes and formatting utilities.
 
-/// Bright cyan ANSI color code.
-pub const BRIGHT_CYAN: &str = "\u{001b}[36m";
-
-/// Bright red ANSI color code.
-pub const BRIGHT_RED: &str = "\u{001b}[31m";
-
-/// Bright green ANSI color code.
-pub const BRIGHT_GREEN: &str = "\u{001b}[32m";
-
-/// Bright yellow ANSI color code.
-pub const BRIGHT_YELLOW: &str = "\u{001b}[33m";
+use std::fmt;
 
 /// ANSI reset code.
 pub const RESET: &str = "\u{001b}[0m";
 
-/// Colored symbols.
-pub const RED_EXCLAMATION: &str = "\u{001b}[31m!\u{001b}[0m";
+/// A colored single-character symbol.
+#[derive(Debug, Clone, Copy)]
+pub struct ColoredSymbol {
+    /// Symbol foreground color.
+    pub color: Color,
+    /// Symbol character.
+    pub symbol: char,
+}
 
-/// Colored check marks.
-pub const CYAN_CHECK: &str = "\u{001b}[36m✓\u{001b}[0m";
+impl ColoredSymbol {
+    /// Creates a new colored symbol.
+    pub const fn new(color: Color, symbol: char) -> Self { Self { color, symbol } }
+}
 
-/// Colored check marks.
-pub const GREEN_CHECK: &str = "\u{001b}[32m✓\u{001b}[0m";
+impl fmt::Display for ColoredSymbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}{}", self.color.code(), self.symbol, RESET)
+    }
+}
 
-/// Colored greater-than signs.
-pub const YELLOW_GT: &str = "\u{001b}[33m>\u{001b}[0m";
-
-/// Colored minus signs.
-pub const CYAN_MINUS: &str = "\u{001b}[36m-\u{001b}[0m";
+/// Red exclamation marker.
+pub const RED_EXCLAMATION: ColoredSymbol = ColoredSymbol::new(Color::Red, '!');
+/// Cyan check marker.
+pub const CYAN_CHECK: ColoredSymbol = ColoredSymbol::new(Color::Cyan, '✓');
+/// Green check marker.
+pub const GREEN_CHECK: ColoredSymbol = ColoredSymbol::new(Color::Green, '✓');
+/// Yellow greater-than marker.
+pub const YELLOW_GT: ColoredSymbol = ColoredSymbol::new(Color::Yellow, '>');
+/// Cyan minus marker.
+pub const CYAN_MINUS: ColoredSymbol = ColoredSymbol::new(Color::Cyan, '-');
 
 /// ANSI color codes.
-#[repr(u8)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Color {
-    /// Bright cyan.
-    BrightCyan = 36,
-    /// Bright red.
-    BrightRed = 31,
-    /// Bright green.
-    BrightGreen = 32,
-    /// Bright yellow.
-    BrightYellow = 33,
+    /// Cyan color.
+    Cyan,
+    /// Red color.
+    Red,
+    /// Green color.
+    Green,
+    /// Yellow color.
+    Yellow,
+}
+
+impl Color {
+    /// Returns the ANSI escape sequence for this color.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Color::Cyan => "\u{001b}[36m",
+            Color::Red => "\u{001b}[31m",
+            Color::Green => "\u{001b}[32m",
+            Color::Yellow => "\u{001b}[33m",
+        }
+    }
+
+    /// Wraps text with this color and reset.
+    pub fn paint(self, text: &str) -> String { format!("{}{}{}", self.code(), text, RESET) }
 }

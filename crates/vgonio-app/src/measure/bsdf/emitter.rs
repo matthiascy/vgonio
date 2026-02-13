@@ -268,7 +268,7 @@ impl Emitter {
         let measpts = params.generate_measurement_points();
         println!(
             "      {}>{} Dividing the emitter into {} sectors, {} rays per sector",
-            ansi::BRIGHT_YELLOW,
+            ansi::Color::Yellow.code(),
             ansi::RESET,
             params.num_sectors,
             num_rays_per_sector

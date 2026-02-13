@@ -400,7 +400,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
 ) -> SingleSimResult {
     println!(
         "      {}>{} Emit rays from {}, sector: #{}",
-        ansi::BRIGHT_YELLOW,
+        ansi::Color::Yellow.code(),
         ansi::RESET,
         w_i,
         sector.idx

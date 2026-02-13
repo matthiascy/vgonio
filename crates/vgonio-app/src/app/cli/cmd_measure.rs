@@ -25,14 +25,14 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
     }
     println!(
         "{}>{} Executing 'vgonio measure' with a thread pool of size: {}",
-        ansi::BRIGHT_YELLOW,
+        ansi::Color::Yellow.code(),
         ansi::RESET,
         rayon::current_num_threads()
     );
 
     println!(
         "  {}>{} Reading measurement description files...",
-        ansi::BRIGHT_YELLOW,
+        ansi::Color::Yellow.code(),
         ansi::RESET
     );
     let measurements = opts
@@ -54,7 +54,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         .collect::<Vec<_>>();
     println!(
         "    {}✓{} {} measurement(s)",
-        ansi::BRIGHT_CYAN,
+        ansi::Color::Cyan.code(),
         ansi::RESET,
         measurements.len()
     );
@@ -66,20 +66,20 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         if measurements.iter().any(|meas| meas.params.is_bsdf()) {
             println!(
                 "  {}>{} Loading data files (refractive indices, spd etc.)...",
-                ansi::BRIGHT_YELLOW,
+                ansi::Color::Yellow.code(),
                 ansi::RESET
             );
             cache.load_ior_database(&config);
             println!(
                 "    {}✓{} Successfully load data files",
-                ansi::BRIGHT_CYAN,
+                ansi::Color::Cyan.code(),
                 ansi::RESET
             );
         }
 
         println!(
             "  {}>{} Resolving and loading micro-surfaces...",
-            ansi::BRIGHT_YELLOW,
+            ansi::Color::Yellow.code(),
             ansi::RESET
         );
         let tasks = measurements
@@ -93,7 +93,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             .collect::<Vec<_>>();
         println!(
             "    {}✓{} {} micro-surface(s) loaded",
-            ansi::BRIGHT_CYAN,
+            ansi::Color::Cyan.code(),
             ansi::RESET,
             cache.num_micro_surfaces()
         );
@@ -106,7 +106,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             .for_each(|s| {
                 println!(
                     "      {}-{} {}",
-                    ansi::BRIGHT_CYAN,
+                    ansi::Color::Cyan.code(),
                     ansi::RESET,
                     s.display()
                 )
@@ -118,7 +118,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
     if num_surfs == 0 {
         println!(
             "  {}✗{} No micro-surface to measure. Exiting...",
-            ansi::BRIGHT_RED,
+            ansi::Color::Red.code(),
             ansi::RESET
         );
         return Ok(());
@@ -141,7 +141,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         - spectrum: {}
         - polar angle: {}
         - azimuthal angle: {}",
-                    ansi::BRIGHT_YELLOW,
+                    ansi::Color::Yellow.code(),
                     ansi::RESET,
                     chrono::DateTime::<chrono::Utc>::from(measurement_start_time),
                     params.incident_medium,
@@ -173,7 +173,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
       + mode: by points
         + azimuth: {}
         + zenith: {}",
-                            ansi::BRIGHT_YELLOW,
+                            ansi::Color::Yellow.code(),
                             ansi::RESET,
                             azimuth.pretty_print(),
                             zenith.pretty_print(),
@@ -186,7 +186,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
        + mode: by partition
            + scheme: Beckers
            + precision: {}",
-                            ansi::BRIGHT_YELLOW,
+                            ansi::Color::Yellow.code(),
                             ansi::RESET,
                             precision.prettified()
                         );
@@ -203,7 +203,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
       + azimuth: {}
       + zenith: {}
       + resolution: {} x {}",
-                    ansi::BRIGHT_YELLOW,
+                    ansi::Color::Yellow.code(),
                     ansi::RESET,
                     measurement.azimuth.pretty_print(),
                     measurement.zenith.pretty_print(),
@@ -222,7 +222,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             MeasurementParams::Sdf(params) => {
                 println!(
                     "  {}>{} Measuring slope distribution function...",
-                    ansi::BRIGHT_YELLOW,
+                    ansi::Color::Yellow.code(),
                     ansi::RESET
                 );
                 cache.read(|cache| {
@@ -233,7 +233,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
 
         println!(
             "    {}✓{} Measurement finished in {} secs.",
-            ansi::BRIGHT_CYAN,
+            ansi::Color::Cyan.code(),
             ansi::RESET,
             measurement_start_time.elapsed().unwrap().as_secs_f32()
         );
@@ -270,12 +270,12 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             },
         )?;
 
-        println!("    {}✓{} Done!", ansi::BRIGHT_CYAN, ansi::RESET);
+        println!("    {}✓{} Done!", ansi::Color::Cyan.code(), ansi::RESET);
     }
 
     println!(
         "    {}✓{} Finished in {:.2} s",
-        ansi::BRIGHT_CYAN,
+        ansi::Color::Cyan.code(),
         ansi::RESET,
         start_time.elapsed().as_secs_f32()
     );

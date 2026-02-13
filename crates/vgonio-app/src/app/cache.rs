@@ -435,7 +435,7 @@ impl RawCache {
             } else {
                 eprintln!(
                     "    {}!{} file not found: {}",
-                    ansi::BRIGHT_RED,
+                    ansi::Color::Red.code(),
                     ansi::RESET,
                     surf.path.display()
                 );

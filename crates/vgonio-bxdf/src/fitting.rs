@@ -258,7 +258,7 @@ impl<M> FittingReport<M> {
                     best_report.1.error_metric,
                     best_report.1.objective_fn
                 ),
-                ansi::Color::BrightGreen,
+                ansi::Color::Green,
             );
         } else {
             // Compute the mse error for nllsq fitting
@@ -274,7 +274,7 @@ impl<M> FittingReport<M> {
                     best_report.1.objective_fn,
                     mse,
                 ),
-                ansi::Color::BrightGreen,
+                ansi::Color::Green,
             );
         }
     }
@@ -379,7 +379,7 @@ pub mod brdf {
                     cpu_count,
                     tasks_per_cpu,
                 ),
-                ansi::Color::BrightYellow,
+                ansi::Color::Yellow,
             );
 
             let multi_pb = MultiProgress::new();

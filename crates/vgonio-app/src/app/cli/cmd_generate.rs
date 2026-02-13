@@ -82,7 +82,7 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
     let (du, dv) = (opts.spacing[0], opts.spacing[1]);
     println!(
         "  {}>{} Generating surface with resolution {}x{}...",
-        ansi::BRIGHT_YELLOW,
+        ansi::Color::Yellow.code(),
         ansi::RESET,
         res_x,
         res_y
@@ -93,7 +93,7 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
             RandomGenMethod::WhiteNoise => {
                 println!(
                     "    {}>{} Generating surface from white noise...",
-                    ansi::BRIGHT_YELLOW,
+                    ansi::Color::Yellow.code(),
                     ansi::RESET
                 );
                 MicroSurface::from_white_noise(
@@ -108,7 +108,7 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
             RandomGenMethod::WorleyNoise => {
                 println!(
                     "    {}>{} Generating surface from Worley noise...",
-                    ansi::BRIGHT_YELLOW,
+                    ansi::Color::Yellow.code(),
                     ansi::RESET
                 );
                 MicroSurface::from_worley_noise(
@@ -128,7 +128,7 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
         SurfGenKind::Gaussian2D => {
             println!(
                 "  {}>{} Generating surface from 2D gaussian distribution...",
-                ansi::BRIGHT_YELLOW,
+                ansi::Color::Yellow.code(),
                 ansi::RESET
             );
             let (sigma_x, sigma_y) = (opts.sigma_x.unwrap(), opts.sigma_y.unwrap());
@@ -172,12 +172,12 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
 
     println!(
         "    {}✓{} Surface generated",
-        ansi::BRIGHT_CYAN,
+        ansi::Color::Cyan.code(),
         ansi::RESET
     );
     println!(
         "    {}>{} Saving to \"{}\"",
-        ansi::BRIGHT_YELLOW,
+        ansi::Color::Yellow.code(),
         ansi::RESET,
         path.display()
     );

@@ -1922,7 +1922,7 @@ pub fn write_measured_data_to_file(
 ) -> Result<(), VgonioError> {
     println!(
         "    {}>{} Saving {} measurement data...",
-        ansi::BRIGHT_YELLOW,
+        ansi::Color::Yellow.code(),
         ansi::RESET,
         data.len()
     );
@@ -1946,7 +1946,7 @@ pub fn write_measured_data_to_file(
         });
         println!(
             "      {}-{} Saving to \"{}\"",
-            ansi::BRIGHT_CYAN,
+            ansi::Color::Cyan.code(),
             ansi::RESET,
             filepath.display()
         );

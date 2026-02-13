@@ -127,7 +127,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
             if let Err(err) = dir_entry {
                 eprintln!(
                     "  {}!{} Failed to read directory \"{}\": {}",
-                    ansi::BRIGHT_RED,
+                    ansi::Color::Red.code(),
                     ansi::RESET,
                     resolved.display(),
                     err
@@ -138,7 +138,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                 if let Err(err) = entry {
                     eprintln!(
                         "  {}!{} Failed to read directory \"{}\": {}",
-                        ansi::BRIGHT_RED,
+                        ansi::Color::Red.code(),
                         ansi::RESET,
                         resolved.display(),
                         err
@@ -187,7 +187,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                             let (w, h) = (new_size[0] as usize, new_size[1] as usize);
                             println!(
                                 "  {}>{} Resizing to {}x{}...",
-                                ansi::BRIGHT_YELLOW,
+                                ansi::Color::Yellow.code(),
                                 ansi::RESET,
                                 w,
                                 h
@@ -201,7 +201,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                             let s = w.min(h);
                             println!(
                                 "  {}>{} Squaring to {}x{}...",
-                                ansi::BRIGHT_YELLOW,
+                                ansi::Color::Yellow.code(),
                                 ansi::RESET,
                                 s,
                                 s
@@ -234,7 +234,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                 if let Ok((ref profile, ref filename)) = result {
                     println!(
                         "{}>{} Converting {:?} to {:?}...",
-                        ansi::BRIGHT_YELLOW,
+                        ansi::Color::Yellow.code(),
                         ansi::RESET,
                         filepath,
                         output_dir
@@ -249,7 +249,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                             .unwrap_or_else(|err| {
                                 eprintln!(
                                     "  {}!{} Failed to save to \"{}\": {}",
-                                    ansi::BRIGHT_RED,
+                                    ansi::Color::Red.code(),
                                     ansi::RESET,
                                     resolved.display(),
                                     err
@@ -265,7 +265,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                             .unwrap_or_else(|err| {
                                 eprintln!(
                                     "  {}!{} Failed to save to \"{}\": {}",
-                                    ansi::BRIGHT_RED,
+                                    ansi::Color::Red.code(),
                                     ansi::RESET,
                                     resolved.display(),
                                     err
@@ -279,13 +279,13 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
         for err in errors {
             eprintln!(
                 "  {}!{} Failed to convert \"{}\": {}",
-                ansi::BRIGHT_RED,
+                ansi::Color::Red.code(),
                 ansi::RESET,
                 resolved.display(),
                 err
             )
         }
-        println!("{}✓{} Done!", ansi::BRIGHT_CYAN, ansi::RESET);
+        println!("{}✓{} Done!", ansi::Color::Cyan.code(), ansi::RESET);
     }
     Ok(())
 }

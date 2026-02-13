@@ -89,7 +89,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
             '>',
             2,
             format_args!("Fitting to distribution @{:?}", opts.distro.unwrap()),
-            ansi::Color::BrightYellow,
+            ansi::Color::Yellow,
         );
         // Load the data from the cache if the fitting is NDF
         cache.write(|cache| {
@@ -129,7 +129,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
             opts.family,
             opts.distro.unwrap()
         ),
-        ansi::Color::BrightYellow,
+        ansi::Color::Yellow,
     );
     let theta_limit = opts
         .theta_limit
@@ -271,7 +271,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
             },
             if opts.on_cpu() { "on CPU" } else { "on GPU" }
         ),
-        ansi::Color::BrightYellow,
+        ansi::Color::Yellow,
     );
     let start = std::time::Instant::now();
     log::debug!(
@@ -345,7 +345,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
                     "Fitting for wavelength: {:?}, in range ax: {}, ay: {}",
                     w, ax_str, ay_str,
                 ),
-                ansi::Color::BrightYellow,
+                ansi::Color::Yellow,
             );
             let a = ax.zip(ay).map(|(ax, ay)| Roughness::Anisotropic { ax, ay });
             let report = brdf_fitting_brute_force_inner(proxy, opts, 0, Some(*w), a);
@@ -547,7 +547,7 @@ fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
             opts.weighting,
             limit.prettified()
         ),
-        ansi::Color::BrightGreen,
+        ansi::Color::Green,
     );
 
     let mut out = opts.output.as_ref().and_then(|output| {

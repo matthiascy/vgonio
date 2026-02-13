@@ -1306,7 +1306,7 @@ pub fn measure_bsdf_rt(
                             println!(
                                 "        {} Collecting BSDF snapshot {}{}/{}{} to receiver #{}...",
                                 ansi::YELLOW_GT,
-                                ansi::BRIGHT_CYAN,
+                                ansi::Color::Cyan.code(),
                                 i + 1,
                                 n_wi,
                                 ansi::RESET,
