@@ -50,12 +50,10 @@ impl IorRegLoader {
     ///
     /// # Arguments
     ///
-    /// * `sys_dir` - The base system directory used to resolve the path when
-    ///   the path is in form `sys://`. The actual path is resolved to
-    ///   `sys_dir/ior/path`.
-    /// * `usr_dir` - The base user directory used to resolve the path when the
-    ///   path is in form `user://`. The actual path is resolved to
-    ///   `usr_dir/ior/path`.
+    /// * `sys_dir` - The base system directory used to resolve the path when the path is in form
+    ///   `sys://`. The actual path is resolved to `sys_dir/ior/path`.
+    /// * `usr_dir` - The base user directory used to resolve the path when the path is in form
+    ///   `user://`. The actual path is resolved to `usr_dir/ior/path`.
     /// * `excluded` - The list of excluded files.
     pub fn new(
         sys_dir: Option<&Path>,
@@ -141,10 +139,12 @@ impl IorReg {
         let i = refractive_indices
             .iter()
             .position(|ior| ior.wavelength >= wavelength)
-            .expect(&format!(
-                "Medium: {:?}, IOR {} not found in the database",
-                medium, wavelength
-            ));
+            .unwrap_or_else(|| {
+                panic!(
+                    "Medium: {:?}, IOR {} not found in the database",
+                    medium, wavelength
+                )
+            });
         let ior_after = refractive_indices[i];
         // If the first wavelength is equal to the given one, return it.
         if math::ulp_eq(ior_after.wavelength.value(), wavelength.value()) {

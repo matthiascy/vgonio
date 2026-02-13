@@ -28,6 +28,14 @@ pub const C: MemLayout = MemLayout::RowMajor;
 pub const F: MemLayout = MemLayout::ColMajor;
 
 /// Trait providing raw access to the elements of the storage.
+///
+/// # Safety
+///
+/// This trait is unsafe because it allows for raw pointer access to the
+/// elements of the array, which can lead to undefined behavior if not used
+/// correctly. The caller must ensure that the pointers returned by `as_ptr` and
+/// `as_mut_ptr` are valid and that the data is properly initialized before
+/// accessing it.
 pub unsafe trait Data: Sized {
     /// The type of the elements stored in the array.
     type Elem;

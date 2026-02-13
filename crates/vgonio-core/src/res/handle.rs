@@ -150,8 +150,8 @@ impl Display for Handle {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { write!(f, "{:?}", self) }
 }
 
-impl Into<Uuid> for Handle {
-    fn into(self) -> Uuid { self.into_uuid() }
+impl From<Handle> for Uuid {
+    fn from(handle: Handle) -> Uuid { handle.into_uuid() }
 }
 
 #[cfg(test)]

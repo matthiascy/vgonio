@@ -54,8 +54,8 @@ impl MeasuredSdfData {
     ///
     /// # Arguments
     ///
-    /// * `filepath` - The path to the image file. It should be a complete path
-    ///   with the file name and extension.
+    /// * `filepath` - The path to the image file. It should be a complete path with the file name
+    ///   and extension.
     /// * `timestamp` - The timestamp of the measurement.
     /// * `resolution` - The resolution of the output image.
     pub fn write_histogram_as_exr(

@@ -100,8 +100,7 @@ pub fn plot_per_wavelength_err(wavelengths: &[f32], alphas: &[f64], errors: &[f6
 ///
 /// # Arguments
 ///
-/// * `itrp` - The VgonioBrdf to plot, which is the interpolated BRDF to match
-///   the ClausenBrdf.
+/// * `itrp` - The VgonioBrdf to plot, which is the interpolated BRDF to match the ClausenBrdf.
 /// * `meas` - The ClausenBrdf to plot, which is the measured BRDF.
 /// * `dense` - Whether to sample 4x more points than the original data.
 pub fn plot_brdf_vgonio_clausen(
@@ -1619,11 +1618,11 @@ impl BrdfFittingPlotter {
     ///
     /// Generated plots include:
     ///
-    ///   - Residuals maps for each wavelength: x-axis is ωo (ϑo, ϕo), y-axis is
-    ///     ωi (ϑi, ϕi), pixel value: residuals
+    ///   - Residuals maps for each wavelength: x-axis is ωo (ϑo, ϕo), y-axis is ωi (ϑi, ϕi), pixel
+    ///     value: residuals
     ///
-    ///   - MSE of per incident angle fitting results: x-axis is the wavelength,
-    ///     y-axis is the incident angle, pixel value: MSE
+    ///   - MSE of per incident angle fitting results: x-axis is the wavelength, y-axis is the
+    ///     incident angle, pixel value: MSE
     ///
     /// # Arguments
     ///

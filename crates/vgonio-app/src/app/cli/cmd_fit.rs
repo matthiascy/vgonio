@@ -274,7 +274,11 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
         ansi::Color::BrightYellow,
     );
     let start = std::time::Instant::now();
-    log::debug!("BRDF proxy created, starting fitting. Number of wavelengths: {}, {:?}", brdf.spectrum().len(), brdf.spectrum());
+    log::debug!(
+        "BRDF proxy created, starting fitting. Number of wavelengths: {}, {:?}",
+        brdf.spectrum().len(),
+        brdf.spectrum()
+    );
     let full_proxy = brdf.proxy(iors);
 
     let reports = if opts.per_wavelength {

@@ -9,11 +9,9 @@ use rand::distributions::{Distribution, Uniform};
 /// # Arguments
 ///
 /// * `vs` - The vertices of the triangle.
-/// * `uvs` - The uv coordinates of the desired interpolation points on the
-///   triangle.
+/// * `uvs` - The uv coordinates of the desired interpolation points on the triangle.
 /// * `ovs` - The output points of the sub-triangulation.
-/// * `offset` - The offset to add randomly to the z coordinate of the new
-///   points.
+/// * `offset` - The offset to add randomly to the z coordinate of the new points.
 pub fn subdivide_triangle(
     vs: &[Vec3],
     uvs: &[Vec2],

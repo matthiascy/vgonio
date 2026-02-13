@@ -16,29 +16,39 @@ pub use loader::*;
 pub use registry::*;
 pub use store::*;
 
+/// Errors that can occur during asset management operations.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// Asset type not found in the storage.
     #[error("Asset type {0} not found in the storage")]
     AssetTypeNotFound(&'static str),
 
+    /// Asset with the given handle not found in the storage.
     #[error("Asset with ID {0} not found in the storage")]
     AssetNotFound(Handle),
 
+    /// Type mismatch when retrieving an asset.
     #[error("Type mismatch: expected {expected}, got {actual}")]
     TypeMismatch {
+        /// Expected type name.
         expected: &'static str,
+        /// Actual type name.
         actual: &'static str,
     },
 
+    /// I/O error occurred.
     #[error("I/O error: {0}")]
     IoError(#[from] std::io::Error),
 
+    /// Asset loader not found for the specified asset type.
     #[error("No loader found for asset of type {0}")]
     LoaderNotFound(&'static str),
 
+    /// Unknown asset type ID.
     #[error("Unknown asset type ID {0}")]
     UnknownAssetTypeId(u8),
 
+    /// Provided path is not a valid directory.
     #[error("Provided path '{0}' is not a valid directory")]
     InvalidDirectory(String),
 }
@@ -61,10 +71,10 @@ impl RawDataStore {
     /// # Arguments
     ///
     /// * `load_ior_db` - Whether to load the refractive index database.
-    /// * `sys_data_dir` - Path to the system data directory; can be obtained
-    ///   from `Config::sys_data_dir()`.
-    /// * `user_data_dir` - Path to the user data directory; can be obtained
-    ///   from `Config::user_data_dir()`.
+    /// * `sys_data_dir` - Path to the system data directory; can be obtained from
+    ///   `Config::sys_data_dir()`.
+    /// * `user_data_dir` - Path to the user data directory; can be obtained from
+    ///   `Config::user_data_dir()`.
     pub fn new(
         load_ior_db: bool,
         sys_data_dir: Option<&Path>,
@@ -163,15 +173,41 @@ impl RawDataStore {
     }
 }
 
-/// A thread-safe cache. This is a wrapper around `RawCache`.
+/// A thread-safe runtime data store that provides synchronized access to the
+/// underlying `RawDataStore`.
 #[derive(Clone)]
 pub struct DataStore(std::sync::Arc<std::sync::RwLock<RawDataStore>>);
 
 impl DataStore {
+    /// Creates a new `DataStore` from the given `RawDataStore`.
     pub fn from_raw(inner: RawDataStore) -> Self {
         Self(std::sync::Arc::new(std::sync::RwLock::new(inner)))
     }
 
+    /// Creates a new `DataStore` with the given configuration.
+    ///
+    /// This is a convenience method that allows you to create a `DataStore` by
+    /// specifying whether to load the refractive index database and providing
+    /// the necessary paths and settings directly, without needing to
+    /// construct a `RawDataStore` first.
+    ///
+    /// # Arguments
+    ///
+    /// - `load_ior_db`: Whether to load the refractive index database. If `true`, the database will
+    ///   be loaded from the specified system and user data directories. If `false`, the database
+    ///   will not be loaded, and the `ior_db` field in the `RawDataStore` will be set to `None`.
+    /// - `sys_data_dir`: Optional path to the system data directory. This is where the refractive
+    ///   index database will be loaded from if `load_ior_db` is `true`. If `None`, the database
+    ///   will not be loaded from the system data directory.
+    /// - `user_data_dir`: Optional path to the user data directory. This is where the refractive
+    ///   index database will be loaded from if `load_ior_db` is `true`. If `None`, the database
+    ///   will not be loaded from the user data directory.
+    /// - `excluded_ior_files`: Optional list of file names to exclude when loading the refractive
+    ///   index database. This allows you to specify certain files that should not be loaded, even
+    ///   if they are present in the specified directories. If `None`, no files will be excluded.
+    ///
+    /// # Returns
+    /// A new `DataStore` instance initialized with the specified configuration.
     pub fn new(
         load_ior_db: bool,
         sys_data_dir: Option<&Path>,
@@ -183,6 +219,18 @@ impl DataStore {
         )))
     }
 
+    /// Creates a new `DataStore` from the given configuration.
+    ///
+    /// This is a convenience method that extracts the necessary paths and
+    /// settings from the provided `Config` object.
+    ///
+    /// # Arguments
+    ///
+    /// - `load_ior_db`: Whether to load the refractive index database. If `true`, the database will
+    ///   be loaded from the system and user data directories specified in the configuration. If
+    ///   `false`, the database will not be loaded, and the `ior_db` field in the `RawDataStore`
+    ///   will be set to `None`.
+    /// - `config`: The configuration object containing the necessary paths and settings.
     #[cfg(feature = "config")]
     pub fn new_from_config(load_ior_db: bool, config: &crate::config::Config) -> Self {
         Self::new(
@@ -193,11 +241,33 @@ impl DataStore {
         )
     }
 
+    /// Provides read-only access to the cache for the duration of the provided
+    /// closure.
+    ///
+    /// This method locks the cache for reading, allowing the closure to access
+    /// its contents safely. The lock is released automatically when the
+    /// closure finishes executing.
+    ///
+    /// # Arguments
+    ///
+    /// - `reader`: A closure that takes a reference to the `RawDataStore` and returns a value of
+    ///   type `R`. This closure will be executed with shared access to the cache.
     pub fn read<R>(&self, reader: impl FnOnce(&RawDataStore) -> R) -> R {
         let cache = self.0.read().unwrap();
         reader(&cache)
     }
 
+    /// Provides mutable access to the cache for the duration of the provided
+    /// closure.
+    ///
+    /// This method locks the cache for writing, allowing the closure to modify
+    /// its contents safely. The lock is released automatically when the closure
+    /// finishes executing.
+    ///
+    /// # Arguments
+    ///
+    /// - `writer`: A closure that takes a mutable reference to the `RawDataStore` and returns a
+    ///   value of type `R`. This closure will be executed with exclusive access to the cache.
     pub fn write<R>(&self, writer: impl FnOnce(&mut RawDataStore) -> R) -> R {
         let mut cache = self.0.write().unwrap();
         writer(&mut cache)

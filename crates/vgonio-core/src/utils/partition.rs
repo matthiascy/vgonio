@@ -378,8 +378,7 @@ impl SphericalPartition {
     /// # Arguments
     ///
     /// * `buf` - The buffer to write the partition to.
-    /// * `write_domain_scheme` - If true, the domain and scheme are written to
-    ///   the buffer.
+    /// * `write_domain_scheme` - If true, the domain and scheme are written to the buffer.
     #[track_caller]
     pub fn write_to_buf(&self, buf: &mut [u8]) {
         let size_required = self.total_required_size();
@@ -599,8 +598,7 @@ impl SphericalPartition {
     /// # Arguments
     /// * `w` - The width of the image.
     /// * `h` - The height of the image.
-    /// * `indices` - The buffer to storage the patch indices. -1 means no
-    ///   patch.
+    /// * `indices` - The buffer to storage the patch indices. -1 means no patch.
     pub fn compute_pixel_patch_indices(&self, w: u32, h: u32, indices: &mut [i32]) {
         debug_assert_eq!(
             indices.len(),

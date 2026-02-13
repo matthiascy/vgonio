@@ -108,5 +108,7 @@ vgn_bxdf = { path = "crates/vgonio-bxdf", package = "vgonio-bxdf" }
 
 
 [workspace.lints.clippy]
-missing_docs = "warn"
-unused_crate_dependencies = "warn"
+missing_docs_in_private_items = "warn"
+pedantic = "warn"
+shadow_unrelated = "warn"
+mem_forget = "warn"

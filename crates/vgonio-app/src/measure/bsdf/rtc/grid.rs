@@ -457,10 +457,8 @@ impl<C: Cell> Grid<C> {
     ///
     /// * `origin` - Origin of the grid in the world space (top-left corner).
     /// * `ray` - The ray to traverse the grid.
-    /// * `min` - Minimum grid coordinates (current level) of the region,
-    ///   inclusive.
-    /// * `max` - Maximum grid coordinates (current level) of the region,
-    ///   inclusive.
+    /// * `min` - Minimum grid coordinates (current level) of the region, inclusive.
+    /// * `max` - Maximum grid coordinates (current level) of the region, inclusive.
     pub fn traverse(&self, origin: Vec2, ray: &Ray) -> GridTraversal {
         log::debug!("Traversing the grid along the ray: {:?}", ray);
         let start_pos = ray.org.xz() - origin;

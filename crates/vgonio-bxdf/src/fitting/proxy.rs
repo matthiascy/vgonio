@@ -39,10 +39,9 @@ pub enum ProxySource {
 /// The outgoing directions of the resampled BRDF data.
 ///
 /// The outgoing directions can be represented in two ways:
-/// 1. As a cartesian product of theta and phi angles, where directions are
-///    computed by iterating over all combinations of theta_o and phi_o
-/// 2. As an explicit list of directions, where each direction is specified
-///    directly
+/// 1. As a cartesian product of theta and phi angles, where directions are computed by iterating
+///    over all combinations of theta_o and phi_o
+/// 2. As an explicit list of directions, where each direction is specified directly
 #[derive(Debug, Clone)]
 pub enum OutgoingDirs<'a> {
     /// Outgoing directions computed from combinations of theta and phi

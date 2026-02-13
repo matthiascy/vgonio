@@ -46,10 +46,10 @@ pub type LogFilter<'a> = (&'a str, log::LevelFilter);
 ///
 /// # Arguments
 ///
-/// * `timestamp` - Whether to print the timestamp in the log; This is the base
-///   time for the timestamp.
-/// * `log_level` - The log level to filter. This is the top level log level for
-///   the program. See [`log_filter_from_level`] for more details.
+/// * `timestamp` - Whether to print the timestamp in the log; This is the base time for the
+///   timestamp.
+/// * `log_level` - The log level to filter. This is the top level log level for the program. See
+///   [`log_filter_from_level`] for more details.
 /// * `filters` - The filters to apply to the logger.
 pub fn setup_logging(
     timestamp: Option<std::time::SystemTime>,

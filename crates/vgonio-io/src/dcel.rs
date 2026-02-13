@@ -309,11 +309,10 @@ impl<'a> HalfEdgeMesh<'a> {
     ///
     /// # Arguments
     ///
-    /// * `uvs` - The uv coordinates of the desired interpolation points on the
-    ///   face; the input UVs contain also the UVs of the original vertices. The
-    ///   uv coordinates are in the range [0, 1]; the first vertex of the face
-    ///   is the origin, the edge from the second to the origin is the u-axis,
-    ///   and the edge from the third to the origin is the v-axis. See
+    /// * `uvs` - The uv coordinates of the desired interpolation points on the face; the input UVs
+    ///   contain also the UVs of the original vertices. The uv coordinates are in the range [0, 1];
+    ///   the first vertex of the face is the origin, the edge from the second to the origin is the
+    ///   u-axis, and the edge from the third to the origin is the v-axis. See
     ///   [`TriangleUVSubdivision::calc_pnts_uvs`] for more details.
     ///
     /// * `interp` - The interpolation function that takes:
@@ -321,8 +320,7 @@ impl<'a> HalfEdgeMesh<'a> {
     ///   - the uv coordinates of the vertices on the triangle face,
     ///   - the normals of the vertices on the triangle face, optional,
     ///   - the interpolated vertices of the face,
-    ///   - the interpolated normals of the face, only if the normals are
-    ///     provided
+    ///   - the interpolated normals of the face, only if the normals are provided
     /// * `normals` - The normals of the vertices of the mesh.
     pub fn subdivide_by_uvs<I>(
         &self,

@@ -56,10 +56,10 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
     ///
     /// # Arguments
     ///
-    /// * `shape` - The shape of the array. Only one dimension size can be -1,
-    ///   which means that the size of that dimension is inferred.
-    /// * `iter` - The iterator to create the array from. The number of elements
-    ///   in the iterator must be equal to the number of elements in the shape.
+    /// * `shape` - The shape of the array. Only one dimension size can be -1, which means that the
+    ///   size of that dimension is inferred.
+    /// * `iter` - The iterator to create the array from. The number of elements in the iterator
+    ///   must be equal to the number of elements in the shape.
     #[track_caller]
     pub fn from_iterator(shape: [isize; N], iter: impl IntoIterator<Item = T>) -> Self {
         let num_minuses = shape.iter().filter(|&&x| x == -1).count();
@@ -113,8 +113,8 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
     ///
     /// # Arguments
     ///
-    /// * `shape` - The new shape of the array. Only one dimension size can be
-    ///   -1, which means that the size of that dimension is inferred.
+    /// * `shape` - The new shape of the array. Only one dimension size can be -1, which means that
+    ///   the size of that dimension is inferred.
     pub fn reshape<const M: usize>(&self, shape: [i32; M]) -> DyArr<T, M, L>
     where
         T: Clone,
@@ -144,7 +144,7 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
         let mut new_shape = [0; M];
         for (o, n) in shape.iter().zip(new_shape.iter_mut()) {
             if *o == -1 {
-                *n = inferred_size as usize;
+                *n = inferred_size;
             } else {
                 *n = *o as usize;
             }
@@ -186,6 +186,13 @@ impl<T, const N: usize, const L: MemLayout> DyArr<T, N, L> {
 impl<T, const N: usize, const L: MemLayout> DyArr<MaybeUninit<T>, N, L> {
     /// Assumes that the array is fully initialised and returns a new array with
     /// the same shape but with the data assumed to be initialised.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that all elements of the array are properly
+    /// initialised before calling this method. Accessing any element of the
+    /// array after calling this method without proper initialisation will
+    /// result in undefined behavior.
     pub unsafe fn assume_init(self) -> DyArr<T, N, L> {
         let mut shape = [0; N];
         shape.copy_from_slice(self.0.shape());

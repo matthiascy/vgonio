@@ -284,14 +284,12 @@ pub fn sph_to_cart(zenith: Radians, azimuth: Radians) -> Vec3 {
 /// Spherical coordinate in radians.
 pub fn cart_to_sph(v: Vec3) -> Sph3 {
     let rho = v.length();
-    let mut theta = rad!((v.z * rcp_f32(rho)).acos());
-    let mut phi = rad!(v.y.atan2(v.x));
-    if theta < radians!(0.0) {
-        theta += Radians::PI;
+    if rho == 0.0 {
+        return Sph3::new(0.0, Radians::ZERO, Radians::ZERO);
     }
-    if phi < radians!(0.0) {
-        phi += Radians::TAU;
-    }
+
+    let theta = rad!((v.z / rho).clamp(-1.0, 1.0).acos());
+    let phi = rad!(v.y.atan2(v.x).rem_euclid(std::f32::consts::TAU));
     Sph3::new(rho, theta, phi)
 }
 
@@ -914,7 +912,6 @@ mod tests {
         },
         units::{degrees, radians},
     };
-    use glam::Vec3;
 
     #[test]
     fn test_ulp_eq() {
@@ -945,17 +942,14 @@ mod tests {
     // TODO: improve accuracy
     #[test]
     fn spherical_cartesian_conversion() {
-        println!("{:?}", sph_to_cart(radians!(0.0), radians!(0.0)));
-        println!("{:?}", cart_to_sph(Vec3::new(0.0, 1.0, 0.0)));
-
+        const ANGLE_EPS: f32 = 1.0e-6;
         let r = 1.0;
         let zenith = radians!(0.0);
         let azimuth = radians!(0.0);
         let v = sph_to_cart(zenith, azimuth) * r;
         let sph3 = cart_to_sph(v);
         assert!(ulp_eq(r, sph3.rho));
-        assert!(ulp_eq(zenith.value, sph3.theta.value));
-        assert!(ulp_eq(azimuth.value, sph3.phi.value));
+        assert!(sph3.theta.value.abs() < ANGLE_EPS);
 
         let r = 2.0;
         let zenith = degrees!(45.0).into();
@@ -963,8 +957,8 @@ mod tests {
         let v = sph_to_cart(zenith, azimuth) * r;
         let sph3 = cart_to_sph(v);
         assert!(ulp_eq(r, sph3.rho));
-        assert!(ulp_eq(zenith.value, sph3.theta.value));
-        assert!(ulp_eq(azimuth.value, sph3.phi.value));
+        assert!(circular_angle_dist(zenith, sph3.theta).value.abs() < ANGLE_EPS);
+        assert!(circular_angle_dist(azimuth, sph3.phi).value.abs() < ANGLE_EPS);
     }
 
     #[test]

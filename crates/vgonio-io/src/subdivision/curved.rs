@@ -11,8 +11,7 @@ use vgn_core::math::cbr;
 ///
 /// * `vs` - The vertices of the triangle.
 /// * `ns` - The normals of triangle vertices.
-/// * `uvs` - The uv coordinates of the desired interpolation points on the
-///   triangle.
+/// * `uvs` - The uv coordinates of the desired interpolation points on the triangle.
 /// * `ovs` - The output points of the sub-triangulation.
 /// * `ons` - The output normals of triangulated points.
 pub fn subdivide_triangle(

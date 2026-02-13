@@ -58,8 +58,7 @@ pub trait MicrofacetDistribution: Debug + Send + Sync {
     /// # Arguments
     ///
     /// * `cos_theta` - The cosine of the polar angle of the microfacet normal.
-    /// * `cos_phi` - The cosine of the azimuthal angle of the microfacet
-    ///   normal.
+    /// * `cos_phi` - The cosine of the azimuthal angle of the microfacet normal.
     fn eval_ndf(&self, cos_theta: f64, cos_phi: f64) -> f64;
 
     // /// Evaluates the slop distribution function. TODO
@@ -101,10 +100,8 @@ pub trait MicrofacetDistribution: Debug + Send + Sync {
     ///
     /// # Arguments
     ///
-    /// * `cos_thetas` - The cosines of the polar angles of the microfacet
-    ///   normals.
-    /// * `cos_phis` - The cosines of the azimuthal angles of the microfacet
-    ///   normals.
+    /// * `cos_thetas` - The cosines of the polar angles of the microfacet normals.
+    /// * `cos_phis` - The cosines of the azimuthal angles of the microfacet normals.
     ///
     /// # Returns
     ///

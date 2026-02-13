@@ -5,8 +5,8 @@ use crate::Vec3;
 ///
 /// # Arguments
 ///
-/// * `wi` - Incident direction (not necessarily normalized), pointing towards
-///   the boundary between two media (ends up on the point of incidence).
+/// * `wi` - Incident direction (not necessarily normalized), pointing towards the boundary between
+///   two media (ends up on the point of incidence).
 ///
 /// * `n` - The normal vector (must be normalized).
 ///
@@ -37,12 +37,12 @@ pub fn reflect(wi: &Vec3, n: &Vec3) -> Vec3 {
 ///
 /// # Arguments
 ///
-/// * `wi` - Incident direction (not necessarily normalized), pointing towards
-///   the boundary between two media (ends up on the point of incidence).
+/// * `wi` - Incident direction (not necessarily normalized), pointing towards the boundary between
+///   two media (ends up on the point of incidence).
 /// * `n` - The normal vector (must be normalized).
-/// * `cos` - The cosine of the incident angle, should always be positive; this
-///   is *NOT* the angle between the two vectors. It should be the absolute
-///   value of the cosine of the angle between 'wi' and 'n'.
+/// * `cos` - The cosine of the incident angle, should always be positive; this is *NOT* the angle
+///   between the two vectors. It should be the absolute value of the cosine of the angle between
+///   'wi' and 'n'.
 ///
 /// # Returns
 ///
@@ -102,14 +102,13 @@ pub enum Refracted {
 ///
 /// # Arguments
 ///
-/// * `wi` - Incident direction (must be normalized), pointing towards the
-///   boundary between two media (ends up on the point of incidence).
-/// * `n` - The normal vector (must be normalized), always pointing towards the
-///   medium where the incident ray is coming from.
-/// * `eta` -  The relative index of refraction, which is the ratio of the
-///   refractive index of outside medium (where `n` is pointing, primary medium
-///   or incident medium) over the refractive index of the inside medium
-///   (secondary medium, transmitted medium).
+/// * `wi` - Incident direction (must be normalized), pointing towards the boundary between two
+///   media (ends up on the point of incidence).
+/// * `n` - The normal vector (must be normalized), always pointing towards the medium where the
+///   incident ray is coming from.
+/// * `eta` -  The relative index of refraction, which is the ratio of the refractive index of
+///   outside medium (where `n` is pointing, primary medium or incident medium) over the refractive
+///   index of the inside medium (secondary medium, transmitted medium).
 ///
 /// # Returns
 ///
@@ -148,22 +147,21 @@ pub fn refract(wi: &Vec3, n: &Vec3, eta: f64) -> Refracted {
 ///
 /// # Arguments
 ///
-/// * `wi` - Incident direction (must be normalized), pointing towards the
-///   boundary between two media (ends up on the point of incidence).
-/// * `n` - The normal vector (must be normalized), always pointing towards the
-///   medium where the incident ray is coming from.
-/// * `cos` - The cosine of the incident angle, should always be positive; this
-///   is *NOT* the angle between the two vectors. It should be the absolute
-///   value of the cosine of the angle between 'wi' and 'n'.
-/// * `eta` - The relative index of refraction, which is the ratio of the
-///   refractive index of outside medium (where `n` is pointing, primary medium
-///   or incident medium) over the refractive index of the inside medium
-///   (secondary medium, transmitted medium), i.e., `eta = eta_i / eta_t`, where
-///   `eta_i` is the refractive index of the incident medium and `eta_t` is the
+/// * `wi` - Incident direction (must be normalized), pointing towards the boundary between two
+///   media (ends up on the point of incidence).
+/// * `n` - The normal vector (must be normalized), always pointing towards the medium where the
+///   incident ray is coming from.
+/// * `cos` - The cosine of the incident angle, should always be positive; this is *NOT* the angle
+///   between the two vectors. It should be the absolute value of the cosine of the angle between
+///   'wi' and 'n'.
+/// * `eta` - The relative index of refraction, which is the ratio of the refractive index of
+///   outside medium (where `n` is pointing, primary medium or incident medium) over the refractive
+///   index of the inside medium (secondary medium, transmitted medium), i.e., `eta = eta_i /
+///   eta_t`, where `eta_i` is the refractive index of the incident medium and `eta_t` is the
 ///   refractive index of the transmitted medium.
-/// * `cos` - The cosine of the incident angle, should always be positive; this
-///   is *NOT* the angle between the two vectors. It should be the absolute
-///   value of the cosine of the angle between 'wi' and 'n'.
+/// * `cos` - The cosine of the incident angle, should always be positive; this is *NOT* the angle
+///   between the two vectors. It should be the absolute value of the cosine of the angle between
+///   'wi' and 'n'.
 ///
 /// # Returns
 ///
@@ -222,11 +220,11 @@ pub fn refract_cos(wi: &Vec3, n: &Vec3, cos: f64, eta: f64) -> Refracted {
 ///
 /// # Arguments
 ///
-/// * `wi` - Incident direction (must be normalized), pointing towards the
-///   boundary between two media (ends up on the point of incidence).
+/// * `wi` - Incident direction (must be normalized), pointing towards the boundary between two
+///   media (ends up on the point of incidence).
 /// * `n` - The normal vector (must be normalized).
-/// * `eta_o` - The refractive index of the outside medium (where `n` is
-///   pointing, primary medium or incident medium).
+/// * `eta_o` - The refractive index of the outside medium (where `n` is pointing, primary medium or
+///   incident medium).
 /// * `eta_i` - The refractive index of the inside medium (transmitted medium).
 ///
 /// # Returns

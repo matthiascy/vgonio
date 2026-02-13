@@ -202,8 +202,7 @@ impl MeasurementDescription {
     /// `.yaml` or `.yml` are loaded.
     ///
     /// # Arguments
-    /// * `path` - Path to the measurement file or directory, must be in
-    ///   canonical form.
+    /// * `path` - Path to the measurement file or directory, must be in canonical form.
     pub fn load(path: &Path) -> Result<Vec<MeasurementDescription>, VgonioError> {
         if path.exists() {
             if path.is_dir() {
@@ -221,8 +220,7 @@ impl MeasurementDescription {
 
     /// Loads the measurement from a directory.
     /// # Arguments
-    /// * `path` - Path to the measurement directory, must be in canonical form
-    ///   and must exist.
+    /// * `path` - Path to the measurement directory, must be in canonical form and must exist.
     fn load_from_dir(dir: &Path) -> Result<Vec<MeasurementDescription>, VgonioError> {
         let mut measurements = Vec::new();
         for entry in std::fs::read_dir(dir).map_err(|err| {
@@ -251,8 +249,8 @@ impl MeasurementDescription {
     ///
     /// # Arguments
     ///
-    /// * `filepath` - Path to the file containing the measurement descriptions,
-    ///   must be in canonical form and must exist.
+    /// * `filepath` - Path to the file containing the measurement descriptions, must be in
+    ///   canonical form and must exist.
     fn load_from_file(filepath: &Path) -> Result<Vec<MeasurementDescription>, VgonioError> {
         let mut file = File::open(filepath).map_err(|err| {
             VgonioError::from_io_error(

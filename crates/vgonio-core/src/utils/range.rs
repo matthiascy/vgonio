@@ -1293,7 +1293,7 @@ mod range_by_step_size_tests {
     #[cfg(feature = "serde")]
     fn deserialisation_exclusive() {
         let range_str = "0 .. 20 / 0.5";
-        let deserialized: StepRange<f32> = serde_yaml::from_str(&range_str).unwrap();
+        let deserialized: StepRange<f32> = serde_yaml::from_str(range_str).unwrap();
         let range = StepRange::new_exclusive(0.0, 20.0, 0.5);
         assert_eq!(
             deserialized, range,

@@ -176,8 +176,8 @@ impl MicroSurface {
     /// * `rows` - the number of sample points in dimension y
     /// * `du` - horizontal spacing between samples points in micrometers
     /// * `dv` - vertical spacing between samples points in micrometers
-    /// * `setter` - the setting function, this function will be invoked with
-    ///   the row number and column number as parameters.
+    /// * `setter` - the setting function, this function will be invoked with the row number and
+    ///   column number as parameters.
     ///
     /// # Examples
     ///
@@ -241,10 +241,8 @@ impl MicroSurface {
     ///
     /// # Arguments
     ///
-    /// * `cols` - number of columns (number of sample points in dimension x) in
-    ///   the height field.
-    /// * `rows` - number of rows (number of sample points in dimension y) in
-    ///   the height field.
+    /// * `cols` - number of columns (number of sample points in dimension x) in the height field.
+    /// * `rows` - number of rows (number of sample points in dimension y) in the height field.
     /// * `du` - horizontal spacing between two samples
     /// * `dv` - vertical spacing between two samples
     /// * `samples` - array of elevation values of the height field.
@@ -1276,18 +1274,16 @@ impl MicroSurface {
     /// Creates micro-geometry height field by reading the samples stored in
     /// different file format. Supported formats are
     ///
-    /// 1. Ascii Matrix file (plain text) coming from Predicting Appearance from
-    ///    Measured Micro-geometry of Metal Surfaces.
+    /// 1. Ascii Matrix file (plain text) coming from Predicting Appearance from Measured
+    ///    Micro-geometry of Metal Surfaces.
     ///
     /// 2. Plain text data coming from a µsurf confocal microscope system.
     ///
     /// 3. Micro-surface height field file (binary format, ends with *.vgms).
     ///
-    /// 4. Micro-surface height field cache file (binary format, ends with
-    ///    *.vgcc).
+    /// 4. Micro-surface height field cache file (binary format, ends with *.vgcc).
     ///
-    /// 5. Micro-geometry height field from EXR file, only read the first
-    ///    channel of the first part.
+    /// 5. Micro-geometry height field from EXR file, only read the first channel of the first part.
     pub fn read_from_file(
         filepath: &Path,
         origin: Option<MicroSurfaceOrigin>,

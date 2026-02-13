@@ -49,7 +49,7 @@ impl MicrofacetBrdfTR {
 }
 
 impl AnalyticalBrdf<<TrowbridgeReitzDistribution as MicrofacetDistribution>::Params>
-for MicrofacetBrdfTR
+    for MicrofacetBrdfTR
 {
     fn name(&self) -> &str { "Microfacet@TrowbridgeReitz" }
 

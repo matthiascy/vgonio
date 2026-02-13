@@ -58,8 +58,8 @@
 //! incident and reflected rays). "S" comes from senkrecht, German for
 //! perpendicular.
 //!
-//! + reflection and transmission coefficients for perpendicularly polarized
-//!   light at the interface of two *dielectric* media:
+//! + reflection and transmission coefficients for perpendicularly polarized light at the interface
+//!   of two *dielectric* media:
 //!
 //!   $$r_\perp=
 //! \frac{\eta_i\cos\theta_i -
@@ -68,8 +68,8 @@
 //!   $$t_\perp=\frac{2\eta_i\cos\theta_i}{\eta_i\cos\theta_i +
 //! \eta_t\cos\theta_t}$$
 //!
-//! + reflection and transmission coefficients for perpendicularly polarized
-//!   light at the interface between a *conductor* and a *dielectric* medium:
+//! + reflection and transmission coefficients for perpendicularly polarized light at the interface
+//!   between a *conductor* and a *dielectric* medium:
 //!
 //!   $$r_\perp=\frac{a^2+b^2-2a\cos\theta+\cos^2\theta}{a^2+b^2+2a\cos\theta+\
 //! cos^2\theta}$$
@@ -93,8 +93,8 @@
 //!   $$t_\parallel = \frac{2\eta_i\cos\theta_i}{\eta_t\cos\theta_i +
 //! \eta_i\cos\theta_t}$$
 //!
-//! + reflection and transmission coefficients for parallel polarized light at
-//!   the interface between a *conductor* and a *dielectric* medium:
+//! + reflection and transmission coefficients for parallel polarized light at the interface between
+//!   a *conductor* and a *dielectric* medium:
 //!
 //!   $$r_\parallel=r_\perp\frac{\cos^2\theta(a^2+b^2)-2a\cos\theta\sin^2\
 //! theta+\ sin^4\theta}{\cos^2\theta(a^2+b^2)-2a\cos\theta\sin^2\theta+\sin^4\
@@ -131,12 +131,11 @@
 //!
 //! ## refractive indices
 //!
-//! + Dielectrics/Insulators Dielectrics dont' conduct electricity, they have
-//!   real-valued indices of refraction and transmit a portion of the incident
-//!   illumination.
+//! + Dielectrics/Insulators Dielectrics dont' conduct electricity, they have real-valued indices of
+//!   refraction and transmit a portion of the incident illumination.
 //!
-//! + Conductors In contrast to dielectrics, conductors have a complex-valued
-//!   index of refraction ῆ = η + ik
+//! + Conductors In contrast to dielectrics, conductors have a complex-valued index of refraction ῆ
+//!   = η + ik
 //!
 //! Give the incident direction $\omega_i$, and indices of refraction of two
 //! mediums, compute the reflection coefficients for waves parallel and
@@ -191,12 +190,11 @@ pub fn reflect(wi: Vec3A, n: Vec3A) -> Vec3A {
 ///
 /// # Arguments
 ///
-/// * `wi` - Vector to be reflected (normalised), ends up on the point of
-///   incidence.
+/// * `wi` - Vector to be reflected (normalised), ends up on the point of incidence.
 /// * `n` - Normal vector (normalised).
-/// * `cos` - Cosine of the incident angle, should always be positive; this is
-///   *NOT* the angle between the two vectors. It should be the absolute value
-///   of the cosine of the angle between `wi` and `n`.
+/// * `cos` - Cosine of the incident angle, should always be positive; this is *NOT* the angle
+///   between the two vectors. It should be the absolute value of the cosine of the angle between
+///   `wi` and `n`.
 ///
 /// # Notes
 ///
@@ -237,16 +235,14 @@ pub enum RefractionResult {
 /// # Arguments
 ///
 /// * `wi` - Incident vector (normalised), ends up on the point of incidence.
-/// * `n` - Normal vector (normalised), always points towards the outside of the
-///   incident medium.
-/// * `eta` - Relative refraction index, the refractive index of outside medium
-///   (where `n` is pointing, primary medium or incident medium) divided by the
-///   refractive index of the inside medium (secondary medium, transmitted
-///   medium), i.e. `eta = eta_i / eta_t`, where `eta_i` is the refractive index
-///   of the incident medium and `eta_t` is the refractive index of the
+/// * `n` - Normal vector (normalised), always points towards the outside of the incident medium.
+/// * `eta` - Relative refraction index, the refractive index of outside medium (where `n` is
+///   pointing, primary medium or incident medium) divided by the refractive index of the inside
+///   medium (secondary medium, transmitted medium), i.e. `eta = eta_i / eta_t`, where `eta_i` is
+///   the refractive index of the incident medium and `eta_t` is the refractive index of the
 ///   transmitted medium.
-/// * `cos_i` - Cosine of the incident angle, NOT the angle between `wi` and
-///   `n`. Should always be positive.
+/// * `cos_i` - Cosine of the incident angle, NOT the angle between `wi` and `n`. Should always be
+///   positive.
 ///
 /// # Notes
 ///
@@ -284,8 +280,7 @@ pub fn refract_cos(wi: Vec3A, n: Vec3A, eta: f32, cos: f32) -> RefractionResult 
 /// # Arguments
 ///
 /// * `wi` - Incident vector (normalised), ends up on the point of incidence.
-/// * `n` - Normal vector (normalised), always points towards the outside of the
-///   incident medium.
+/// * `n` - Normal vector (normalised), always points towards the outside of the incident medium.
 /// * `eta_i` - Refractive index of the incident medium.
 /// * `eta_t` - Refractive index of the transmitted medium.
 pub fn refract2(wi: Vec3A, n: Vec3A, eta_i: f32, eta_t: f32) -> RefractionResult {
@@ -311,8 +306,8 @@ pub fn refract2(wi: Vec3A, n: Vec3A, eta_i: f32, eta_t: f32) -> RefractionResult
 /// # Arguments
 ///
 /// * `wi` - Incident vector (normalised), ends up on the point of incidence.
-/// * `n` - Normal vector (normalised), always pointing towards the outside of
-///   the incident medium (surface).
+/// * `n` - Normal vector (normalised), always pointing towards the outside of the incident medium
+///   (surface).
 /// * `eta_o` - Refractive index of the outside medium of the interface.
 /// * `eta_i` - Refractive index of the inside medium of the interface.
 ///
@@ -344,9 +339,8 @@ pub fn refract(wi: Vec3A, n: Vec3A, eta_o: f32, eta_i: f32) -> RefractionResult 
 ///
 /// # Arguments
 ///
-/// * `cos_i` - absolute cosine of the angle between the direction from which
-///   the incident light is coming and the normal of the interface between the
-///   two media.
+/// * `cos_i` - absolute cosine of the angle between the direction from which the incident light is
+///   coming and the normal of the interface between the two media.
 /// * `eta_i` - refractive index of incident medium.
 /// * `eta_t` - refractive index of transmitted medium.
 pub fn reflectance_schlick_approx(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
@@ -367,9 +361,8 @@ pub fn reflectance_schlick_approx(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
 ///
 /// # Arguments
 ///
-/// * `cos_i` - cosine of the angle between the direction from which the
-///   incident light is coming and the normal of the interface between the two
-///   media.
+/// * `cos_i` - cosine of the angle between the direction from which the incident light is coming
+///   and the normal of the interface between the two media.
 /// * `eta_i` - slice of refractive index of incident medium.
 /// * `eta_t` - slice of refractive index of transmitted medium.
 ///
@@ -408,8 +401,8 @@ pub fn reflectance_schlick_approx_spectrum(cos_i: f32, eta_i: &[f32], eta_t: &[f
 ///
 /// # Arguments
 ///
-/// * `cos_i` - cosine of the angle between the normal and the incident
-///   direction (originated from the ray's origin).
+/// * `cos_i` - cosine of the angle between the normal and the incident direction (originated from
+///   the ray's origin).
 /// * `eta_i` - refractive index of the incident medium.
 /// * `eta_t` - refractive index of the transmitted medium.
 ///
@@ -441,9 +434,9 @@ pub fn reflectance_dielectric(cos_i: f32, eta_i: f32, eta_t: f32) -> f32 {
 ///
 /// # Arguments
 ///
-/// * `cos_i` - cosine of the incident angle, should always be positive; this is
-///   *NOT* the angle between the two vectors. It should be the absolute value
-///   of the cosine of the angle between `wi` and `n`.
+/// * `cos_i` - cosine of the incident angle, should always be positive; this is *NOT* the angle
+///   between the two vectors. It should be the absolute value of the cosine of the angle between
+///   `wi` and `n`.
 /// * `eta_i` - refractive index of the incident medium (outside).
 /// * `eta_t` - refractive index of the transmitted medium (inside).
 pub fn reflectance_dielectric2(cos_i_abs: f32, eta_i: f32, eta_t: f32) -> f32 {
@@ -477,8 +470,8 @@ pub fn reflectance_dielectric2(cos_i_abs: f32, eta_i: f32, eta_t: f32) -> f32 {
 ///
 /// # Arguments
 ///
-/// * `cos_i` - cosine of the angle between the normal and the incident
-///   direction (originated from the ray's origin).
+/// * `cos_i` - cosine of the angle between the normal and the incident direction (originated from
+///   the ray's origin).
 /// * `eta_i` - slice of refractive index of incident medium.
 pub fn reflectance_dielectric_spectrum(cos_i: f32, eta: &[f32]) -> Vec<f32> {
     debug_assert!((-1.0..=1.0).contains(&cos_i), "cos_i must be in [-1, 1]");
@@ -537,8 +530,8 @@ pub fn reflectance_dielectric_conductor(cos_i_abs: f32, eta_i: f32, eta_t: f32, 
 ///
 /// # Arguments
 ///
-/// * `cos_i` - cosine of the angle between the normal and the incident
-///   direction (originated from the ray's origin).
+/// * `cos_i` - cosine of the angle between the normal and the incident direction (originated from
+///   the ray's origin).
 /// * `ior_i` - refractive index of the outside medium.
 /// * `ior_t` - refractive index of the inside medium.
 ///
@@ -678,6 +671,7 @@ mod tests {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(true)
             .open("./reflectance_dielectric_conductor.csv")
             .unwrap();
         file.write_all(b"angle,reflectance\n").unwrap();

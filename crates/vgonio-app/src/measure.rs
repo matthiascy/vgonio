@@ -365,8 +365,8 @@ impl SphericalTransform {
     ///
     /// # Arguments
     ///
-    /// * `dest` - The desired position in spherical coordinates; it should
-    ///   always be defined in the unit sphere.
+    /// * `dest` - The desired position in spherical coordinates; it should always be defined in the
+    ///   unit sphere.
     ///
     /// # Returns
     ///
@@ -385,10 +385,9 @@ impl SphericalTransform {
     ///
     /// # Arguments
     ///
-    /// * `dest` - The desired position in spherical coordinates; should always
-    ///   be defined in the unit sphere.
-    /// * `orbit_radius` - The radius of the orbit about which the samples are
-    ///   rotating around.
+    /// * `dest` - The desired position in spherical coordinates; should always be defined in the
+    ///   unit sphere.
+    /// * `orbit_radius` - The radius of the orbit about which the samples are rotating around.
     pub fn transform_cap(dest: Sph2, orbit_radius: f32) -> Mat3 {
         Self::transform_to(dest) * Mat3::from_diagonal(Vec3::splat(orbit_radius))
     }
@@ -401,12 +400,10 @@ impl SphericalTransform {
     ///
     /// # Arguments
     ///
-    /// * `dest` - The desired position in spherical coordinates; should always
-    ///   be defined in the unit sphere.
-    /// * `disk_radius` - The radius of the disk on which the samples are
-    ///   distributed.
-    /// * `orbit_radius` - The radius of the orbit about which the samples are
-    ///   rotating around.
+    /// * `dest` - The desired position in spherical coordinates; should always be defined in the
+    ///   unit sphere.
+    /// * `disk_radius` - The radius of the disk on which the samples are distributed.
+    /// * `orbit_radius` - The radius of the orbit about which the samples are rotating around.
     pub fn transform_disc(dest: Sph2, disk_radius: f32, orbit_radius: f32) -> Mat3 {
         Self::transform_to(dest)
             * Mat3::from_diagonal(Vec3::new(disk_radius, disk_radius, orbit_radius))
@@ -561,11 +558,11 @@ impl<'a> DataCarriedOnHemisphereSampler<'a, VgonioBrdf> {
     /// # Arguments
     ///
     /// * `wi` - The incident direction; it must exist in the BSDF snapshots.
-    /// * `wo` - The outgoing direction; if it doesn't exist in the BSDF
-    ///   snapshots, it will be interpolated.
-    /// * `out` - The interpolated BSDF values at the given position; it should
-    ///   be pre-allocated, and the number of elements should NOT exceed the
-    ///   number of wavelengths in the BSDF data; panics in case it's empty.
+    /// * `wo` - The outgoing direction; if it doesn't exist in the BSDF snapshots, it will be
+    ///   interpolated.
+    /// * `out` - The interpolated BSDF values at the given position; it should be pre-allocated,
+    ///   and the number of elements should NOT exceed the number of wavelengths in the BSDF data;
+    ///   panics in case it's empty.
     pub fn sample_point_at(&self, wi: Sph2, wo: Sph2, out: &mut [f32]) {
         log::trace!(
             "Sampling at wi: ({}, {}), wo: ({} {})",

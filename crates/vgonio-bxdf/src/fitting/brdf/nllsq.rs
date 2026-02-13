@@ -141,7 +141,7 @@ impl<'a, const I: Symmetry> NllsqBrdfFittingProxy<'a, I> {
 }
 
 /// Specialisation for the isotropic case.
-impl<'a> NllsqBrdfFittingProxy<'a, { Symmetry::Isotropic }> {
+impl NllsqBrdfFittingProxy<'_, { Symmetry::Isotropic }> {
     /// Computes the Jacobian matrix for the isotropic case.
     fn jacobian(&self) -> Matrix<f64, Dyn, U1, Owned<f64, Dyn, U1>> {
         let mut jacobian =
@@ -328,7 +328,7 @@ impl<'a> NllsqBrdfFittingProxy<'a, { Symmetry::Isotropic }> {
 }
 
 /// Specialisation for the anisotropic case.
-impl<'a> NllsqBrdfFittingProxy<'a, { Symmetry::Anisotropic }> {
+impl NllsqBrdfFittingProxy<'_, { Symmetry::Anisotropic }> {
     /// Computes the Jacobian matrix for the anisotropic case.
     fn jacobian(&self) -> Matrix<f64, Dyn, U2, Owned<f64, Dyn, U2>> {
         let shape = self.proxy.samples().shape();

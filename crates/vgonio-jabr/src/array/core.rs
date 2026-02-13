@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_arr_core_index() {
-        let data = (0..48).into_iter().map(|x| x as f32).collect::<Vec<f32>>();
+        let data = (0..48).map(|x| x as f32).collect::<Vec<f32>>();
         let dyarr: ArrCore<DynSized<f32>, [usize; 3], { MemLayout::ColMajor }> =
             ArrCore::new([4, 6, 2], DynSized::from(data));
         assert_eq!(dyarr[[0, 0, 0]], 0.0);
@@ -202,7 +202,7 @@ mod tests {
     #[test]
     #[should_panic = "Index dimension mismatch: expected 4, got 5"]
     fn test_arr_core_index_panic_dimension_mismatch() {
-        let data = (0..48).into_iter().map(|x| x as f32).collect::<Vec<f32>>();
+        let data = (0..48).map(|x| x as f32).collect::<Vec<f32>>();
         let dynarr: ArrCore<DynSized<f32>, Vec<usize>, { MemLayout::RowMajor }> =
             ArrCore::new(vec![2, 3, 4, 2], DynSized::from(data));
         assert_eq!(dynarr[[0, 0, 0, 0, 0]], 0.0);
@@ -211,7 +211,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_arr_core_index_panic_size_mismatch() {
-        let data = (0..48).into_iter().map(|x| x as f32).collect::<Vec<f32>>();
+        let data = (0..48).map(|x| x as f32).collect::<Vec<f32>>();
         let dynarr: ArrCore<DynSized<f32>, Vec<usize>> =
             ArrCore::new(vec![2, 3, 4, 2], DynSized::from(data));
         assert_eq!(dynarr[[1, 2, 4, 0]], 0.0);

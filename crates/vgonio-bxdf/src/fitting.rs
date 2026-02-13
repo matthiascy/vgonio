@@ -306,8 +306,7 @@ pub trait FittingProblem {
     /// * `weighting` - The weighting to use.
     /// * `max_theta_i` - The maximum incident angle to consider.
     /// * `max_theta_o` - The maximum outgoing angle to consider.
-    /// * `precision` - The number of digits after the decimal point to
-    ///   consider.
+    /// * `precision` - The number of digits after the decimal point to consider.
     fn brute_fit(
         &self,
         target: MicrofacetDistroKind,
@@ -703,8 +702,7 @@ pub mod brdf {
     /// # Arguments
     ///
     /// * `n` - The number of total tasks to perform.
-    /// * `n_cpu` - The number of CPUs to use, each CPU will have a progress
-    ///   bar.
+    /// * `n_cpu` - The number of CPUs to use, each CPU will have a progress bar.
     fn create_multi_progress_bar(n: u64, n_cpu: u64) -> (MultiProgress, Box<[ProgressBar]>) {
         let n_tasks_per_cpu = n.div_ceil(n_cpu);
         let multi_pb = MultiProgress::new();

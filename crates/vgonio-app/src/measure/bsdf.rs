@@ -608,8 +608,8 @@ impl SingleBsdfMeasurementStats {
     ///
     /// # Arguments
     /// * `n_wavelength`: Number of wavelengths.
-    /// * `max_bounce`: Maximum number of bounces. This is used to pre-allocate
-    ///   the memory for the histograms.
+    /// * `max_bounce`: Maximum number of bounces. This is used to pre-allocate the memory for the
+    ///   histograms.
     pub fn new(n_spectrum: usize, max_bounce: usize) -> Self {
         Self {
             n_bounce: max_bounce as u32,

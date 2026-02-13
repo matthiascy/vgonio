@@ -1,3 +1,5 @@
+//! Build script for the `vgonio-powitacq` crate, which compiles C++ code using
+//! the `cxx` crate.
 fn main() {
     cxx_build::bridge("src/lib.rs")
         .file("cxx/powitacq.cc")
