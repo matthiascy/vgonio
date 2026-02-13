@@ -2,7 +2,7 @@ use std::path::PathBuf;
 #[cfg(feature = "surf-obj")]
 use vgn_core::units::LengthUnit;
 use vgn_core::{
-    cli::ansi,
+    cli,
     config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
@@ -125,23 +125,25 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
             let mut files = Vec::new();
             let dir_entry = std::fs::read_dir(&resolved);
             if let Err(err) = dir_entry {
-                eprintln!(
-                    "  {}!{} Failed to read directory \"{}\": {}",
-                    ansi::Color::Red.code(),
-                    ansi::RESET,
-                    resolved.display(),
-                    err
+                cli::error(
+                    2,
+                    format_args!(
+                        "Failed to read directory \"{}\": {}",
+                        resolved.display(),
+                        err
+                    ),
                 );
                 continue;
             }
             for entry in dir_entry.unwrap() {
                 if let Err(err) = entry {
-                    eprintln!(
-                        "  {}!{} Failed to read directory \"{}\": {}",
-                        ansi::Color::Red.code(),
-                        ansi::RESET,
-                        resolved.display(),
-                        err
+                    cli::error(
+                        2,
+                        format_args!(
+                            "Failed to read directory \"{}\": {}",
+                            resolved.display(),
+                            err
+                        ),
                     );
                     continue;
                 }
@@ -185,13 +187,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                     if let Ok(loaded) = loaded {
                         let (w, h) = if let Some(new_size) = opts.resize.as_ref() {
                             let (w, h) = (new_size[0] as usize, new_size[1] as usize);
-                            println!(
-                                "  {}>{} Resizing to {}x{}...",
-                                ansi::Color::Yellow.code(),
-                                ansi::RESET,
-                                w,
-                                h
-                            );
+                            cli::step(2, format_args!("Resizing to {}x{}...", w, h));
                             (w, h)
                         } else {
                             (loaded.cols, loaded.rows)
@@ -199,13 +195,7 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
 
                         let (w, h) = if opts.squaring {
                             let s = w.min(h);
-                            println!(
-                                "  {}>{} Squaring to {}x{}...",
-                                ansi::Color::Yellow.code(),
-                                ansi::RESET,
-                                s,
-                                s
-                            );
+                            cli::step(2, format_args!("Squaring to {}x{}...", s, s));
                             (s, s)
                         } else {
                             (w, h)
@@ -232,12 +222,9 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                 };
 
                 if let Ok((ref profile, ref filename)) = result {
-                    println!(
-                        "{}>{} Converting {:?} to {:?}...",
-                        ansi::Color::Yellow.code(),
-                        ansi::RESET,
-                        filepath,
-                        output_dir
+                    cli::step(
+                        0,
+                        format_args!("Converting {:?} to {:?}...", filepath, output_dir),
                     );
 
                     if opts.dst_kind == ConvertKind::Exr {
@@ -247,12 +234,13 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                                 opts.offset.unwrap_or(HeightOffset::None),
                             )
                             .unwrap_or_else(|err| {
-                                eprintln!(
-                                    "  {}!{} Failed to save to \"{}\": {}",
-                                    ansi::Color::Red.code(),
-                                    ansi::RESET,
-                                    resolved.display(),
-                                    err
+                                cli::error(
+                                    2,
+                                    format_args!(
+                                        "Failed to save to \"{}\": {}",
+                                        resolved.display(),
+                                        err
+                                    ),
                                 );
                             });
                     } else {
@@ -263,12 +251,13 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
                                 opts.compression,
                             )
                             .unwrap_or_else(|err| {
-                                eprintln!(
-                                    "  {}!{} Failed to save to \"{}\": {}",
-                                    ansi::Color::Red.code(),
-                                    ansi::RESET,
-                                    resolved.display(),
-                                    err
+                                cli::error(
+                                    2,
+                                    format_args!(
+                                        "Failed to save to \"{}\": {}",
+                                        resolved.display(),
+                                        err
+                                    ),
                                 );
                             });
                     }
@@ -277,15 +266,12 @@ pub fn convert(opts: ConvertOptions, config: Config) -> Result<(), VgonioError> 
             })
             .collect::<Vec<_>>();
         for err in errors {
-            eprintln!(
-                "  {}!{} Failed to convert \"{}\": {}",
-                ansi::Color::Red.code(),
-                ansi::RESET,
-                resolved.display(),
-                err
+            cli::error(
+                2,
+                format_args!("Failed to convert \"{}\": {}", resolved.display(), err),
             )
         }
-        println!("{}✓{} Done!", ansi::Color::Cyan.code(), ansi::RESET);
+        cli::success(0, format_args!("Done!"));
     }
     Ok(())
 }

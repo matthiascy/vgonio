@@ -23,6 +23,7 @@ use vgn_bxdf::{
     AnyMeasured,
 };
 use vgn_core::{
+    cli,
     config::Config,
     error::VgonioError,
     math::Sph2,
@@ -541,7 +542,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                     .push((distro, alpha));
             }
 
-            println!("{:#?}", fitting_results);
+            log::debug!("NDF fitting results: {:#?}", fitting_results);
 
             // For each input file, load the NDF and try to find the fitting
             // results and plot them.
@@ -746,7 +747,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         stem.into()
                     }
                 })?;
-                println!("handles: {:?}", handles);
+                log::debug!("Loaded handles: {:?}", handles);
                 cache.read(|c| {
                     let measured = load_measured(&handles, c)?;
                     let alphas = extract_alphas(&opts.alpha, opts.symmetry, true)?;
@@ -884,7 +885,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                             None,
                         );
 
-                        println!("{}: MSE#{:?} = {}", names[0], distro, mse);
+                        cli::note(2, format_args!("{}: MSE#{:?} = {}", names[0], distro, mse));
                     }
                 }
             });
@@ -921,9 +922,9 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                         .iter()
                         .position(|&l| (l.as_f32() - opts.lambda).abs() < 1e-6)
                         .expect("Wavelength not found in the spectrum");
-                    println!("Wavelength index: {}", wl_idx);
+                    log::debug!("Wavelength index: {}", wl_idx);
                     let proxy_per_wl = proxy.per_wavelength(wl_idx);
-                    println!("Alphas: {:?}", alphas);
+                    log::debug!("Alphas: {:?}", alphas);
                     for (ax, ref ay) in alphas.iter() {
                         let model: Box<dyn AnalyticalBrdf<[f64; 2]>> = match distro {
                             MicrofacetDistroKind::Beckmann => {
@@ -934,7 +935,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                             },
                         };
                         let fitted_per_wl = proxy_per_wl.generate_analytical(model.as_ref());
-                        println!("Fitted per wavelength: {:?}", fitted_per_wl.spectrum);
+                        log::debug!("Fitted per wavelength: {:?}", fitted_per_wl.spectrum);
 
                         let mse = proxy_per_wl.distance(
                             &fitted_per_wl,
@@ -945,7 +946,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                             #[cfg(feature = "cuda")]
                             None,
                         );
-                        println!("{}: MSE#{:?} = {}", names[0], distro, mse);
+                        cli::note(2, format_args!("{}: MSE#{:?} = {}", names[0], distro, mse));
                     }
                 }
             });

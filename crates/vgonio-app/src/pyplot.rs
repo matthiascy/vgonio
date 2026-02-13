@@ -33,7 +33,6 @@ use vgn_bxdf::{
     AnyMeasured, AnyMeasuredBrdf, Scattering,
 };
 use vgn_core::{
-    cli::println,
     error::VgonioError,
     math::{self, Sph2, Vec2, Vec3},
     optics::IorReg,

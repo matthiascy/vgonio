@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use vgn_core::{
-    cli::ansi,
+    cli,
     config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
@@ -1920,12 +1920,7 @@ pub fn write_measured_data_to_file(
     config: &Config,
     output: OutputOptions,
 ) -> Result<(), VgonioError> {
-    println!(
-        "    {}>{} Saving {} measurement data...",
-        ansi::Color::Yellow.code(),
-        ansi::RESET,
-        data.len()
-    );
+    cli::step(4, format_args!("Saving {} measurement data...", data.len()));
     let output_dir = config.resolve_output_dir(output.dir.as_deref())?;
     for (i, measurement) in data.iter().enumerate() {
         let filepath = cache.read(|cache| {
@@ -1944,30 +1939,29 @@ pub fn write_measured_data_to_file(
                 ),
             ))
         });
-        println!(
-            "      {}-{} Saving to \"{}\"",
-            ansi::Color::Cyan.code(),
-            ansi::RESET,
-            filepath.display()
-        );
+        cli::note(6, format_args!("Saving to \"{}\"", filepath.display()));
 
         for format in output.formats.iter() {
             match measurement.write_to_file(&filepath, format) {
                 Ok(_) => {
-                    println!(
-                        "      {} Successfully saved to \"{}\", format: {:?}",
-                        ansi::CYAN_CHECK,
-                        output_dir.display(),
-                        format
+                    cli::success(
+                        6,
+                        format_args!(
+                            "Successfully saved to \"{}\", format: {:?}",
+                            output_dir.display(),
+                            format
+                        ),
                     );
                 },
                 Err(err) => {
-                    eprintln!(
-                        "        {} Failed to save to \"{}\" with format {:?}: {}",
-                        ansi::RED_EXCLAMATION,
-                        filepath.display(),
-                        format,
-                        err,
+                    cli::error(
+                        8,
+                        format_args!(
+                            "Failed to save to \"{}\" with format {:?}: {}",
+                            filepath.display(),
+                            format,
+                            err,
+                        ),
                     );
                 },
             }
@@ -1989,12 +1983,8 @@ pub fn write_single_measured_data_to_file(
 ) -> Result<(), VgonioError> {
     use std::ffi::OsStr;
 
-    println!("    {} Saving measurement data...", ansi::YELLOW_GT);
-    println!(
-        "      {} Saving as \"{}\"",
-        ansi::CYAN_MINUS,
-        filepath.display()
-    );
+    cli::step(4, format_args!("Saving measurement data..."));
+    cli::note(6, format_args!("Saving as \"{}\"", filepath.display()));
 
     let ext = filepath
         .extension()
@@ -2019,18 +2009,15 @@ pub fn write_single_measured_data_to_file(
 
     match measured.write_to_file(filepath, &format) {
         Ok(_) => {
-            println!(
-                "      {} Successfully saved as \"{}\"",
-                ansi::CYAN_CHECK,
-                filepath.display()
+            cli::success(
+                6,
+                format_args!("Successfully saved as \"{}\"", filepath.display()),
             );
         },
         Err(err) => {
-            eprintln!(
-                "        {} Failed to save as \"{}\": {}",
-                ansi::RED_EXCLAMATION,
-                filepath.display(),
-                err
+            cli::error(
+                8,
+                format_args!("Failed to save as \"{}\": {}", filepath.display(), err),
             );
         },
     }

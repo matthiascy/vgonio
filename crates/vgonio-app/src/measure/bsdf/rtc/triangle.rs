@@ -292,7 +292,6 @@ pub fn ray_tri_intersect_woop(ray: &Ray, triangle: &[Vec3; 3], tmax: f32) -> Opt
 
     // Perform edge tests.
     if (e0 < 0.0 || e1 < 0.0 || e2 < 0.0) && (e0 > 0.0 || e1 > 0.0 || e2 > 0.0) {
-        println!("case 1");
         return None;
     }
 

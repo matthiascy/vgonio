@@ -5,11 +5,10 @@ use crate::{
     BrdfFamily,
 };
 use levenberg_marquardt::{MinimizationReport, TerminationReason};
-use rayon::iter::IndexedParallelIterator;
 use std::fmt::Debug;
 use vgn_core::{
-    cli, cli::ansi, math::rcp_f64, units::Radians, utils::range::StepRangeIncl, ErrorMetric,
-    Symmetry, Weighting,
+    cli, math::rcp_f64, units::Radians, utils::range::StepRangeIncl, ErrorMetric, Symmetry,
+    Weighting,
 };
 
 pub mod proxy;
@@ -249,8 +248,7 @@ impl<M> FittingReport<M> {
         // Check if the best model is user terminated
         // Currently, the user termination is only used in the brute force fitting
         if let TerminationReason::User(_) = best_report.1.termination {
-            cli::println(
-                '✓',
+            cli::success(
                 indent,
                 format_args!(
                     "{:?}, metric: {}, obj_fn: {}",
@@ -258,14 +256,12 @@ impl<M> FittingReport<M> {
                     best_report.1.error_metric,
                     best_report.1.objective_fn
                 ),
-                ansi::Color::Green,
             );
         } else {
             // Compute the mse error for nllsq fitting
             let rcp = rcp_f64(best_report.1.n_data_points as f64);
             let mse = best_report.1.objective_fn * 2.0 * rcp;
-            cli::println(
-                '✓',
+            cli::success(
                 indent,
                 format_args!(
                     "{:?}, metric: {}, obj_fn: {}, mse: {}",
@@ -274,7 +270,6 @@ impl<M> FittingReport<M> {
                     best_report.1.objective_fn,
                     mse,
                 ),
-                ansi::Color::Green,
             );
         }
     }
@@ -352,7 +347,7 @@ pub mod brdf {
     use vgn_core::{units::Radians, utils::range::StepRangeIncl, ErrorMetric, Symmetry, Weighting};
 
     #[cfg(feature = "cli")]
-    use vgn_core::cli::{self, ansi};
+    use vgn_core::cli;
 
     impl FittingProblem for BrdfProxy<'_> {
         type Model = Box<dyn AnalyticalBrdf<[f64; 2]>>;
@@ -370,8 +365,7 @@ pub mod brdf {
             let tasks = init_microfacet_brdf_models(initial, target, symmetry);
             let tasks_per_cpu = tasks.len().div_ceil(cpu_count);
             #[cfg(feature = "cli")]
-            cli::println(
-                '>',
+            cli::step(
                 6,
                 format_args!(
                     "Solve {} models on {} CPUs, {} per CPU",
@@ -379,7 +373,6 @@ pub mod brdf {
                     cpu_count,
                     tasks_per_cpu,
                 ),
-                ansi::Color::Yellow,
             );
 
             let multi_pb = MultiProgress::new();

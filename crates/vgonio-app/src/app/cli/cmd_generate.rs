@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use vgn_core::{
-    cli::ansi,
+    cli,
     config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
@@ -80,22 +80,15 @@ pub struct GenerateOptions {
 pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError> {
     let (res_x, res_y) = (opts.res[0], opts.res[1]);
     let (du, dv) = (opts.spacing[0], opts.spacing[1]);
-    println!(
-        "  {}>{} Generating surface with resolution {}x{}...",
-        ansi::Color::Yellow.code(),
-        ansi::RESET,
-        res_x,
-        res_y
+    cli::step(
+        2,
+        format_args!("Generating surface with resolution {}x{}...", res_x, res_y),
     );
 
     let surf = match opts.kind {
         SurfGenKind::Random => match opts.method.unwrap() {
             RandomGenMethod::WhiteNoise => {
-                println!(
-                    "    {}>{} Generating surface from white noise...",
-                    ansi::Color::Yellow.code(),
-                    ansi::RESET
-                );
+                cli::step(4, format_args!("Generating surface from white noise..."));
                 MicroSurface::from_white_noise(
                     res_y as usize,
                     res_x as usize,
@@ -106,11 +99,7 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
                 )
             },
             RandomGenMethod::WorleyNoise => {
-                println!(
-                    "    {}>{} Generating surface from Worley noise...",
-                    ansi::Color::Yellow.code(),
-                    ansi::RESET
-                );
+                cli::step(4, format_args!("Generating surface from Worley noise..."));
                 MicroSurface::from_worley_noise(
                     res_y as usize,
                     res_x as usize,
@@ -126,10 +115,9 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
             },
         },
         SurfGenKind::Gaussian2D => {
-            println!(
-                "  {}>{} Generating surface from 2D gaussian distribution...",
-                ansi::Color::Yellow.code(),
-                ansi::RESET
+            cli::step(
+                2,
+                format_args!("Generating surface from 2D gaussian distribution..."),
             );
             let (sigma_x, sigma_y) = (opts.sigma_x.unwrap(), opts.sigma_y.unwrap());
             let (mean_x, mean_y) = (opts.mean_x.unwrap(), opts.mean_y.unwrap());
@@ -170,16 +158,7 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
         .resolve_output_dir(opts.output.as_deref())?
         .join(filename);
 
-    println!(
-        "    {}✓{} Surface generated",
-        ansi::Color::Cyan.code(),
-        ansi::RESET
-    );
-    println!(
-        "    {}>{} Saving to \"{}\"",
-        ansi::Color::Yellow.code(),
-        ansi::RESET,
-        path.display()
-    );
+    cli::success(4, format_args!("Surface generated"));
+    cli::step(4, format_args!("Saving to \"{}\"", path.display()));
     surf.write_to_file(&path, opts.encoding, opts.compression)
 }

@@ -33,7 +33,7 @@ use vgn_bxdf::{
     AnyMeasuredBrdf,
 };
 use vgn_core::{
-    cli::ansi,
+    cli,
     error::VgonioError,
     math::{rcp_f64, Sph2, Vec3},
     res::{Handle, RawDataStore},
@@ -747,46 +747,64 @@ impl SingleBsdfMeasurementStats {
     /// Tests if the statistics are valid.
     pub fn is_valid(&self) -> bool {
         if self.n_ray_stats.len() != Self::N_STATS * self.n_spectrum {
-            eprintln!("Invalid n_ray_stats length: {}", self.n_ray_stats.len());
+            cli::error(
+                0,
+                format_args!("Invalid n_ray_stats length: {}", self.n_ray_stats.len()),
+            );
             return false;
         }
         if self.n_ray_per_bounce.len() != self.n_spectrum * self.n_bounce as usize {
-            eprintln!(
-                "Invalid n_ray_per_bounce length: {}",
-                self.n_ray_per_bounce.len()
+            cli::error(
+                0,
+                format_args!(
+                    "Invalid n_ray_per_bounce length: {}",
+                    self.n_ray_per_bounce.len()
+                ),
             );
             return false;
         }
         if self.energy_per_bounce.len() != self.n_spectrum * self.n_bounce as usize {
-            eprintln!(
-                "Invalid energy_per_bounce length: {}",
-                self.energy_per_bounce.len()
+            cli::error(
+                0,
+                format_args!(
+                    "Invalid energy_per_bounce length: {}",
+                    self.energy_per_bounce.len()
+                ),
             );
             return false;
         }
         if self.e_captured.len() != self.n_spectrum {
-            eprintln!("Invalid e_captured length: {}", self.e_captured.len());
+            cli::error(
+                0,
+                format_args!("Invalid e_captured length: {}", self.e_captured.len()),
+            );
             return false;
         }
         // N_emitted = N_missed + N_received
         for i in 0..self.n_spectrum {
             // N_received = N_absorbed + N_reflected
             if self.n_reflected()[i] + self.n_absorbed()[i] != self.n_received {
-                eprintln!(
-                    "Invalid N_received: {} = Nr {} + Na {}",
-                    self.n_received,
-                    self.n_reflected()[i],
-                    self.n_absorbed()[i]
+                cli::error(
+                    0,
+                    format_args!(
+                        "Invalid N_received: {} = Nr {} + Na {}",
+                        self.n_received,
+                        self.n_reflected()[i],
+                        self.n_absorbed()[i]
+                    ),
                 );
                 return false;
             }
             // N_reflected = N_captured + N_escaped
             if self.n_captured()[i] + self.n_escaped()[i] != self.n_reflected()[i] {
-                eprintln!(
-                    "Invalid N_reflected: {} = {} + {}",
-                    self.n_reflected()[i],
-                    self.n_captured()[i],
-                    self.n_escaped()[i]
+                cli::error(
+                    0,
+                    format_args!(
+                        "Invalid N_reflected: {} = {} + {}",
+                        self.n_reflected()[i],
+                        self.n_captured()[i],
+                        self.n_escaped()[i]
+                    ),
                 );
                 return false;
             }
@@ -1303,20 +1321,25 @@ pub fn measure_bsdf_rt(
                             #[cfg(feature = "bench")]
                             let t = std::time::Instant::now();
 
-                            println!(
-                                "        {} Collecting BSDF snapshot {}{}/{}{} to receiver #{}...",
-                                ansi::YELLOW_GT,
-                                ansi::Color::Cyan.code(),
-                                i + 1,
-                                n_wi,
-                                ansi::RESET,
-                                j
+                            cli::step_v(
+                                1,
+                                8,
+                                format_args!(
+                                    "Collecting BSDF snapshot {}/{} to receiver #{}...",
+                                    i + 1,
+                                    n_wi,
+                                    j
+                                ),
                             );
 
                             // Print receiver number of patches
-                            println!(
-                                "Receiver number of patches: {}",
-                                receiver.patches.n_patches()
+                            cli::note_v(
+                                1,
+                                8,
+                                format_args!(
+                                    "Receiver number of patches: {}",
+                                    receiver.patches.n_patches()
+                                ),
                             );
 
                             // Collect the tracing data into raw bsdf snapshots.
@@ -1395,10 +1418,9 @@ pub fn measure_bsdf_rt(
                 }
             },
             SimulationKind::WaveOptics => {
-                println!(
-                    "    {} Measuring {} with wave optics...",
-                    ansi::YELLOW_GT,
-                    params.kind
+                cli::step(
+                    4,
+                    format_args!("Measuring {} with wave optics...", params.kind),
                 );
                 todo!("Wave optics simulation is not yet implemented")
             },

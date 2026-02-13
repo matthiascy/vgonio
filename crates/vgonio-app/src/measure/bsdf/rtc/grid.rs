@@ -18,8 +18,7 @@ use std::time::Instant;
 #[cfg(feature = "vdbg")]
 use vgn_core::optics::fresnel;
 use vgn_core::{
-    cli::ansi,
-    math,
+    cli, math,
     math::{IVec2, UVec2, Vec2, Vec3, Vec3Swizzles},
 };
 use vgn_io::{MicroSurface, MicroSurfaceMesh};
@@ -67,11 +66,14 @@ pub fn measure_bsdf(
         .measpts
         .iter()
         .map(|w_i| {
-            println!(
-                "      {} Emit rays from {}° {}°",
-                ansi::YELLOW_GT,
-                w_i.theta.in_degrees().value(),
-                w_i.phi.in_degrees().value()
+            cli::step_v(
+                1,
+                6,
+                format_args!(
+                    "Emit rays from {}° {}°",
+                    w_i.theta.in_degrees().value(),
+                    w_i.phi.in_degrees().value()
+                ),
             );
             let t = Instant::now();
             let emitted_rays = sector.emit_rays(*w_i, mesh);
@@ -467,7 +469,7 @@ impl<C: Cell> Grid<C> {
             start_pos
         );
         let start_cell = self.world_to_local(&origin, &ray.org.xz()).unwrap();
-        println!("Start position in the grid space: {:?}", start_cell);
+        log::debug!("Start position in the grid space: {:?}", start_cell);
         let ray_dir = ray.dir.xz();
         log::debug!("Ray direction in the grid space: {:?}", ray_dir);
 

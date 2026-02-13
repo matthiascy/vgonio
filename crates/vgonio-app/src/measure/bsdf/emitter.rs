@@ -5,7 +5,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use vgn_core::{
-    cli::ansi,
+    cli,
     math::{Sph2, Vec3},
     units::{deg, nm, rad, Nanometres, Radians, Rads},
     utils::range::StepRangeIncl,
@@ -266,12 +266,13 @@ impl Emitter {
         let num_rays_per_sector =
             (params.num_rays as f64 / params.num_sectors as f64).ceil() as u32;
         let measpts = params.generate_measurement_points();
-        println!(
-            "      {}>{} Dividing the emitter into {} sectors, {} rays per sector",
-            ansi::Color::Yellow.code(),
-            ansi::RESET,
-            params.num_sectors,
-            num_rays_per_sector
+        cli::step_v(
+            1,
+            6,
+            format_args!(
+                "Dividing the emitter into {} sectors, {} rays per sector",
+                params.num_sectors, num_rays_per_sector
+            ),
         );
         Self {
             params: *params,

@@ -11,6 +11,16 @@ pub(crate) mod gui;
 pub fn run() -> Result<(), VgonioError> {
     let (args, launch_time) = core_cli::parse_args::<CliArgs>("vgonio-comp");
 
+    core_cli::setup_printer(core_cli::PrinterConfig {
+        quiet: args.quite,
+        verbosity: if args.verbose || args.log_level >= 3 {
+            1
+        } else {
+            0
+        },
+        color_mode: core_cli::ColorMode::Auto,
+    });
+
     let timestamp = if args.log_timestamp {
         Some(launch_time)
     } else {

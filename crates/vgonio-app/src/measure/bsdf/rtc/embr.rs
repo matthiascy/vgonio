@@ -19,7 +19,7 @@ use std::sync::Arc;
 #[cfg(not(feature = "vdbg"))]
 use vgn_core::optics::Ior;
 use vgn_core::{
-    cli::ansi,
+    cli,
     math::{Sph2, Vec3A},
     optics::fresnel,
 };
@@ -398,12 +398,10 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
     #[cfg(not(feature = "vdbg"))] iors_i: &'b [Ior],
     #[cfg(not(feature = "vdbg"))] iors_t: &'b [Ior],
 ) -> SingleSimResult {
-    println!(
-        "      {}>{} Emit rays from {}, sector: #{}",
-        ansi::Color::Yellow.code(),
-        ansi::RESET,
-        w_i,
-        sector.idx
+    cli::step_v(
+        1,
+        6,
+        format_args!("Emit rays from {}, sector: #{}", w_i, sector.idx),
     );
     let max_bounces = sector.params.max_bounces;
     #[cfg(all(debug_assertions, feature = "vvdbg"))]
@@ -436,11 +434,14 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
         iors_t,
     );
     #[cfg(debug_assertions)]
-    println!(
-        "        {} Trace {} rays ({} streams rays)",
-        ansi::YELLOW_GT,
-        emitted_rays.len(),
-        stream_data.total_stream_size
+    cli::step_v(
+        1,
+        8,
+        format_args!(
+            "Trace {} rays ({} streams rays)",
+            emitted_rays.len(),
+            stream_data.total_stream_size
+        ),
     );
 
     emitted_rays
