@@ -53,7 +53,10 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
     let (tasks, num_surfs) = cache.write(|cache| {
         // Load data files: refractive indices, spd etc. if needed.
         if measurements.iter().any(|meas| meas.params.is_bsdf()) {
-            cli_step!(Indent::SECTION, "Loading data files (refractive indices, spd etc.)...");
+            cli_step!(
+                Indent::SECTION,
+                "Loading data files (refractive indices, spd etc.)..."
+            );
             cache.load_ior_database(&config);
             cli_success!(Indent::SUBSECTION, "Successfully loaded data files");
         }
@@ -68,7 +71,11 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     .map(|surfaces| (meas, surfaces))
             })
             .collect::<Vec<_>>();
-        cli_success!(Indent::SUBSECTION, "{} micro-surface(s) loaded", cache.num_micro_surfaces());
+        cli_success!(
+            Indent::SUBSECTION,
+            "{} micro-surface(s) loaded",
+            cache.num_micro_surfaces()
+        );
 
         #[cfg(debug_assertions)]
         cache

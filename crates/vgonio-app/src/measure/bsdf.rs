@@ -747,7 +747,11 @@ impl SingleBsdfMeasurementStats {
     /// Tests if the statistics are valid.
     pub fn is_valid(&self) -> bool {
         if self.n_ray_stats.len() != Self::N_STATS * self.n_spectrum {
-            cli_error!(Indent::ROOT, "Invalid n_ray_stats length: {}", self.n_ray_stats.len());
+            cli_error!(
+                Indent::ROOT,
+                "Invalid n_ray_stats length: {}",
+                self.n_ray_stats.len()
+            );
             return false;
         }
         if self.n_ray_per_bounce.len() != self.n_spectrum * self.n_bounce as usize {
@@ -767,7 +771,11 @@ impl SingleBsdfMeasurementStats {
             return false;
         }
         if self.e_captured.len() != self.n_spectrum {
-            cli_error!(Indent::ROOT, "Invalid e_captured length: {}", self.e_captured.len());
+            cli_error!(
+                Indent::ROOT,
+                "Invalid e_captured length: {}",
+                self.e_captured.len()
+            );
             return false;
         }
         // N_emitted = N_missed + N_received
@@ -1404,7 +1412,11 @@ pub fn measure_bsdf_rt(
                 }
             },
             SimulationKind::WaveOptics => {
-                cli_step!(Indent::SUBSECTION, "Measuring {} with wave optics...", params.kind);
+                cli_step!(
+                    Indent::SUBSECTION,
+                    "Measuring {} with wave optics...",
+                    params.kind
+                );
                 todo!("Wave optics simulation is not yet implemented")
             },
         }

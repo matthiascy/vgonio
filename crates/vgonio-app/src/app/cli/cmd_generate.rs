@@ -101,7 +101,10 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
                 )
             },
             RandomGenMethod::WorleyNoise => {
-                cli_step!(Indent::SUBSECTION, "Generating surface from Worley noise...");
+                cli_step!(
+                    Indent::SUBSECTION,
+                    "Generating surface from Worley noise..."
+                );
                 MicroSurface::from_worley_noise(
                     res_y as usize,
                     res_x as usize,
@@ -117,7 +120,10 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
             },
         },
         SurfGenKind::Gaussian2D => {
-            cli_step!(Indent::SECTION, "Generating surface from 2D gaussian distribution...");
+            cli_step!(
+                Indent::SECTION,
+                "Generating surface from 2D gaussian distribution..."
+            );
             let (sigma_x, sigma_y) = (opts.sigma_x.unwrap(), opts.sigma_y.unwrap());
             let (mean_x, mean_y) = (opts.mean_x.unwrap(), opts.mean_y.unwrap());
             let amp = opts.amplitude.unwrap();

@@ -84,7 +84,11 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
 
     // Temporary fix for adding the NDF fitting
     if opts.ndf {
-        cli_step!(Indent::SECTION, "Fitting to distribution @{:?}", opts.distro.unwrap());
+        cli_step!(
+            Indent::SECTION,
+            "Fitting to distribution @{:?}",
+            opts.distro.unwrap()
+        );
         // Load the data from the cache if the fitting is NDF
         cache.write(|cache| {
             cache.load_ior_database(&config);
@@ -204,7 +208,10 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     load_and_fit!(RglBrdf, opts, cache, config, &opts.inputs, theta_limit);
                 },
                 MeasuredBrdfKind::Unknown => {
-                    cli_error!(Indent::SECTION, "Unknown measured BRDF kind specified, cannot fit!");
+                    cli_error!(
+                        Indent::SECTION,
+                        "Unknown measured BRDF kind specified, cannot fit!"
+                    );
                 },
             }
         }
@@ -252,7 +259,11 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
     cli_step!(
         Indent::DETAIL,
         "Fitting with brute force method... {} {}",
-        if opts.per_wavelength { "per wavelength" } else { "" },
+        if opts.per_wavelength {
+            "per wavelength"
+        } else {
+            ""
+        },
         if opts.on_cpu() { "on CPU" } else { "on GPU" }
     );
     let start = std::time::Instant::now();

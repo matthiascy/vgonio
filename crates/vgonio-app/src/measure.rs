@@ -36,7 +36,8 @@ use vgn_bxdf::{
     AnyMeasured,
 };
 use vgn_core::{
-    asset, cli::{self, cli_step, Indent},
+    asset,
+    cli::{self, cli_step, Indent},
     error::VgonioError,
     io::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
@@ -194,7 +195,11 @@ impl Measurement {
     pub fn read_from_file(filepath: &Path) -> Result<Self, VgonioError> {
         // TODO: unified file loading
         if filepath.extension().unwrap() == "bsdf" {
-            cli_step!(Indent::SUBSECTION, "Loading RGL BSDF file: {}", filepath.display());
+            cli_step!(
+                Indent::SUBSECTION,
+                "Loading RGL BSDF file: {}",
+                filepath.display()
+            );
             let filename = filepath.file_stem().unwrap().to_str().unwrap();
             let mut medium = Medium::Air;
             for m in filename.split('_') {
@@ -220,7 +225,11 @@ impl Measurement {
                 measured: Box::new(loaded),
             });
         } else if filepath.extension().unwrap() == "binary" {
-            cli_step!(Indent::SUBSECTION, "Loading MERL BSDF file: {}", filepath.display());
+            cli_step!(
+                Indent::SUBSECTION,
+                "Loading MERL BSDF file: {}",
+                filepath.display()
+            );
             let loaded = MerlBrdf::load(filepath)?;
             return Ok(Measurement {
                 name: format!(
@@ -243,7 +252,11 @@ impl Measurement {
 
         if let Some(extension) = filepath.extension() {
             if extension == OsStr::new("json") {
-                cli_step!(Indent::SUBSECTION, "Loading Clausen BSDF file: {}", filepath.display());
+                cli_step!(
+                    Indent::SUBSECTION,
+                    "Loading Clausen BSDF file: {}",
+                    filepath.display()
+                );
                 return ClausenBrdf::load_from_reader(reader).map(|brdf| Measurement {
                     name: format!(
                         "clausen_{}",
@@ -256,7 +269,11 @@ impl Measurement {
             }
 
             if extension == OsStr::new("exr") {
-                cli_step!(Indent::SUBSECTION, "Loading Yan18 BSDF file: {}", filepath.display());
+                cli_step!(
+                    Indent::SUBSECTION,
+                    "Loading Yan18 BSDF file: {}",
+                    filepath.display()
+                );
                 return Yan18Brdf::load_from_exr(&filepath, Medium::Air, Medium::Aluminium).map(
                     |brdf| Measurement {
                         name: format!(
@@ -271,7 +288,11 @@ impl Measurement {
             }
         }
 
-        cli_step!(Indent::SUBSECTION, "Loading VGMO BSDF file: {}", filepath.display());
+        cli_step!(
+            Indent::SUBSECTION,
+            "Loading VGMO BSDF file: {}",
+            filepath.display()
+        );
         let header = Header::<VgmoHeaderExt>::read(&mut reader).map_err(|err| {
             VgonioError::from_read_file_error(
                 ReadFileError {

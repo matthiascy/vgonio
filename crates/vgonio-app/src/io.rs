@@ -1920,7 +1920,11 @@ pub fn write_measured_data_to_file(
     config: &Config,
     output: OutputOptions,
 ) -> Result<(), VgonioError> {
-    cli_step!(Indent::SUBSECTION, "Saving {} measurement data...", data.len());
+    cli_step!(
+        Indent::SUBSECTION,
+        "Saving {} measurement data...",
+        data.len()
+    );
     let output_dir = config.resolve_output_dir(output.dir.as_deref())?;
     for (i, measurement) in data.iter().enumerate() {
         let filepath = cache.read(|cache| {
