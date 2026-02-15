@@ -15,13 +15,27 @@ use vgn_core::{
 /// Measure different metrics of the micro-surface.
 pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
     log::info!("{:#?}", config);
-    // Configure thread pool for parallelism.
+
     if let Some(nthreads) = opts.nthreads {
-        rayon::ThreadPoolBuilder::new()
+        let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(nthreads as usize)
-            .build_global()
-            .unwrap();
+            .build()
+            .map_err(|err| {
+                VgonioError::new(
+                    &format!(
+                        "Failed to create measurement thread pool with {} threads: {}",
+                        nthreads, err
+                    ),
+                    None,
+                )
+            })?;
+        pool.install(|| measure_impl(opts, config))
+    } else {
+        measure_impl(opts, config)
     }
+}
+
+fn measure_impl(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
     cli_step!(
         Indent::ROOT,
         "Executing 'vgonio measure' with a thread pool of size: {}",

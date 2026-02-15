@@ -97,9 +97,6 @@ pub struct Measurement {
     pub measured: Box<dyn AnyMeasured>,
 }
 
-unsafe impl Send for Measurement {}
-unsafe impl Sync for Measurement {}
-
 asset!(Measurement, "Measurement");
 
 impl PartialEq for Measurement {

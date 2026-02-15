@@ -86,7 +86,7 @@ macro_rules! any_measured_brdf_trait_common_impl {
 /// - Masking Shadowing Function (MSF)
 /// - Slope Distribution Function (SDF)
 /// - Bidirectional Scattering Distribution Function (BSDF)
-pub trait AnyMeasured: Debug {
+pub trait AnyMeasured: Debug + Send + Sync {
     /// Returns the kind of the measurement.
     fn kind(&self) -> MeasurementKind;
 
