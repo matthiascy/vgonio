@@ -6,7 +6,7 @@ use crate::{
 };
 use std::{path::PathBuf, time::Instant};
 use vgn_core::{
-    cli,
+    cli::{self, cli_error, cli_note, cli_step, cli_success, Indent},
     config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
@@ -22,15 +22,13 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             .build_global()
             .unwrap();
     }
-    cli::step(
-        0,
-        format_args!(
-            "Executing 'vgonio measure' with a thread pool of size: {}",
-            rayon::current_num_threads()
-        ),
+    cli_step!(
+        Indent::ROOT,
+        "Executing 'vgonio measure' with a thread pool of size: {}",
+        rayon::current_num_threads()
     );
 
-    cli::step(2, format_args!("Reading measurement description files..."));
+    cli_step!(Indent::SECTION, "Reading measurement description files...");
     let measurements = opts
         .inputs
         .iter()
@@ -48,22 +46,19 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         .filter_map(|meas| meas)
         .flatten()
         .collect::<Vec<_>>();
-    cli::success(4, format_args!("{} measurement(s)", measurements.len()));
+    cli_success!(Indent::SUBSECTION, "{} measurement(s)", measurements.len());
 
     let cache = Cache::new(config.cache_dir());
 
     let (tasks, num_surfs) = cache.write(|cache| {
         // Load data files: refractive indices, spd etc. if needed.
         if measurements.iter().any(|meas| meas.params.is_bsdf()) {
-            cli::step(
-                2,
-                format_args!("Loading data files (refractive indices, spd etc.)..."),
-            );
+            cli_step!(Indent::SECTION, "Loading data files (refractive indices, spd etc.)...");
             cache.load_ior_database(&config);
-            cli::success(4, format_args!("Successfully loaded data files"));
+            cli_success!(Indent::SUBSECTION, "Successfully loaded data files");
         }
 
-        cli::step(2, format_args!("Resolving and loading micro-surfaces..."));
+        cli_step!(Indent::SECTION, "Resolving and loading micro-surfaces...");
         let tasks = measurements
             .into_iter()
             .filter_map(|meas| {
@@ -73,23 +68,20 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     .map(|surfaces| (meas, surfaces))
             })
             .collect::<Vec<_>>();
-        cli::success(
-            4,
-            format_args!("{} micro-surface(s) loaded", cache.num_micro_surfaces()),
-        );
+        cli_success!(Indent::SUBSECTION, "{} micro-surface(s) loaded", cache.num_micro_surfaces());
 
         #[cfg(debug_assertions)]
         cache
             .loaded_micro_surface_paths()
             .unwrap()
             .iter()
-            .for_each(|s| cli::note(6, format_args!("{}", s.display())));
+            .for_each(|s| cli_note!(Indent::DETAIL, "{}", s.display()));
 
         (tasks, cache.num_micro_surfaces())
     });
 
     if num_surfs == 0 {
-        cli::error(2, format_args!("No micro-surface to measure. Exiting..."));
+        cli_error!(Indent::SECTION, "No micro-surface to measure. Exiting...");
         return Ok(());
     }
 
@@ -98,10 +90,9 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         let measurement_start_time = std::time::SystemTime::now();
         let measured = match desc.params {
             MeasurementParams::Bsdf(params) => {
-                cli::step(
-                    2,
-                    format_args!(
-                        "Launch BSDF measurement at {}
+                cli_step!(
+                    Indent::SECTION,
+                    "Launch BSDF measurement at {}
     • parameters:
       + incident medium: {:?}
       + transmitted medium: {:?}
@@ -112,16 +103,15 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         - spectrum: {}
         - polar angle: {}
         - azimuthal angle: {}",
-                        chrono::DateTime::<chrono::Utc>::from(measurement_start_time),
-                        params.incident_medium,
-                        params.transmitted_medium,
-                        params.emitter.num_rays,
-                        params.emitter.num_sectors,
-                        params.emitter.max_bounces,
-                        params.emitter.spectrum,
-                        params.emitter.zenith.pretty_print(),
-                        params.emitter.azimuth.pretty_print(),
-                    ),
+                    chrono::DateTime::<chrono::Utc>::from(measurement_start_time),
+                    params.incident_medium,
+                    params.transmitted_medium,
+                    params.emitter.num_rays,
+                    params.emitter.num_sectors,
+                    params.emitter.max_bounces,
+                    params.emitter.spectrum,
+                    params.emitter.zenith.pretty_print(),
+                    params.emitter.azimuth.pretty_print()
                 );
                 for receiver in &params.receivers {
                     println!(
@@ -137,30 +127,26 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             MeasurementParams::Ndf(measurement) => {
                 match &measurement.mode {
                     NdfMeasurementMode::ByPoints { azimuth, zenith } => {
-                        cli::step(
-                            2,
-                            format_args!(
-                                "Measuring microfacet area distribution:
+                        cli_step!(
+                            Indent::SECTION,
+                            "Measuring microfacet area distribution:
     • parameters:
       + mode: by points
         + azimuth: {}
         + zenith: {}",
-                                azimuth.pretty_print(),
-                                zenith.pretty_print(),
-                            ),
+                            azimuth.pretty_print(),
+                            zenith.pretty_print()
                         );
                     },
                     NdfMeasurementMode::ByPartition { precision } => {
-                        cli::step(
-                            2,
-                            format_args!(
-                                "Measuring microfacet area distribution:
+                        cli_step!(
+                            Indent::SECTION,
+                            "Measuring microfacet area distribution:
     • parameters:
        + mode: by partition
            + scheme: Beckers
            + precision: {}",
-                                precision.prettified()
-                            ),
+                            precision.prettified()
                         );
                     },
                 }
@@ -169,19 +155,17 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                 })
             },
             MeasurementParams::Gaf(measurement) => {
-                cli::step(
-                    2,
-                    format_args!(
-                        "Measuring microfacet masking-shadowing function:
+                cli_step!(
+                    Indent::SECTION,
+                    "Measuring microfacet masking-shadowing function:
     • parameters:
       + azimuth: {}
       + zenith: {}
       + resolution: {} x {}",
-                        measurement.azimuth.pretty_print(),
-                        measurement.zenith.pretty_print(),
-                        measurement.resolution,
-                        measurement.resolution
-                    ),
+                    measurement.azimuth.pretty_print(),
+                    measurement.zenith.pretty_print(),
+                    measurement.resolution,
+                    measurement.resolution
                 );
 
                 #[cfg(debug_assertions)]
@@ -193,19 +177,17 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                 })
             },
             MeasurementParams::Sdf(params) => {
-                cli::step(2, format_args!("Measuring slope distribution function..."));
+                cli_step!(Indent::SECTION, "Measuring slope distribution function...");
                 cache.read(|cache| {
                     measure::mfd::measure_slope_distribution(&surfaces, params, cache)
                 })
             },
         };
 
-        cli::success(
-            4,
-            format_args!(
-                "Measurement finished in {} secs.",
-                measurement_start_time.elapsed().unwrap().as_secs_f32()
-            ),
+        cli_success!(
+            Indent::SUBSECTION,
+            "Measurement finished in {} secs.",
+            measurement_start_time.elapsed().unwrap().as_secs_f32()
         );
 
         let formats = match opts.output_format {
@@ -240,12 +222,13 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             },
         )?;
 
-        cli::success(4, format_args!("Done!"));
+        cli_success!(Indent::SUBSECTION, "Done!");
     }
 
-    cli::success(
-        4,
-        format_args!("Finished in {:.2} s", start_time.elapsed().as_secs_f32()),
+    cli_success!(
+        Indent::SUBSECTION,
+        "Finished in {:.2} s",
+        start_time.elapsed().as_secs_f32()
     );
 
     Ok(())

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use vgn_core::{
-    cli,
+    cli::{self, cli_step, cli_success, Indent},
     config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
@@ -80,15 +80,17 @@ pub struct GenerateOptions {
 pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError> {
     let (res_x, res_y) = (opts.res[0], opts.res[1]);
     let (du, dv) = (opts.spacing[0], opts.spacing[1]);
-    cli::step(
-        2,
-        format_args!("Generating surface with resolution {}x{}...", res_x, res_y),
+    cli_step!(
+        Indent::SECTION,
+        "Generating surface with resolution {}x{}...",
+        res_x,
+        res_y
     );
 
     let surf = match opts.kind {
         SurfGenKind::Random => match opts.method.unwrap() {
             RandomGenMethod::WhiteNoise => {
-                cli::step(4, format_args!("Generating surface from white noise..."));
+                cli_step!(Indent::SUBSECTION, "Generating surface from white noise...");
                 MicroSurface::from_white_noise(
                     res_y as usize,
                     res_x as usize,
@@ -99,7 +101,7 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
                 )
             },
             RandomGenMethod::WorleyNoise => {
-                cli::step(4, format_args!("Generating surface from Worley noise..."));
+                cli_step!(Indent::SUBSECTION, "Generating surface from Worley noise...");
                 MicroSurface::from_worley_noise(
                     res_y as usize,
                     res_x as usize,
@@ -115,10 +117,7 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
             },
         },
         SurfGenKind::Gaussian2D => {
-            cli::step(
-                2,
-                format_args!("Generating surface from 2D gaussian distribution..."),
-            );
+            cli_step!(Indent::SECTION, "Generating surface from 2D gaussian distribution...");
             let (sigma_x, sigma_y) = (opts.sigma_x.unwrap(), opts.sigma_y.unwrap());
             let (mean_x, mean_y) = (opts.mean_x.unwrap(), opts.mean_y.unwrap());
             let amp = opts.amplitude.unwrap();
@@ -158,7 +157,7 @@ pub fn generate(opts: GenerateOptions, config: Config) -> Result<(), VgonioError
         .resolve_output_dir(opts.output.as_deref())?
         .join(filename);
 
-    cli::success(4, format_args!("Surface generated"));
-    cli::step(4, format_args!("Saving to \"{}\"", path.display()));
+    cli_success!(Indent::SUBSECTION, "Surface generated");
+    cli_step!(Indent::SUBSECTION, "Saving to \"{}\"", path.display());
     surf.write_to_file(&path, opts.encoding, opts.compression)
 }

@@ -33,7 +33,7 @@ use vgn_bxdf::{
     AnyMeasuredBrdf,
 };
 use vgn_core::{
-    cli,
+    cli::{self, cli_error, cli_step, Indent},
     error::VgonioError,
     math::{rcp_f64, Sph2, Vec3},
     res::{Handle, RawDataStore},
@@ -747,64 +747,50 @@ impl SingleBsdfMeasurementStats {
     /// Tests if the statistics are valid.
     pub fn is_valid(&self) -> bool {
         if self.n_ray_stats.len() != Self::N_STATS * self.n_spectrum {
-            cli::error(
-                0,
-                format_args!("Invalid n_ray_stats length: {}", self.n_ray_stats.len()),
-            );
+            cli_error!(Indent::ROOT, "Invalid n_ray_stats length: {}", self.n_ray_stats.len());
             return false;
         }
         if self.n_ray_per_bounce.len() != self.n_spectrum * self.n_bounce as usize {
-            cli::error(
-                0,
-                format_args!(
-                    "Invalid n_ray_per_bounce length: {}",
-                    self.n_ray_per_bounce.len()
-                ),
+            cli_error!(
+                Indent::ROOT,
+                "Invalid n_ray_per_bounce length: {}",
+                self.n_ray_per_bounce.len()
             );
             return false;
         }
         if self.energy_per_bounce.len() != self.n_spectrum * self.n_bounce as usize {
-            cli::error(
-                0,
-                format_args!(
-                    "Invalid energy_per_bounce length: {}",
-                    self.energy_per_bounce.len()
-                ),
+            cli_error!(
+                Indent::ROOT,
+                "Invalid energy_per_bounce length: {}",
+                self.energy_per_bounce.len()
             );
             return false;
         }
         if self.e_captured.len() != self.n_spectrum {
-            cli::error(
-                0,
-                format_args!("Invalid e_captured length: {}", self.e_captured.len()),
-            );
+            cli_error!(Indent::ROOT, "Invalid e_captured length: {}", self.e_captured.len());
             return false;
         }
         // N_emitted = N_missed + N_received
         for i in 0..self.n_spectrum {
             // N_received = N_absorbed + N_reflected
             if self.n_reflected()[i] + self.n_absorbed()[i] != self.n_received {
-                cli::error(
-                    0,
-                    format_args!(
-                        "Invalid N_received: {} = Nr {} + Na {}",
-                        self.n_received,
-                        self.n_reflected()[i],
-                        self.n_absorbed()[i]
-                    ),
+                cli_error!(
+                    Indent::ROOT,
+                    "Invalid N_received: {} = Nr {} + Na {}",
+                    self.n_received,
+                    self.n_reflected()[i],
+                    self.n_absorbed()[i]
                 );
                 return false;
             }
             // N_reflected = N_captured + N_escaped
             if self.n_captured()[i] + self.n_escaped()[i] != self.n_reflected()[i] {
-                cli::error(
-                    0,
-                    format_args!(
-                        "Invalid N_reflected: {} = {} + {}",
-                        self.n_reflected()[i],
-                        self.n_captured()[i],
-                        self.n_escaped()[i]
-                    ),
+                cli_error!(
+                    Indent::ROOT,
+                    "Invalid N_reflected: {} = {} + {}",
+                    self.n_reflected()[i],
+                    self.n_captured()[i],
+                    self.n_escaped()[i]
                 );
                 return false;
             }
@@ -1418,10 +1404,7 @@ pub fn measure_bsdf_rt(
                 }
             },
             SimulationKind::WaveOptics => {
-                cli::step(
-                    4,
-                    format_args!("Measuring {} with wave optics...", params.kind),
-                );
+                cli_step!(Indent::SUBSECTION, "Measuring {} with wave optics...", params.kind);
                 todo!("Wave optics simulation is not yet implemented")
             },
         }

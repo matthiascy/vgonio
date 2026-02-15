@@ -23,7 +23,7 @@ use vgn_bxdf::{
     AnyMeasured,
 };
 use vgn_core::{
-    cli,
+    cli::{self, cli_note, Indent},
     config::Config,
     error::VgonioError,
     math::Sph2,
@@ -885,7 +885,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                             None,
                         );
 
-                        cli::note(2, format_args!("{}: MSE#{:?} = {}", names[0], distro, mse));
+                        cli_note!(Indent::SECTION, "{}: MSE#{:?} = {}", names[0], distro, mse);
                     }
                 }
             });
@@ -946,7 +946,7 @@ pub fn plot(opts: PlotOptions, config: Config) -> Result<(), VgonioError> {
                             #[cfg(feature = "cuda")]
                             None,
                         );
-                        cli::note(2, format_args!("{}: MSE#{:?} = {}", names[0], distro, mse));
+                        cli_note!(Indent::SECTION, "{}: MSE#{:?} = {}", names[0], distro, mse);
                     }
                 }
             });

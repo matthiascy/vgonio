@@ -1020,3 +1020,8 @@ macro_rules! cli_timed_v {
 #[doc(hidden)]
 #[inline(always)]
 pub fn indent_as_u32<I: Into<u32>>(indent: I) -> u32 { indent.into() }
+
+// Re-export macros at the cli module level
+pub use crate::{
+    cli_error, cli_note, cli_step, cli_success, cli_timed, cli_timed_v, cli_warning,
+};

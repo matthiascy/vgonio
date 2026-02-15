@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use vgn_core::{
-    cli,
+    cli::{self, cli_error, cli_note, cli_step, format_duration, Indent},
     config::Config,
     error::VgonioError,
     optics::IorReg,
@@ -84,10 +84,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
 
     // Temporary fix for adding the NDF fitting
     if opts.ndf {
-        cli::step(
-            2,
-            format_args!("Fitting to distribution @{:?}", opts.distro.unwrap()),
-        );
+        cli_step!(Indent::SECTION, "Fitting to distribution @{:?}", opts.distro.unwrap());
         // Load the data from the cache if the fitting is NDF
         cache.write(|cache| {
             cache.load_ior_database(&config);
@@ -118,13 +115,11 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
         return Ok(());
     }
 
-    cli::step(
-        2,
-        format_args!(
-            "Fitting to model {:?}@{:?}",
-            opts.family,
-            opts.distro.unwrap()
-        ),
+    cli_step!(
+        Indent::SECTION,
+        "Fitting to model {:?}@{:?}",
+        opts.family,
+        opts.distro.unwrap()
     );
     let theta_limit = opts
         .theta_limit
@@ -132,7 +127,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     cache.write(|cache| {
         cache.load_ior_database(&config);
         if opts.kind == MeasuredBrdfKind::Vgonio && opts.clausen {
-            cli::step(2, format_args!("Fitting simulated data to Clausen's data."));
+            cli_step!(Indent::SECTION, "Fitting simulated data to Clausen's data.");
             if opts.inputs.len() % 2 != 0 {
                 return Err(VgonioError::new(
                     "The input files should be in pairs of measured data and corresponding \
@@ -209,10 +204,7 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     load_and_fit!(RglBrdf, opts, cache, config, &opts.inputs, theta_limit);
                 },
                 MeasuredBrdfKind::Unknown => {
-                    cli::error(
-                        2,
-                        format_args!("Unknown measured BRDF kind specified, cannot fit!"),
-                    );
+                    cli_error!(Indent::SECTION, "Unknown measured BRDF kind specified, cannot fit!");
                 },
             }
         }
@@ -257,17 +249,11 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
     iors: &IorReg,
     writer: Option<&mut BufWriter<File>>,
 ) {
-    cli::step(
-        6,
-        format_args!(
-            "Fitting with brute force method... {} {}",
-            if opts.per_wavelength {
-                "per wavelength"
-            } else {
-                ""
-            },
-            if opts.on_cpu() { "on CPU" } else { "on GPU" }
-        ),
+    cli_step!(
+        Indent::DETAIL,
+        "Fitting with brute force method... {} {}",
+        if opts.per_wavelength { "per wavelength" } else { "" },
+        if opts.on_cpu() { "on CPU" } else { "on GPU" }
     );
     let start = std::time::Instant::now();
     log::debug!(
@@ -334,12 +320,12 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
                     ay.unwrap().step_size
                 )
             };
-            cli::step(
-                6,
-                format_args!(
-                    "Fitting for wavelength: {:?}, in range ax: {}, ay: {}",
-                    w, ax_str, ay_str,
-                ),
+            cli_step!(
+                Indent::DETAIL,
+                "Fitting for wavelength: {:?}, in range ax: {}, ay: {}",
+                w,
+                ax_str,
+                ay_str
             );
             let a = ax.zip(ay).map(|(ax, ay)| Roughness::Anisotropic { ax, ay });
             let report = brdf_fitting_brute_force_inner(proxy, opts, 0, Some(*w), a);
@@ -364,7 +350,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
         )])
     };
     let end = std::time::Instant::now();
-    cli::note(4, format_args!("Took: {:?}", end - start));
+    cli_note!(Indent::SUBSECTION, "Took: {}", format_duration(end - start));
 
     write_fitting_reports(
         writer,
@@ -508,7 +494,7 @@ fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(
             opts.theta_limit.map(|t| Radians::from_degrees(t)),
         );
         if let Some(w) = w {
-            cli::step(6, format_args!("λ = {:?}:", w));
+            cli_step!(Indent::DETAIL, "λ = {:?}:", w);
         }
         report.print_fitting_report(n, 6);
         report
@@ -522,24 +508,22 @@ fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
     theta_limit: Option<Radians>,
 ) {
     let limit = theta_limit.unwrap_or(Radians::HALF_PI);
-    cli::step(
-        4,
-        format_args!(
-            "Fitting ({:?}) to model: {:?}, distro: {:?}, symmetry: {}, method: {:?}, error \
-             metric: {}, weighting: {:?}, θ < {}",
-            brdf.kind(),
-            opts.family,
-            opts.distro,
-            opts.symmetry,
-            opts.method,
-            if opts.method == FittingMethod::Brute {
-                opts.error_metric.unwrap_or(ErrorMetric::Mse)
-            } else {
-                ErrorMetric::Nllsq
-            },
-            opts.weighting,
-            limit.prettified()
-        ),
+    cli_step!(
+        Indent::SUBSECTION,
+        "Fitting ({:?}) to model: {:?}, distro: {:?}, symmetry: {}, method: {:?}, error metric: \
+         {}, weighting: {:?}, θ < {}",
+        brdf.kind(),
+        opts.family,
+        opts.distro,
+        opts.symmetry,
+        opts.method,
+        if opts.method == FittingMethod::Brute {
+            opts.error_metric.unwrap_or(ErrorMetric::Mse)
+        } else {
+            ErrorMetric::Nllsq
+        },
+        opts.weighting,
+        limit.prettified()
     );
 
     let mut out = opts.output.as_ref().and_then(|output| {
