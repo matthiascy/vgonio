@@ -1,5 +1,6 @@
 use args::CliArgs;
-use vgn_core::{cli as core_cli, error::VgonioError};
+use std::io::IsTerminal;
+use vgn_core::{cli as core_cli, cli::SilentSink, error::VgonioError};
 
 pub(crate) mod args;
 
@@ -11,15 +12,38 @@ pub(crate) mod gui;
 pub fn run() -> Result<(), VgonioError> {
     let (args, launch_time) = core_cli::parse_args::<CliArgs>("vgonio-comp");
 
+    let base_status_verbosity = if args.verbose || args.log_level >= 3 {
+        1
+    } else {
+        0
+    };
+    let color_mode = match args.status_color {
+        args::StatusColorMode::Auto => core_cli::ColorMode::Auto,
+        args::StatusColorMode::Always => core_cli::ColorMode::Always,
+        args::StatusColorMode::Never => core_cli::ColorMode::Never,
+    };
     core_cli::setup_printer(core_cli::PrinterConfig {
-        quiet: args.quite,
-        verbosity: if args.verbose || args.log_level >= 3 {
-            1
-        } else {
-            0
-        },
-        color_mode: core_cli::ColorMode::Auto,
+        quiet: args.quiet,
+        verbosity: args.status_verbosity.max(base_status_verbosity),
+        color_mode,
     });
+    let serialize_env = matches!(
+        std::env::var("VGN_CLI_SERIALIZE")
+            .as_deref()
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str(),
+        "1" | "true" | "yes" | "on"
+    );
+    let serialize_auto = !std::io::stdout().is_terminal();
+    match args.status_sink {
+        args::StatusSinkMode::Silent => core_cli::set_status_sink(SilentSink),
+        args::StatusSinkMode::Cli | args::StatusSinkMode::Auto => {
+            if args.serialize_output || serialize_env || serialize_auto {
+                core_cli::use_cli_sink(true);
+            }
+        },
+    }
 
     let timestamp = if args.log_timestamp {
         Some(launch_time)

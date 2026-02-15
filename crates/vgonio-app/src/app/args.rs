@@ -20,11 +20,42 @@ use std::{
 pub struct CliArgs {
     /// Whether to print any information to stdout.
     #[clap(short, long, help = "Silent output printed to stdout")]
-    pub quite: bool,
+    pub quiet: bool,
 
     /// Whether to print verbose information to stdout.
     #[clap(short, long, help = "Use verbose output (log level = 4)")]
     pub verbose: bool,
+
+    /// Status verbosity level (0 = default). Overrides verbosity derived from `--verbose`/log
+    /// level.
+    #[clap(
+        long,
+        default_value_t = 0,
+        help = "Status verbosity level (0 = default)"
+    )]
+    pub status_verbosity: u8,
+
+    /// Color policy for status output.
+    #[clap(
+        long,
+        value_enum,
+        default_value_t = StatusColorMode::Auto,
+        help = "Status color policy: auto|always|never"
+    )]
+    pub status_color: StatusColorMode,
+
+    /// Status sink selection.
+    #[clap(
+        long,
+        value_enum,
+        default_value_t = StatusSinkMode::Auto,
+        help = "Status sink: auto|cli|silent"
+    )]
+    pub status_sink: StatusSinkMode,
+
+    /// Serialize CLI status output to avoid interleaving from parallel tasks.
+    #[clap(long, help = "Serialize stdout status lines (slower, deterministic)")]
+    pub serialize_output: bool,
 
     /// Path to the file where to output the log to.
     #[clap(long, help = "Set a file to output the log to")]
@@ -164,4 +195,26 @@ impl OutputFormat {
     pub fn is_vgmo(&self) -> bool { matches!(self, Self::Vgmo | Self::VgmoExr) }
 
     pub fn is_exr(&self) -> bool { matches!(self, Self::Exr | Self::VgmoExr) }
+}
+
+/// Status color policy exposed on CLI.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
+pub enum StatusColorMode {
+    #[clap(name = "auto")]
+    Auto,
+    #[clap(name = "always")]
+    Always,
+    #[clap(name = "never")]
+    Never,
+}
+
+/// Status sink selection exposed on CLI.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
+pub enum StatusSinkMode {
+    #[clap(name = "auto")]
+    Auto,
+    #[clap(name = "cli")]
+    Cli,
+    #[clap(name = "silent")]
+    Silent,
 }

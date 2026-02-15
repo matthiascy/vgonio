@@ -35,6 +35,8 @@ pub const GREEN_CHECK: ColoredSymbol = ColoredSymbol::new(Color::Green, '✓');
 pub const YELLOW_GT: ColoredSymbol = ColoredSymbol::new(Color::Yellow, '>');
 /// Cyan minus marker.
 pub const CYAN_MINUS: ColoredSymbol = ColoredSymbol::new(Color::Cyan, '-');
+/// Yellow warning marker.
+pub const YELLOW_WARN: ColoredSymbol = ColoredSymbol::new(Color::Yellow, '⚠');
 
 /// ANSI color codes.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -47,6 +49,8 @@ pub enum Color {
     Green,
     /// Yellow color.
     Yellow,
+    /// Orange color (rendered as bright yellow).
+    Orange,
 }
 
 impl Color {
@@ -57,6 +61,7 @@ impl Color {
             Color::Red => "\u{001b}[31m",
             Color::Green => "\u{001b}[32m",
             Color::Yellow => "\u{001b}[33m",
+            Color::Orange => "\u{001b}[38;5;208m", // 256-color orange
         }
     }
 

@@ -1264,7 +1264,7 @@ pub fn measure_bsdf_rt(
         log::trace!("Estimated orbit radius: {}", orbit_radius);
 
         // Receiver with its records & stats
-        let receivers = params
+        let mut receivers = params
             .receivers
             .iter()
             .map(|rparams| {
