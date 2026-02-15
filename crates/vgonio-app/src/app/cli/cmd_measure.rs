@@ -258,6 +258,7 @@ pub struct MeasureOptions {
     #[arg(
         short,
         long,
+        required = true,
         num_args(1..),
         help = "The measurement description files or directories."
     )]

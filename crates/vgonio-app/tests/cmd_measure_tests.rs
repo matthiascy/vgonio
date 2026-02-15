@@ -59,8 +59,8 @@ fn rejects_unknown_output_format() {
 }
 
 #[test]
-fn accepts_missing_inputs_as_empty_list() {
+fn rejects_missing_inputs() {
     let args = vec!["measure-tests".to_string()];
-    let parsed = MeasureCli::try_parse_from(args).unwrap();
-    assert!(parsed.measure.inputs.is_empty());
+    let err = MeasureCli::try_parse_from(args).unwrap_err();
+    assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
 }
