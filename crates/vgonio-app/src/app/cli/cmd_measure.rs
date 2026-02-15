@@ -97,6 +97,16 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
         let measurement_start_time = std::time::SystemTime::now();
         let measured = match desc.params {
             MeasurementParams::Bsdf(params) => {
+                if let Err(reason) = params.check_supported_for_measurement() {
+                    return Err(VgonioError::new(
+                        &format!(
+                            "Unsupported simulation method for this build: {}. Rebuild with the \
+                             required backend feature or choose another simulation kind.",
+                            reason
+                        ),
+                        None,
+                    ));
+                }
                 cli_step!(
                     Indent::SECTION,
                     "Launch BSDF measurement at {}

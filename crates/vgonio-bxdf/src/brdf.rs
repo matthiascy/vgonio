@@ -46,6 +46,16 @@ pub trait AnalyticalBrdf<P>: Send + Sync + Debug + AnalyticalBrdfClone<P> + 'sta
     /// Evaluates the BRDF ($f_r$) with the classical parametrisation for any
     /// incident and outgoing direction located on the hemisphere.
     ///
+    /// # Note
+    ///
+    /// This only evaluates the D * G / (4 * cos_i * cos_o) term of the microfacet BRDF. The Fresnel
+    /// term is not included in this evaluation. This allows us to fit the microfacet distribution
+    /// and masking-shadowing function separately from the Fresnel term, which is important for
+    /// fitting measured BRDFs with a known Fresnel term. To include the Fresnel term, multiply the
+    /// result of this function with the Fresnel term evaluated at the half-vector and the incident
+    /// direction. See [`Scattering::eval_reflectance`] for an example of how to properly
+    /// evaluate the microfacet BRDF with the Fresnel term included.
+    ///
     /// # Arguments
     ///
     /// * `vi` - The incident direction (normalised).

@@ -229,24 +229,22 @@ fn read_per_wavelength_roughness_values(
     path: &Path,
     n_wl: usize,
 ) -> Result<Box<[StepRangeIncl<f64>]>, &'static str> {
-    let file = File::open(path).unwrap();
+    let file = File::open(path).map_err(|_| "Failed to open the roughness values file.")?;
     let reader = std::io::BufReader::new(file);
-    let values = reader
-        .lines()
-        .map(|line| {
-            let line = line.unwrap();
-            let values = line
-                .split(':')
-                .map(|v| v.parse::<f64>().unwrap())
-                .collect::<Vec<_>>();
-            let val: [f64; 3] = values.try_into().unwrap();
-            StepRangeIncl::new(val[0], val[1], val[2])
-        })
-        .collect::<Box<_>>();
+    let mut values = Vec::new();
+    for line in reader.lines() {
+        let line = line.map_err(|_| "Failed to read the roughness values file.")?;
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let [start, stop, step] = parse_roughness_values(line)?;
+        values.push(StepRangeIncl::new(start, stop, step));
+    }
     if values.len() != n_wl {
         return Err("The number of triplets should be equal to the number of wavelengths.");
     }
-    Ok(values)
+    Ok(values.into_boxed_slice())
 }
 
 // TODO: add intermediate fitting results output, and add error handling
@@ -299,8 +297,33 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
             .as_ref()
             .map(|[start, end, step]| StepRangeIncl::new(*start, *end, *step));
 
+        // GPU optimization: Pre-create all wavelength proxies to enable batch GPU memory allocation
+        // This reduces redundant GPU memory transfers by allowing the GPU layer to batch allocate
+        // and transfer all wavelength data in one operation instead of per-wavelength transfers.
+        #[cfg(feature = "cuda")]
+        let wavelength_proxies: Option<Vec<_>> = if opts.cuda {
+            cli_step!(
+                Indent::DETAIL,
+                "Pre-allocating GPU memory for {} wavelengths...",
+                wavelengths.len()
+            );
+            Some(
+                wavelengths
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| full_proxy.per_wavelength(i))
+                    .collect(),
+            )
+        } else {
+            None
+        };
+
         for (i, w) in wavelengths.iter().enumerate() {
-            let proxy = full_proxy.per_wavelength(i);
+            // Use pre-allocated proxy on GPU to avoid redundant memory transfers,
+            // or create on-demand for CPU processing
+            #[cfg(feature = "cuda")]
+            let use_prealloc = wavelength_proxies.is_some();
+
             let ax = if per_wl_ax.is_none() {
                 ax
             } else {
@@ -339,7 +362,28 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
                 ay_str
             );
             let a = ax.zip(ay).map(|(ax, ay)| Roughness::Anisotropic { ax, ay });
-            let report = brdf_fitting_brute_force_inner(proxy, opts, 0, Some(*w), a);
+
+            // Call fitting with pre-allocated proxy (GPU) or create on-demand (CPU)
+            #[cfg(feature = "cuda")]
+            let report = if use_prealloc {
+                brdf_fitting_brute_force_inner(
+                    &wavelength_proxies.as_ref().unwrap()[i],
+                    opts,
+                    0,
+                    Some(*w),
+                    a,
+                )
+            } else {
+                let proxy = full_proxy.per_wavelength(i);
+                brdf_fitting_brute_force_inner(&proxy, opts, 0, Some(*w), a)
+            };
+
+            #[cfg(not(feature = "cuda"))]
+            let report = {
+                let proxy = full_proxy.per_wavelength(i);
+                brdf_fitting_brute_force_inner(&proxy, opts, 0, Some(*w), a)
+            };
+
             reports[i].write((Some(*w), report));
         }
         unsafe { reports.assume_init() }
@@ -357,7 +401,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
         };
         Box::new([(
             None,
-            brdf_fitting_brute_force_inner(full_proxy, opts, 4, None, alpha),
+            brdf_fitting_brute_force_inner(&full_proxy, opts, 4, None, alpha),
         )])
     };
     let end = std::time::Instant::now();
@@ -412,7 +456,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
     }
 
     fn brdf_fitting_brute_force_inner(
-        proxy: BrdfProxy,
+        proxy: &BrdfProxy,
         opts: &FitOptions,
         n: usize,
         w: Option<Nanometres>,
@@ -628,14 +672,26 @@ fn write_fitting_reports(
 
 /// Parse the roughness values from a string formatted as `START:END:STEP`.
 fn parse_roughness_values(arg: &str) -> Result<[f64; 3], &'static str> {
-    arg.split(':')
+    let values = arg
+        .split(':')
         .map(|arg| {
             arg.parse::<f64>()
-                .expect("roughness value is not a valid floating point number")
+                .map_err(|_| "roughness value is not a valid floating point number")
         })
-        .collect::<Vec<_>>()
+        .collect::<Result<Vec<_>, _>>()?
         .try_into()
-        .map_err(|_| "Must provide 3 values separated by ':'")
+        .map_err(|_| "Must provide 3 values separated by ':'")?;
+    let [start, stop, step] = values;
+    if !(start.is_finite() && stop.is_finite() && step.is_finite()) {
+        return Err("roughness values must be finite");
+    }
+    if step <= 0.0 {
+        return Err("roughness step must be greater than 0");
+    }
+    if start > stop {
+        return Err("roughness range start must be <= end");
+    }
+    Ok([start, stop, step])
 }
 
 // TODO: separate the NDF fitting & the BRDF fitting
@@ -838,4 +894,61 @@ pub enum FittingMethod {
     Brute,
     /// Non-linear least squares fitting method.
     Nllsq,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_roughness_values, read_per_wavelength_roughness_values};
+    use std::io::Write;
+
+    #[test]
+    fn parse_roughness_values_accepts_valid_triplet() {
+        let parsed = parse_roughness_values("0.1:0.5:0.01").unwrap();
+        assert_eq!(parsed, [0.1, 0.5, 0.01]);
+    }
+
+    #[test]
+    fn parse_roughness_values_rejects_non_numeric_values() {
+        let err = parse_roughness_values("a:b:c").unwrap_err();
+        assert_eq!(err, "roughness value is not a valid floating point number");
+    }
+
+    #[test]
+    fn parse_roughness_values_rejects_non_positive_step() {
+        let err = parse_roughness_values("0.1:0.5:0.0").unwrap_err();
+        assert_eq!(err, "roughness step must be greater than 0");
+    }
+
+    #[test]
+    fn parse_roughness_values_rejects_reversed_range() {
+        let err = parse_roughness_values("0.5:0.1:0.01").unwrap_err();
+        assert_eq!(err, "roughness range start must be <= end");
+    }
+
+    #[test]
+    fn read_per_wavelength_roughness_values_parses_valid_file() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(file, "0.1:0.2:0.01").unwrap();
+        writeln!(file, "0.2:0.3:0.01").unwrap();
+        writeln!(file, "0.3:0.4:0.01").unwrap();
+        file.flush().unwrap();
+
+        let values = read_per_wavelength_roughness_values(file.path(), 3).unwrap();
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0].start, 0.1);
+        assert_eq!(values[2].stop, 0.4);
+    }
+
+    #[test]
+    fn read_per_wavelength_roughness_values_rejects_length_mismatch() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        writeln!(file, "0.1:0.2:0.01").unwrap();
+        file.flush().unwrap();
+
+        let err = read_per_wavelength_roughness_values(file.path(), 2).unwrap_err();
+        assert_eq!(
+            err,
+            "The number of triplets should be equal to the number of wavelengths."
+        );
+    }
 }

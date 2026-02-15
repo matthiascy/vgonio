@@ -72,7 +72,8 @@
 //! For cleaner syntax and zero-cost verbosity gating, use the macro variants:
 //!
 //! ```no_run
-//! use vgn_core::{cli::Indent, cli_note, cli_step, cli_timed, cli_warning};
+//! # use vgn_core::{cli::Indent, cli_note, cli_step, cli_timed, cli_warning};
+//! # let count = 5;
 //!
 //! cli_step!(Indent::ROOT, "Starting process...");
 //! cli_note!(Indent::SECTION, "Found {} items", count);
@@ -87,10 +88,11 @@
 //! The `_v` macro variants only evaluate arguments when verbosity permits:
 //!
 //! ```no_run
-//! use vgn_core::cli_step_v;
+//! # use vgn_core::cli_step_v;
+//! # let expensive_debug = || "expensive debug info".to_string();
 //!
 //! // expensive_debug() only runs if verbosity >= 1
-//! cli_step_v!(1, 2, \"Debug info: {}\", expensive_debug());
+//! cli_step_v!(1, 2u32, "Debug info: {}", expensive_debug());
 //! ```
 //!
 //! ### Type-Safe Indentation
@@ -141,7 +143,7 @@
 //! ### Using Functions
 //!
 //! ```no_run
-//! use vgn_core::cli::{self, setup_printer, ColorMode, PrinterConfig};
+//! # use vgn_core::cli::{self, setup_printer, ColorMode, PrinterConfig};
 //!
 //! // Setup during app initialization
 //! setup_printer(PrinterConfig {
@@ -167,10 +169,10 @@
 //! ### Using Macros (Recommended)
 //!
 //! ```no_run
-//! use vgn_core::{
-//!     cli::{self, setup_printer, ColorMode, Indent, PrinterConfig},
-//!     cli_error, cli_note_v, cli_step, cli_success, cli_warning,
-//! };
+//! # use vgn_core::{
+//! #    cli::{self, setup_printer, ColorMode, Indent, PrinterConfig},
+//! #    cli_error, cli_note_v, cli_step, cli_success, cli_warning,
+//! # };
 //!
 //! setup_printer(PrinterConfig {
 //!     quiet: false,
@@ -182,8 +184,12 @@
 //! cli_step!(Indent::ROOT, "Loading configuration...");
 //! cli_success!(Indent::ROOT, "Configuration loaded");
 //!
+//! # let get_cache_dir = || "/path/to/cache";
+//!
 //! // Zero-cost verbosity gating - only evaluates if verbosity >= 1
 //! cli_note_v!(1, Indent::SECTION, "Cache dir: {}", get_cache_dir());
+//!
+//! # let path = "/path/to/file";
 //!
 //! cli_warning!(Indent::ROOT, "Using deprecated feature");
 //! cli_error!(Indent::ROOT, "Failed to open file: {}", path);
@@ -877,9 +883,13 @@ pub fn print_inline_v(
 ///
 /// # Examples
 ///
-/// ```ignore
-/// cli_step!(0, "Loading configuration...");
-/// cli_step!(2, "Found {} files", count);
+/// ```ignore,no_run
+/// # use vgn_core::{cli_step, cli::Indent};
+/// # let count = 5;
+/// # let name = "example.txt";
+///
+/// cli_step!(0u32, "Loading configuration...");
+/// cli_step!(2u32, "Found {} files", count);
 /// cli_step!(Indent::SECTION, "Processing {}", name);
 /// ```
 #[macro_export]
@@ -983,8 +993,8 @@ macro_rules! cli_step_inline_flush {
 ///
 /// # Examples
 ///
-/// ```no_run
-/// use vgn_core::{cli::Indent, cli_timed};
+/// ```no_run,ignore
+/// # use vgn_core::{cli::Indent, cli_timed};
 ///
 /// cli_timed!(Indent::ROOT, "Processing data", {
 ///     // expensive operation

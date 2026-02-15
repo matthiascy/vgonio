@@ -349,6 +349,14 @@ pub struct Ior {
     pub k: f32,
 }
 
+impl Ior {
+    /// Creates a new index of refraction for insulator material.
+    pub fn new_dielectric(eta: f32) -> Ior { Ior { eta, k: 0.0 } }
+
+    /// Creates a new index of refraction for conductor material.
+    pub fn new_conductor(eta: f32, k: f32) -> Ior { Ior { eta, k } }
+}
+
 impl Debug for Ior {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "IOR(η={}, κ={})", self.eta, self.k)

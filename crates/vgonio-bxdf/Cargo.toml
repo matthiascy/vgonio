@@ -45,3 +45,5 @@ vgn_jabr.workspace = true
 
 [dev-dependencies]
 approx.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true

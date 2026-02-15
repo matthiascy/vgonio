@@ -28,12 +28,11 @@ pub enum SimulationKind {
 impl TryFrom<u8> for SimulationKind {
     type Error = String;
 
+    #[track_caller]
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0x00 => Ok(Self::GeomOptics(RtcMethod::Grid)),
-            #[cfg(feature = "embree")]
             0x01 => Ok(Self::GeomOptics(RtcMethod::Embree)),
-            #[cfg(feature = "optix")]
             0x02 => Ok(Self::GeomOptics(RtcMethod::Optix)),
             0x03 => Ok(Self::WaveOptics),
             _ => Err(format!("Invalid simulation kind {}", value)),
@@ -46,11 +45,37 @@ impl SimulationKind {
     pub fn as_u8(&self) -> u8 {
         match self {
             Self::GeomOptics(RtcMethod::Grid) => 0x00,
-            #[cfg(feature = "embree")]
             Self::GeomOptics(RtcMethod::Embree) => 0x01,
-            #[cfg(feature = "optix")]
             Self::GeomOptics(RtcMethod::Optix) => 0x02,
             Self::WaveOptics => 0x03,
+        }
+    }
+
+    /// Verifies whether the selected simulation method is available in the
+    /// current build.
+    pub fn check_supported_for_measurement(&self) -> Result<(), String> {
+        match self {
+            Self::GeomOptics(RtcMethod::Embree) => {
+                if cfg!(feature = "embree") {
+                    Ok(())
+                } else {
+                    Err("SimulationKind is Embree, but this build does not enable `embree`.".to_string())
+                }
+            },
+            Self::GeomOptics(RtcMethod::Optix) => {
+                if cfg!(feature = "optix") {
+                    Err("Optix simulation is not implemented.".to_string())
+                } else {
+                    Err(
+                        "SimulationKind is Optix, but this build does not enable `optix`."
+                            .to_string(),
+                    )
+                }
+            },
+            Self::GeomOptics(RtcMethod::Grid) => {
+                Err("Grid simulation is temporarily deactivated.".to_string())
+            },
+            Self::WaveOptics => Err("Wave optics simulation is not yet implemented.".to_string()),
         }
     }
 }
@@ -181,6 +206,12 @@ impl BsdfMeasurementParams {
             .map(|r| r.num_patches() * self.emitter.measurement_points_count())
     }
 
+    /// Verifies whether the selected simulation method is available in the
+    /// current build.
+    pub fn check_supported_for_measurement(&self) -> Result<(), String> {
+        self.sim_kind.check_supported_for_measurement()
+    }
+
     /// Checks if the incident and transmitted media are air.
     pub fn is_both_air_medium(&self) -> bool {
         self.incident_medium == Medium::Air && self.transmitted_medium == Medium::Air
@@ -286,5 +317,53 @@ impl BsdfMeasurementParams {
             );
         }
         hash_map
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simulation_kind_decodes_well_known_values() {
+        assert!(matches!(
+            SimulationKind::try_from(0x00),
+            Ok(SimulationKind::GeomOptics(RtcMethod::Grid))
+        ));
+        assert!(matches!(
+            SimulationKind::try_from(0x01),
+            Ok(SimulationKind::GeomOptics(RtcMethod::Embree))
+        ));
+        assert!(matches!(
+            SimulationKind::try_from(0x02),
+            Ok(SimulationKind::GeomOptics(RtcMethod::Optix))
+        ));
+        assert!(matches!(
+            SimulationKind::try_from(0x03),
+            Ok(SimulationKind::WaveOptics)
+        ));
+    }
+
+    #[test]
+    fn simulation_kind_rejects_unknown_values() {
+        assert!(SimulationKind::try_from(0xFF).is_err());
+    }
+
+    #[test]
+    fn simulation_kind_support_check_matches_enabled_backends() {
+        let grid = SimulationKind::GeomOptics(RtcMethod::Grid);
+        let embree = SimulationKind::GeomOptics(RtcMethod::Embree);
+        let optix = SimulationKind::GeomOptics(RtcMethod::Optix);
+        let wave = SimulationKind::WaveOptics;
+
+        assert!(grid.check_supported_for_measurement().is_err());
+        assert!(wave.check_supported_for_measurement().is_err());
+
+        #[cfg(feature = "embree")]
+        assert!(embree.check_supported_for_measurement().is_ok());
+        #[cfg(not(feature = "embree"))]
+        assert!(embree.check_supported_for_measurement().is_err());
+
+        assert!(optix.check_supported_for_measurement().is_err());
     }
 }

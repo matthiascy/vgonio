@@ -32,10 +32,8 @@ use vgn_core::math;
 #[serde(rename_all = "lowercase")]
 pub enum RtcMethod {
     /// Ray tracing using Intel's Embree library.
-    #[cfg(feature = "embree")]
     Embree,
     /// Ray tracing using Nvidia's OptiX library.
-    #[cfg(feature = "optix")]
     Optix,
     /// Customised grid ray tracing method.
     Grid,

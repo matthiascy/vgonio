@@ -623,6 +623,21 @@ impl VgonioGuiApp {
                                     });
                                     return;
                                 }
+                                if let Err(reason) = params.check_supported_for_measurement() {
+                                    log::error!(
+                                        "Cannot measure BSDF with unsupported simulation method: {}",
+                                        reason
+                                    );
+                                    self.event_loop_proxy.send_event(Notify {
+                                        kind: NotifyKind::Error,
+                                        text: format!(
+                                            "Unsupported simulation method for this build: {}",
+                                            reason
+                                        ),
+                                        time: 2.0,
+                                    });
+                                    return;
+                                }
 
                                 #[cfg(feature = "vdbg")]
                                 {

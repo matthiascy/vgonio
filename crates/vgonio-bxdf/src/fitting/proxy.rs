@@ -383,7 +383,18 @@ impl<'a> BrdfProxy<'a> {
         );
         let has_nan = self.has_nan || other.has_nan;
         let is_rmse = metric == ErrorMetric::Rmse;
-        let effective_n = self.resampled.iter().filter(|&x| !x.is_nan()).count();
+        let effective_n = if has_nan {
+            self.resampled
+                .iter()
+                .zip(other.resampled.iter())
+                .filter(|(x, y)| !x.is_nan() && !y.is_nan())
+                .count()
+        } else {
+            self.resampled.len()
+        };
+        if effective_n == 0 {
+            return 0.0;
+        }
         let factor = match metric {
             ErrorMetric::Nllsq => 0.5,
             ErrorMetric::L1 | ErrorMetric::L2 => 1.0,
@@ -551,9 +562,6 @@ impl<'a> BrdfProxy<'a> {
                     acc + *x as f64 * factor
                 })
             };
-
-            assert!(!sum.is_nan(), "The sum of the differences is NaN");
-            assert_ne!(sum, 0.0, "The sum is zero");
 
             if is_rmse {
                 sum.sqrt()
@@ -1090,6 +1098,99 @@ fn sample_difference_sum(
                 })
                 .reduce(|| 0.0, |a, b| a + b)
         },
+    }
+}
+
+#[cfg(test)]
+mod distance_tests {
+    use super::{BrdfProxy, OutgoingDirs, ProxySource};
+    use crate::{brdf::measured::MeasuredBrdfKind, AnyMeasuredBrdf};
+    use std::borrow::Cow;
+    use vgn_core::{
+        optics::{Ior, IorReg},
+        units::{nm, Nanometres},
+        utils::medium::Medium,
+        ErrorMetric, Weighting,
+    };
+    use vgn_jabr::array::{DyArr, DynArr};
+
+    struct TestMeasuredBrdf {
+        spectrum: Box<[Nanometres]>,
+    }
+
+    impl AnyMeasuredBrdf for TestMeasuredBrdf {
+        fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Unknown }
+
+        fn spectrum(&self) -> &[Nanometres] { &self.spectrum }
+
+        fn transmitted_medium(&self) -> Medium { Medium::Air }
+
+        fn incident_medium(&self) -> Medium { Medium::Air }
+
+        fn proxy(&self, _: &IorReg) -> BrdfProxy<'_> { unreachable!("not used in test helper") }
+
+        fn as_any(&self) -> &dyn std::any::Any { self }
+
+        fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
+    }
+
+    fn make_proxy(samples: &[f32], has_nan: bool) -> BrdfProxy<'static> {
+        let measured = Box::leak(Box::new(TestMeasuredBrdf {
+            spectrum: vec![nm!(550.0)].into_boxed_slice(),
+        }));
+        let i_thetas = DyArr::from_vec_1d(vec![0.2f32]);
+        let i_phis = DyArr::from_vec_1d(vec![0.0f32]);
+        let o_thetas = DyArr::from_vec_1d(vec![0.1f32, 0.4f32]);
+        let o_phis = DyArr::from_vec_1d(vec![0.0f32, 1.0f32]);
+        let resampled = DynArr::from_vec(&[1, 1, 2, 2, 1], samples.to_vec());
+        let iors_i = vec![Ior::new_dielectric(1.0)];
+        let iors_t = vec![Ior::new_dielectric(1.5)];
+
+        BrdfProxy::new(
+            has_nan,
+            ProxySource::Measured,
+            measured,
+            Cow::Owned(i_thetas),
+            Cow::Owned(i_phis),
+            OutgoingDirs::new_grid(Cow::Owned(o_thetas), Cow::Owned(o_phis)),
+            Cow::Owned(resampled),
+            Cow::Owned(iors_i),
+            Cow::Owned(iors_t),
+        )
+    }
+
+    fn distance(a: &BrdfProxy, b: &BrdfProxy, metric: ErrorMetric, weighting: Weighting) -> f64 {
+        #[cfg(feature = "cuda")]
+        {
+            a.distance(b, metric, weighting, None, None)
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            a.distance(b, metric, weighting)
+        }
+    }
+
+    #[test]
+    fn distance_identical_proxies_is_zero() {
+        let proxy = make_proxy(&[0.1, 0.2, 0.3, 0.4], false);
+        let d = distance(&proxy, &proxy, ErrorMetric::Mse, Weighting::None);
+        assert_eq!(d, 0.0, "distance should be zero for identical proxies");
+    }
+
+    #[test]
+    fn distance_all_nan_samples_is_zero() {
+        let a = make_proxy(&[f32::NAN, f32::NAN, f32::NAN, f32::NAN], true);
+        let b = make_proxy(&[f32::NAN, f32::NAN, f32::NAN, f32::NAN], true);
+        let d_mse = distance(&a, &b, ErrorMetric::Mse, Weighting::None);
+        let d_rmse = distance(&a, &b, ErrorMetric::Rmse, Weighting::None);
+        assert_eq!(
+            d_mse, 0.0,
+            "MSE distance should be zero when no valid samples exist"
+        );
+        assert_eq!(
+            d_rmse, 0.0,
+            "RMSE distance should be zero when no valid samples exist"
+        );
     }
 }
 

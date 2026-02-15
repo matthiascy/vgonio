@@ -701,7 +701,8 @@ pub mod brdf {
         let multi_pb = MultiProgress::new();
         let pbs = (0..n_cpu)
             .map(|i| {
-                let n_tasks = n_tasks_per_cpu.min(n - i * n_tasks_per_cpu);
+                let remaining = n.saturating_sub(i * n_tasks_per_cpu);
+                let n_tasks = n_tasks_per_cpu.min(remaining);
                 let pb = multi_pb.add(ProgressBar::new(n_tasks));
                 pb.set_style(
                     indicatif::ProgressStyle::default_bar()

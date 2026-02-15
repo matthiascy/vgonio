@@ -99,11 +99,6 @@ pub fn input_ui<T: egui::emath::Numeric>(
 }
 
 /// A wrapper that allows the more idiomatic usage of `input_vec3`.
-///
-/// ## Example:
-/// ``` ignore
-/// ui.add(input3(&mut my_vec3));
-/// ```
 #[allow(dead_code)]
 pub fn input<'a, T: egui::emath::Numeric>(
     value: &'a mut T,
@@ -124,11 +119,6 @@ pub fn input3_ui(ui: &mut egui::Ui, value: &mut Vec3, prefixes: &[&str; 3]) -> e
 }
 
 /// A wrapper that allows the more idiomatic usage of `input_vec3`.
-///
-/// ## Example:
-/// ``` ignore
-/// ui.add(input3(&mut my_vec3));
-/// ```
 #[allow(dead_code)]
 pub fn input3_xyz(value: &mut Vec3) -> impl egui::Widget + '_ {
     move |ui: &mut egui::Ui| input3_ui(ui, value, &["x: ", "y: ", "z: "])

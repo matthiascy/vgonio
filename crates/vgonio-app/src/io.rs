@@ -712,7 +712,12 @@ pub mod vgmo {
                     let kind = BsdfKind::from(buf[0]);
                     let incident_medium = Medium::read_from_buf(&buf[1..4]);
                     let transmitted_medium = Medium::read_from_buf(&buf[4..7]);
-                    let sim_kind = SimulationKind::try_from(buf[7]).unwrap();
+                    let sim_kind = SimulationKind::try_from(buf[7]).map_err(|e| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("Invalid simulation kind in VGMO header: {}", e),
+                        )
+                    })?;
                     let fresnel = buf[8] != 0; // [9] padding bytes
                     let nrays64 = buf[10] == 0xff;
 
