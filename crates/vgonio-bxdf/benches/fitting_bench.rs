@@ -24,6 +24,35 @@ use vgn_core::{
 };
 use vgn_jabr::array::{DyArr, DynArr};
 
+#[derive(Clone, Copy)]
+struct ProxyShape {
+    i_theta_count: usize,
+    i_phi_count: usize,
+    o_theta_count: usize,
+    o_phi_count: usize,
+}
+
+const SHAPE_SMALL: ProxyShape = ProxyShape {
+    i_theta_count: 3,
+    i_phi_count: 2,
+    o_theta_count: 4,
+    o_phi_count: 4,
+};
+
+const SHAPE_MEDIUM: ProxyShape = ProxyShape {
+    i_theta_count: 8,
+    i_phi_count: 4,
+    o_theta_count: 10,
+    o_phi_count: 10,
+};
+
+const SHAPE_LARGE: ProxyShape = ProxyShape {
+    i_theta_count: 16,
+    i_phi_count: 16,
+    o_theta_count: 16,
+    o_phi_count: 16,
+};
+
 struct SyntheticMeasuredBrdf {
     spectrum: Box<[Nanometres]>,
 }
@@ -48,14 +77,28 @@ impl AnyMeasuredBrdf for SyntheticMeasuredBrdf {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
 }
 
-fn make_proxy(alpha_x: f64, alpha_y: f64, wavelengths: &[Nanometres]) -> BrdfProxy<'static> {
+fn linspace(start: f32, end: f32, count: usize) -> Vec<f32> {
+    debug_assert!(count > 0);
+    if count == 1 {
+        return vec![start];
+    }
+    let step = (end - start) / (count as f32 - 1.0);
+    (0..count).map(|i| start + i as f32 * step).collect()
+}
+
+fn make_proxy(
+    alpha_x: f64,
+    alpha_y: f64,
+    wavelengths: &[Nanometres],
+    shape: ProxyShape,
+) -> BrdfProxy<'static> {
     let measured = Box::leak(Box::new(SyntheticMeasuredBrdf::new(
         wavelengths.to_vec().into_boxed_slice(),
     )));
-    let i_thetas = vec![0.2f32, 0.55f32];
-    let i_phis = vec![0.0f32];
-    let o_thetas = vec![0.15f32, 0.45f32];
-    let o_phis = vec![0.0f32, 1.7f32];
+    let i_thetas = linspace(0.05, 0.75, shape.i_theta_count);
+    let i_phis = linspace(0.0, 2.8, shape.i_phi_count);
+    let o_thetas = linspace(0.05, 0.7, shape.o_theta_count);
+    let o_phis = linspace(0.0, 2.8, shape.o_phi_count);
     let iors_i = wavelengths
         .iter()
         .map(|_| Ior::new_dielectric(1.0))
@@ -118,6 +161,10 @@ fn make_proxy(alpha_x: f64, alpha_y: f64, wavelengths: &[Nanometres]) -> BrdfPro
     )
 }
 
+fn proxy_bytes(proxy: &BrdfProxy) -> u64 {
+    (proxy.samples().len() * std::mem::size_of::<f32>()) as u64
+}
+
 fn distance_mse(a: &BrdfProxy, b: &BrdfProxy) -> f64 {
     #[cfg(feature = "cuda")]
     {
@@ -129,7 +176,7 @@ fn distance_mse(a: &BrdfProxy, b: &BrdfProxy) -> f64 {
     }
 }
 
-fn brute_fit_isotropic(proxy: &BrdfProxy) -> [f64; 2] {
+fn brute_fit_isotropic(proxy: &BrdfProxy, precision: u32) -> [f64; 2] {
     #[cfg(feature = "cuda")]
     let report = proxy.brute_fit(
         MicrofacetDistroKind::TrowbridgeReitz,
@@ -138,7 +185,7 @@ fn brute_fit_isotropic(proxy: &BrdfProxy) -> [f64; 2] {
         Weighting::None,
         None,
         None,
-        1,
+        precision,
         false,
         None,
     );
@@ -151,17 +198,17 @@ fn brute_fit_isotropic(proxy: &BrdfProxy) -> [f64; 2] {
         Weighting::None,
         None,
         None,
-        1,
+        precision,
         None,
     );
 
     report.best_model().unwrap().params()
 }
 
-fn brute_fit_anisotropic(proxy: &BrdfProxy) -> [f64; 2] {
+fn brute_fit_anisotropic(proxy: &BrdfProxy, precision: u32) -> [f64; 2] {
     let alpha = Some(Roughness::Anisotropic {
-        ax: StepRangeIncl::new(0.1, 0.3, 0.05),
-        ay: StepRangeIncl::new(0.35, 0.55, 0.05),
+        ax: StepRangeIncl::new(0.08, 0.22, 0.01),
+        ay: StepRangeIncl::new(0.32, 0.58, 0.01),
     });
 
     #[cfg(feature = "cuda")]
@@ -172,7 +219,7 @@ fn brute_fit_anisotropic(proxy: &BrdfProxy) -> [f64; 2] {
         Weighting::None,
         None,
         None,
-        1,
+        precision,
         false,
         alpha,
     );
@@ -185,7 +232,7 @@ fn brute_fit_anisotropic(proxy: &BrdfProxy) -> [f64; 2] {
         Weighting::None,
         None,
         None,
-        1,
+        precision,
         alpha,
     );
 
@@ -193,9 +240,10 @@ fn brute_fit_anisotropic(proxy: &BrdfProxy) -> [f64; 2] {
 }
 
 #[bench]
-fn bench_generate_analytical_proxy(b: &mut Bencher) {
-    let measured = make_proxy(0.25, 0.25, &[nm!(550.0)]);
+fn bench_generate_analytical_proxy_small(b: &mut Bencher) {
+    let measured = make_proxy(0.25, 0.25, &[nm!(550.0)], SHAPE_SMALL);
     let model = MicrofacetBrdfTR::new(0.27, 0.27);
+    b.bytes = proxy_bytes(&measured);
     b.iter(|| {
         let generated = measured.generate_analytical(black_box(&model));
         black_box(generated.samples().len())
@@ -203,21 +251,98 @@ fn bench_generate_analytical_proxy(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_proxy_distance_mse(b: &mut Bencher) {
-    let measured = make_proxy(0.25, 0.25, &[nm!(550.0)]);
+fn bench_generate_analytical_proxy_medium(b: &mut Bencher) {
+    let measured = make_proxy(
+        0.25,
+        0.25,
+        &[nm!(450.0), nm!(550.0), nm!(650.0)],
+        SHAPE_MEDIUM,
+    );
+    let model = MicrofacetBrdfTR::new(0.27, 0.27);
+    b.bytes = proxy_bytes(&measured);
+    b.iter(|| {
+        let generated = measured.generate_analytical(black_box(&model));
+        black_box(generated.samples().len())
+    });
+}
+
+#[bench]
+fn bench_generate_analytical_proxy_large(b: &mut Bencher) {
+    let measured = make_proxy(
+        0.25,
+        0.25,
+        &[nm!(450.0), nm!(550.0), nm!(650.0)],
+        SHAPE_LARGE,
+    );
+    let model = MicrofacetBrdfTR::new(0.27, 0.27);
+    b.bytes = proxy_bytes(&measured);
+    b.iter(|| {
+        let generated = measured.generate_analytical(black_box(&model));
+        black_box(generated.samples().len())
+    });
+}
+
+#[bench]
+fn bench_proxy_distance_mse_small(b: &mut Bencher) {
+    let measured = make_proxy(0.25, 0.25, &[nm!(550.0)], SHAPE_SMALL);
     let model = MicrofacetBrdfTR::new(0.27, 0.27);
     let generated = measured.generate_analytical(&model);
+    b.bytes = proxy_bytes(&measured);
     b.iter(|| black_box(distance_mse(&measured, &generated)));
 }
 
 #[bench]
-fn bench_brute_force_isotropic(b: &mut Bencher) {
-    let measured = make_proxy(0.25, 0.25, &[nm!(550.0)]);
-    b.iter(|| black_box(brute_fit_isotropic(&measured)));
+fn bench_proxy_distance_mse_medium(b: &mut Bencher) {
+    let measured = make_proxy(
+        0.25,
+        0.25,
+        &[nm!(450.0), nm!(550.0), nm!(650.0)],
+        SHAPE_MEDIUM,
+    );
+    let model = MicrofacetBrdfTR::new(0.27, 0.27);
+    let generated = measured.generate_analytical(&model);
+    b.bytes = proxy_bytes(&measured);
+    b.iter(|| black_box(distance_mse(&measured, &generated)));
 }
 
 #[bench]
-fn bench_brute_force_anisotropic_windowed(b: &mut Bencher) {
-    let measured = make_proxy(0.15, 0.45, &[nm!(550.0)]);
-    b.iter(|| black_box(brute_fit_anisotropic(&measured)));
+fn bench_proxy_distance_mse_large(b: &mut Bencher) {
+    let measured = make_proxy(
+        0.25,
+        0.25,
+        &[nm!(450.0), nm!(550.0), nm!(650.0)],
+        SHAPE_LARGE,
+    );
+    let model = MicrofacetBrdfTR::new(0.27, 0.27);
+    let generated = measured.generate_analytical(&model);
+    b.bytes = proxy_bytes(&measured);
+    b.iter(|| black_box(distance_mse(&measured, &generated)));
+}
+
+#[bench]
+fn bench_brute_force_isotropic_medium(b: &mut Bencher) {
+    let measured = make_proxy(0.25, 0.25, &[nm!(550.0)], SHAPE_MEDIUM);
+    b.bytes = proxy_bytes(&measured);
+    b.iter(|| black_box(brute_fit_isotropic(&measured, 2)));
+}
+
+#[bench]
+fn bench_brute_force_isotropic_large(b: &mut Bencher) {
+    let measured = make_proxy(0.25, 0.25, &[nm!(550.0)], SHAPE_LARGE);
+    b.bytes = proxy_bytes(&measured);
+    b.iter(|| black_box(brute_fit_isotropic(&measured, 2)));
+}
+
+#[bench]
+fn bench_brute_force_anisotropic_windowed_medium(b: &mut Bencher) {
+    let measured = make_proxy(0.15, 0.45, &[nm!(550.0)], SHAPE_MEDIUM);
+    b.bytes = proxy_bytes(&measured);
+    b.iter(|| black_box(brute_fit_anisotropic(&measured, 1)));
+}
+
+#[bench]
+fn bench_brute_force_anisotropic_windowed_large(b: &mut Bencher) {
+    let measured = make_proxy(0.15, 0.45, &[nm!(550.0)], SHAPE_LARGE);
+    b.bytes = proxy_bytes(&measured);
+    b.iter(|| black_box(brute_fit_anisotropic(&measured, 1)));
 }

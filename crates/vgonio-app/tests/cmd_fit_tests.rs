@@ -100,3 +100,29 @@ fn parses_per_wavelength_anisotropic_ranges_from_paths() {
         Some("ay_ranges.txt")
     );
 }
+
+#[test]
+fn rejects_per_wavelength_ranges_without_per_wavelength_flag() {
+    let mut args = base_args("anisotropic");
+    args.extend([
+        "--per-wl-ax".into(),
+        "ax_ranges.txt".into(),
+        "--per-wl-ay".into(),
+        "ay_ranges.txt".into(),
+    ]);
+    let err = FitCli::try_parse_from(args).unwrap_err();
+    assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
+}
+
+#[test]
+fn rejects_conflicting_scalar_and_per_wavelength_isotropic_ranges() {
+    let mut args = base_args("isotropic");
+    args.extend([
+        "--a".into(),
+        "0.1:0.5:0.01".into(),
+        "--per-wl-a".into(),
+        "a_ranges.txt".into(),
+    ]);
+    let err = FitCli::try_parse_from(args).unwrap_err();
+    assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+}

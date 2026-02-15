@@ -27,7 +27,7 @@ pub(crate) mod pyplot;
 
 #[cfg(feature = "fitting")]
 pub use app::cli::FitOptions;
-pub use app::run;
+pub use app::{cli::MeasureOptions, run};
 
 /// Machine epsilon for `f32`.
 pub const MACHINE_EPSILON: f32 = f32::EPSILON * 0.5;
