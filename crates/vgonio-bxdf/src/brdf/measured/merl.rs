@@ -291,8 +291,10 @@ impl MerlBrdf {
             for j in 0..MerlBrdfParam::RES_THETA_D as usize {
                 for k in 0..MerlBrdfParam::RES_PHI_D as usize {
                     for c in 0..3 {
+                        // Reverse the channel order from RGB to BGR to match the wavelength order.
+                        let w = 2 - c;
                         let offset = c * stride_c + i * stride_th + j * stride_td + k;
-                        samples[[i, j, k, c]] = (data[offset] * scale[c]) as f32;
+                        samples[[i, j, k, w]] = (data[offset] * scale[c]) as f32;
                     }
                 }
             }
