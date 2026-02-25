@@ -21,7 +21,7 @@ use vgn_core::{
 };
 use vgn_jabr::array::{s, DArr, DyArr, DynArr};
 
-/// The wavelengths of the RGB channels in the MERL BRDF data, in nanometres.
+/// The wavelengths of the channels used in this loader, in nanometres.
 ///
 /// In the MERL BRDF data, the RGB channels are **not single-wavelength
 /// measurements**. Instead, they come from an RGB Bayer filter camera, so each
@@ -38,6 +38,8 @@ use vgn_jabr::array::{s, DArr, DyArr, DynArr};
 /// - Blue channel: ~470nm (broadly ~400-550nm)
 /// - Green channel: ~540-550nm (broadly ~450-600nm)
 /// - Red channel: ~610-620nm (broadly ~520-700nm)
+/// Channel order is BGR (blue, green, red) so that wavelength indices are
+/// increasing.
 const MERL_BRDF_SPECTRUM: [Nanometres; 3] = [nm!(470.0), nm!(545.0), nm!(620.0)];
 
 /// Parametrisation for a measured BRDF from the MERL database: <http://www.merl.com/brdf/>
@@ -109,8 +111,8 @@ impl BrdfParam for MerlBrdfParam {
 /// array with dimensions: (theta_h, theta_d, phi_d, lambda), where lambda is
 /// the wavelength index from smallest to largest. Therefore, the RGB channels
 /// in the original data are reversed as BGR as Blue has the smallest
-/// wavelength. The chosen wavelengths of the BGR channels are 435.8, 546.1, and
-/// 700 nm, respectively.
+/// wavelength. The chosen wavelengths of the BGR channels are 470, 545, and
+/// 620 nm, respectively.
 pub type MerlBrdf = MeasuredBrdf<MerlBrdfParam, 4>;
 
 unsafe impl Send for MerlBrdf {}
@@ -204,18 +206,32 @@ impl MerlBrdf {
             ));
         }
 
-        let mut medium = Medium::Unknown;
-
-        let splits = filepath
+        let filename = filepath
             .as_ref()
             .file_stem()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .split('-');
-        for split in splits {
+            .and_then(|stem| stem.to_str())
+            .ok_or_else(|| {
+                VgonioError::new(
+                    format!(
+                        "Can't read MERL BRDF from {:?}: invalid UTF-8 file name!",
+                        filepath.as_ref()
+                    ),
+                    None,
+                )
+            })?;
+
+        let mut medium = Medium::Unknown;
+        for split in filename.split('-') {
             if split == "aluminium" {
                 medium = Medium::Aluminium;
+                break;
+            }
+            if split == "copper" {
+                medium = Medium::Copper;
+                break;
+            }
+            if split == "pvc" {
+                medium = Medium::Pvc;
                 break;
             }
         }
@@ -233,42 +249,73 @@ impl MerlBrdf {
         let mut file = File::open(filepath.as_ref())
             .map_err(|err| VgonioError::from_io_error(err, "Can't read MERL BRDF file!"))?;
         let mut count = 1u32;
+        let mut dims = [0u32; 3];
         let mut buf = [0u8; size_of::<u32>()];
 
-        log::info!("Reading MERL BRDF dismensions...");
-        for _ in 0..3 {
+        log::info!("Reading MERL BRDF dimensions...");
+        for (i, dim) in dims.iter_mut().enumerate() {
             file.read_exact(&mut buf).map_err(|err| {
                 VgonioError::from_io_error(err, "Can't read MERL BRDF dimensions!")
             })?;
-            let n = u32::from_le_bytes(buf);
-            count *= n;
+            *dim = u32::from_le_bytes(buf);
+            count = count.checked_mul(*dim).ok_or_else(|| {
+                VgonioError::new(
+                    format!(
+                        "Can't read MERL BRDF from {:?}: dimensions overflow at index {}!",
+                        filepath.as_ref(),
+                        i
+                    ),
+                    None,
+                )
+            })?;
         }
 
-        if count != MerlBrdfParam::RES_TOTAL {
+        let expected_dims = [
+            MerlBrdfParam::RES_THETA_H,
+            MerlBrdfParam::RES_THETA_D,
+            MerlBrdfParam::RES_PHI_D,
+        ];
+        if dims != expected_dims {
             return Err(VgonioError::new(
                 format!(
-                    "Can't read MERL BRDF from {:?}: invalid dimensions (expecting {}, actual {})!",
+                    "Can't read MERL BRDF from {:?}: invalid dimensions (expecting {:?}, actual \
+                     {:?})!",
                     filepath.as_ref(),
-                    MerlBrdfParam::RES_TOTAL,
-                    count
+                    expected_dims,
+                    dims
                 ),
                 None,
             ));
         }
 
+        debug_assert_eq!(count, MerlBrdfParam::RES_TOTAL);
+
         // Read the data which is composited of 3 channels (RGB).
         let mut data = vec![0.0f64; count as usize * 3].into_boxed_slice();
-        file.read_exact(unsafe {
-            std::slice::from_raw_parts_mut(
-                data.as_mut_ptr() as *mut u8,
-                count as usize * 3 * size_of::<f64>(),
-            )
-        })
-        .map_err(|err| VgonioError::from_io_error(err, "Can't read MERL BRDF data!"))?;
+        if cfg!(target_endian = "little") {
+            file.read_exact(unsafe {
+                std::slice::from_raw_parts_mut(
+                    data.as_mut_ptr() as *mut u8,
+                    count as usize * 3 * size_of::<f64>(),
+                )
+            })
+            .map_err(|err| VgonioError::from_io_error(err, "Can't read MERL BRDF data!"))?;
+        } else {
+            let mut raw = vec![0u8; count as usize * 3 * size_of::<f64>()].into_boxed_slice();
+            file.read_exact(&mut raw)
+                .map_err(|err| VgonioError::from_io_error(err, "Can't read MERL BRDF data!"))?;
+            // Convert the data from big-endian to little-endian.
+            for (dst, chunk) in data.iter_mut().zip(raw.chunks_exact(size_of::<f64>())) {
+                let mut bytes = [0u8; size_of::<f64>()];
+                bytes.copy_from_slice(chunk);
+                *dst = f64::from_le_bytes(bytes);
+            }
+        }
 
         // Rearrange the data into a 4D array.
         // Original data layout: (channel, theta_h, theta_d, phi_d)
         // New data layout: (theta_h, theta_d, phi_d, channel)
+        // Channel order is BGR so that `lambda` follows ascending wavelength.
         // TODO: ideally, we should simply read the data into a 4D array directly
         // following the MERL BRDF layout then apply the dimension permutation with
         // multidimentional indexing.
