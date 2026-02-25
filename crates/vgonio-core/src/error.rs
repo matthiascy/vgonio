@@ -15,16 +15,17 @@ pub struct VgonioError {
 }
 
 impl Display for VgonioError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let cause = match &self.source {
-            Some(cause) => format!("{}", cause),
-            None => String::from("None"),
-        };
-        write!(f, "Error: {}, caused by {}", self.message, cause)
-    }
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
 }
 
-impl Error for VgonioError {}
+// Override the default implementation of `source` to return the underlying error if it exists.
+impl Error for VgonioError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source
+            .as_deref()
+            .map(|err| err as &(dyn Error + 'static))
+    }
+}
 
 impl VgonioError {
     /// Create a new VgonioError.
@@ -38,12 +39,24 @@ impl VgonioError {
         }
     }
 
+    /// Creates a new `VgonioError` and stores the provided source error.
+    pub fn with_source<S, E>(message: S, source: E) -> Self
+    where
+        S: Into<String>,
+        E: Error + Send + Sync + 'static,
+    {
+        Self::new(message, Some(Box::new(source)))
+    }
+
+    /// Returns the error message.
+    pub fn message(&self) -> &str { &self.message }
+
     /// Creates a new VgonioError from a Utf8Error.
     pub fn from_utf8_error<S>(err: Utf8Error, message: S) -> Self
     where
         S: Into<String>,
     {
-        Self::new(message, Some(Box::new(err)))
+        Self::with_source(message, err)
     }
 
     /// Creates a new VgonioError from a std::io::Error.
@@ -51,7 +64,7 @@ impl VgonioError {
     where
         S: Into<String>,
     {
-        Self::new(message, Some(Box::new(err)))
+        Self::with_source(message, err)
     }
 
     /// Creates a new VgonioError from a ReadFileError.
@@ -59,7 +72,7 @@ impl VgonioError {
     where
         S: Into<String>,
     {
-        Self::new(message, Some(Box::new(err)))
+        Self::with_source(message, err)
     }
 
     /// Creates a new VgonioError from a WriteFileError.
@@ -67,6 +80,22 @@ impl VgonioError {
     where
         S: Into<String>,
     {
-        Self::new(message, Some(Box::new(err)))
+        Self::with_source(message, err)
     }
+}
+
+impl From<std::io::Error> for VgonioError {
+    fn from(err: std::io::Error) -> Self { Self::with_source(err.to_string(), err) }
+}
+
+impl From<Utf8Error> for VgonioError {
+    fn from(err: Utf8Error) -> Self { Self::with_source(err.to_string(), err) }
+}
+
+impl From<ReadFileError> for VgonioError {
+    fn from(err: ReadFileError) -> Self { Self::with_source(err.to_string(), err) }
+}
+
+impl From<WriteFileError> for VgonioError {
+    fn from(err: WriteFileError) -> Self { Self::with_source(err.to_string(), err) }
 }
