@@ -23,9 +23,14 @@ pub enum Medium {
     /// Copper.
     #[cfg_attr(feature = "serde", serde(rename = "cu"))]
     Copper = 0x03,
+    /// Nickel.
+    #[cfg_attr(feature = "serde", serde(rename = "ni"))]
+    Nickel = 0x04,
     /// Polyvinyl chloride.
     #[cfg_attr(feature = "serde", serde(rename = "pvc"))]
-    Pvc = 0x04,
+    Pvc = 0x05,
+    #[cfg_attr(feature = "serde", serde(rename = "chromium"))]
+    Chromium = 0x06,
     /// Unknown.
     #[cfg_attr(feature = "serde", serde(rename = "unknown"))]
     Unknown,
@@ -38,7 +43,9 @@ impl From<u8> for Medium {
             0x01 => Self::Air,
             0x02 => Self::Aluminium,
             0x03 => Self::Copper,
-            0x04 => Self::Pvc,
+            0x04 => Self::Nickel,
+            0x05 => Self::Pvc,
+            0x06 => Self::Chromium,
             _ => panic!("Invalid medium kind: {}", value),
         }
     }
@@ -51,7 +58,9 @@ impl From<[u8; 3]> for Medium {
             [b'a', b'i', b'r'] => Self::Air,
             [b'a', b'l', 0] => Self::Aluminium,
             [b'c', b'u', 0] => Self::Copper,
+            [b'n', b'i', 0] => Self::Nickel,
             [b'p', b'v', b'c'] => Self::Pvc,
+            [b'c', b'r', b'0'] => Self::Chromium,
             _ => panic!("Invalid medium kind: {:?}", value),
         }
     }
@@ -70,7 +79,9 @@ impl Medium {
     pub fn kind(&self) -> MaterialKind {
         match self {
             Self::Air | Self::Vacuum => MaterialKind::Insulator,
-            Self::Aluminium | Self::Copper => MaterialKind::Conductor,
+            Self::Aluminium | Self::Copper | Self::Nickel | Self::Chromium => {
+                MaterialKind::Conductor
+            },
             Self::Pvc => MaterialKind::Insulator,
             Self::Unknown => panic!("Unknown medium"),
         }
@@ -84,7 +95,9 @@ impl Medium {
             Self::Air => buf[0..3].copy_from_slice(b"air"),
             Self::Aluminium => buf[0..3].copy_from_slice(b"al\0"),
             Self::Copper => buf[0..3].copy_from_slice(b"cu\0"),
+            Self::Nickel => buf[0..3].copy_from_slice(b"ni\0"),
             Self::Pvc => buf[0..3].copy_from_slice(b"pvc"),
+            Self::Chromium => buf[0..3].copy_from_slice(b"cr\0"),
             Self::Unknown => panic!("Unknown medium"),
         }
     }
@@ -97,6 +110,9 @@ impl Medium {
             b"air" => Self::Air,
             b"al\0" => Self::Aluminium,
             b"cu\0" => Self::Copper,
+            b"ni\0" => Self::Nickel,
+            b"pvc" => Self::Pvc,
+            b"cr\0" => Self::Chromium,
             _ => panic!("Invalid medium kind {:?}", &buf[0..3]),
         }
     }
@@ -111,7 +127,9 @@ impl FromStr for Medium {
             "vacuum" => Ok(Self::Vacuum),
             "al" => Ok(Self::Aluminium),
             "cu" => Ok(Self::Copper),
+            "ni" => Ok(Self::Nickel),
             "pvc" => Ok(Self::Pvc),
+            "cr" => Ok(Self::Chromium),
             &_ => Err(VgonioError::new("Unknown medium", None)),
         }
     }

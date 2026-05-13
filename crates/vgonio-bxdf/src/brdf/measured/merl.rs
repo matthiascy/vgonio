@@ -221,6 +221,10 @@ impl MerlBrdf {
             })?;
 
         let mut medium = Medium::Unknown;
+        // TODO: better parsing of the material type from the file name, e.g., using regex or a more
+        //       robust naming convention. The current parsing is very brittle and relies on the
+        //       exact file naming in the MERL BRDF dataset, which may not be consistent or
+        //       may change in the future.
         for split in filename.split('-') {
             if split == "aluminium" {
                 medium = Medium::Aluminium;
@@ -232,6 +236,14 @@ impl MerlBrdf {
             }
             if split == "pvc" {
                 medium = Medium::Pvc;
+                break;
+            }
+            if split == "nickel" {
+                medium = Medium::Nickel;
+                break;
+            }
+            if split == "chrome" {
+                medium = Medium::Chromium;
                 break;
             }
         }
