@@ -68,6 +68,10 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 indicatif = { version = "0.17", features = ["rayon"] }
 lazy_static = "1.5"
 levenberg-marquardt = "0.14"
+lz4_flex = { version = "0.13", default-features = false, features = [
+    "std",
+    "frame",
+] }
 nalgebra = "0.33"
 libm = "0.2"
 log = "0.4"
