@@ -43,6 +43,18 @@ powitacq = { package = "vgonio-powitacq", path = "../vgonio-powitacq" }
 vgn_core.workspace = true
 vgn_jabr.workspace = true
 
+# `vgn_bxdf::fitting` is only available under the `fitting` feature; skip these
+# targets entirely when the feature is off instead of failing to compile.
+[[test]]
+name = "fitting_tests"
+path = "tests/fitting_tests.rs"
+required-features = ["fitting"]
+
+[[bench]]
+name = "fitting_bench"
+path = "benches/fitting_bench.rs"
+required-features = ["fitting"]
+
 [dev-dependencies]
 approx.workspace = true
 rand.workspace = true

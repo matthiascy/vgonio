@@ -2,7 +2,7 @@ use std::path::PathBuf;
 #[cfg(feature = "surf-obj")]
 use vgn_core::units::LengthUnit;
 use vgn_core::{
-    cli::{self, cli_error, cli_step, cli_success, Indent},
+    cli::{cli_error, cli_step, cli_success, Indent},
     config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},

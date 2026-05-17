@@ -52,6 +52,13 @@ uuid.workspace = true
 winit = { workspace = true, optional = true }
 pyo3 = { workspace = true, optional = true, features = ["extension-module"] }
 
+# `vgn_core::cli` is only available under the `cli` feature; skip this test
+# target entirely when the feature is off instead of failing to compile.
+[[test]]
+name = "test_cli"
+path = "tests/test_cli.rs"
+required-features = ["cli"]
+
 [dev-dependencies]
 proptest.workspace = true
 serde_yaml.workspace = true

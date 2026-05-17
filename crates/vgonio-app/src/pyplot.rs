@@ -33,8 +33,7 @@ use vgn_bxdf::{
     AnyMeasured, AnyMeasuredBrdf, Scattering,
 };
 use vgn_core::{
-    error::VgonioError,
-    math::{self, Sph2, Vec2, Vec3},
+    math::{self, Sph2},
     optics::IorReg,
     units::{nm, rad, Degrees, Nanometres, Radians, Rads},
     utils::range::{StepRangeExcl, StepRangeIncl},

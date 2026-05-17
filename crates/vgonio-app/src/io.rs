@@ -1,3 +1,10 @@
+//! There are two cache file types in vgnio:
+//!
+//! - `.vgmo` (VGonio Measurement Output): written/read by BSDF/NDF/SDF measurement pipelines. Holds
+//!   the raw simulation outputs.
+//! - `.vgms` (VGonio Microsurface): written/read by microsurface (heightfield) I/O. Holds geometry
+//!   data.
+
 use crate::{
     app::cache::Cache,
     measure::{
@@ -11,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use vgn_core::{
-    cli::{self, cli_error, cli_note, cli_step, cli_success, Indent},
+    cli::{cli_error, cli_note, cli_step, cli_success, Indent},
     config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
@@ -1381,6 +1388,7 @@ pub mod vgmo {
                 FileEncoding::Binary => {
                     let mut zlib_decoder;
                     let mut gzip_decoder;
+                    let mut lz4_decoder;
                     let mut decoder: Box<&mut dyn Read> = match compression {
                         CompressionScheme::Zlib => {
                             zlib_decoder = flate2::bufread::ZlibDecoder::new(reader);
@@ -1390,7 +1398,12 @@ pub mod vgmo {
                             gzip_decoder = flate2::bufread::GzDecoder::new(reader);
                             Box::new(&mut gzip_decoder)
                         },
-                        _ => Box::new(reader),
+                        CompressionScheme::Lz4 => {
+                            lz4_decoder = lz4_flex::frame::FrameDecoder::new(reader);
+                            Box::new(&mut lz4_decoder)
+                        },
+                        CompressionScheme::None => Box::new(reader),
+                        _ => unimplemented!("Unsupported compression scheme: {:?}", compression),
                     };
                     let spectrum = params.emitter.spectrum.values().collect::<Vec<_>>();
                     let incoming = params.emitter.generate_measurement_points().0;
@@ -1484,7 +1497,17 @@ pub mod vgmo {
                     Self::write_measured_bsdf_data(&mut gzip_encoder, self.bsdfs.iter())?;
                     writer.write_all(&gzip_encoder.finish()?)?
                 },
-                _ => {},
+                CompressionScheme::Lz4 => {
+                    let mut lz4_encoder = lz4_flex::frame::FrameEncoder::new(vec![]);
+                    Self::write_raw_measured_data(&mut lz4_encoder, &self.raw, nrays64)?;
+                    Self::write_measured_bsdf_data(&mut lz4_encoder, self.bsdfs.iter())?;
+                    writer.write_all(
+                        &lz4_encoder
+                            .finish()
+                            .map_err(|e| WriteFileErrorKind::Write(e.into()))?,
+                    )?
+                },
+                _ => unimplemented!("Unsupported compression scheme: {:?}", compression),
             }
             Ok(())
         }

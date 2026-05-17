@@ -9,6 +9,13 @@ version.workspace = true
 name = "vgn_app"
 path = "src/main.rs"
 
+# `FitOptions` is only exported under the `fitting` feature; skip this test
+# target entirely when the feature is off instead of failing to compile.
+[[test]]
+name = "cmd_fit_tests"
+path = "tests/cmd_fit_tests.rs"
+required-features = ["fitting"]
+
 [features]
 default = ["dep:embree", "dep:vgn_bxdf", "vgn_bxdf/io"]
 embree = ["dep:embree", "vgn_io/embree"]
@@ -37,6 +44,7 @@ env_logger.workspace = true
 exr.workspace = true
 flate2.workspace = true
 log.workspace = true
+lz4_flex.workspace = true
 rand.workspace = true
 rayon.workspace = true
 serde.workspace = true

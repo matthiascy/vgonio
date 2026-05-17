@@ -6,7 +6,7 @@ use crate::{
 };
 use std::{path::PathBuf, time::Instant};
 use vgn_core::{
-    cli::{self, cli_error, cli_note, cli_step, cli_success, Indent},
+    cli::{cli_error, cli_note, cli_step, cli_success, Indent},
     config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},

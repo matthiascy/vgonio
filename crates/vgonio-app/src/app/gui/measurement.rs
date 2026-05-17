@@ -352,6 +352,11 @@ impl MeasurementDialog {
                                         CompressionScheme::Gzip,
                                         "gzip",
                                     );
+                                    ui.selectable_value(
+                                        &mut self.compression,
+                                        CompressionScheme::Lz4,
+                                        "lz4",
+                                    );
                                 });
                             });
                     }
