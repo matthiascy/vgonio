@@ -1488,7 +1488,7 @@ pub mod vgmo {
                         flate2::write::ZlibEncoder::new(vec![], flate2::Compression::default());
                     Self::write_raw_measured_data(&mut zlib_encoder, &self.raw, nrays64)?;
                     Self::write_measured_bsdf_data(&mut zlib_encoder, self.bsdfs.iter())?;
-                    writer.write_all(&zlib_encoder.flush_finish()?)?
+                    writer.write_all(&zlib_encoder.finish()?)?
                 },
                 CompressionScheme::Gzip => {
                     let mut gzip_encoder =

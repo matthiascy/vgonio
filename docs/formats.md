@@ -24,7 +24,7 @@ The meta information part of the header is 48 bytes in total. It contains the fo
 |     12 - 0x0C      | 32 bytes |         [u8;32]          | Timestamp in RFC 3339 and ISO 8601 date and time format "yyyy-MM-ddTHH:mm:ss.SSSXXX+HH:MM" |
 |     44 - 0x2C      |  1 byte  |       0x00 or 0xFF       | Size of single data sample in bytes. 0x04: 4 bytes(f32), 0xFF: 0x08 bytes(f64)             |
 |     45 - 0x2D      |  1 byte  |       0x21 or 0x23       | Data (body) encoding: !(0x21)-binary, #(0x23)-ascii                                        |
-|     46 - 0x2E      |  1 byte  |      0x00/0x01/0x02      | Data (body) compression: 0x00: not compressed, 0x01: zlib, 0x02: gzip                      |
+|     46 - 0x2E      |  1 byte  |    0x00/0x01/0x02/0x03   | Data (body) compression: 0x00: not compressed, 0x01: zlib, 0x02: gzip, 0x03: lz4           |
 |     47 - 0x2F      |  1 byte  |           0x00           | Padding                                                                                    |
 
 ### 2. Data-specific information
@@ -179,7 +179,7 @@ Depending on the measurement mode, the header part of the file is different.
 ### Micro-surface profile (.vgms)
 
 The body of micro-surface profile file contains the actual data samples of the micro-surface. The data can be encoded
-in binary or ascii format. It can also be compressed at the same time. The compression format is zlib or gzip.
+in binary or ascii format. It can also be compressed at the same time. The compression format is zlib, gzip, or lz4.
 
 - Binary format: Sample points of the micro-surface's height field are stored continuously as an 1D array. Each sample
   is stored as a 4 bytes or 8 bytes floating point value.
