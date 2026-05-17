@@ -5,6 +5,7 @@
 
 use crate::Version;
 use byteorder::{LittleEndian, ReadBytesExt};
+use lz4_flex::frame::FrameEncoder;
 use num_traits::Float;
 use std::{
     borrow::Cow,
@@ -260,6 +261,9 @@ pub enum CompressionScheme {
     Zlib = 0x01,
     /// Gzip compression.
     Gzip = 0x02,
+    /// Lz4 frame compression - streaming, fast decode, slightly worse ratio than zlib.
+    /// For cache files; not for archival files.
+    Lz4 = 0x03,
 }
 
 impl From<u8> for CompressionScheme {
@@ -268,6 +272,7 @@ impl From<u8> for CompressionScheme {
             0x00 => CompressionScheme::None,
             0x01 => CompressionScheme::Zlib,
             0x02 => CompressionScheme::Gzip,
+            0x03 => CompressionScheme::Lz4,
             _ => panic!("Invalid data compression: {}", value),
         }
     }
@@ -279,6 +284,7 @@ impl fmt::Display for CompressionScheme {
             CompressionScheme::None => write!(f, "none"),
             CompressionScheme::Zlib => write!(f, "zlib"),
             CompressionScheme::Gzip => write!(f, "gzip"),
+            CompressionScheme::Lz4 => write!(f, "lz4"),
         }
     }
 }
@@ -292,6 +298,9 @@ impl CompressionScheme {
 
     /// Returns true if the data is compressed with gzip.
     pub fn is_gzip(&self) -> bool { matches!(self, CompressionScheme::Gzip) }
+
+    /// Returns true if the data is compressed with lz4.
+    pub fn is_lz4(&self) -> bool { matches!(self, CompressionScheme::Lz4) }
 }
 
 /// Enum for different file variants.
@@ -520,6 +529,12 @@ pub fn write_f32_data_samples_binary<W: Write>(
             gzip_encoder.write_all(&bytes)?;
             writer.write_all(&gzip_encoder.finish()?)?;
         },
+        CompressionScheme::Lz4 => {
+            let encoder_buf = Vec::with_capacity(samples.len() * 4);
+            let mut lz4_encoder = FrameEncoder::new(encoder_buf);
+            lz4_encoder.write_all(&bytes)?;
+            writer.write_all(&lz4_encoder.finish()?)?;
+        },
     }
     Ok(())
 }
@@ -533,6 +548,7 @@ pub fn read_f32_data_samples<R: Read>(
 ) -> Result<Box<[f32]>, ParseError> {
     let mut zlib_decoder;
     let mut gzip_decoder;
+    let mut lz4_decoder;
 
     let decoder: Box<&mut dyn Read> = match compression {
         CompressionScheme::None => Box::new(reader),
@@ -543,6 +559,10 @@ pub fn read_f32_data_samples<R: Read>(
         CompressionScheme::Gzip => {
             gzip_decoder = flate2::bufread::GzDecoder::new(reader);
             Box::new(&mut gzip_decoder)
+        },
+        CompressionScheme::Lz4 => {
+            lz4_decoder = lz4_flex::frame::FrameDecoder::new(reader);
+            Box::new(&mut lz4_decoder)
         },
     };
 
@@ -645,4 +665,70 @@ where
 
     results?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{BufReader, BufWriter};
+
+    ///  16 KiB f32 samples.
+    fn make_payload() -> Vec<f32> { (0..4096).map(|i| (i as f32 * 0.0125f32).sin()).collect() }
+
+    fn round_trip(scheme: CompressionScheme) {
+        let samples = make_payload();
+        let n = samples.len();
+
+        // Write the samples to a buffer.
+        let mut buffer = Vec::<u8>::new();
+        {
+            let mut w = BufWriter::new(&mut buffer);
+            write_f32_data_samples_binary(&mut w, scheme, &samples).unwrap();
+        }
+
+        // Read the samples from the buffer.
+        let mut r = BufReader::new(&buffer[..]);
+        let got = read_f32_data_samples(&mut r, n, FileEncoding::Binary, scheme).unwrap();
+
+        assert_eq!(got.len(), n, "scheme={scheme}");
+        for (i, (s, g)) in samples.iter().zip(got.iter()).enumerate() {
+            assert!(
+                (s - g).abs() < f32::EPSILON,
+                "scheme={scheme}, index={i}, expected={s}, got={g}"
+            );
+        }
+    }
+
+    #[test]
+    fn compression_scheme_round_trip_none() { round_trip(CompressionScheme::None); }
+
+    #[test]
+    fn compression_scheme_round_trip_zlib() { round_trip(CompressionScheme::Zlib); }
+
+    #[test]
+    fn compression_scheme_round_trip_gzip() { round_trip(CompressionScheme::Gzip); }
+
+    #[test]
+    fn compression_scheme_round_trip_lz4() { round_trip(CompressionScheme::Lz4); }
+
+    #[test]
+    fn compression_scheme_discriminant_bytes() {
+        assert_eq!(CompressionScheme::None as u8, 0x00);
+        assert_eq!(CompressionScheme::Zlib as u8, 0x01);
+        assert_eq!(CompressionScheme::Gzip as u8, 0x02);
+        assert_eq!(CompressionScheme::Lz4 as u8, 0x03);
+
+        for v in [0x00u8, 0x01u8, 0x02u8, 0x03u8] {
+            let scheme = CompressionScheme::from(v);
+            assert_eq!(scheme as u8, v);
+        }
+    }
+
+    #[test]
+    fn compression_scheme_display() {
+        assert_eq!(CompressionScheme::None.to_string(), "none");
+        assert_eq!(CompressionScheme::Zlib.to_string(), "zlib");
+        assert_eq!(CompressionScheme::Gzip.to_string(), "gzip");
+        assert_eq!(CompressionScheme::Lz4.to_string(), "lz4");
+    }
 }
