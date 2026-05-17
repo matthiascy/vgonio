@@ -23,6 +23,9 @@ mod error;
 pub mod fitting;
 #[cfg(not(any(test, feature = "test-support")))]
 mod io;
+
+#[cfg(feature = "fitting")]
+mod fitting_orchestration;
 // The VGMO codec (`BsdfMeasurement::{read,write}_to_vgmo`) lives here; its
 // inherent methods are only reachable from integration tests if the enclosing
 // module is public. Expose it solely under `test-support`.
