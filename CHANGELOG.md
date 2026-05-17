@@ -29,6 +29,9 @@
 - Overhaul the project structure and module organization
 - Update dependencies
 - Development facilities improvements (xtask)
+- Add LZ4 as a body compression scheme for cache/measurement files (`.vgmo`), alongside zlib and gzip
+- Fix zlib-compressed sample data being silently truncated on large payloads (the encoder was
+  sync-flushed instead of finished, leaving an incomplete stream)
 
 ## 0.3.2 - 2024-08-16
 
