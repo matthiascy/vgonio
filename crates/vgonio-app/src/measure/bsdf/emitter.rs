@@ -140,6 +140,27 @@ impl EmitterParams {
             .map(move |s| Ray::new(transform * Vec3::new(s.x * dest.theta.cos(), s.y, s.z), dir))
             .collect()
     }
+
+    #[cfg(test)]
+    /// Creates a minimal set of parameters for testing.
+    pub fn default_for_test() -> Self {
+        Self {
+            num_rays: 2 << 20,
+            num_sectors: 1,
+            max_bounces: 8,
+            zenith: StepRangeIncl {
+                start: Rads::from_degrees(0.0),
+                stop: Rads::from_degrees(90.0),
+                step_size: Rads::from_degrees(10.0),
+            },
+            azimuth: StepRangeIncl {
+                start: Rads::from_degrees(0.0),
+                stop: Rads::from_degrees(360.0),
+                step_size: Rads::from_degrees(180.0),
+            },
+            spectrum: StepRangeIncl::new(nm!(400.0), nm!(700.0), nm!(100.0)),
+        }
+    }
 }
 
 /// Emitter's samples in the sampling space.

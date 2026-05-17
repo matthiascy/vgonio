@@ -1544,6 +1544,7 @@ mod tests {
         BrdfLevel, Version,
     };
     use vgn_jabr::array::DyArr;
+    use wgpu::naga::proc::Emitter;
 
     #[test]
     fn test_bsdf_measurement_params() {

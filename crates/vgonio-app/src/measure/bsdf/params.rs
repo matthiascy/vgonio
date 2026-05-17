@@ -59,7 +59,10 @@ impl SimulationKind {
                 if cfg!(feature = "embree") {
                     Ok(())
                 } else {
-                    Err("SimulationKind is Embree, but this build does not enable `embree`.".to_string())
+                    Err(
+                        "SimulationKind is Embree, but this build does not enable `embree`."
+                            .to_string(),
+                    )
                 }
             },
             Self::GeomOptics(RtcMethod::Optix) => {
@@ -317,6 +320,37 @@ impl BsdfMeasurementParams {
             );
         }
         hash_map
+    }
+
+    #[cfg(test)]
+    /// Creates a minimal set of parameters for testing.
+    pub fn default_for_test() -> Self {
+        Self {
+            kind: BsdfKind::Brdf,
+            sim_kind: SimulationKind::GeomOptics(RtcMethod::Embree),
+            incident_medium: Medium::Vacuum,
+            transmitted_medium: Medium::Aluminium,
+            emitter: EmitterParams::default_for_test(),
+            receivers: vec![
+                ReceiverParams {
+                    domain: SphericalDomain::Upper,
+                    precision: Sph2 {
+                        theta: rad!(10.0),
+                        phi: rad!(10.0),
+                    },
+                    scheme: PartitionScheme::Beckers,
+                },
+                ReceiverParams {
+                    domain: SphericalDomain::Upper,
+                    precision: Sph2 {
+                        theta: rad!(45.0),
+                        phi: rad!(2.0),
+                    },
+                    scheme: PartitionScheme::EqualAngle,
+                },
+            ],
+            fresnel: true,
+        }
     }
 }
 

@@ -157,6 +157,51 @@ impl RawBsdfMeasurement {
             .unwrap()
     }
 
+    /// Asserts the shape invariants every consumer of this struct relies on.
+    ///
+    /// The snapshot iterator slices `records`/`stats` (and the `vdbg` arrays)
+    /// by `incoming.len()`, and the `.vgmo` codec reconstructs array extents
+    /// from `params`. A drift between any of these would surface as a *codec
+    /// round-trip* failure pointing at the wrong code. Fail loud and local
+    /// instead so a fixture bug can't masquerade as a compression bug.
+    pub fn assert_consistent(&self, params: &BsdfMeasurementParams) {
+        let n_wi = self.incoming.len();
+        let n_wo = self.outgoing.n_patches();
+        let n_spectrum = self.spectrum.len();
+
+        // Internal contract the snapshot iterator depends on.
+        assert_eq!(
+            self.stats.len(),
+            n_wi,
+            "stats len {} != n_wi {n_wi}",
+            self.stats.len()
+        );
+        assert_eq!(
+            self.records.len(),
+            n_wi * n_wo * n_spectrum,
+            "records len {} != n_wi*n_wo*n_spectrum = {n_wi}*{n_wo}*{n_spectrum}",
+            self.records.len()
+        );
+        #[cfg(feature = "vdbg")]
+        {
+            assert_eq!(self.trajectories.len(), n_wi, "trajectories len != n_wi");
+            assert_eq!(self.hit_points.len(), n_wi, "hit_points len != n_wi");
+        }
+
+        // Cross-check against params: the codec rebuilds these extents on read,
+        // so a mismatch here is exactly the round-trip trap.
+        assert_eq!(
+            n_wo,
+            params.receivers[0].num_patches(),
+            "partition patches != receivers[0].num_patches()"
+        );
+        assert_eq!(
+            n_spectrum,
+            params.emitter.spectrum.values().count(),
+            "spectrum len != emitter spectrum sample count"
+        );
+    }
+
     /// Computes the BSDF data from the raw data.
     pub fn compute_bsdfs(
         &self,
@@ -271,6 +316,7 @@ impl RawBsdfMeasurement {
 }
 
 // TODO: save multiple Receiver data into one file
+// TODO: reflect the multiple-receiver design in the params and raw data structures
 /// BSDF measurement data.
 ///
 /// The Number of emitted rays, wavelengths, and bounces are invariant over
@@ -445,6 +491,72 @@ impl BsdfMeasurement {
             params: Box::new(new_params),
             spectrum: DyArr::from_vec_1d(spectrum),
             samples: DyArr::<f32, 3>::from_vec([n_wi, n_wo_dense, n_spectrum], samples),
+        }
+    }
+
+    /// Synthesises a minimal BSDF measurement for testing purposes.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn synthesise_minimal(params: &BsdfMeasurementParams) -> Self {
+        // A receiver *is* an outgoing-direction partition; the .vgmo codec only
+        // serialises one (see the "save multiple Receiver data" TODO above), so
+        // the minimal fixture is single-receiver by construction.
+        let receiver = &params.receivers[0];
+
+        let incoming = DyArr::from_boxed_slice_1d(params.emitter.generate_measurement_points().0);
+        let spectrum = DyArr::from_vec_1d(params.emitter.spectrum.values().collect::<Vec<_>>());
+        let outgoing = receiver.partitioning();
+
+        // `n_wi` is the full azimuth x zenith grid — NOT the zenith-only count.
+        // The snapshot iterator walks `incoming.len()` snapshots, so `records`,
+        // `stats` and the vdbg arrays must all be sized by `n_wi`.
+        let n_wi = incoming.len();
+        let n_wo = outgoing.n_patches();
+        let n_spectrum = spectrum.len();
+        let n_zenith_in = params.emitter.measurement_points_zenith_count();
+        let n_bounce = 4usize;
+
+        // Synthetic per-(wi, wo, λ) bucket. Values are arbitrary; only the
+        // shapes must be self-consistent so the codec round-trips byte-stable.
+        let mut cell = BounceAndEnergy::empty(n_bounce);
+        cell.n_ray_per_bounce.iter_mut().for_each(|v| *v = 1);
+        cell.energy_per_bounce.iter_mut().for_each(|v| *v = 1.0);
+        let records = DyArr::<Option<BounceAndEnergy>, 3>::from_vec(
+            [n_wi, n_wo, n_spectrum],
+            vec![Some(cell); n_wi * n_wo * n_spectrum],
+        );
+
+        let stats_proto = SingleBsdfMeasurementStats {
+            n_bounce: n_bounce as u32,
+            n_received: 1000,
+            n_missed: 0,
+            n_spectrum,
+            n_ray_stats: vec![1000; 4 * n_spectrum].into_boxed_slice(),
+            e_captured: vec![500.0; n_spectrum].into_boxed_slice(),
+            n_ray_per_bounce: vec![200; n_spectrum * n_bounce].into_boxed_slice(),
+            energy_per_bounce: vec![100.0; n_spectrum * n_bounce].into_boxed_slice(),
+        };
+        let stats = DyArr::<SingleBsdfMeasurementStats>::from_vec_1d(vec![stats_proto; n_wi]);
+
+        let raw = RawBsdfMeasurement {
+            n_zenith_in,
+            spectrum,
+            incoming,
+            outgoing,
+            records,
+            stats,
+            #[cfg(feature = "vdbg")]
+            trajectories: vec![vec![RayTrajectory::default()].into_boxed_slice(); n_wi]
+                .into_boxed_slice(),
+            #[cfg(feature = "vdbg")]
+            hit_points: vec![vec![Vec3::zero()]; n_wi].into_boxed_slice(),
+        };
+        raw.assert_consistent(params);
+
+        let bsdfs = raw.compute_bsdfs(params.incident_medium, params.transmitted_medium);
+        Self {
+            params: params.clone(),
+            raw,
+            bsdfs,
         }
     }
 }
