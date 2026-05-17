@@ -32,6 +32,7 @@ mod fitting_orchestration;
 #[cfg(any(test, feature = "test-support"))]
 pub mod io;
 pub mod measure;
+mod measure_orchestration;
 pub(crate) mod pyplot;
 
 #[cfg(feature = "fitting")]
