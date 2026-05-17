@@ -37,6 +37,7 @@ byteorder = "1.4"
 cfg-if = "1.0"
 chrono = "0.4"
 clap = { version = "~4", features = ["derive", "wrap_help"] }
+criterion = "0.7"
 csv = "1"
 cust = "0.3"
 cxx = "1.0"

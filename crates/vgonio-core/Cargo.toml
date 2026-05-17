@@ -59,7 +59,12 @@ name = "test_cli"
 path = "tests/test_cli.rs"
 required-features = ["cli"]
 
+[[bench]]
+name = "compression_schemes"
+harness = false
+
 [dev-dependencies]
+criterion.workspace = true
 proptest.workspace = true
 serde_yaml.workspace = true
 env_logger.workspace = true

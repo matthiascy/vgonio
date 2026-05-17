@@ -520,7 +520,11 @@ pub fn write_f32_data_samples_binary<W: Write>(
                 flate2::write::ZlibEncoder::new(encoder_buf, flate2::Compression::default());
 
             zlib_encoder.write_all(&bytes)?;
-            writer.write_all(&zlib_encoder.flush_finish()?)?;
+            // `finish()` runs deflate to completion (final block + Adler-32
+            // trailer). `flush_finish()` only sync-flushes and leaves the
+            // stream unterminated, which truncates on decode for larger
+            // payloads.
+            writer.write_all(&zlib_encoder.finish()?)?;
         },
         CompressionScheme::Gzip => {
             let encoder_buf = Vec::with_capacity(samples.len() * 4);
