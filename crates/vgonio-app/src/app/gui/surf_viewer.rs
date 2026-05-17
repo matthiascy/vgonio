@@ -1,6 +1,6 @@
 use super::state::DepthMap;
 use crate::app::{
-    cache::RawCache,
+    cache::UiCache,
     gui::{
         data::MicroSurfaceProp,
         docking::{Dockable, WidgetKind},
@@ -330,7 +330,7 @@ impl SurfaceViewerStates {
         input: &InputState,
         dt: std::time::Duration,
         theme: ThemeKind,
-        cache: &RawCache,
+        cache: &UiCache,
         surfaces: &[(&Handle, &MicroSurfaceProp)],
     ) -> wgpu::CommandEncoder {
         let mut encoder = gpu

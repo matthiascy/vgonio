@@ -7,7 +7,7 @@ pub use ndf::*;
 
 use crate::{
     app::{
-        cache::{Cache, RawCache},
+        cache::{Cache, ComputeCache},
         gui::{
             data::PropertyData,
             docking::{Dockable, WidgetKind},
@@ -88,7 +88,7 @@ pub trait VariantData {
     /// # Arguments
     ///
     /// * `data` - The handle to the measurement data.
-    fn pre_process(&mut self, data: Handle, cache: &RawCache);
+    fn pre_process(&mut self, data: Handle, cache: &ComputeCache);
 
     /// Returns the curve to be displayed.
     fn current_curve(&self) -> Option<&Curve>;
@@ -227,7 +227,7 @@ impl Deref for Curve {
 }
 
 impl VariantData for BsdfPlotExtraData {
-    fn pre_process(&mut self, _data: Handle, _cache: &RawCache) {
+    fn pre_process(&mut self, _data: Handle, _cache: &ComputeCache) {
         // TODO: pre-process data
     }
 

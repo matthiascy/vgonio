@@ -347,19 +347,21 @@ impl VgonioGui {
                     let new_micro_facet_area = new_mesh.facet_total_area;
                     let new_mesh_hdl = Handle::from_uuid::<MicroSurface>(new_mesh.uuid);
                     cache.meshes.insert(new_mesh_hdl, new_mesh);
-                    cache.renderables.insert(new_renderable_hdl, new_renderable);
 
-                    // Create a new renderable mesh from the subdivided mesh.
+                    // Repoint the record's mesh and rebind the surface's
+                    // renderable; `set_surface_renderable` returns the old
+                    // renderable handle so we can release it.
                     let record = cache.records.get_mut(surf).unwrap();
                     let old_mesh_hdl = record.mesh;
-                    let old_renderable_hdl = record.renderable;
-
                     record.mesh = new_mesh_hdl;
-                    record.renderable = new_renderable_hdl;
+                    let old_renderable_hdl =
+                        cache.set_surface_renderable(*surf, new_renderable_hdl, new_renderable);
 
                     // Remove the old mesh and renderable.
                     cache.meshes.remove(&old_mesh_hdl);
-                    cache.renderables.remove(&old_renderable_hdl);
+                    if let Some(old) = old_renderable_hdl {
+                        cache.remove_renderable(old);
+                    }
 
                     // Update the properties related to the surface.
                     let mut props = self.properties.write().unwrap();

@@ -7,7 +7,7 @@ use crate::measure::bsdf::rtc::embr;
 #[cfg(feature = "vdbg")]
 use crate::measure::bsdf::rtc::RayTrajectory;
 use crate::{
-    app::cache::RawCache,
+    app::cache::ComputeCache,
     measure::{
         bsdf::{
             emitter::Emitter,
@@ -1147,7 +1147,7 @@ impl<'a> ExactSizeIterator for SingleSimResultRayChunk<'a> {
 // pub fn measure_bsdf_rt(
 //     params: BsdfMeasurementParams,
 //     handles: &[Handle<MicroSurface>],
-//     cache: &RawCache,
+//     cache: &ComputeCache,
 // ) -> Box<[Measurement]> {
 //     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
 //     let surfaces = cache.get_micro_surfaces(handles);
@@ -1317,7 +1317,7 @@ impl<'a> ExactSizeIterator for SingleSimResultRayChunk<'a> {
 pub fn measure_bsdf_rt(
     params: BsdfMeasurementParams,
     handles: &[Handle],
-    cache: &RawCache,
+    cache: &ComputeCache,
 ) -> Box<[Measurement]> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);

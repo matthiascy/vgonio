@@ -1,5 +1,5 @@
 use crate::{
-    app::cache::RawCache,
+    app::cache::ComputeCache,
     measure::{params::GafMeasurementParams, AnyMeasured, Measurement, MeasurementSource},
 };
 use bytemuck::{Pod, Zeroable};
@@ -1489,7 +1489,7 @@ impl MeasuredGafData {
 pub fn measure_masking_shadowing_function(
     params: GafMeasurementParams,
     handles: &[Handle],
-    cache: &RawCache,
+    cache: &ComputeCache,
 ) -> Box<[Measurement]> {
     log::info!("Measuring microfacet masking/shadowing function...");
     let wgpu_config = WgpuConfig {

@@ -1,5 +1,5 @@
 use crate::{
-    app::cache::RawCache,
+    app::cache::ComputeCache,
     measure::{params::SdfMeasurementParams, AnyMeasured, Measurement, MeasurementSource},
 };
 use std::{borrow::Cow, path::Path};
@@ -247,7 +247,7 @@ impl MeasuredSdfData {
 pub fn measure_slope_distribution(
     handles: &[Handle],
     params: SdfMeasurementParams,
-    cache: &RawCache,
+    cache: &ComputeCache,
 ) -> Box<[Measurement]> {
     #[cfg(feature = "bench")]
     let start = std::time::Instant::now();

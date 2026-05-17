@@ -5,7 +5,7 @@ use crate::measure::bsdf::rtc::RayTrajectory;
 use vgn_core::math::{Vec3, Vec3A};
 
 use crate::{
-    app::cache::RawCache,
+    app::cache::ComputeCache,
     measure::{
         bsdf::{SingleBsdfMeasurementStats, SingleSimResult},
         params::BsdfMeasurementParams,
@@ -143,7 +143,7 @@ impl Receiver {
     pub fn new(
         receiver_params: &ReceiverParams,
         meas_params: &BsdfMeasurementParams,
-        cache: &RawCache,
+        cache: &ComputeCache,
     ) -> Self {
         let spectrum = meas_params.emitter.spectrum.values().collect::<Box<_>>();
         // Retrieve the incident medium's refractive indices for each wavelength.

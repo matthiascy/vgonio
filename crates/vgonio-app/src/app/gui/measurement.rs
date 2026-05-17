@@ -6,7 +6,7 @@ mod sdf;
 use crate::{
     app::{
         args::OutputFormat,
-        cache::{Cache, RawCache},
+        cache::{Cache, ComputeCache},
         gui::{
             event::{DebuggingEvent, EventLoopProxy, VgonioEvent},
             measurement::{
@@ -149,7 +149,7 @@ impl MeasurementDialog {
         }
     }
 
-    pub fn update_surface_selector(&mut self, surfs: &[Handle], cache: &RawCache) {
+    pub fn update_surface_selector(&mut self, surfs: &[Handle], cache: &ComputeCache) {
         let surfs = cache.get_micro_surface_records(surfs.iter());
         let surfs = surfs.iter().map(|r| (r.surf, r.name()));
         self.selector.update(surfs);

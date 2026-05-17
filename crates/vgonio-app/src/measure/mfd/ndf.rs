@@ -1,5 +1,5 @@
 use crate::{
-    app::cache::RawCache,
+    app::cache::ComputeCache,
     measure::{
         params::{NdfMeasurementMode, NdfMeasurementParams},
         Measurement, MeasurementSource,
@@ -176,7 +176,7 @@ const FACET_CHUNK_SIZE: usize = 4096;
 pub fn measure_area_distribution(
     params: NdfMeasurementParams,
     handles: &[Handle],
-    cache: &RawCache,
+    cache: &ComputeCache,
 ) -> Box<[Measurement]> {
     #[cfg(feature = "bench")]
     let start = std::time::Instant::now();

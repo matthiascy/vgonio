@@ -2,7 +2,7 @@
 use crate::app::gui::plotter::{debug_print_angle, debug_print_angle_pair};
 use crate::{
     app::{
-        cache::{Cache, RawCache},
+        cache::{Cache, ComputeCache},
         gui::{
             event::EventLoopProxy,
             plotter::{angle_knob, Curve, VariantData},
@@ -69,7 +69,7 @@ impl Default for MaskingShadowingExtra {
 }
 
 impl VariantData for MaskingShadowingExtra {
-    fn pre_process(&mut self, data: Handle, cache: &RawCache) {
+    fn pre_process(&mut self, data: Handle, cache: &ComputeCache) {
         let measurement = cache.get_measurement(data).unwrap();
         assert_eq!(
             measurement.measured.kind(),

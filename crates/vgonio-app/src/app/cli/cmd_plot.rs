@@ -1,4 +1,5 @@
 use crate::{
+    app::cache::{Cache, ComputeCache},
     measure::{
         bsdf::BsdfMeasurement,
         mfd::{MeasuredGafData, MeasuredNdfData},
@@ -10,7 +11,6 @@ use crate::{
     },
 };
 
-use crate::app::cache::{Cache, RawCache};
 use egui::ahash::{HashMap, HashMapExt};
 use std::path::PathBuf;
 use vgn_bxdf::{
@@ -1033,7 +1033,7 @@ fn load_measurements(
 /// * `cache` - The cache to use.
 fn load_measured<'a>(
     inputs: &[Handle],
-    cache: &'a RawCache,
+    cache: &'a ComputeCache,
 ) -> Result<Box<[&'a Box<dyn AnyMeasured>]>, VgonioError> {
     Ok(inputs
         .iter()
@@ -1045,7 +1045,7 @@ fn load_measured<'a>(
 /// the specified type.
 fn load_measured_downcast<'a, T: AnyMeasured + 'static>(
     inputs: &[Handle],
-    cache: &'a RawCache,
+    cache: &'a ComputeCache,
 ) -> Result<Box<[&'a T]>, VgonioError> {
     Ok(load_measured(inputs, cache)?
         .iter()

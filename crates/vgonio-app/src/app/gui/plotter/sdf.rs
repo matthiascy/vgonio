@@ -2,7 +2,7 @@
 use crate::app::gui::plotter::debug_print_angle_pair;
 use crate::{
     app::{
-        cache::{Cache, RawCache},
+        cache::{Cache, ComputeCache},
         gui::{
             event::EventLoopProxy,
             misc::drag_angle,
@@ -92,7 +92,7 @@ impl SlopeDistributionExtra {
 }
 
 impl VariantData for SlopeDistributionExtra {
-    fn pre_process(&mut self, data: Handle, cache: &RawCache) {
+    fn pre_process(&mut self, data: Handle, cache: &ComputeCache) {
         self.generate_curves(cache.get_measurement(data).unwrap());
     }
 

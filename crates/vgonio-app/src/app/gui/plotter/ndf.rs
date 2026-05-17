@@ -19,7 +19,7 @@ use vgn_core::{
     utils::range::StepRangeIncl,
 };
 
-use crate::app::cache::{Cache, RawCache};
+use crate::app::cache::{Cache, ComputeCache};
 use egui::{Align, Ui};
 use std::any::Any;
 use vgn_bxdf::{
@@ -106,7 +106,7 @@ impl AreaDistributionExtra {
 }
 
 impl VariantData for AreaDistributionExtra {
-    fn pre_process(&mut self, data: Handle, cache: &RawCache) {
+    fn pre_process(&mut self, data: Handle, cache: &ComputeCache) {
         let measurement = cache.get_measurement(data).unwrap();
         let ndf = measurement
             .measured

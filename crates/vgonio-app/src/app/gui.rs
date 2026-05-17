@@ -57,7 +57,7 @@ use self::tools::SamplingInspector;
 
 use crate::{
     app::{
-        cache::{Cache, RawCache},
+        cache::{Cache, ComputeCache},
         gui::{
             docking::WidgetKind,
             event::{EventLoopProxy, SurfaceViewerEvent},
@@ -193,7 +193,7 @@ impl VgonioGuiApp {
 
         let config = Arc::new(config);
         let cache = {
-            let mut inner = RawCache::new(config.cache_dir());
+            let mut inner = ComputeCache::new(config.cache_dir());
             inner.load_ior_database(&config);
             Cache::from_raw(inner)
         };
@@ -625,7 +625,8 @@ impl VgonioGuiApp {
                                 }
                                 if let Err(reason) = params.check_supported_for_measurement() {
                                     log::error!(
-                                        "Cannot measure BSDF with unsupported simulation method: {}",
+                                        "Cannot measure BSDF with unsupported simulation method: \
+                                         {}",
                                         reason
                                     );
                                     self.event_loop_proxy.send_event(Notify {

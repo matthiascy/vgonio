@@ -1,7 +1,7 @@
 use super::outliner::OutlinerItem;
 #[cfg(feature = "fitting")]
 use crate::fitting::FittedModels;
-use crate::{app::cache::RawCache, measure::MeasurementSource};
+use crate::{app::cache::ComputeCache, measure::MeasurementSource};
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
 use vgn_core::{res::Handle, units::LengthUnit, MeasurementKind};
@@ -93,7 +93,7 @@ impl PropertyData {
     ///
     /// This should be called whenever the micro surface cache is updated (new
     /// micro surfaces are added or removed)
-    pub fn update_surfaces(&mut self, surfs: &[Handle], cache: &RawCache) {
+    pub fn update_surfaces(&mut self, surfs: &[Handle], cache: &ComputeCache) {
         for hdl in surfs {
             if let std::collections::hash_map::Entry::Vacant(e) = self.surfaces.entry(*hdl) {
                 let record = cache.get_micro_surface_record(*hdl).unwrap();
@@ -141,7 +141,7 @@ impl PropertyData {
     }
 
     /// Updates the list of measurement data.
-    pub fn update_measurement_data(&mut self, measurements: &[Handle], cache: &RawCache) {
+    pub fn update_measurement_data(&mut self, measurements: &[Handle], cache: &ComputeCache) {
         for meas in measurements {
             if let std::collections::hash_map::Entry::Vacant(e) = self.measured.entry(*meas) {
                 let data = cache.get_measurement(*meas).unwrap();
