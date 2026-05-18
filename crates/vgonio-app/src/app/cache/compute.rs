@@ -368,76 +368,20 @@ impl ComputeCache {
     /// Loads the refractive index database from the paths specified in the
     /// configuration.
     pub fn load_ior_database(&mut self, config: &Config) {
-        log::debug!("Loading refractive index database ...");
-        let sys_path: PathBuf = config.sys_data_dir().to_path_buf().join("ior");
-        let user_path = config
-            .user_data_dir()
-            .map(|path| path.to_path_buf().join("ior"));
-        log::debug!("  -- sys_path: {:?}", sys_path);
-        log::debug!("  -- user_path: {:?}", user_path);
+        use vgn_core::{optics::IorRegLoader, res::AssetLoader};
 
-        if !sys_path.exists() {
-            log::debug!("  Refractive index database not found at {:?}", sys_path);
+        let loader = IorRegLoader::new(
+            Some(config.sys_data_dir()),
+            config.user_data_dir(),
+            config.user.excluded_ior_files.clone(),
+        );
+
+        match loader.load(None) {
+            Ok(boxed) => match boxed.into_any().downcast::<IorReg>() {
+                Ok(reg) => self.iors = *reg,
+                Err(_) => log::error!("loaded IOR asset had unexpected type"),
+            },
+            Err(e) => log::error!("failed to load IOR database: {e}"),
         }
-
-        let excluded = match &config.user.excluded_ior_files {
-            Some(excluded) => excluded.as_slice(),
-            None => &[],
-        };
-
-        // First load refractive indices from `VgonioConfig::sys_data_dir()`.
-        let n = Self::load_refractive_indices(&mut self.iors, &sys_path, excluded);
-        log::debug!("  Loaded {} ior files from {:?}", n, sys_path);
-
-        if !user_path.as_ref().is_some_and(|p| p.exists()) {
-            log::debug!("  Refractive index database not found at {:?}", user_path);
-        }
-
-        let n =
-            Self::load_refractive_indices(&mut self.iors, user_path.as_ref().unwrap(), excluded);
-        log::debug!("  Loaded {} ior files from {:?}", n, user_path);
-    }
-
-    /// Load the refractive index database from the given path.
-    /// Returns the number of files loaded.
-    fn load_refractive_indices(iors: &mut IorReg, path: &Path, excluded: &[String]) -> u32 {
-        // let mut n_files = 0;
-        // if path.is_file() {
-        //     log::debug!("Loading refractive index database from {:?}", path);
-        //     let filename = path.file_name().unwrap().to_str().unwrap();
-        //     if excluded.contains(&filename.to_string()) {
-        //         log::debug!("  -- excluded: {}", filename);
-        //         return 0;
-        //     }
-        //     let medium = Medium::from_str(
-        //         path.file_name()
-        //             .unwrap()
-        //             .to_str()
-        //             .unwrap()
-        //             .split('_')
-        //             .next()
-        //             .unwrap(),
-        //     )
-        //     .unwrap();
-        //     let refractive_indices = IorReg::read_iors_from_file(path).unwrap();
-        //     let iors = iors.entry(medium).or_default();
-        //     for ior in refractive_indices.iter() {
-        //         if !iors.contains(ior) {
-        //             iors.push(*ior);
-        //         }
-        //     }
-        //     iors.sort_by(|a, b| a.wavelength.partial_cmp(&b.wavelength).unwrap());
-        //     log::debug!("  -- loaded ior: {:?}", iors);
-        //     n_files += 1;
-        // } else if path.is_dir() {
-        //     for entry in path.read_dir().unwrap() {
-        //         let entry = entry.unwrap();
-        //         let path = entry.path();
-        //         n_files += Self::load_refractive_indices(iors, &path, excluded);
-        //     }
-        // }
-
-        // n_files
-        todo!()
     }
 }
