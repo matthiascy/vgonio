@@ -66,6 +66,7 @@ flate2 = { version = "~1.0", features = [
 futures-intrusive = "0.5"
 glam = { version = "~0.28", features = ["serde", "bytemuck"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
+include_dir = "0.7"
 indicatif = { version = "0.17", features = ["rayon"] }
 lazy_static = "1.5"
 levenberg-marquardt = "0.14"
@@ -94,6 +95,7 @@ serde_json = "1.0"
 serde-pickle = "1.2"
 serde_yaml = "0.9"
 static_assertions = "1.1"
+tempfile = "3"
 thiserror = "2.0"
 tobj = "4.0"
 toml = "0.8"
