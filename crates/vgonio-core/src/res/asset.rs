@@ -65,6 +65,14 @@ pub trait Asset: Any + Send + Sync + 'static {
     /// Enables mutable downcasting to the actual asset type using `Any`.
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
+    /// Consumes the boxed asset, returning a `Box<dyn Any + Send + Sync>` that
+    /// supports `Box::downcast::<T>()`. Owned counterpart to `as_any()`.
+    ///
+    /// The default implementation provided by the [`asset!`] macro is `self`, which
+    /// is valid because every concrete `Asset` is `: 'static + Send + Sync`.
+    /// Hand-rolled `impl Asset for T` blocks must implement this themselves.
+    fn into_any(self: Box<Self>) -> Box<dyn Any + Send + Sync>;
+
     /// Creates a new handle for the asset.
     fn new_handle() -> Handle
     where
@@ -105,6 +113,8 @@ macro_rules! asset {
             fn as_any(&self) -> &dyn std::any::Any { self }
 
             fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
+
+            fn into_any(self: Box<Self>) -> Box<dyn std::any::Any + Send + Sync> { self }
         }
     };
 }
