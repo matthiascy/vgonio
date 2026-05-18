@@ -81,7 +81,7 @@ vgn_core = { workspace = true, features = ["cli", "winit", "io", "config"] }
 vgn_bxdf = { workspace = true, optional = true, features = ["fitting", "io"] }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true
 
 [lints]
 workspace = true

@@ -469,7 +469,11 @@ mod tests {
         // Run from the workspace root (cargo test sets CWD to the crate dir, so go up two levels).
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let cases: [(&str, Medium, usize); 4] = [
-            ("datafiles/ior/air_iors_[0.23-1.69].csv", Medium::Air, 2), // no BOM, 2 cols
+            (
+                "datafiles/ior/air_iors_[0.23-1.69]_Ciddor1996.csv",
+                Medium::Air,
+                2,
+            ), // no BOM, 2 cols
             (
                 "datafiles/ior/al_iors_[0.15-1.7]_McPeak2015.csv",
                 Medium::Aluminium,
@@ -480,7 +484,11 @@ mod tests {
                 Medium::Aluminium,
                 3,
             ), // BOM, 3 cols
-            ("datafiles/ior/cu_iors_[0.3-1.7].csv", Medium::Copper, 3), // BOM, 3 cols
+            (
+                "datafiles/ior/cu_iors_[0.3-1.7]_McPeak2015.csv",
+                Medium::Copper,
+                3,
+            ), // BOM, 3 cols
         ];
         for (rel, medium, _cols) in cases {
             let path = root.join(rel);

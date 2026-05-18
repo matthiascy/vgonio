@@ -13,7 +13,7 @@ use std::{
 // TODO: refactor the code use const generics.
 
 /// Represents a unit of length.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum LengthUnit {
     /// Metres.

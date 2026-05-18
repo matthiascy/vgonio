@@ -401,42 +401,43 @@ impl ComputeCache {
     /// Load the refractive index database from the given path.
     /// Returns the number of files loaded.
     fn load_refractive_indices(iors: &mut IorReg, path: &Path, excluded: &[String]) -> u32 {
-        let mut n_files = 0;
-        if path.is_file() {
-            log::debug!("Loading refractive index database from {:?}", path);
-            let filename = path.file_name().unwrap().to_str().unwrap();
-            if excluded.contains(&filename.to_string()) {
-                log::debug!("  -- excluded: {}", filename);
-                return 0;
-            }
-            let medium = Medium::from_str(
-                path.file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .split('_')
-                    .next()
-                    .unwrap(),
-            )
-            .unwrap();
-            let refractive_indices = IorReg::read_iors_from_file(path).unwrap();
-            let iors = iors.entry(medium).or_default();
-            for ior in refractive_indices.iter() {
-                if !iors.contains(ior) {
-                    iors.push(*ior);
-                }
-            }
-            iors.sort_by(|a, b| a.wavelength.partial_cmp(&b.wavelength).unwrap());
-            log::debug!("  -- loaded ior: {:?}", iors);
-            n_files += 1;
-        } else if path.is_dir() {
-            for entry in path.read_dir().unwrap() {
-                let entry = entry.unwrap();
-                let path = entry.path();
-                n_files += Self::load_refractive_indices(iors, &path, excluded);
-            }
-        }
+        // let mut n_files = 0;
+        // if path.is_file() {
+        //     log::debug!("Loading refractive index database from {:?}", path);
+        //     let filename = path.file_name().unwrap().to_str().unwrap();
+        //     if excluded.contains(&filename.to_string()) {
+        //         log::debug!("  -- excluded: {}", filename);
+        //         return 0;
+        //     }
+        //     let medium = Medium::from_str(
+        //         path.file_name()
+        //             .unwrap()
+        //             .to_str()
+        //             .unwrap()
+        //             .split('_')
+        //             .next()
+        //             .unwrap(),
+        //     )
+        //     .unwrap();
+        //     let refractive_indices = IorReg::read_iors_from_file(path).unwrap();
+        //     let iors = iors.entry(medium).or_default();
+        //     for ior in refractive_indices.iter() {
+        //         if !iors.contains(ior) {
+        //             iors.push(*ior);
+        //         }
+        //     }
+        //     iors.sort_by(|a, b| a.wavelength.partial_cmp(&b.wavelength).unwrap());
+        //     log::debug!("  -- loaded ior: {:?}", iors);
+        //     n_files += 1;
+        // } else if path.is_dir() {
+        //     for entry in path.read_dir().unwrap() {
+        //         let entry = entry.unwrap();
+        //         let path = entry.path();
+        //         n_files += Self::load_refractive_indices(iors, &path, excluded);
+        //     }
+        // }
 
-        n_files
+        // n_files
+        todo!()
     }
 }

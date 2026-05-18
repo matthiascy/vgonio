@@ -1,0 +1,29 @@
+upstream = "https://github.com/polyanskiy/refractiveindex.info-database"
+
+[[dataset]]
+file = "air_Ciddor1996.ior.ron"
+medium = "air"
+default = true
+path = "other/mixed gases/air/nk/Ciddor.yml"
+verified = true
+
+[[dataset]]
+file = "al_McPeak2015.ior.ron"
+medium = "al"
+default = true
+path = "main/Al/nk/McPeak.yml"
+verified = true
+
+[[dataset]]
+file = "al_Cheng2016.ior.ron"
+medium = "al"
+default = false
+path = "main/Al/nk/Cheng.yml"
+verified = true
+
+[[dataset]]
+file = "cu_McPeak2015.ior.ron"
+medium = "cu"
+default = true
+path = "main/Cu/nk/McPeak.yml"
+verified = true
