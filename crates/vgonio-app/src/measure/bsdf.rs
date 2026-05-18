@@ -857,6 +857,15 @@ impl SingleBsdfMeasurementStats {
     }
 
     /// Tests if the statistics are valid.
+    // [0.5] orchestration/diagnostic: the 6 `cli_error!(Indent::ROOT, …)` calls
+    // in this method are data-validation failure diagnostics → Phase 1
+    // `ProgressEvent::Error`. This file moves into a capability crate in
+    // Phase 2 (hard Phase-2 breaker — `vgn_core::cli` unreachable).
+    // TODO [cli-report worthy / smell]: a `*::is_valid() -> bool` printing to
+    // the CLI on the failure path is a layering smell. Phase 1 should make
+    // validation return a structured error (or emit ProgressEvent::Error) and
+    // let the caller decide how to surface it, instead of `is_valid()` writing
+    // to stdout from deep compute.
     pub fn is_valid(&self) -> bool {
         if self.n_ray_stats.len() != Self::N_STATS * self.n_spectrum {
             cli_error!(
@@ -1524,6 +1533,8 @@ pub fn measure_bsdf_rt(
                 }
             },
             SimulationKind::WaveOptics => {
+                // [0.5] orchestration → Phase 1 ProgressEvent::Step (Phase-2
+                // breaker: deep compute in a future capability crate)
                 cli_step!(
                     Indent::SUBSECTION,
                     "Measuring {} with wave optics...",

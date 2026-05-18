@@ -190,6 +190,12 @@ impl Measurement {
 
     /// Loads the measurement data from a file.
     pub fn read_from_file(filepath: &Path) -> Result<Self, VgonioError> {
+        // [0.5] orchestration: the 5 `cli_step!(Indent::SUBSECTION, "Loading
+        // <RGL|MERL|Clausen|Yan18|VGMO> BSDF file: …")` calls below are
+        // per-format load steps → Phase 1 `ProgressEvent::Note`. NOTE: this
+        // file (`crate::measure`) moves into a capability crate in Phase 2,
+        // where `vgn_core::cli` is unreachable — these are hard Phase-2
+        // breakers and MUST be ProgressEvent by then.
         // TODO: unified file loading
         if filepath.extension().unwrap() == "bsdf" {
             cli_step!(

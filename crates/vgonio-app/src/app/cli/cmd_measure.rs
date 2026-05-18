@@ -4,6 +4,7 @@
 use crate::app::args::OutputFormat;
 use std::path::PathBuf;
 use vgn_core::{
+    cli::{cli_step, Indent},
     config::Config,
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
@@ -12,6 +13,19 @@ use vgn_core::{
 /// Measure different metrics of the micro-surface.
 pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
     log::info!("{:#?}", config);
+
+    // [0.5] TODO: later when extracting capabilites (ADAPTER print, moved here
+    // from measure_orchestration::run), this will stay in the command file, because
+    // this is the top-level `vgonio measure` banner; this is a CLI-shell
+    // concern, not orchestration.
+    let dispatch = |opts: MeasureOptions, config: Config| {
+        cli_step!(
+            Indent::ROOT,
+            "Executing 'vgonio measure' with a thread pool of size: {}",
+            rayon::current_num_threads()
+        );
+        crate::measure_orchestration::run(opts, config)
+    };
 
     if let Some(nthreads) = opts.nthreads {
         let pool = rayon::ThreadPoolBuilder::new()
@@ -26,9 +40,9 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
                     None,
                 )
             })?;
-        pool.install(|| crate::measure_orchestration::run(opts, config))
+        pool.install(|| dispatch(opts, config))
     } else {
-        crate::measure_orchestration::run(opts, config)
+        dispatch(opts, config)
     }
 }
 

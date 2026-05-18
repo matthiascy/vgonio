@@ -1,3 +1,32 @@
+//! Fitting orchestration. CLI shape (clap) stays in
+//! [`crate::app::cli::cmd_fit`]; Phase 2 moves this module into a capability
+//! crate.
+//!
+//! # CLI-print inventory
+//!
+//! Every `cli_*` call here is ORCHESTRATION -- there is no top-level ADAPTER
+//! banner to move (unlike `measure_orchestration`; `fit` never printed an
+//! `Indent::ROOT` "Executing 'vgonio fit'…" line). When Capability Separation
+//! moves this module into a capability crate, `vgn_core::cli` is unreachable;
+//! Contracts + local executor replaces each call with a `ProgressEvent`.
+//! Mapping (see inline `[0.5]`):
+//!
+//! | Site | Context | -> Phase 1 |
+//! |---|---|---|
+//! | "Fitting (…) to model: …" | `measured_brdf_fitting` | `ProgressEvent::Step` |
+//! | "Fitting with brute force method…" | `brdf_fitting_brute_force` | `ProgressEvent::Step` |
+//! | "Pre-allocating GPU memory…" | cuda path | `ProgressEvent::Step` |
+//! | "Fitting for wavelength: …" | per-λ brute loop | `ProgressEvent::Step` |
+//! | "Took: …" | timing | `ProgressEvent::Note` |
+//! | "λ = …:" | per-λ report header | `ProgressEvent::Step` |
+//! | "Fitting to distribution @…" | NDF branch in `run` | `ProgressEvent::Step` |
+//! | "Fitting to model …@…" | BRDF branch in `run` | `ProgressEvent::Step` |
+//! | "Fitting simulated data to Clausen's data." | clausen path | `ProgressEvent::Step` |
+//! | "Unknown measured BRDF kind…" | error arm | `ProgressEvent::Error` |
+//!
+//! Do NOT migrate to `ProgressEvent` in Phase 0 (`vgonio-job-api` does not
+//! exist yet). This is the Phase 1 migration checklist.
+
 use crate::{measure::bsdf::BsdfMeasurement, pyplot::plot_err, FitOptions};
 use dirs::cache_dir;
 use std::{
@@ -88,6 +117,7 @@ fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
     theta_limit: Option<Radians>,
 ) {
     let limit = theta_limit.unwrap_or(Radians::HALF_PI);
+    // [0.5] orchestration → Phase 1 ProgressEvent::Step
     cli_step!(
         Indent::SUBSECTION,
         "Fitting ({:?}) to model: {:?}, distro: {:?}, symmetry: {}, method: {:?}, error metric: \
@@ -178,6 +208,12 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
     iors: &IorReg,
     writer: Option<&mut BufWriter<File>>,
 ) {
+    // [0.5] orchestration → Phase 1 ProgressEvent::Step
+    // TODO [cli-report worthy]: brute force searches a roughness grid
+    // (START:END:STEP, possibly thousands of points) after this single banner
+    // with no further feedback until the report. Phase 1 should emit a
+    // ProgressEvent with percent/ETA across the grid (and per-wavelength when
+    // `opts.per_wavelength`), not just a start line.
     cli_step!(
         Indent::DETAIL,
         "Fitting with brute force method... {} {}",
@@ -226,6 +262,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
         // and transfer all wavelength data in one operation instead of per-wavelength transfers.
         #[cfg(feature = "cuda")]
         let wavelength_proxies: Option<Vec<_>> = if opts.cuda {
+            // [0.5] orchestration → Phase 1 ProgressEvent::Step
             cli_step!(
                 Indent::DETAIL,
                 "Pre-allocating GPU memory for {} wavelengths...",
@@ -278,6 +315,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
                     ay.unwrap().step_size
                 )
             };
+            // [0.5] orchestration → Phase 1 ProgressEvent::Step (per wavelength)
             cli_step!(
                 Indent::DETAIL,
                 "Fitting for wavelength: {:?}, in range ax: {}, ay: {}",
@@ -329,6 +367,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
         )])
     };
     let end = std::time::Instant::now();
+    // [0.5] orchestration → Phase 1 ProgressEvent::Note
     cli_note!(Indent::SUBSECTION, "Took: {}", format_duration(end - start));
 
     write_fitting_reports(
@@ -473,6 +512,7 @@ fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(
             opts.theta_limit.map(|t| Radians::from_degrees(t)),
         );
         if let Some(w) = w {
+            // [0.5] orchestration → Phase 1 ProgressEvent::Step (per-λ report header)
             cli_step!(Indent::DETAIL, "λ = {:?}:", w);
         }
         report.print_fitting_report(n, 6);
@@ -569,6 +609,7 @@ pub fn run(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
 
     // Temporary fix for adding the NDF fitting
     if opts.ndf {
+        // [0.5] orchestration → Phase 1 ProgressEvent::Step
         cli_step!(
             Indent::SECTION,
             "Fitting to distribution @{:?}",
@@ -604,6 +645,7 @@ pub fn run(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
         return Ok(());
     }
 
+    // [0.5] orchestration → Phase 1 ProgressEvent::Step
     cli_step!(
         Indent::SECTION,
         "Fitting to model {:?}@{:?}",
@@ -616,6 +658,7 @@ pub fn run(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     cache.write(|cache| {
         cache.load_ior_database(&config);
         if opts.kind == MeasuredBrdfKind::Vgonio && opts.clausen {
+            // [0.5] orchestration → Phase 1 ProgressEvent::Step
             cli_step!(Indent::SECTION, "Fitting simulated data to Clausen's data.");
             if opts.inputs.len() % 2 != 0 {
                 return Err(VgonioError::new(
@@ -693,6 +736,7 @@ pub fn run(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
                     load_and_fit!(RglBrdf, opts, cache, config, &opts.inputs, theta_limit);
                 },
                 MeasuredBrdfKind::Unknown => {
+                    // [0.5] orchestration → Phase 1 ProgressEvent::Error
                     cli_error!(
                         Indent::SECTION,
                         "Unknown measured BRDF kind specified, cannot fit!"
