@@ -159,6 +159,65 @@ impl IorDatasetDto {
             data,
         })
     }
+
+    /// Reads a legacy `*.csv` file (`"wavelength, µm", "n"[, "k"]`, optional UTF-8 BOM, µm
+    /// wavelengths) into a `Tabulated` DTO. `medium` and `name` are supplide by the caller.
+    pub fn from_legacy_csv(
+        path: &Path,
+        medium: Medium,
+        name: &str,
+    ) -> Result<IorDatasetDto, IorFileError> {
+        let p = path.display().to_string();
+        let raw = std::fs::read(path).map_err(|source| IorFileError::Io {
+            path: p.clone(),
+            source,
+        })?;
+        // Strip UTF-8 BOM if present.
+        let bytes = raw.strip_prefix(&[0xEF, 0xBB, 0xBF][..]).unwrap_or(&raw);
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(true)
+            .from_reader(bytes);
+        let n_cols = rdr
+            .headers()
+            .map_err(|e| IorFileError::Csv {
+                path: p.clone(),
+                msg: e.to_string(),
+            })?
+            .len();
+        let mut rows: Vec<[f64; 3]> = Vec::new();
+        for rec in rdr.records() {
+            let rec = rec.map_err(|e| IorFileError::Csv {
+                path: p.clone(),
+                msg: e.to_string(),
+            })?;
+            let parse = |i: usize| -> Result<f64, IorFileError> {
+                rec.get(i)
+                    .ok_or_else(|| IorFileError::Csv {
+                        path: p.clone(),
+                        msg: format!("missing column {i}"),
+                    })
+                    .and_then(|s| {
+                        s.trim().parse::<f64>().map_err(|e| IorFileError::Csv {
+                            path: p.clone(),
+                            msg: e.to_string(),
+                        })
+                    })
+            };
+            let lambda_nm = parse(0)? * 1000.0; // µm -> nm
+            let eta = parse(1)?;
+            let k = if n_cols >= 3 { parse(2)? } else { 0.0 };
+            rows.push([lambda_nm, eta, k]);
+        }
+        rows.sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap());
+        Ok(IorDatasetDto {
+            schema_version: IOR_DATASET_SCHEMA_VERSION,
+            medium: medium.name().to_string(),
+            name: name.to_string(),
+            reference: String::new(),
+            comments: String::new(),
+            data: IorDataDto::Tabulated(rows),
+        })
+    }
 }
 
 /// Reads and validates a `*.ior.ron` file into a runtime dataset.
@@ -369,5 +428,46 @@ mod tests {
         std::fs::write(&path, "[[dataset]]\nfile=\"x.ior.ron\"\nmedium=\"al\"\n").unwrap();
         assert!(ManifestDto::read(&path).unwrap().datasets[0].verified);
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn legacy_csv_parses_all_four_repo_files() {
+        // Run from the workspace root (cargo test sets CWD to the crate dir, so go up two levels).
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let cases: [(&str, Medium, usize); 4] = [
+            ("datafiles/ior/air_iors_[0.23-1.69].csv", Medium::Air, 2), // no BOM, 2 cols
+            (
+                "datafiles/ior/al_iors_[0.15-1.7]_McPeak2015.csv",
+                Medium::Aluminium,
+                3,
+            ), // no BOM, 3 cols
+            (
+                "datafiles/ior/al_iors_[0.225-1.0]_Cheng2016.csv",
+                Medium::Aluminium,
+                3,
+            ), // BOM, 3 cols
+            ("datafiles/ior/cu_iors_[0.3-1.7].csv", Medium::Copper, 3), // BOM, 3 cols
+        ];
+        for (rel, medium, _cols) in cases {
+            let path = root.join(rel);
+            let dto = IorDatasetDto::from_legacy_csv(&path, medium, "Legacy")
+                .unwrap_or_else(|e| panic!("{rel}: {e}"));
+            let runtime = dto.clone().into_runtime(rel).unwrap();
+            match runtime.data {
+                IorData::Tabulated(s) => {
+                    assert!(!s.is_empty(), "{rel}: empty");
+                    // ascending, nm units (first sample for these files is > 100 nm)
+                    assert!(
+                        s[0].wavelength.value() > 100.0,
+                        "{rel}: looks like µm, not nm"
+                    );
+                    assert!(
+                        s.windows(2).all(|w| w[0].wavelength <= w[1].wavelength),
+                        "{rel}: not sorted"
+                    );
+                },
+                _ => panic!("{rel}: expected Tabulated"),
+            }
+        }
     }
 }
