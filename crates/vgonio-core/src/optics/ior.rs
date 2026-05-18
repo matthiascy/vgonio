@@ -15,7 +15,7 @@ pub use loader::IorRegLoader;
 
 use crate::{
     asset, math,
-    res::{Asset, AssetLoader, AssetTypeId, Error},
+    res::{AssetTypeId, Error},
     units::{nanometres, Length, LengthMeasurement, Nanometres},
     utils::medium::{MaterialKind, Medium},
 };
@@ -24,8 +24,6 @@ use std::{
     collections::HashMap,
     fmt::{Debug, Display, Formatter},
     ops::{Deref, DerefMut},
-    path::PathBuf,
-    str::FromStr,
 };
 
 use std::path::Path;
@@ -178,6 +176,20 @@ impl IorDataset {
                 })
             },
         }
+    }
+
+    /// Reads and validates a `*.ior.ron` file into a runtime dataset.
+    ///
+    /// Returns an error if the file cannot be read or parsed, or if the parsed data is invalid.
+    pub fn read(path: &Path) -> Result<IorDataset, IorFileError> {
+        let dto = IorDatasetDto::read(path)?;
+        dto.into_runtime(&path.display().to_string())
+    }
+
+    /// Serialises a runtime dataset to a `*.ior.ron` file (pretty-printed).
+    pub fn write(&self, path: &Path) -> Result<(), IorFileError> {
+        let dto = IorDatasetDto::from_runtime(self);
+        dto.write(path)
     }
 }
 

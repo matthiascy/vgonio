@@ -2,7 +2,7 @@
 //! its conversion to/from the runtime [`super::IorDataset`], the `sources.toml`
 //! manifest model, and a reader for the legacy `*.csv` files.
 
-use super::{DispersionFormula, Ior, IorData, IorDataset, IorRecord};
+use super::{DispersionFormula, IorData, IorDataset, IorRecord};
 use crate::{units::nanometres, utils::medium::Medium};
 use serde::{Deserialize, Serialize};
 use std::{path::Path, str::FromStr};
@@ -218,32 +218,57 @@ impl IorDatasetDto {
             data: IorDataDto::Tabulated(rows),
         })
     }
+
+    /// Reads a `*.ior.ron` file into a dto.
+    pub fn read(path: &Path) -> Result<IorDatasetDto, IorFileError> {
+        let p = path.display().to_string();
+        let text = std::fs::read_to_string(path).map_err(|source| IorFileError::Io {
+            path: p.clone(),
+            source,
+        })?;
+        Self::parse(&text, Some(p))
+    }
+
+    /// Serialises a dto dataset to a `*.ior.ron` file (pretty-printed).
+    pub fn write(&self, path: &Path) -> Result<(), IorFileError> {
+        let p = path.display().to_string();
+        let pretty = ron::ser::PrettyConfig::new().struct_names(false);
+        let text = ron::ser::to_string_pretty(&self, pretty).map_err(|e| IorFileError::Ron {
+            path: p.clone(),
+            source: e.into(),
+        })?;
+        std::fs::write(path, text).map_err(|source| IorFileError::Io { path: p, source })
+    }
+
+    /// Parse a DTO from text.
+    ///
+    /// The text is expected to be the content of a `*.ior.ron` file, but this method doesn't
+    /// enforce that or use the `path` for anything other than error messages.
+    ///
+    /// `path` is used only for error messages; if `None`, errors will have a generic `<string>`
+    /// path.
+    pub fn parse(src: &str, path: Option<String>) -> Result<IorDatasetDto, IorFileError> {
+        let p = path.unwrap_or_else(|| "<string>".into());
+
+        ron::from_str(&src).map_err(|e| IorFileError::Ron {
+            path: p,
+            source: e.into(),
+        })
+    }
 }
 
-/// Reads and validates a `*.ior.ron` file into a runtime dataset.
+/// Reads a `*.ior.ron` file into a runtime [`IorDataset`].
+///
+/// Convenience wrapper over [`IorDatasetDto::read`] + [`IorDatasetDto::into_runtime`].
 pub fn read_dataset_file(path: &Path) -> Result<IorDataset, IorFileError> {
-    let p = path.display().to_string();
-    let text = std::fs::read_to_string(path).map_err(|source| IorFileError::Io {
-        path: p.clone(),
-        source,
-    })?;
-    let dto: IorDatasetDto = ron::from_str(&text).map_err(|e| IorFileError::Ron {
-        path: p.clone(),
-        source: e.into(),
-    })?;
-    dto.into_runtime(&p)
+    IorDatasetDto::read(path)?.into_runtime(&path.display().to_string())
 }
 
-/// Serialises a runtime dataset to a `*.ior.ron` file (pretty-printed).
-pub fn write_dataset_file(path: &Path, ds: &IorDataset) -> Result<(), IorFileError> {
-    let p = path.display().to_string();
-    let dto = IorDatasetDto::from_runtime(ds);
-    let pretty = ron::ser::PrettyConfig::new().struct_names(false);
-    let text = ron::ser::to_string_pretty(&dto, pretty).map_err(|e| IorFileError::Ron {
-        path: p.clone(),
-        source: e.into(),
-    })?;
-    std::fs::write(path, text).map_err(|source| IorFileError::Io { path: p, source })
+/// Serialises a runtime [`IorDataset`] to a `*.ior.ron` file (pretty-printed).
+///
+/// Convenience wrapper over [`IorDatasetDto::from_runtime`] + [`IorDatasetDto::write`].
+pub fn write_dataset_file(path: &Path, dataset: &IorDataset) -> Result<(), IorFileError> {
+    IorDatasetDto::from_runtime(dataset).write(path)
 }
 
 /// The `datafiles/ior/sources.toml` manifest: pinned upstream + per-dataset records.
@@ -298,7 +323,7 @@ impl ManifestDto {
             path: p.clone(),
             source,
         })?;
-        toml::from_str(&text).map_err(|e| IorFileError::Toml(format!("{p}: {e}")))
+        Self::parse(&text, Some(p))
     }
 
     /// Writes `sources.toml`.
@@ -307,6 +332,15 @@ impl ManifestDto {
         let text =
             toml::to_string_pretty(self).map_err(|e| IorFileError::Toml(format!("{p}: {e}")))?;
         std::fs::write(path, text).map_err(|source| IorFileError::Io { path: p, source })
+    }
+
+    /// Parses manifest text.
+    ///
+    /// `path` is used only for error messages; if `None`, errors will have a generic `<manifest>`
+    /// path.
+    pub fn parse(src: &str, path: Option<String>) -> Result<ManifestDto, IorFileError> {
+        let p = path.unwrap_or_else(|| "<manifest>".into());
+        toml::from_str(&src).map_err(|e| IorFileError::Toml(format!("{p}: {e}")))
     }
 }
 
@@ -385,8 +419,8 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("al_Demo2024.ior.ron");
         let ds = sample_tabulated();
-        write_dataset_file(&path, &ds).unwrap();
-        assert_eq!(read_dataset_file(&path).unwrap(), ds);
+        ds.write(&path).unwrap();
+        assert_eq!(IorDataset::read(&path).unwrap(), ds);
         std::fs::remove_dir_all(&dir).ok();
     }
 

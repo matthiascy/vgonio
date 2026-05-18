@@ -1,8 +1,23 @@
 //! Loader for the refractive-index registry.
+//!
+//! A compiled-in baseline (`datafiles/ior/`, embeded via `include_dir`) is always loaded, and
+//! additional files can be loaded from the system and user directories. The loader supports
+//! excluding specific files by name, which is useful for testing and development.
 
 use super::IorReg;
-use crate::res::{Asset, AssetLoader, AssetTypeId, Error};
-use std::path::{Path, PathBuf};
+use crate::{
+    optics::{ior::Medium, IorDataset, ManifestDto},
+    res::{Asset, AssetLoader, AssetTypeId, Error},
+};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
+
+#[cfg(feature = "embed-datafiles")]
+static EMBEDDED_IOR: include_dir::Dir<'static> =
+    include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../datafiles/ior");
 
 /// Loader for refractive index database.
 pub struct IorRegLoader {
@@ -11,7 +26,7 @@ pub struct IorRegLoader {
     /// User directory.
     usr_dir: Option<PathBuf>,
     /// Excluded files.
-    excluded: Option<Vec<String>>,
+    excluded: Vec<String>,
 }
 
 impl IorRegLoader {
@@ -24,6 +39,14 @@ impl IorRegLoader {
     /// * `usr_dir` - The base user directory used to resolve the path when the path is in form
     ///   `user://`. The actual path is resolved to `usr_dir/ior/path`.
     /// * `excluded` - The list of excluded files.
+    ///
+    /// Layering order (later overrides earlier for the same medium):
+    /// 1. Embedded baseline
+    /// 2. System
+    /// 3. User
+    /// The embeded baseline is implicit (no parameter): it is the compiled-in `datafiles/ior/`
+    /// when the `embed-datafiles` feature is enabled, and empty otherwise. Pass `None` for both
+    /// `sys_dir` and `usr_dir` to only load the embedded baseline.
     pub fn new(
         sys_dir: Option<&Path>,
         usr_dir: Option<&Path>,
@@ -32,8 +55,238 @@ impl IorRegLoader {
         Self {
             sys_dir: sys_dir.map(|path| path.to_path_buf().join("ior")),
             usr_dir: usr_dir.map(|path| path.to_path_buf().join("ior")),
-            excluded,
+            excluded: excluded.unwrap_or_default(),
         }
+    }
+
+    /// Returns `true` if `file_name` is in this loader's exclusion list
+    /// (matched verbatim, by file name).
+    pub fn is_excluded(&self, file_name: &str) -> bool {
+        self.excluded.iter().any(|excluded| excluded == file_name)
+    }
+}
+
+/// One layer's raw inputs: optional manifest text + an iterator of
+/// `(file_name, ron_text)` for every file in the layer.
+type LayerItems<'a> = Box<dyn Iterator<Item = Result<(String, String), Error>> + 'a>;
+
+/// Resolve one layer (a dir, or the embedded baseline) to "the chosen
+/// dataset per medium". Applies exclusion, the filename/DTO/manifest
+/// consistency rule, the manifest `default` flag, and the no-silent-pick
+/// ambiguity rule. `label` is used only in error messages.
+///
+/// # Arguments
+///
+/// - `label`: A label for this layer, used in error messages.
+/// - `manifest_src`: Optional manifest text for this layer. If `None`, treated as empty manifest
+///   (no entries).
+/// - `items`: An iterator of `(file_name, ron_text)` for every file in this layer.
+/// - `excluded`: A predicate for excluding files by name. Excluded files are ignored as if they
+///   don't exist, and do not cause errors by themselves.
+fn resolve_layer(
+    label: &str,
+    manifest_src: Option<&str>,
+    items: LayerItems<'_>,
+    excluded: &dyn Fn(&str) -> bool,
+) -> Result<HashMap<Medium, IorDataset>, Error> {
+    let manifest = match manifest_src {
+        Some(s) => ManifestDto::parse(s, None)?,
+        None => ManifestDto::default(),
+    };
+    let manifest_by_file: HashMap<&str, &super::dto::DatasetEntry> = manifest
+        .datasets
+        .iter()
+        .map(|d| (d.file.as_str(), d))
+        .collect();
+
+    // Collect candidates per medium: (file_name, dataset, is_default).
+    let mut by_medium: HashMap<Medium, Vec<(String, IorDataset, bool)>> = HashMap::new();
+    for item in items {
+        let (file_name, src) = item?;
+        if !file_name.ends_with(".ior.ron") {
+            continue; // ignore non-".ior.ron" (incl. leftover .csv during migration)
+        }
+        if excluded(&file_name) {
+            log::debug!("  -- excluded ior file: {file_name}");
+            continue;
+        }
+
+        let path = format!("{label}/iors/{file_name}");
+        let ds = super::dto::IorDatasetDto::parse(&src, Some(path.clone()))?.into_runtime(&path)?;
+
+        // Consistency rule: filename `<medium>_` prefix (if recognized) and the
+        // manifest entry (if present) must agree with the DTO's `medium`/`name`.
+        if let Some((prefix, _)) = file_name.split_once('_') {
+            if let Ok(prefix_medium) = Medium::from_str(prefix) {
+                if prefix_medium != ds.medium {
+                    return Err(Error::IoError(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "{file_name}: filename prefix says {:?} but file body says {:?}",
+                            prefix_medium, ds.medium
+                        ),
+                    )));
+                }
+            }
+        }
+        let is_default = if let Some(m) = manifest_by_file.get(file_name.as_str()) {
+            if Medium::from_str(&m.medium).ok() != Some(ds.medium) {
+                return Err(Error::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "{file_name}: sources.toml says medium {:?} but file body says {:?}",
+                        m.medium, ds.medium
+                    ),
+                )));
+            }
+            m.default
+        } else {
+            false
+        };
+        by_medium
+            .entry(ds.medium)
+            .or_default()
+            .push((file_name, ds, is_default));
+    }
+
+    // Resolve to one per medium.
+    let mut chosen = HashMap::new();
+    for (medium, mut candidates) in by_medium {
+        let dataset = if candidates.len() == 1 {
+            candidates.pop().unwrap().1
+        } else {
+            let defaults: Vec<_> = candidates.iter().filter(|c| c.2).collect();
+            match defaults.len() {
+                1 => {
+                    let name = defaults[0].0.clone();
+                    candidates.into_iter().find(|c| c.0 == name).unwrap().1
+                },
+                0 => {
+                    let names: Vec<_> = candidates.iter().map(|c| c.0.as_str()).collect();
+                    return Err(Error::IoError(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "{label}: {:?} has {} datasets and no `default = true` in \
+                             sources.toml (nor all-but-one in `excluded_ior_files`): {names:?}",
+                            medium,
+                            candidates.len()
+                        ),
+                    )));
+                },
+                _ => {
+                    let names: Vec<_> = defaults.iter().map(|c| c.0.as_str()).collect();
+                    return Err(Error::IoError(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "{label}: {:?} has multiple `default = true` datasets: {names:?}",
+                            medium
+                        ),
+                    )));
+                },
+            }
+        };
+        chosen.insert(medium, dataset);
+    }
+    Ok(chosen)
+}
+
+/// Filesystem layer: read `<dir>/sources.toml` + every file in `<dir>`.
+fn resolve_dir(
+    dir: &Path,
+    excluded: &dyn Fn(&str) -> bool,
+) -> Result<HashMap<Medium, IorDataset>, Error> {
+    if !dir.is_dir() {
+        return Ok(HashMap::new());
+    }
+    let manifest_src = std::fs::read_to_string(dir.join("sources.toml")).ok();
+    let rd = std::fs::read_dir(dir).map_err(Error::from)?;
+    let items: LayerItems = Box::new(rd.filter_map(|e| {
+        let path = match e {
+            Ok(e) => e.path(),
+            Err(e) => return Some(Err(Error::from(e))),
+        };
+        let name = path.file_name()?.to_str()?.to_string();
+        if !name.ends_with(".ior.ron") {
+            return None;
+        }
+        Some(
+            std::fs::read_to_string(&path)
+                .map(|s| (name, s))
+                .map_err(Error::from),
+        )
+    }));
+    resolve_layer(
+        &dir.display().to_string(),
+        manifest_src.as_deref(),
+        items,
+        excluded,
+    )
+}
+
+/// Embedded baseline layer: the compiled-in `datafiles/ior/`.
+/// Empty when built without the `embed-datafiles` feature.
+fn resolve_embedded(excluded: &dyn Fn(&str) -> bool) -> Result<HashMap<Medium, IorDataset>, Error> {
+    #[cfg(not(feature = "embed-datafiles"))]
+    {
+        let _ = excluded;
+        Ok(HashMap::new())
+    }
+    #[cfg(feature = "embed-datafiles")]
+    {
+        let manifest_src = EMBEDDED_IOR
+            .get_file("sources.toml")
+            .and_then(|f| f.contents_utf8())
+            .map(str::to_owned);
+        let items: LayerItems = Box::new(EMBEDDED_IOR.files().filter_map(|f| {
+            let name = f.path().file_name()?.to_str()?.to_string();
+            if !name.ends_with(".ior.ron") {
+                return None;
+            }
+            match f.contents_utf8() {
+                Some(s) => Some(Ok((name, s.to_owned()))),
+                None => Some(Err(Error::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Embedded IOR file {:?} is not valid UTF-8", f.path()),
+                )))),
+            }
+        }));
+        resolve_layer(
+            "<embedded datafiles/ior>",
+            manifest_src.as_deref(),
+            items,
+            excluded,
+        )
+    }
+}
+
+impl IorRegLoader {
+    /// Merge the three layers -- embedded baseline, then system, then user;
+    /// later layers override earlier per medium.
+    fn load_reg(&self) -> Result<IorReg, Error> {
+        let excluded = |f: &str| self.is_excluded(f);
+        let mut reg = IorReg::new();
+        for (m, ds) in resolve_embedded(&excluded)? {
+            reg.0.insert(m, ds);
+        }
+        log::debug!("  Embedded baseline: {} ior datasets", reg.0.len());
+        if let Some(d) = &self.sys_dir {
+            for (m, ds) in resolve_dir(d, &excluded)? {
+                reg.0.insert(m, ds); // system overrides embedded per medium
+            }
+            log::debug!("  After sys dir {:?}: {} ior datasets", d, reg.0.len());
+        }
+        if let Some(d) = &self.usr_dir {
+            for (m, ds) in resolve_dir(d, &excluded)? {
+                reg.0.insert(m, ds); // user overrides system + embedded per medium
+            }
+            log::debug!("  After user dir {:?}: {} ior datasets", d, reg.0.len());
+        }
+        if reg.0.is_empty() {
+            // Not an error in principle (e.g. `--no-default-features` with no
+            // dirs configured), but almost always a misconfiguration.
+            log::warn!("IOR registry is empty: no embedded baseline and no sys/user datasets");
+        }
+        Ok(reg)
     }
 }
 
@@ -43,49 +296,225 @@ impl AssetLoader for IorRegLoader {
     fn asset_type_id(&self) -> AssetTypeId { IorReg::asset_type_id() }
 
     fn load(&self, path: Option<&Path>) -> Result<Box<dyn Asset>, Error> {
-        let own_excluded = self
-            .excluded
-            .as_ref()
-            .map(|ss| ss.iter().map(|s| s.as_str()).collect::<Vec<_>>());
-        let excluded = own_excluded.as_deref().unwrap_or(&[]);
         match path {
-            Some(path) => {
-                let mut ior_reg = IorReg::new();
-                let n = ior_reg.load_from_path(path, excluded)?;
-                log::debug!("  Loaded {} ior files from {:?}", n, path);
-                Ok(Box::new(ior_reg))
+            // Explicit single directory: resolve it alone (no embedded baseline).
+            Some(p) => {
+                let excluded = |f: &str| self.is_excluded(f);
+                let mut reg = IorReg::new();
+                for (m, ds) in resolve_dir(p, &excluded)? {
+                    reg.0.insert(m, ds);
+                }
+                log::debug!("Loaded IOR registry from {:?}: {} datasets", p, reg.0.len());
+                Ok(Box::new(reg))
             },
-            None => {
-                log::debug!("Loading refractive index database from default paths ...");
-                log::debug!("  -- sys_dir: {:?}", self.sys_dir);
-                log::debug!("  -- usr_dir: {:?}", self.usr_dir);
-
-                if self.sys_dir.is_none() {
-                    log::debug!(
-                        "  Refractive index database not found at sys dir: {:?}",
-                        self.sys_dir
-                    );
-                }
-
-                if self.usr_dir.is_none() {
-                    log::debug!(
-                        "  Refractive index database not found at user dir: {:?}",
-                        self.usr_dir
-                    );
-                }
-
-                if self.usr_dir.is_none() && self.sys_dir.is_none() {
-                    log::error!("No path specified to load refractive index database");
-                    todo!("return an error");
-                }
-
-                let mut ior_reg = IorReg::new();
-                let n = ior_reg.load_from_path(self.sys_dir.as_ref().unwrap(), excluded)?;
-                log::debug!("  Loaded {} ior files from {:?}", n, self.sys_dir);
-                let n = ior_reg.load_from_path(self.usr_dir.as_ref().unwrap(), excluded)?;
-                log::debug!("  Loaded {} ior files from {:?}", n, self.usr_dir);
-                Ok(Box::new(ior_reg))
-            },
+            None => Ok(Box::new(self.load_reg()?)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        optics::ior::{write_dataset_file, IorData, IorDataset, IorRecord},
+        units::nm,
+    };
+
+    fn ds(medium: Medium, name: &str) -> IorDataset {
+        IorDataset {
+            medium,
+            name: name.into(),
+            reference: String::new(),
+            comments: String::new(),
+            data: IorData::Tabulated(Box::from([
+                IorRecord::new(nm!(400.0), 1.0, 5.0),
+                IorRecord::new(nm!(500.0), 2.0, 7.0),
+            ])),
+        }
+    }
+
+    fn tmpdir(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("vgn-iorload-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("ior")).unwrap();
+        d
+    }
+
+    #[test]
+    fn single_dataset_is_chosen() {
+        let root = tmpdir("single");
+        write_dataset_file(&root.join("ior/al_A.ior.ron"), &ds(Medium::Aluminium, "A")).unwrap();
+        let loader = IorRegLoader::new(Some(&root), None, None);
+        let reg = match loader.load(None).unwrap().into_any().downcast::<IorReg>() {
+            Ok(b) => *b,
+            Err(_) => unreachable!(),
+        };
+        assert_eq!(reg.get(&Medium::Aluminium).unwrap().name, "A");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn two_datasets_no_default_is_error() {
+        let root = tmpdir("ambig");
+        write_dataset_file(&root.join("ior/al_A.ior.ron"), &ds(Medium::Aluminium, "A")).unwrap();
+        write_dataset_file(&root.join("ior/al_B.ior.ron"), &ds(Medium::Aluminium, "B")).unwrap();
+        let loader = IorRegLoader::new(Some(&root), None, None);
+        // `.err().unwrap()` rather than `.unwrap_err()`: the Ok type
+        // `Box<dyn Asset>` is not `Debug`, which `Result::unwrap_err` requires.
+        let err = loader.load(None).err().unwrap();
+        assert!(
+            format!("{err}").contains("no `default = true`"),
+            "got: {err}"
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn default_flag_picks_the_winner_and_excluded_disambiguates() {
+        let root = tmpdir("default");
+        write_dataset_file(&root.join("ior/al_A.ior.ron"), &ds(Medium::Aluminium, "A")).unwrap();
+        write_dataset_file(&root.join("ior/al_B.ior.ron"), &ds(Medium::Aluminium, "B")).unwrap();
+        // via sources.toml default:
+        std::fs::write(
+            root.join("ior/sources.toml"),
+            "[[dataset]]\nfile=\"al_A.ior.ron\"\nmedium=\"al\"\ndefault=true\n[[dataset]]\nfile=\"\
+             al_B.ior.ron\"\nmedium=\"al\"\n",
+        )
+        .unwrap();
+        let loader = IorRegLoader::new(Some(&root), None, None);
+        let reg = *loader
+            .load(None)
+            .unwrap()
+            .into_any()
+            .downcast::<IorReg>()
+            .ok()
+            .unwrap();
+        assert_eq!(reg.get(&Medium::Aluminium).unwrap().name, "A");
+        // via excluded:
+        let loader = IorRegLoader::new(Some(&root), None, Some(vec!["al_A.ior.ron".into()]));
+        // with A excluded and B not default, B is the only candidate ⇒ chosen.
+        let reg = *loader
+            .load(None)
+            .unwrap()
+            .into_any()
+            .downcast::<IorReg>()
+            .ok()
+            .unwrap();
+        assert_eq!(reg.get(&Medium::Aluminium).unwrap().name, "B");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn filename_body_mismatch_is_rejected() {
+        let root = tmpdir("mismatch");
+        // file named al_* but body says copper
+        write_dataset_file(&root.join("ior/al_Bad.ior.ron"), &ds(Medium::Copper, "Bad")).unwrap();
+        let loader = IorRegLoader::new(Some(&root), None, None);
+        // `.err().unwrap()` rather than `.unwrap_err()`: the Ok type
+        // `Box<dyn Asset>` is not `Debug`, which `Result::unwrap_err` requires.
+        let err = loader.load(None).err().unwrap();
+        assert!(
+            format!("{err}").contains("filename prefix says"),
+            "got: {err}"
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn prefixless_file_loads_on_its_medium_field() {
+        let root = tmpdir("prefixless");
+        write_dataset_file(
+            &root.join("ior/copper-data.ior.ron"),
+            &ds(Medium::Copper, "X"),
+        )
+        .unwrap();
+        let loader = IorRegLoader::new(Some(&root), None, None);
+        let reg = *loader
+            .load(None)
+            .unwrap()
+            .into_any()
+            .downcast::<IorReg>()
+            .ok()
+            .unwrap();
+        assert_eq!(reg.get(&Medium::Copper).unwrap().name, "X");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn stale_manifest_entry_is_ignored() {
+        let root = tmpdir("stale");
+        write_dataset_file(&root.join("ior/al_A.ior.ron"), &ds(Medium::Aluminium, "A")).unwrap();
+        std::fs::write(
+            root.join("ior/sources.toml"),
+            "[[dataset]]\nfile=\"al_A.ior.ron\"\nmedium=\"al\"\n[[dataset]]\nfile=\"al_GONE.ior.\
+             ron\"\nmedium=\"al\"\ndefault=true\n",
+        )
+        .unwrap();
+        // al_GONE doesn't exist on disk ⇒ ignored; al_A is the only real candidate ⇒ chosen.
+        let loader = IorRegLoader::new(Some(&root), None, None);
+        let reg = *loader
+            .load(None)
+            .unwrap()
+            .into_any()
+            .downcast::<IorReg>()
+            .ok()
+            .unwrap();
+        assert_eq!(reg.get(&Medium::Aluminium).unwrap().name, "A");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn user_dir_overrides_system_dir_per_medium() {
+        let sys = tmpdir("sys");
+        let usr = tmpdir("usr");
+        write_dataset_file(&sys.join("ior/al_S.ior.ron"), &ds(Medium::Aluminium, "S")).unwrap();
+        write_dataset_file(&sys.join("ior/cu_S.ior.ron"), &ds(Medium::Copper, "Scu")).unwrap();
+        write_dataset_file(&usr.join("ior/al_U.ior.ron"), &ds(Medium::Aluminium, "U")).unwrap();
+        let loader = IorRegLoader::new(Some(&sys), Some(&usr), None);
+        let reg = *loader
+            .load(None)
+            .unwrap()
+            .into_any()
+            .downcast::<IorReg>()
+            .ok()
+            .unwrap();
+        assert_eq!(reg.get(&Medium::Aluminium).unwrap().name, "U"); // user wins
+        assert_eq!(reg.get(&Medium::Copper).unwrap().name, "Scu"); // system kept where user is silent
+        std::fs::remove_dir_all(&sys).ok();
+        std::fs::remove_dir_all(&usr).ok();
+    }
+
+    #[test]
+    fn embedded_layer_resolves_without_error() {
+        // Content-agnostic: the embedded baseline must resolve cleanly whether
+        // `embed-datafiles` is on or off, and whether or not `datafiles/ior/`
+        // has been populated yet by Task 8. (Deterministic content tests for
+        // the embedded layer aren't possible until Task 8 commits the data;
+        // the sys/user override behaviour is covered by the dir tests above,
+        // and the embedded→sys→user precedence chain is exercised end-to-end
+        // by the Task 9 workspace run against the real committed data.)
+        assert!(resolve_embedded(&|_| false).is_ok());
+    }
+
+    #[test]
+    fn explicit_dir_path_bypasses_embedded_and_layers() {
+        // `load(Some(dir))` resolves exactly that directory -- no embedded
+        // baseline, no sys/user merge.
+        let only = tmpdir("explicit");
+        write_dataset_file(
+            &only.join("ior/cu_Only.ior.ron"),
+            &ds(Medium::Copper, "Only"),
+        )
+        .unwrap();
+        let loader = IorRegLoader::new(None, None, None);
+        let reg = *loader
+            .load(Some(&only.join("ior")))
+            .unwrap()
+            .into_any()
+            .downcast::<IorReg>()
+            .ok()
+            .unwrap();
+        assert_eq!(reg.get(&Medium::Copper).unwrap().name, "Only");
+        std::fs::remove_dir_all(&only).ok();
     }
 }

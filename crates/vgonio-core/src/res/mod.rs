@@ -8,7 +8,7 @@ mod loader;
 mod registry;
 mod store;
 
-use crate::optics::{IorReg, IorRegLoader};
+use crate::optics::{IorFileError, IorReg, IorRegLoader};
 
 pub use asset::*;
 pub use handle::*;
@@ -51,6 +51,39 @@ pub enum Error {
     /// Provided path is not a valid directory.
     #[error("Provided path '{0}' is not a valid directory")]
     InvalidDirectory(String),
+}
+
+impl From<IorFileError> for Error {
+    fn from(e: IorFileError) -> Self {
+        match e {
+            IorFileError::Io { path, source } => Error::IoError(source),
+            IorFileError::Ron { path, source } => Error::IoError(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Failed to parse RON file: {source}"),
+            )),
+            IorFileError::Toml(_) => todo!(),
+            IorFileError::Csv { path, msg } => Error::IoError(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Failed to parse CSV file: {msg}"),
+            )),
+            IorFileError::SchemaVersion {
+                path,
+                found,
+                expected,
+            } => Error::IoError(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Unsupported schema version: found {found}, expected {expected}"),
+            )),
+            IorFileError::UnknownMedium(path, medium) => Error::IoError(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Unknown medium '{medium}' in file: {path}"),
+            )),
+            IorFileError::Inconsistent(path, msg) => Error::IoError(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Inconsistent asset data in file {path}: {msg}"),
+            )),
+        }
+    }
 }
 
 /// Structure for caching intermediate results and data.
