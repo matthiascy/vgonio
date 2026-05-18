@@ -94,8 +94,7 @@ pub fn ulp_eq(a: f32, b: f32) -> bool {
 }
 
 /// Spherical coordinate in radians.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Sph3 {
     /// Radius of the sphere.
     pub rho: f32,
@@ -161,8 +160,7 @@ impl Display for Sph3 {
 /// Spherical coordinate in radians.
 ///
 /// This is a version of [`Sph3`] with radius fixed to 1.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Sph2 {
     /// Zenith angle (polar angle) in radians.
     pub theta: Radians,

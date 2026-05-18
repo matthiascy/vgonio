@@ -19,21 +19,22 @@ use std::{
 };
 
 /// The domain of the spherical coordinate.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(
+    Debug, Default, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
 pub enum SphericalDomain {
     /// Simulation happens only on the upper part of the sphere.
     #[default]
-    #[cfg_attr(feature = "serde", serde(rename = "upper_hemisphere"))]
+    #[serde(rename = "upper_hemisphere")]
     Upper = 0x01,
 
     /// Simulation happens only on the lower part of the sphere.
-    #[cfg_attr(feature = "serde", serde(rename = "lower_hemisphere"))]
+    #[serde(rename = "lower_hemisphere")]
     Lower = 0x02,
 
     /// Simulation happens on the whole sphere.
-    #[cfg_attr(feature = "serde", serde(rename = "whole_sphere"))]
+    #[serde(rename = "whole_sphere")]
     Whole = 0x00,
 }
 
@@ -115,9 +116,8 @@ impl SphericalDomain {
 }
 
 /// Scheme of the spherical partition.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
+#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PartitionScheme {
     /// Partition scheme based on "A general rule for disk and hemisphere
     /// partition into equal-area cells" by Benoit Beckers et Pierre Beckers.

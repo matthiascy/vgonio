@@ -13,8 +13,7 @@ use std::ops::{Index, IndexMut};
 /// assert_eq!(pos[Axis::X], 0.0);
 /// ```
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Axis {
     /// X-axis.
     X = 0,

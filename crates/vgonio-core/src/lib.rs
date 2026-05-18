@@ -227,8 +227,9 @@ pub enum Weighting {
 /// This is used to indicate the level of the measured BRDF that includes the
 /// energy of rays at the given bounce.
 #[repr(u32)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 pub enum BrdfLevel {
     /// The level of the measured BRDF that includes the energy of rays at
     /// all bounces.
@@ -371,8 +372,7 @@ impl Display for BrdfLevel {
 
 /// Kind of different measurements.
 #[non_exhaustive]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum MeasurementKind {
     /// BSDF measurement.
     Bsdf = 0x00,
@@ -429,9 +429,8 @@ impl MeasurementKind {
 }
 
 /// Triangulation pattern for grid triangulation.
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum TriangulationPattern {
     /// Triangulate from top to bottom, left to right.
     /// 0  <--  1

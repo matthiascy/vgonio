@@ -3,7 +3,6 @@ use crate::{
     io::{FileEncoding, ParseError, ParseErrorKind},
     math::NumericCast,
 };
-#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
@@ -14,8 +13,7 @@ use std::{
 // TODO: refactor the code use const generics.
 
 /// Represents a unit of length.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum LengthUnit {
     /// Metres.
@@ -386,10 +384,8 @@ impl<A: LengthMeasurement> FromStr for Length<A> {
     fn from_str(s: &str) -> Result<Self, Self::Err> { Self::try_from(s) }
 }
 
-#[cfg(feature = "serde")]
 super::impl_serialization!(Length<A> where A: LengthMeasurement, #[doc = "Customized serialization for the `Length` type."]);
 
-#[cfg(feature = "serde")]
 impl<'de, A: LengthMeasurement> Deserialize<'de> for Length<A> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -659,7 +655,6 @@ mod length_unit_tests {
     }
 
     #[test]
-    #[cfg(feature = "serde")]
     fn de_serialization() {
         let a: Millimetres = metres!(100.2).into();
         let serialized = serde_yaml::to_string(&a).unwrap();

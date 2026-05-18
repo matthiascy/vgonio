@@ -7,32 +7,32 @@ use std::str::FromStr;
 
 /// Medium of the surface.
 #[non_exhaustive]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Medium {
     /// Vacuum.
-    #[cfg_attr(feature = "serde", serde(rename = "vac"))]
+    #[serde(rename = "vac")]
     Vacuum = 0x00,
     /// Air.
-    #[cfg_attr(feature = "serde", serde(rename = "air"))]
+    #[serde(rename = "air")]
     Air = 0x01,
     /// Aluminium.
-    #[cfg_attr(feature = "serde", serde(rename = "al"))]
+    #[serde(rename = "al")]
     Aluminium = 0x02,
     /// Copper.
-    #[cfg_attr(feature = "serde", serde(rename = "cu"))]
+    #[serde(rename = "cu")]
     Copper = 0x03,
     /// Nickel.
-    #[cfg_attr(feature = "serde", serde(rename = "ni"))]
+    #[serde(rename = "ni")]
     Nickel = 0x04,
     /// Polyvinyl chloride.
-    #[cfg_attr(feature = "serde", serde(rename = "pvc"))]
+    #[serde(rename = "pvc")]
     Pvc = 0x05,
-    #[cfg_attr(feature = "serde", serde(rename = "chromium"))]
+    /// Chromium.
+    #[serde(rename = "cr")]
     Chromium = 0x06,
     /// Unknown.
-    #[cfg_attr(feature = "serde", serde(rename = "unknown"))]
+    #[serde(rename = "unknown")]
     Unknown,
 }
 
