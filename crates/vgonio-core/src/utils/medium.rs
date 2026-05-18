@@ -87,6 +87,20 @@ impl Medium {
         }
     }
 
+    /// The canonical lowercase name (inverse of [`Medium::from_str`]).
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Vacuum => "vacuum",
+            Self::Air => "air",
+            Self::Aluminium => "al",
+            Self::Copper => "cu",
+            Self::Nickel => "ni",
+            Self::Pvc => "pvc",
+            Self::Chromium => "cr",
+            Self::Unknown => "unknown",
+        }
+    }
+
     /// Serializes the medium to a buffer.
     pub fn write_to_buf(&self, buf: &mut [u8]) {
         debug_assert!(buf.len() >= 3, "Medium needs at least 3 bytes of space");
