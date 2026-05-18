@@ -17,6 +17,16 @@
 - Implement cargo like external subcommands
 - Load BRDF data measured from RGL's BRDF database
 - Enable excluding ior files in configuration
+- Replace the per-medium IOR `*.csv` files with a vgonio-native, versioned `*.ior.ron`
+  format (RON), described by a `sources.toml` manifest
+    - the registry now holds one dataset per medium (it previously merged every CSV for
+      a medium); the default Aluminium dataset is now `McPeak2015`
+    - baseline datasets are compiled into the binary (default-on `embed-datafiles`
+      feature) and overridden by the system then user data dirs. If present,
+      `--no-default-features` drops the embedded baseline for distro packaging
+    - `excluded_ior_files` entries must now name `.ior.ron` files
+    - out-of-range wavelength lookups now return no value instead of panicking
+    - dispersion-formula datasets (refractiveindex.info forms 1-9) are now supported
 - New fitting interface
 - Remove `alpha_start`, `alpha_stop`, `alpha_step` from CLI
 - Rearrange the crates in the workspace into /bins and /libs

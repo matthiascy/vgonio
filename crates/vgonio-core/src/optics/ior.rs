@@ -15,7 +15,7 @@ pub use loader::IorRegLoader;
 
 use crate::{
     asset, math,
-    res::{AssetTypeId, Error},
+    res::AssetTypeId,
     units::{nanometres, Length, LengthMeasurement, Nanometres},
     utils::medium::{MaterialKind, Medium},
 };

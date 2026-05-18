@@ -277,3 +277,97 @@ incident and outgoing directions and the number of wavelengths specified in the 
 |---------|-------|-------------------------------------------------------------------|
 | 4 bytes | u32   | BRDF level (number of bounces), 0 means the sum of all the levels |
 | ...     | f32   | BRDF samples                                                      |
+
+## IOR datasets (`.ior.ron`)
+
+Unlike the binary `.vgms`/`.vgmo` files above, refractive-index (IOR) datasets are stored as
+human-readable [RON](https://github.com/ron-rs/ron). Each file holds **one dataset for one
+medium**; a directory of them is described by a `sources.toml` manifest.
+
+### Dataset schema
+
+```ron
+(
+    schema_version: 1,
+    medium: "al",
+    name: "McPeak2015",
+    reference: "",          // optional plain-text citation
+    comments: "",           // optional
+    data: Tabulated([
+        (150.0, 0.0953908, 1.2836663),   // (λ in nm, η, κ)
+        // … rows ascending by wavelength …
+    ]),
+)
+```
+
+| Field            | Meaning                                                                          |
+|------------------|----------------------------------------------------------------------------------|
+| `schema_version` | Must equal the version this build expects (currently `1`); mismatch is rejected. |
+| `medium`         | Lowercase medium name (e.g. `al`, `cu`, `air`); must parse to a known `Medium`.  |
+| `name`           | Source label (e.g. `McPeak2015`).                                                |
+| `reference`      | Optional citation text.                                                          |
+| `comments`       | Optional free text.                                                              |
+| `data`           | Either `Tabulated([...])` or `Dispersion(...)` (see below).                      |
+
+**`Tabulated`** -- rows of `(λ_nm, η, κ)`, ascending by wavelength. A lookup outside the
+covered wavelength range returns *no value* (it does not extrapolate or panic).
+
+**`Dispersion`** -- an analytic η formula plus an optional tabulated κ:
+
+```ron
+data: Dispersion(
+    formula: Sellmeier(c0: 1.0, terms: [(1.0, 0.01), …]),
+    range_nm: (200.0, 2000.0),   // valid wavelength range
+    k: Some([(200.0, 0.1), …]),  // optional κ table; absent => κ = 0
+),
+```
+
+The supported formulas are the nine refractiveindex.info dispersion forms:
+`Sellmeier` (1), `Sellmeier2` (2), `Polynomial` (3), `RiiFull` (4), `Cauchy` (5),
+`Gases` (6), `Herzberger` (7), `Retro` (8), `Exotic` (9).
+
+### Naming & consistency rule
+
+Files are named `<medium>_<name>.ior.ron` (e.g. `al_McPeak2015.ior.ron`). If the filename
+prefix is a recognized medium it **must** match the `medium` field in the body; likewise a
+`sources.toml` entry for the file must agree with the body. Any disagreement is a hard error
+rather than a silent mismatch. A file whose prefix is not a recognized medium is loaded
+purely on its `medium` field.
+
+### `sources.toml` manifest
+
+```toml
+upstream = "https://github.com/polyanskiy/refractiveindex.info-database"
+
+[[dataset]]
+file    = "al_McPeak2015.ior.ron"
+medium  = "al"
+default = true                    # the chosen dataset when a medium has several
+path    = "main/Al/nk/McPeak.yml" # upstream provenance (informational)
+verified = true                   # false ⇒ provenance unconfirmed
+```
+
+When a directory contains **more than one** dataset for the same medium, exactly one must
+win: either it is the only non-excluded candidate, or it is marked `default = true`. Zero
+defaults *and* an ambiguous set is an error; multiple `default = true` for one medium is an
+error. Manifest entries pointing at files that do not exist on disk are ignored.
+
+### Data resolution (where datasets come from)
+
+The registry is assembled from up to three layers; later layers override earlier ones
+**per medium**:
+
+1. **Embedded baseline**
+   The committed `datafiles/ior/` compiled into the binary at build time (the default-on
+   `embed-datafiles` Cargo feature). This makes a fresh checkout, a bare `cargo install`,
+   and a packaged binary all work with no setup and no source-tree discovery. Building with `--no-default-features` drops this layer so distro packages can ship the data themselves.
+2. **System**
+   `<sys_data_dir>/ior/` (e.g. `$XDG_DATA_DIRS`, `/usr/share/vgonio/ior/`),
+   where a system package places datasets.
+3. **User**
+   `<user_data_dir>/ior/` (`$XDG_DATA_HOME`), per-user overrides; highest precedence.
+
+To add or replace a dataset at runtime without rebuilding, drop a `.ior.ron` file (and a
+matching `sources.toml` entry if the medium would otherwise be ambiguous) into the user
+directory. Per-config exclusions are listed by **`.ior.ron` file name** under
+`excluded_ior_files` in the vgonio config.

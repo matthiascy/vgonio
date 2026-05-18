@@ -496,6 +496,28 @@ mod tests {
         assert!(resolve_embedded(&|_| false).is_ok());
     }
 
+    /// End-to-end check of the *real shipped* embedded data: the committed
+    /// `datafiles/ior/` must embed, parse, satisfy the consistency rule, and
+    /// resolve one dataset per medium honouring `sources.toml` defaults.
+    /// (Aluminium ships two datasets: McPeak2015 is `default = true`.)
+    #[cfg(feature = "embed-datafiles")]
+    #[test]
+    fn embedded_baseline_contains_expected_shipped_datasets() {
+        let reg = resolve_embedded(&|_| false).expect("embedded baseline must resolve");
+        assert!(
+            reg.contains_key(&Medium::Aluminium)
+                && reg.contains_key(&Medium::Copper)
+                && reg.contains_key(&Medium::Air),
+            "expected al/cu/air in the embedded baseline, got: {:?}",
+            reg.keys().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            reg.get(&Medium::Aluminium).unwrap().name,
+            "McPeak2015",
+            "Aluminium must resolve to the sources.toml default (McPeak2015), not Cheng2016"
+        );
+    }
+
     #[test]
     fn explicit_dir_path_bypasses_embedded_and_layers() {
         // `load(Some(dir))` resolves exactly that directory -- no embedded

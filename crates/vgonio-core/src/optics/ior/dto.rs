@@ -464,52 +464,83 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// CSV files are deleted by the Task 8 migration, so this exercises the
+    /// same code paths (BOM stripping, 2-col vs 3-col, µm -> nm, sorting) with
+    /// in-memory fixtures written to a temp dir.
     #[test]
-    fn legacy_csv_parses_all_four_repo_files() {
-        // Run from the workspace root (cargo test sets CWD to the crate dir, so go up two levels).
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let cases: [(&str, Medium, usize); 4] = [
-            (
-                "datafiles/ior/air_iors_[0.23-1.69]_Ciddor1996.csv",
-                Medium::Air,
-                2,
-            ), // no BOM, 2 cols
-            (
-                "datafiles/ior/al_iors_[0.15-1.7]_McPeak2015.csv",
-                Medium::Aluminium,
-                3,
-            ), // no BOM, 3 cols
-            (
-                "datafiles/ior/al_iors_[0.225-1.0]_Cheng2016.csv",
-                Medium::Aluminium,
-                3,
-            ), // BOM, 3 cols
-            (
-                "datafiles/ior/cu_iors_[0.3-1.7]_McPeak2015.csv",
-                Medium::Copper,
-                3,
-            ), // BOM, 3 cols
-        ];
-        for (rel, medium, _cols) in cases {
-            let path = root.join(rel);
-            let dto = IorDatasetDto::from_legacy_csv(&path, medium, "Legacy")
-                .unwrap_or_else(|e| panic!("{rel}: {e}"));
-            let runtime = dto.clone().into_runtime(rel).unwrap();
-            match runtime.data {
-                IorData::Tabulated(s) => {
-                    assert!(!s.is_empty(), "{rel}: empty");
-                    // ascending, nm units (first sample for these files is > 100 nm)
-                    assert!(
-                        s[0].wavelength.value() > 100.0,
-                        "{rel}: looks like µm, not nm"
-                    );
-                    assert!(
-                        s.windows(2).all(|w| w[0].wavelength <= w[1].wavelength),
-                        "{rel}: not sorted"
-                    );
-                },
-                _ => panic!("{rel}: expected Tabulated"),
-            }
+    fn legacy_csv_reader_handles_bom_columns_and_units() {
+        let dir = std::env::temp_dir().join(format!("vgn-ior-csv-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // (file, raw bytes, medium, expected col count, asserts-k)
+        let two_col = "wl_um,n\n0.5,1.30\n0.4,1.20\n"; // no BOM, unsorted, 2 cols
+        let three_col = "wl_um,n,k\n0.30,1.10,2.20\n0.20,1.00,3.30\n"; // no BOM, 3 cols
+        let bom_three = {
+            // UTF-8 BOM + 3 cols (must be stripped before the CSV header)
+            let mut v = vec![0xEF, 0xBB, 0xBF];
+            v.extend_from_slice(b"wl_um,n,k\n0.70,0.9,8.0\n0.30,0.5,4.0\n");
+            v
+        };
+
+        let air = dir.join("air.csv");
+        let al = dir.join("al.csv");
+        let cu = dir.join("cu.csv");
+        std::fs::write(&air, two_col).unwrap();
+        std::fs::write(&al, three_col).unwrap();
+        std::fs::write(&cu, &bom_three).unwrap();
+
+        // 2-col, no BOM: k defaults to 0, µm→nm, sorted ascending.
+        let air_ds = IorDatasetDto::from_legacy_csv(&air, Medium::Air, "TwoCol")
+            .unwrap()
+            .into_runtime("air")
+            .unwrap();
+        assert_eq!(air_ds.medium, Medium::Air);
+        match air_ds.data {
+            IorData::Tabulated(s) => {
+                assert_eq!(s.len(), 2);
+                assert!(
+                    (s[0].wavelength.value() - 400.0).abs() < 1e-3,
+                    "µm→nm + sort"
+                );
+                assert!((s[1].wavelength.value() - 500.0).abs() < 1e-3);
+                assert_eq!(s[0].k, 0.0, "2-col ⇒ k = 0");
+                assert!(s.windows(2).all(|w| w[0].wavelength <= w[1].wavelength));
+            },
+            _ => panic!("expected Tabulated"),
         }
+
+        // 3-col, no BOM: k preserved.
+        let al_ds = IorDatasetDto::from_legacy_csv(&al, Medium::Aluminium, "ThreeCol")
+            .unwrap()
+            .into_runtime("al")
+            .unwrap();
+        match al_ds.data {
+            IorData::Tabulated(s) => {
+                assert_eq!(s.len(), 2);
+                assert!((s[0].wavelength.value() - 200.0).abs() < 1e-3);
+                assert_eq!(s[0].k, 3.30_f32);
+            },
+            _ => panic!("expected Tabulated"),
+        }
+
+        // 3-col WITH BOM: BOM must be stripped so the header/first field parse.
+        let cu_ds = IorDatasetDto::from_legacy_csv(&cu, Medium::Copper, "Bom")
+            .expect("UTF-8 BOM must be stripped before CSV parsing")
+            .into_runtime("cu")
+            .unwrap();
+        match cu_ds.data {
+            IorData::Tabulated(s) => {
+                assert_eq!(s.len(), 2);
+                assert!(
+                    (s[0].wavelength.value() - 300.0).abs() < 1e-3,
+                    "BOM corrupted first row"
+                );
+                assert!(s.windows(2).all(|w| w[0].wavelength <= w[1].wavelength));
+            },
+            _ => panic!("expected Tabulated"),
+        }
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
