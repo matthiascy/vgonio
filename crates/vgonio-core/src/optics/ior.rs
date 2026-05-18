@@ -16,6 +16,8 @@ use std::{
 
 use std::path::Path;
 
+pub mod formula;
+
 /// Refractive index database.
 #[derive(Debug, Clone)]
 pub struct IorReg(pub(crate) HashMap<Medium, Vec<IorRecord>>);
