@@ -4,7 +4,12 @@ mod error;
 pub use error::MediumLoadError;
 
 mod id;
+pub use id::MediumId;
+
 pub(crate) mod intern;
+
+mod registry;
+pub use registry::{MediumEntry, MediumRegistry, MediumSource};
 
 use crate::error::VgonioError;
 use std::str::FromStr;
