@@ -1,5 +1,8 @@
 //! Medium of the surface.
 
+mod error;
+pub use error::MediumLoadError;
+
 use crate::error::VgonioError;
 use std::str::FromStr;
 
