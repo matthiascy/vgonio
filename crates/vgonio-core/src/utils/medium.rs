@@ -3,6 +3,7 @@
 mod error;
 pub use error::MediumLoadError;
 
+mod id;
 pub(crate) mod intern;
 
 use crate::error::VgonioError;
