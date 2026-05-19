@@ -3,6 +3,8 @@
 mod error;
 pub use error::MediumLoadError;
 
+pub(crate) mod intern;
+
 use crate::error::VgonioError;
 use std::str::FromStr;
 
