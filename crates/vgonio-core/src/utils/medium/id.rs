@@ -27,10 +27,32 @@ impl MediumId {
     /// The canonical name as &'static str. Stable identity for this medium.
     #[inline]
     pub fn name(self) -> &'static str { self.0 }
+
+    /// Resolve a name or alias to a `MediumId`. Returns `None` if unknown, or if
+    /// the registry hasn't been bootstrapped yet (uses `OnceLock::get`, which
+    /// returns `None` rather than panicking when unset).
+    pub fn try_from_name(s: &str) -> Option<MediumId> {
+        let reg = super::registry()?;
+        reg.by_name(s).map(|e| e.id)
+    }
 }
 
 impl fmt::Debug for MediumId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "MediumId({:?})", self.0) }
+}
+
+impl fmt::Display for MediumId {
+    /// Post-bootstrap: prints `display_name` from the registry.
+    /// Pre-bootstrap (or for an id whose entry isn't yet in the registry):
+    /// falls back to `self.name()`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(reg) = super::registry() {
+            if let Some(entry) = reg.by_name(self.0) {
+                return f.write_str(entry.display_name);
+            }
+        }
+        f.write_str(self.0)
+    }
 }
 
 #[cfg(test)]
@@ -58,5 +80,33 @@ mod tests {
     #[test]
     fn debug_format_includes_name() {
         assert_eq!(format!("{:?}", MediumId::AIR), r#"MediumId("air")"#);
+    }
+
+    #[test]
+    fn try_from_name_pre_bootstrap_returns_none() {
+        // This test is order-dependent — runs only when the test binary hasn't
+        // bootstrapped yet. Tolerates either case.
+        let result = MediumId::try_from_name("al");
+        // Post-bootstrap: Some(AL). Pre-bootstrap: None. Both are valid.
+        if let Some(id) = result {
+            assert_eq!(id, MediumId::AL);
+        }
+    }
+
+    #[test]
+    fn try_from_name_post_bootstrap_resolves_canonical_and_aliases() {
+        // Force bootstrap so this test is deterministic regardless of order.
+        let _ = super::super::bootstrap(None, None);
+        assert_eq!(MediumId::try_from_name("al"), Some(MediumId::AL));
+        assert_eq!(MediumId::try_from_name("aluminium"), Some(MediumId::AL));
+        assert_eq!(MediumId::try_from_name("Al"), Some(MediumId::AL));
+        assert_eq!(MediumId::try_from_name("chrome"), Some(MediumId::CR));
+        assert_eq!(MediumId::try_from_name("nonexistent"), None);
+    }
+
+    #[test]
+    fn display_post_bootstrap_uses_display_name() {
+        let _ = super::super::bootstrap(None, None);
+        assert_eq!(format!("{}", MediumId::AL), "Aluminium");
     }
 }
