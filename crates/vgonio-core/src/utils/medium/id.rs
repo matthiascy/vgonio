@@ -2,6 +2,7 @@
 //! medium name as a `&'static str`. Equality and hashing are content-based.
 
 use core::fmt;
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 /// A medium handle. See module docs.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -52,6 +53,24 @@ impl fmt::Display for MediumId {
             }
         }
         f.write_str(self.0)
+    }
+}
+
+impl Serialize for MediumId {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.name())
+    }
+}
+
+impl<'de> Deserialize<'de> for MediumId {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        // `Cow` lets borrowed formats stay zero-copy and owned formats still work.
+        let s: std::borrow::Cow<'de, str> = Deserialize::deserialize(d)?;
+        MediumId::try_from_name(&s).ok_or_else(|| {
+            de::Error::custom(format!(
+                "unknown medium {s:?} (registry not initialized? or missing entry in media.toml)"
+            ))
+        })
     }
 }
 
@@ -108,5 +127,59 @@ mod tests {
     fn display_post_bootstrap_uses_display_name() {
         let _ = super::super::bootstrap(None, None);
         assert_eq!(format!("{}", MediumId::AL), "Aluminium");
+    }
+}
+
+#[cfg(test)]
+mod serde_tests {
+    use super::*;
+    use serde::{Deserialize, Serialize};
+
+    // The `toml` crate's `to_string`/`from_str` operate on tables, not on bare
+    // scalars. We wrap `MediumId` so the round-trip is meaningful.
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    struct Wrapper {
+        medium: MediumId,
+    }
+
+    #[test]
+    fn round_trip_toml_canonical_name() {
+        let _ = super::super::bootstrap(None, None);
+        let w = Wrapper {
+            medium: MediumId::AL,
+        };
+        let toml_str = toml::to_string(&w).unwrap();
+        assert!(toml_str.contains(r#"medium = "al""#), "got: {toml_str}");
+        let parsed: Wrapper = toml::from_str(&toml_str).unwrap();
+        assert_eq!(parsed, w);
+    }
+
+    #[test]
+    fn deserialize_alias_resolves_to_canonical() {
+        let _ = super::super::bootstrap(None, None);
+        let parsed: Wrapper = toml::from_str(r#"medium = "aluminium""#).unwrap();
+        assert_eq!(parsed.medium, MediumId::AL);
+        // Serialization always writes canonical, never the alias.
+        let written = toml::to_string(&parsed).unwrap();
+        assert!(written.contains(r#"medium = "al""#), "got: {written}");
+    }
+
+    #[test]
+    fn deserialize_unknown_name_errors() {
+        let _ = super::super::bootstrap(None, None);
+        let err = toml::from_str::<Wrapper>(r#"medium = "nonexistent""#).unwrap_err();
+        assert!(err.to_string().contains("unknown medium"), "got: {err}");
+    }
+
+    #[test]
+    fn deserialize_chromium_legacy_spelling_works() {
+        // The serde rename in the old enum was "chromium"; aliases ensure
+        // back-compat: deserializing "chromium" returns MediumId::CR.
+        let _ = super::super::bootstrap(None, None);
+        let parsed: Wrapper = toml::from_str(r#"medium = "chromium""#).unwrap();
+        assert_eq!(parsed.medium, MediumId::CR);
+        // But new writes spell it "cr".
+        let written = toml::to_string(&parsed).unwrap();
+        assert!(written.contains(r#"medium = "cr""#), "got: {written}");
     }
 }
