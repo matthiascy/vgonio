@@ -8,6 +8,8 @@ pub use id::MediumId;
 
 pub(crate) mod intern;
 
+mod dto;
+
 mod registry;
 pub use registry::{MediumEntry, MediumRegistry, MediumSource};
 
