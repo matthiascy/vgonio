@@ -1,7 +1,12 @@
 //! In-memory medium registry. Built once at startup from layered TOML inputs.
 
-use crate::utils::medium::MediumId;
-use std::collections::HashMap;
+use crate::utils::medium::{
+    dto::{self, MediumDto, MediumTomlFile},
+    error::MediumLoadError,
+    intern::intern,
+    MediumId,
+};
+use std::{collections::HashMap, path::Path};
 
 /// The compile-time embedded fallback (`builtin.toml`).
 pub(super) const BUILTIN_TOML: &str = include_str!("builtin.toml");
@@ -21,7 +26,7 @@ pub struct MediumEntry {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MediumSource {
-    Builtin,
+    BuiltIn,
     Embedded,
     System,
     User,
@@ -30,7 +35,7 @@ pub enum MediumSource {
 impl MediumSource {
     pub fn label(self) -> &'static str {
         match self {
-            MediumSource::Builtin => "builtin",
+            MediumSource::BuiltIn => "builtin",
             MediumSource::Embedded => "embedded",
             MediumSource::System => "system",
             MediumSource::User => "user",
@@ -46,6 +51,29 @@ pub struct MediumRegistry {
 }
 
 impl MediumRegistry {
+    /// Build a registry from the embedded fallback + (optional) system, user files.
+    /// Vacuum is seeded as a synthetic built-in before any layer is processed.
+    pub fn build(sys: Option<&Path>, user: Option<&Path>) -> Result<Self, MediumLoadError> {
+        let mut reg = Self::empty();
+        Self::seed_vacuum(&mut reg);
+        Self::merge_str(
+            &mut reg,
+            BUILTIN_TOML,
+            Path::new("<buildin.toml>"),
+            MediumSource::Embedded,
+        )?;
+
+        if let Some(p) = sys {
+            Self::merge_file_optional(&mut reg, p, MediumSource::System)?;
+        }
+
+        if let Some(p) = user {
+            Self::merge_file_optional(&mut reg, p, MediumSource::User)?;
+        }
+
+        Ok(reg)
+    }
+
     pub(super) fn empty() -> Self {
         Self {
             by_id: HashMap::new(),
@@ -76,6 +104,163 @@ impl MediumRegistry {
             self.by_alias.insert(alias, entry.id.name());
         }
         self.by_id.insert(entry.id.name(), entry);
+    }
+
+    fn seed_vacuum(reg: &mut Self) {
+        reg.insert(MediumEntry {
+            id: MediumId::VACUUM,
+            display_name: "Vacuum",
+            aliases: &["vacuum"],
+            source: MediumSource::BuiltIn,
+        });
+    }
+
+    fn merge_file_optional(
+        reg: &mut Self,
+        path: &Path,
+        source: MediumSource,
+    ) -> Result<(), MediumLoadError> {
+        if !path.exists() {
+            return Ok(()); // missing layer is OK
+        }
+
+        let file = dto::read_file(path)?;
+        Self::validate_and_merge(reg, file, path, source)
+    }
+
+    fn merge_str(
+        reg: &mut Self,
+        text: &str,
+        path: &Path,
+        source: MediumSource,
+    ) -> Result<(), MediumLoadError> {
+        let file = dto::parse_str(text, path)?;
+        Self::validate_and_merge(reg, file, path, source)
+    }
+
+    fn validate_and_merge(
+        reg: &mut Self,
+        file: MediumTomlFile,
+        path: &Path,
+        source: MediumSource,
+    ) -> Result<(), MediumLoadError> {
+        if file.schema_version != 1 {
+            return Err(MediumLoadError::UnsupportedSchemaVersion {
+                found: file.schema_version,
+            });
+        }
+        // Per-file: within-file duplicate detection. Owned `String` keys so
+        // the borrow doesn't conflict with the subsequent `for m in file.medium`
+        // which consumes `file.medium`.
+        let mut seen_names: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for (idx, m) in file.medium.iter().enumerate() {
+            if !dto::is_valid_name(&m.name) {
+                return Err(MediumLoadError::InvalidName {
+                    name: m.name.clone(),
+                });
+            }
+            if m.name == "vac" {
+                return Err(MediumLoadError::ReservedName {
+                    name: m.name.clone(),
+                    path: path.to_path_buf(),
+                });
+            }
+            for alias in &m.aliases {
+                if !dto::is_valid_alias(alias) {
+                    return Err(MediumLoadError::InvalidAlias {
+                        alias: alias.clone(),
+                        entry: m.name.clone(),
+                        path: path.to_path_buf(),
+                    });
+                }
+                if alias == "vac" {
+                    return Err(MediumLoadError::ReservedName {
+                        name: alias.clone(),
+                        path: path.to_path_buf(),
+                    });
+                }
+            }
+            if let Some(&first) = seen_names.get(&m.name) {
+                return Err(MediumLoadError::DuplicateName {
+                    name: m.name.clone(),
+                    path: path.to_path_buf(),
+                    first,
+                    second: idx,
+                });
+            }
+            seen_names.insert(m.name.clone(), idx);
+        }
+        drop(seen_names); // explicit — readers see the borrow story clearly
+                          // Cumulative: cross-layer collisions.
+        for m in file.medium {
+            Self::check_and_insert(reg, m, path, source)?;
+        }
+        Ok(())
+    }
+
+    fn check_and_insert(
+        reg: &mut Self,
+        m: MediumDto,
+        path: &Path,
+        source: MediumSource,
+    ) -> Result<(), MediumLoadError> {
+        // Layer-collision: does this name (or any alias) already exist?
+        if let Some(existing) = reg.by_id.get(m.name.as_str()) {
+            return Err(MediumLoadError::LayerCollision {
+                name: m.name.clone(),
+                path: path.to_path_buf(),
+                earlier_layer: existing.source.label(),
+            });
+        }
+        if let Some(canon) = reg.by_alias.get(m.name.as_str()) {
+            let other_source = reg.by_id[canon].source.label();
+            return Err(MediumLoadError::AliasCollision {
+                alias: m.name.clone(),
+                entry: m.name.clone(),
+                path: path.to_path_buf(),
+                kind: "alias",
+                other: canon.to_string(),
+                other_source,
+            });
+        }
+        for alias in &m.aliases {
+            if let Some(existing) = reg.by_id.get(alias.as_str()) {
+                return Err(MediumLoadError::AliasCollision {
+                    alias: alias.clone(),
+                    entry: m.name.clone(),
+                    path: path.to_path_buf(),
+                    kind: "name",
+                    other: existing.id.name().to_string(),
+                    other_source: existing.source.label(),
+                });
+            }
+            if let Some(canon) = reg.by_alias.get(alias.as_str()) {
+                let other_source = reg.by_id[canon].source.label();
+                return Err(MediumLoadError::AliasCollision {
+                    alias: alias.clone(),
+                    entry: m.name.clone(),
+                    path: path.to_path_buf(),
+                    kind: "alias",
+                    other: canon.to_string(),
+                    other_source,
+                });
+            }
+        }
+        // All checks passed; intern strings and insert.
+        let name_static: &'static str = intern(&m.name);
+        let display_static: &'static str = intern(&m.display_name);
+        let aliases_static: &'static [&'static str] = {
+            let v: Vec<&'static str> = m.aliases.iter().map(|a| intern(a)).collect();
+            Box::leak(v.into_boxed_slice())
+        };
+        reg.insert(MediumEntry {
+            id: MediumId(name_static),
+            display_name: display_static,
+            aliases: aliases_static,
+            source,
+        });
+        Ok(())
     }
 }
 
@@ -137,5 +322,98 @@ mod embedded_tests {
             assert_ne!(m.name, "vac");
             assert!(!m.aliases.iter().any(|a| a == "vac"));
         }
+    }
+}
+
+#[cfg(test)]
+mod build_tests {
+    use super::*;
+
+    #[test]
+    fn build_with_no_layers_yields_seven_entries() {
+        let reg = MediumRegistry::build(None, None).unwrap();
+        assert_eq!(reg.len(), 7); // 6 built-ins + vacuum
+        assert_eq!(reg.by_name("vac").unwrap().id, MediumId::VACUUM);
+        assert_eq!(reg.by_name("al").unwrap().display_name, "Aluminium");
+        assert_eq!(reg.by_name("aluminium").unwrap().id, MediumId::AL);
+        assert_eq!(reg.by_name("chrome").unwrap().id, MediumId::CR);
+    }
+
+    #[test]
+    fn reserved_vac_in_layer_errors() {
+        let bad = r#"
+schema_version = 1
+[[medium]]
+name = "vac"
+display_name = "Bogus"
+"#;
+        let mut reg = MediumRegistry::empty();
+        MediumRegistry::seed_vacuum(&mut reg);
+        let err = MediumRegistry::merge_str(&mut reg, bad, Path::new("<bad>"), MediumSource::User)
+            .unwrap_err();
+        assert!(matches!(err, MediumLoadError::ReservedName { .. }));
+    }
+
+    #[test]
+    fn invalid_name_errors() {
+        let bad = r#"
+schema_version = 1
+[[medium]]
+name = "Al"
+display_name = "x"
+"#;
+        let err = MediumRegistry::merge_str(
+            &mut MediumRegistry::empty(),
+            bad,
+            Path::new("<bad>"),
+            MediumSource::User,
+        )
+        .unwrap_err();
+        assert!(matches!(err, MediumLoadError::InvalidName { .. }));
+    }
+
+    #[test]
+    fn schema_version_mismatch_errors() {
+        let bad = "schema_version = 999\n";
+        let err = MediumRegistry::merge_str(
+            &mut MediumRegistry::empty(),
+            bad,
+            Path::new("<bad>"),
+            MediumSource::User,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            MediumLoadError::UnsupportedSchemaVersion { found: 999 }
+        ));
+    }
+
+    #[test]
+    fn user_layer_redefining_builtin_errors() {
+        let bad = r#"
+schema_version = 1
+[[medium]]
+name = "al"
+display_name = "Custom Al"
+"#;
+        let mut reg = MediumRegistry::build(None, None).unwrap();
+        let err = MediumRegistry::merge_str(&mut reg, bad, Path::new("<user>"), MediumSource::User)
+            .unwrap_err();
+        assert!(matches!(err, MediumLoadError::LayerCollision { .. }));
+    }
+
+    #[test]
+    fn user_layer_adding_new_name_succeeds() {
+        let ok = r#"
+schema_version = 1
+[[medium]]
+name = "au"
+display_name = "Gold"
+aliases = ["gold", "Au"]
+"#;
+        let mut reg = MediumRegistry::build(None, None).unwrap();
+        MediumRegistry::merge_str(&mut reg, ok, Path::new("<user>"), MediumSource::User).unwrap();
+        assert_eq!(reg.by_name("au").unwrap().display_name, "Gold");
+        assert_eq!(reg.by_name("Au").unwrap().id.name(), "au");
     }
 }
