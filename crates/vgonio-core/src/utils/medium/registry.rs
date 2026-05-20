@@ -3,6 +3,9 @@
 use crate::utils::medium::MediumId;
 use std::collections::HashMap;
 
+/// The compile-time embedded fallback (`builtin.toml`).
+pub(super) const BUILTIN_TOML: &str = include_str!("builtin.toml");
+
 /// A single medium entry in the registry.
 #[derive(Debug, Clone)]
 pub struct MediumEntry {
@@ -110,5 +113,29 @@ mod tests {
         });
         assert_eq!(reg.by_name("Al").unwrap().id, MediumId::AL);
         assert_eq!(reg.by_name("aluminium").unwrap().id, MediumId::AL);
+    }
+}
+
+#[cfg(test)]
+mod embedded_tests {
+    use super::*;
+    use crate::utils::medium::dto;
+
+    #[test]
+    fn builtin_toml_parses_and_has_six_entries() {
+        let file = dto::parse_str(BUILTIN_TOML, std::path::Path::new("<builtin.toml>")).unwrap();
+        assert_eq!(file.schema_version, 1);
+        assert_eq!(file.medium.len(), 6);
+        let names: Vec<_> = file.medium.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, vec!["air", "al", "cu", "ni", "pvc", "cr"]);
+    }
+
+    #[test]
+    fn builtin_toml_does_not_list_vac() {
+        let file = dto::parse_str(BUILTIN_TOML, std::path::Path::new("<builtin.toml>")).unwrap();
+        for m in &file.medium {
+            assert_ne!(m.name, "vac");
+            assert!(!m.aliases.iter().any(|a| a == "vac"));
+        }
     }
 }

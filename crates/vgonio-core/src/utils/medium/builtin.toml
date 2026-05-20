@@ -1,0 +1,31 @@
+schema_version = 1
+
+[[medium]]
+name = "air"
+display_name = "Air"
+aliases = ["Air"]
+
+[[medium]]
+name = "al"
+display_name = "Aluminium"
+aliases = ["aluminium", "Al"]
+
+[[medium]]
+name = "cu"
+display_name = "Copper"
+aliases = ["copper", "Cu"]
+
+[[medium]]
+name = "ni"
+display_name = "Nickel"
+aliases = ["nickel", "Ni"]
+
+[[medium]]
+name = "pvc"
+display_name = "Polyvinyl chloride"
+aliases = ["PVC"]
+
+[[medium]]
+name = "cr"
+display_name = "Chromium"
+aliases = ["chromium", "chrome", "Cr"]
