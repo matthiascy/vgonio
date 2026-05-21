@@ -64,7 +64,7 @@ pub enum MediumLoadError {
         path: PathBuf,
         kind: &'static str,         // "name" | "alias"
         other: String,              // the canonical name on the other side
-        other_source: &'static str, // the MediumSource label of the existing entry
+        other_source: &'static str, // the Provenance label of the existing entry
     },
 
     #[error(

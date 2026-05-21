@@ -4,7 +4,7 @@ use crate::utils::medium::{
     dto::{self, MediumDto, MediumTomlFile},
     error::MediumLoadError,
     intern::intern,
-    MediumId,
+    MediumId, Provenance,
 };
 use std::{collections::HashMap, path::Path};
 
@@ -21,26 +21,7 @@ pub struct MediumEntry {
     /// Alternative names that resolve to the same medium (e.g. "al" for "Aluminium").
     pub aliases: &'static [&'static str],
     /// Where this entry came from.
-    pub source: MediumSource,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum MediumSource {
-    BuiltIn,
-    Embedded,
-    System,
-    User,
-}
-
-impl MediumSource {
-    pub fn label(self) -> &'static str {
-        match self {
-            MediumSource::BuiltIn => "builtin",
-            MediumSource::Embedded => "embedded",
-            MediumSource::System => "system",
-            MediumSource::User => "user",
-        }
-    }
+    pub source: Provenance,
 }
 
 /// The frozen registry of media.
@@ -60,15 +41,15 @@ impl MediumRegistry {
             &mut reg,
             BUILTIN_TOML,
             Path::new("<buildin.toml>"),
-            MediumSource::Embedded,
+            Provenance::Builtin,
         )?;
 
         if let Some(p) = sys {
-            Self::merge_file_optional(&mut reg, p, MediumSource::System)?;
+            Self::merge_file_optional(&mut reg, p, Provenance::System)?;
         }
 
         if let Some(p) = user {
-            Self::merge_file_optional(&mut reg, p, MediumSource::User)?;
+            Self::merge_file_optional(&mut reg, p, Provenance::User)?;
         }
 
         Ok(reg)
@@ -111,14 +92,14 @@ impl MediumRegistry {
             id: MediumId::VACUUM,
             display_name: "Vacuum",
             aliases: &["vacuum"],
-            source: MediumSource::BuiltIn,
+            source: Provenance::Builtin,
         });
     }
 
     fn merge_file_optional(
         reg: &mut Self,
         path: &Path,
-        source: MediumSource,
+        source: Provenance,
     ) -> Result<(), MediumLoadError> {
         if !path.exists() {
             return Ok(()); // missing layer is OK
@@ -132,7 +113,7 @@ impl MediumRegistry {
         reg: &mut Self,
         text: &str,
         path: &Path,
-        source: MediumSource,
+        source: Provenance,
     ) -> Result<(), MediumLoadError> {
         let file = dto::parse_str(text, path)?;
         Self::validate_and_merge(reg, file, path, source)
@@ -142,7 +123,7 @@ impl MediumRegistry {
         reg: &mut Self,
         file: MediumTomlFile,
         path: &Path,
-        source: MediumSource,
+        source: Provenance,
     ) -> Result<(), MediumLoadError> {
         if file.schema_version != 1 {
             return Err(MediumLoadError::UnsupportedSchemaVersion {
@@ -203,7 +184,7 @@ impl MediumRegistry {
         reg: &mut Self,
         m: MediumDto,
         path: &Path,
-        source: MediumSource,
+        source: Provenance,
     ) -> Result<(), MediumLoadError> {
         // Layer-collision: does this name (or any alias) already exist?
         if let Some(existing) = reg.by_id.get(m.name.as_str()) {
@@ -282,7 +263,7 @@ mod tests {
             id: MediumId::AL,
             display_name: "Aluminium",
             aliases: &["aluminium", "Al"],
-            source: MediumSource::Embedded,
+            source: Provenance::Builtin,
         });
         assert_eq!(reg.by_name("al").unwrap().display_name, "Aluminium");
     }
@@ -294,7 +275,7 @@ mod tests {
             id: MediumId::AL,
             display_name: "Aluminium",
             aliases: &["aluminium", "Al"],
-            source: MediumSource::Embedded,
+            source: Provenance::Builtin,
         });
         assert_eq!(reg.by_name("Al").unwrap().id, MediumId::AL);
         assert_eq!(reg.by_name("aluminium").unwrap().id, MediumId::AL);
@@ -349,7 +330,7 @@ display_name = "Bogus"
 "#;
         let mut reg = MediumRegistry::empty();
         MediumRegistry::seed_vacuum(&mut reg);
-        let err = MediumRegistry::merge_str(&mut reg, bad, Path::new("<bad>"), MediumSource::User)
+        let err = MediumRegistry::merge_str(&mut reg, bad, Path::new("<bad>"), Provenance::User)
             .unwrap_err();
         assert!(matches!(err, MediumLoadError::ReservedName { .. }));
     }
@@ -366,7 +347,7 @@ display_name = "x"
             &mut MediumRegistry::empty(),
             bad,
             Path::new("<bad>"),
-            MediumSource::User,
+            Provenance::User,
         )
         .unwrap_err();
         assert!(matches!(err, MediumLoadError::InvalidName { .. }));
@@ -379,7 +360,7 @@ display_name = "x"
             &mut MediumRegistry::empty(),
             bad,
             Path::new("<bad>"),
-            MediumSource::User,
+            Provenance::User,
         )
         .unwrap_err();
         assert!(matches!(
@@ -397,7 +378,7 @@ name = "al"
 display_name = "Custom Al"
 "#;
         let mut reg = MediumRegistry::build(None, None).unwrap();
-        let err = MediumRegistry::merge_str(&mut reg, bad, Path::new("<user>"), MediumSource::User)
+        let err = MediumRegistry::merge_str(&mut reg, bad, Path::new("<user>"), Provenance::User)
             .unwrap_err();
         assert!(matches!(err, MediumLoadError::LayerCollision { .. }));
     }
@@ -412,7 +393,7 @@ display_name = "Gold"
 aliases = ["gold", "Au"]
 "#;
         let mut reg = MediumRegistry::build(None, None).unwrap();
-        MediumRegistry::merge_str(&mut reg, ok, Path::new("<user>"), MediumSource::User).unwrap();
+        MediumRegistry::merge_str(&mut reg, ok, Path::new("<user>"), Provenance::User).unwrap();
         assert_eq!(reg.by_name("au").unwrap().display_name, "Gold");
         assert_eq!(reg.by_name("Au").unwrap().id.name(), "au");
     }
