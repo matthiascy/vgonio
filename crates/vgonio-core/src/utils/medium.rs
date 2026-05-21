@@ -10,6 +10,9 @@ pub(crate) mod intern;
 
 mod dto;
 
+mod layer;
+pub use layer::{merge_layers, Collision, MergePolicy, Provenance};
+
 mod registry;
 pub use registry::{MediumEntry, MediumRegistry, MediumSource};
 
