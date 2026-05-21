@@ -1,5 +1,6 @@
 //! Errors produced by the medium registry loader.
 
+use crate::utils::medium::Provenance;
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -55,25 +56,24 @@ pub enum MediumLoadError {
     ReservedName { name: String, path: PathBuf },
 
     #[error(
-        "alias {alias:?} in entry {entry:?} ({path}) collides with {kind} {other:?} (from the \
+        "alias {alias:?} in entry {entry:?} collides with {kind} {other:?} (from the \
          {other_source} layer)"
     )]
     AliasCollision {
         alias: String,
         entry: String,
-        path: PathBuf,
-        kind: &'static str,         // "name" | "alias"
-        other: String,              // the canonical name on the other side
+        kind: &'static str, // "name" | "alias"
+        other: String,
         other_source: &'static str, // the Provenance label of the existing entry
     },
 
     #[error(
-        "media.toml entry {name:?} ({path}) redefines a medium from {earlier_layer}; layers may \
-         only add new media"
+        "medium {name:?} from the {later} layer redefines one already provided by the {earlier} \
+         layer; layers may only add new media"
     )]
     LayerCollision {
         name: String,
-        path: PathBuf,
-        earlier_layer: &'static str,
+        earlier: Provenance,
+        later: Provenance,
     },
 }
