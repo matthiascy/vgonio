@@ -224,14 +224,14 @@ impl MerlBrdf {
             .split('-')
             .find_map(MediumId::try_from_name)
             .ok_or_else(|| {
-                Err(VgonioError::new(
+                VgonioError::new(
                     format!(
                         "Can't read MERL BRDF from {:?}: unknown material!",
                         filepath.as_ref()
                     ),
                     None,
-                ))
-            });
+                )
+            })?;
 
         let mut file = File::open(filepath.as_ref())
             .map_err(|err| VgonioError::from_io_error(err, "Can't read MERL BRDF file!"))?;

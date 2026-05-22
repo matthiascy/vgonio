@@ -56,7 +56,7 @@ pub mod vgmo {
         math::Sph2,
         units::{rad, Nanometres, Radians},
         utils::{
-            medium::Medium,
+            medium::MediumId,
             partition::{PartitionScheme, Ring, SphericalDomain, SphericalPartition},
             range::StepRangeIncl,
         },
@@ -717,8 +717,8 @@ pub mod vgmo {
                     let mut buf = [0u8; 11];
                     reader.read_exact(&mut buf)?;
                     let kind = BsdfKind::from(buf[0]);
-                    let incident_medium = Medium::read_from_buf(&buf[1..4]);
-                    let transmitted_medium = Medium::read_from_buf(&buf[4..7]);
+                    let incident_medium = read_legacy_medium_field(&buf[1..4])?;
+                    let transmitted_medium = read_legacy_medium_field(&buf[4..7])?;
                     let sim_kind = SimulationKind::try_from(buf[7]).map_err(|e| {
                         std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
@@ -782,8 +782,8 @@ pub mod vgmo {
             };
             let mut buf = vec![0u8; buf_size].into_boxed_slice();
             buf[0] = self.kind as u8;
-            self.incident_medium.write_to_buf(&mut buf[1..4]);
-            self.transmitted_medium.write_to_buf(&mut buf[4..7]);
+            write_legacy_medium_field(self.incident_medium, &mut buf[1..4]);
+            write_legacy_medium_field(self.transmitted_medium, &mut buf[4..7]);
             buf[7] = self.sim_kind.as_u8();
             buf[8] = self.fresnel as u8;
             buf[9] = 0; // padding, reserved for num receivers
@@ -1512,6 +1512,15 @@ pub mod vgmo {
             Ok(())
         }
     }
+
+    // TEMP: filled in later (legacy BSDF medium codec). Calls here panic at
+    // runtime, the workspace compiles, but BSDF read/write tests will fail.
+    fn write_legacy_medium_field(_mid: MediumId, _dst: &mut [u8]) -> std::io::Result<()> {
+        unimplemented!("medium-plan-task: legacy BSDF medium codec")
+    }
+    fn read_legacy_medium_field(_src: &[u8]) -> std::io::Result<MediumId> {
+        unimplemented!("medium-plan-task: legacy BSDF medium codec")
+    }
 }
 
 #[cfg(test)]
@@ -1537,7 +1546,7 @@ mod tests {
         math::Sph2,
         units::{nm, rad, Rads},
         utils::{
-            medium::Medium,
+            medium::MediumId,
             partition::{PartitionScheme, SphericalDomain, SphericalPartition},
             range::StepRangeIncl,
         },
@@ -1550,8 +1559,8 @@ mod tests {
     fn test_bsdf_measurement_params() {
         let params = BsdfMeasurementParams {
             kind: BsdfKind::Brdf,
-            incident_medium: Medium::Vacuum,
-            transmitted_medium: Medium::Aluminium,
+            incident_medium: MediumId::VACUUM,
+            transmitted_medium: MediumId::AL,
             sim_kind: SimulationKind::WaveOptics,
             emitter: EmitterParams {
                 num_rays: 0,
@@ -1737,8 +1746,8 @@ mod tests {
         let n_spectrum = 4;
         let brdf = VgonioBrdf {
             origin: Origin::Simulated,
-            incident_medium: Medium::Vacuum,
-            transmitted_medium: Medium::Vacuum,
+            incident_medium: MediumId::VACUUM,
+            transmitted_medium: MediumId::VACUUM,
             params: Box::new(VgonioBrdfParameterisation {
                 n_zenith_i: 4,
                 incoming: DyArr::splat(Sph2::zero(), [4]),
@@ -1800,8 +1809,8 @@ mod tests {
             VgonioBrdf {
                 kind: MeasuredBrdfKind::Vgonio,
                 origin: Origin::Simulated,
-                incident_medium: Medium::Vacuum,
-                transmitted_medium: Medium::Aluminium,
+                incident_medium: MediumId::VACUUM,
+                transmitted_medium: MediumId::AL,
                 params: Box::new(VgonioBrdfParameterisation {
                     n_zenith_i: emitter_params.measurement_points_zenith_count(),
                     incoming: incoming.clone(),
@@ -1816,8 +1825,8 @@ mod tests {
             params: BsdfMeasurementParams {
                 kind: BsdfKind::Brdf,
                 sim_kind: SimulationKind::WaveOptics,
-                incident_medium: Medium::Vacuum,
-                transmitted_medium: Medium::Aluminium,
+                incident_medium: MediumId::VACUUM,
+                transmitted_medium: MediumId::AL,
                 emitter: emitter_params,
                 receivers: vec![ReceiverParams {
                     domain: SphericalDomain::Upper,

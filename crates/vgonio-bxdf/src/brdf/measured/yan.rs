@@ -7,6 +7,8 @@ use crate::{
     },
     impl_any_measured_trait, AnyMeasured, AnyMeasuredBrdf, MeasuredBrdfKind,
 };
+#[cfg(feature = "fitting")]
+use std::borrow::Cow;
 use std::fmt::Debug;
 #[cfg(feature = "io")]
 use std::path::Path;

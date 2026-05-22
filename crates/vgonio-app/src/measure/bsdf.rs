@@ -38,7 +38,7 @@ use vgn_core::{
     math::{rcp_f64, Sph2, Vec3},
     res::{Handle, RawDataStore},
     units::{Degs, Nanometres, Radians, Rads},
-    utils::{medium::Medium, partition::SphericalPartition},
+    utils::{medium::MediumId, partition::SphericalPartition},
     BrdfLevel, MeasurementKind,
 };
 use vgn_io::{MicroSurface, MicroSurfaceMesh};
@@ -205,8 +205,8 @@ impl RawBsdfMeasurement {
     /// Computes the BSDF data from the raw data.
     pub fn compute_bsdfs(
         &self,
-        medium_i: Medium,
-        medium_t: Medium,
+        medium_i: MediumId,
+        medium_t: MediumId,
     ) -> HashMap<BrdfLevel, VgonioBrdf> {
         let n_wi = self.n_wi();
         let n_wo = self.n_wo();

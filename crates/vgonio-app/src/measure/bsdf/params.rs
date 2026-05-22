@@ -8,7 +8,7 @@ use vgn_core::{
     math::Sph2,
     units::{deg, nm, rad},
     utils::{
-        medium::Medium,
+        medium::MediumId,
         partition::{PartitionScheme, SphericalDomain},
         range::StepRangeIncl,
     },
@@ -93,10 +93,10 @@ pub struct BsdfMeasurementParams {
     pub sim_kind: SimulationKind,
 
     /// Incident medium of the measurement.
-    pub incident_medium: Medium,
+    pub incident_medium: MediumId,
 
     /// Transmitted medium of the measurement (surface medium).
-    pub transmitted_medium: Medium,
+    pub transmitted_medium: MediumId,
 
     /// Description of the emitter.
     pub emitter: EmitterParams,
@@ -116,8 +116,8 @@ impl Default for BsdfMeasurementParams {
             sim_kind: SimulationKind::GeomOptics(RtcMethod::Embree),
             #[cfg(not(feature = "embree"))]
             sim_kind: SimulationKind::GeomOptics(RtcMethod::Grid),
-            incident_medium: Medium::Air,
-            transmitted_medium: Medium::Air,
+            incident_medium: MediumId::AIR,
+            transmitted_medium: MediumId::AIR,
             emitter: EmitterParams {
                 num_rays: 1000,
                 num_sectors: 1,
@@ -217,7 +217,7 @@ impl BsdfMeasurementParams {
 
     /// Checks if the incident and transmitted media are air.
     pub fn is_both_air_medium(&self) -> bool {
-        self.incident_medium == Medium::Air && self.transmitted_medium == Medium::Air
+        self.incident_medium == MediumId::AIR && self.transmitted_medium == MediumId::AIR
     }
 
     /// Returns the parameters as a HashMap.
@@ -328,8 +328,8 @@ impl BsdfMeasurementParams {
         Self {
             kind: BsdfKind::Brdf,
             sim_kind: SimulationKind::GeomOptics(RtcMethod::Embree),
-            incident_medium: Medium::Vacuum,
-            transmitted_medium: Medium::Aluminium,
+            incident_medium: MediumId::VACUUM,
+            transmitted_medium: MediumId::AL,
             emitter: EmitterParams::default_for_test(),
             receivers: vec![
                 ReceiverParams {

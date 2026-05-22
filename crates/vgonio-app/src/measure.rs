@@ -46,7 +46,7 @@ use vgn_core::{
     res::{AssetTypeId, Handle},
     units::{rad, Radians},
     utils::{
-        medium::Medium,
+        medium::MediumId,
         partition::{SphericalDomain, SphericalPartition},
     },
     MeasurementKind, Version,
@@ -204,21 +204,18 @@ impl Measurement {
                 filepath.display()
             );
             let filename = filepath.file_stem().unwrap().to_str().unwrap();
-            let mut medium = Medium::Air;
-            for m in filename.split('_') {
-                if m == "aluminium" {
-                    medium = Medium::Aluminium;
-                    break;
-                }
-                if m == "copper" {
-                    medium = Medium::Copper;
-                    break;
-                }
-                if m == "pvc" {
-                    medium = Medium::Pvc;
-                    break;
-                }
-            }
+
+            let medium = filename
+                .split('_')
+                .find_map(MediumId::try_from_name)
+                .unwrap_or_else(|| {
+                    log::warn!(
+                        "Failed to parse medium from filename: {}. Defaulting to AIR.",
+                        filename
+                    );
+                    MediumId::AIR
+                });
+
             let loaded = RglBrdf::load(filepath, medium);
             log::info!("Loaded RGL BSDF file with medium: {:?}", medium);
             return Ok(Measurement {
@@ -277,7 +274,7 @@ impl Measurement {
                     "Loading Yan18 BSDF file: {}",
                     filepath.display()
                 );
-                return Yan18Brdf::load_from_exr(&filepath, Medium::Air, Medium::Aluminium).map(
+                return Yan18Brdf::load_from_exr(&filepath, MediumId::AIR, MediumId::AL).map(
                     |brdf| Measurement {
                         name: format!(
                             "yan2018_{}",

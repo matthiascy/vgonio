@@ -11,7 +11,7 @@ use crate::{
     },
 };
 use std::hash::Hash;
-use vgn_core::utils::{medium::Medium, partition::SphericalDomain};
+use vgn_core::utils::{medium::MediumId, partition::SphericalDomain};
 #[cfg(feature = "vdbg")]
 use vgn_core::{math::Sph2, units::Rads};
 use vgn_uxgx::gui::widgets::ToggleSwitch;
@@ -31,14 +31,14 @@ impl BsdfKind {
     }
 }
 
-pub fn medium_selectable_ui(medium: &mut Medium, id_source: impl Hash, ui: &mut egui::Ui) {
+pub fn medium_selectable_ui(medium: &mut MediumId, id_source: impl Hash, ui: &mut egui::Ui) {
     egui::ComboBox::from_id_salt(id_source)
         .selected_text(format!("{:?}", medium))
         .show_ui(ui, |ui| {
-            ui.selectable_value(medium, Medium::Air, "Air");
-            ui.selectable_value(medium, Medium::Copper, "Copper");
-            ui.selectable_value(medium, Medium::Aluminium, "Aluminium");
-            ui.selectable_value(medium, Medium::Vacuum, "Vacuum");
+            ui.selectable_value(medium, MediumId::AIR, "Air");
+            ui.selectable_value(medium, MediumId::CU, "Copper");
+            ui.selectable_value(medium, MediumId::AL, "Aluminium");
+            ui.selectable_value(medium, MediumId::VACUUM, "Vacuum");
         });
 }
 
