@@ -157,6 +157,7 @@ impl IorDatasetDto {
             reference: self.reference,
             comments: self.comments,
             data,
+            provenance: None,
         })
     }
 
@@ -347,7 +348,7 @@ impl ManifestDto {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::units::nm;
+    use crate::{units::nm, utils::medium::bootstrap};
 
     fn sample_tabulated() -> IorDataset {
         IorDataset {
@@ -359,6 +360,7 @@ mod tests {
                 IorRecord::new(nm!(400.0), 1.0, 5.0),
                 IorRecord::new(nm!(500.0), 2.0, 7.0),
             ])),
+            provenance: None,
         }
     }
 
@@ -376,11 +378,13 @@ mod tests {
                 range: (nm!(300.0), nm!(2000.0)),
                 k: Some(Box::from([(nm!(300.0), 0.1f32), (nm!(2000.0), 0.4f32)])),
             },
+            provenance: None,
         }
     }
 
     #[test]
     fn round_trip_tabulated_and_dispersion() {
+        let _ = bootstrap(None, None);
         for ds in [sample_tabulated(), sample_dispersion()] {
             let dto = IorDatasetDto::from_runtime(&ds);
             let text =
@@ -415,6 +419,7 @@ mod tests {
 
     #[test]
     fn write_then_read_file_round_trips(/* uses a tempdir */) {
+        let _ = bootstrap(None, None);
         let dir = std::env::temp_dir().join(format!("vgn-ior-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("al_Demo2024.ior.ron");
@@ -469,6 +474,7 @@ mod tests {
     /// in-memory fixtures written to a temp dir.
     #[test]
     fn legacy_csv_reader_handles_bom_columns_and_units() {
+        let _ = bootstrap(None, None);
         let dir = std::env::temp_dir().join(format!("vgn-ior-csv-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();

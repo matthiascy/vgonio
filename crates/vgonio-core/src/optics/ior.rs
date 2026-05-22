@@ -17,7 +17,7 @@ use crate::{
     asset, math,
     res::AssetTypeId,
     units::{nanometres, Length, LengthMeasurement, Nanometres},
-    utils::medium::MediumId,
+    utils::medium::{MediumId, Provenance},
 };
 use std::{
     cmp::Ordering,
@@ -145,6 +145,9 @@ pub struct IorDataset {
     pub comments: String,
     /// The η/κ data.
     pub data: IorData,
+    /// Which registry layer this dataset was resolved from. `None` when dataset was
+    /// read from a single file rather than through the layered [`loader::IorRegLoader`].
+    pub provenance: Option<Provenance>,
 }
 
 impl IorDataset {
@@ -291,6 +294,7 @@ mod tests {
                     .map(|&(w, e, k)| IorRecord::new(nm!(w), e, k))
                     .collect(),
             ),
+            provenance: None,
         }
     }
 
@@ -338,6 +342,7 @@ mod tests {
                 range: (nm!(400.0), nm!(800.0)),
                 k: Some(Box::from([(nm!(400.0), 0.1f32), (nm!(800.0), 0.3f32)])),
             },
+            provenance: None,
         };
         let mut reg = IorReg::new();
         reg.insert(MediumId::PVC, ds);
@@ -363,6 +368,7 @@ mod tests {
                     range: (nm!(400.0), nm!(800.0)),
                     k: None,
                 },
+                provenance: None,
             },
         );
         assert_eq!(reg2.ior_of(MediumId::PVC, nm!(600.0)).unwrap().k, 0.0);

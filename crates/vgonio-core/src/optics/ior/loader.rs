@@ -331,6 +331,7 @@ mod tests {
     use crate::{
         optics::ior::{write_dataset_file, IorData, IorDataset, IorRecord},
         units::nm,
+        utils::medium::bootstrap,
     };
 
     fn ds(medium: MediumId, name: &str) -> IorDataset {
@@ -343,6 +344,7 @@ mod tests {
                 IorRecord::new(nm!(400.0), 1.0, 5.0),
                 IorRecord::new(nm!(500.0), 2.0, 7.0),
             ])),
+            provenance: None,
         }
     }
 
@@ -355,6 +357,7 @@ mod tests {
 
     #[test]
     fn single_dataset_is_chosen() {
+        let _ = bootstrap(None, None);
         let root = tmpdir("single");
         write_dataset_file(&root.join("ior/al_A.ior.ron"), &ds(MediumId::AL, "A")).unwrap();
         let loader = IorRegLoader::new(Some(&root), None, None);
@@ -368,6 +371,7 @@ mod tests {
 
     #[test]
     fn two_datasets_no_default_is_error() {
+        let _ = bootstrap(None, None);
         let root = tmpdir("ambig");
         write_dataset_file(&root.join("ior/al_A.ior.ron"), &ds(MediumId::AL, "A")).unwrap();
         write_dataset_file(&root.join("ior/al_B.ior.ron"), &ds(MediumId::AL, "B")).unwrap();
@@ -384,6 +388,7 @@ mod tests {
 
     #[test]
     fn default_flag_picks_the_winner_and_excluded_disambiguates() {
+        let _ = bootstrap(None, None);
         let root = tmpdir("default");
         write_dataset_file(&root.join("ior/al_A.ior.ron"), &ds(MediumId::AL, "A")).unwrap();
         write_dataset_file(&root.join("ior/al_B.ior.ron"), &ds(MediumId::AL, "B")).unwrap();
@@ -419,6 +424,7 @@ mod tests {
 
     #[test]
     fn filename_body_mismatch_is_rejected() {
+        let _ = bootstrap(None, None);
         let root = tmpdir("mismatch");
         // file named al_* but body says copper
         write_dataset_file(&root.join("ior/al_Bad.ior.ron"), &ds(MediumId::CU, "Bad")).unwrap();
@@ -435,6 +441,7 @@ mod tests {
 
     #[test]
     fn prefixless_file_loads_on_its_medium_field() {
+        let _ = bootstrap(None, None);
         let root = tmpdir("prefixless");
         write_dataset_file(
             &root.join("ior/copper-data.ior.ron"),
@@ -455,6 +462,7 @@ mod tests {
 
     #[test]
     fn stale_manifest_entry_is_ignored() {
+        let _ = bootstrap(None, None);
         let root = tmpdir("stale");
         write_dataset_file(&root.join("ior/al_A.ior.ron"), &ds(MediumId::AL, "A")).unwrap();
         std::fs::write(
@@ -478,6 +486,7 @@ mod tests {
 
     #[test]
     fn user_dir_overrides_system_dir_per_medium() {
+        let _ = bootstrap(None, None);
         let sys = tmpdir("sys");
         let usr = tmpdir("usr");
         write_dataset_file(&sys.join("ior/al_S.ior.ron"), &ds(MediumId::AL, "S")).unwrap();
@@ -499,6 +508,7 @@ mod tests {
 
     #[test]
     fn embedded_layer_resolves_without_error() {
+        let _ = bootstrap(None, None);
         // Content-agnostic: the embedded baseline must resolve cleanly whether
         // `embed-datafiles` is on or off, and whether or not `datafiles/ior/`
         // has been populated yet by Task 8. (Deterministic content tests for
@@ -516,6 +526,7 @@ mod tests {
     #[cfg(feature = "embed-datafiles")]
     #[test]
     fn embedded_baseline_contains_expected_shipped_datasets() {
+        let _ = bootstrap(None, None);
         let reg = resolve_embedded(&|_| false).expect("embedded baseline must resolve");
         assert!(
             reg.contains_key(&MediumId::AL)
@@ -533,6 +544,7 @@ mod tests {
 
     #[test]
     fn explicit_dir_path_bypasses_embedded_and_layers() {
+        let _ = bootstrap(None, None);
         // `load(Some(dir))` resolves exactly that directory -- no embedded
         // baseline, no sys/user merge.
         let only = tmpdir("explicit");
