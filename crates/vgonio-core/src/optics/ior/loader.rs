@@ -65,6 +65,16 @@ impl IorRegLoader {
     pub fn is_excluded(&self, file_name: &str) -> bool {
         self.excluded.iter().any(|excluded| excluded == file_name)
     }
+
+    /// The error returned when an IOR load is attempted before the medium
+    /// identity registry has been bootstrapped.
+    fn spine_not_ready_error() -> Error {
+        Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "cannot load the IOR registry before medium::bootstrap() has run: the medium identity \
+             registry is the authority on which media exist",
+        ))
+    }
 }
 
 /// One layer's raw inputs: optional manifest text + an iterator of
@@ -315,6 +325,9 @@ impl AssetLoader for IorRegLoader {
     fn asset_type_id(&self) -> AssetTypeId { IorReg::asset_type_id() }
 
     fn load(&self, path: Option<&Path>) -> Result<Box<dyn Asset>, Error> {
+        if crate::utils::medium::registry().is_none() {
+            return Err(Self::spine_not_ready_error());
+        }
         match path {
             // Explicit single directory: resolve it alone (no embedded baseline).
             Some(p) => {
@@ -585,5 +598,13 @@ mod tests {
             Some(crate::utils::medium::Provenance::User)
         );
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn spine_check_message_is_clear() {
+        // `require_spine` returns the precondition error; assert its
+        // wording without depending on global bootstrap state.
+        let err = IorRegLoader::spine_not_ready_error();
+        assert!(format!("{err}").contains("medium::bootstrap"), "got: {err}");
     }
 }
