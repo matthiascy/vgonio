@@ -3,7 +3,7 @@
 //! manifest model, and a reader for the legacy `*.csv` files.
 
 use super::{DispersionFormula, IorData, IorDataset, IorRecord};
-use crate::{units::nanometres, utils::medium::Medium};
+use crate::{units::nanometres, utils::medium::MediumId};
 use serde::{Deserialize, Serialize};
 use std::{path::Path, str::FromStr};
 
@@ -56,7 +56,7 @@ pub enum IorFileError {
 pub struct IorDatasetDto {
     /// Schema version; must equal [`IOR_DATASET_SCHEMA_VERSION`].
     pub schema_version: u32,
-    /// Lowercase medium name (see [`Medium::name`]).
+    /// Lowercase medium name (see [`MediumId::name`]).
     pub medium: String,
     /// Source label (e.g. `"McPeak2015"`).
     pub name: String,
@@ -126,8 +126,8 @@ impl IorDatasetDto {
                 expected: IOR_DATASET_SCHEMA_VERSION,
             });
         }
-        let medium = Medium::from_str(&self.medium)
-            .map_err(|_| IorFileError::UnknownMedium(path.into(), self.medium.clone()))?;
+        let medium = MediumId::try_from_name(&self.medium)
+            .ok_or_else(|| IorFileError::UnknownMedium(path.into(), self.medium.clone()))?;
         let data = match self.data {
             IorDataDto::Tabulated(rows) => IorData::Tabulated(
                 rows.into_iter()
@@ -164,7 +164,7 @@ impl IorDatasetDto {
     /// wavelengths) into a `Tabulated` DTO. `medium` and `name` are supplide by the caller.
     pub fn from_legacy_csv(
         path: &Path,
-        medium: Medium,
+        medium: MediumId,
         name: &str,
     ) -> Result<IorDatasetDto, IorFileError> {
         let p = path.display().to_string();
@@ -351,7 +351,7 @@ mod tests {
 
     fn sample_tabulated() -> IorDataset {
         IorDataset {
-            medium: Medium::Aluminium,
+            medium: MediumId::AL,
             name: "Demo2024".into(),
             reference: "Some Author. Title. Journal (2024)".into(),
             comments: String::new(),
@@ -364,7 +364,7 @@ mod tests {
 
     fn sample_dispersion() -> IorDataset {
         IorDataset {
-            medium: Medium::Pvc,
+            medium: MediumId::PVC,
             name: "Demo".into(),
             reference: String::new(),
             comments: String::new(),
@@ -491,11 +491,11 @@ mod tests {
         std::fs::write(&cu, &bom_three).unwrap();
 
         // 2-col, no BOM: k defaults to 0, µm→nm, sorted ascending.
-        let air_ds = IorDatasetDto::from_legacy_csv(&air, Medium::Air, "TwoCol")
+        let air_ds = IorDatasetDto::from_legacy_csv(&air, MediumId::AIR, "TwoCol")
             .unwrap()
             .into_runtime("air")
             .unwrap();
-        assert_eq!(air_ds.medium, Medium::Air);
+        assert_eq!(air_ds.medium, MediumId::AIR);
         match air_ds.data {
             IorData::Tabulated(s) => {
                 assert_eq!(s.len(), 2);
@@ -511,7 +511,7 @@ mod tests {
         }
 
         // 3-col, no BOM: k preserved.
-        let al_ds = IorDatasetDto::from_legacy_csv(&al, Medium::Aluminium, "ThreeCol")
+        let al_ds = IorDatasetDto::from_legacy_csv(&al, MediumId::AL, "ThreeCol")
             .unwrap()
             .into_runtime("al")
             .unwrap();
@@ -525,7 +525,7 @@ mod tests {
         }
 
         // 3-col WITH BOM: BOM must be stripped so the header/first field parse.
-        let cu_ds = IorDatasetDto::from_legacy_csv(&cu, Medium::Copper, "Bom")
+        let cu_ds = IorDatasetDto::from_legacy_csv(&cu, MediumId::CU, "Bom")
             .expect("UTF-8 BOM must be stripped before CSV parsing")
             .into_runtime("cu")
             .unwrap();

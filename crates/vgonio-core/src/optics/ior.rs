@@ -17,7 +17,7 @@ use crate::{
     asset, math,
     res::AssetTypeId,
     units::{nanometres, Length, LengthMeasurement, Nanometres},
-    utils::medium::{MaterialKind, Medium},
+    utils::medium::MediumId,
 };
 use std::{
     cmp::Ordering,
@@ -88,15 +88,6 @@ impl IorRecord {
             ior: Ior { eta, k },
         }
     }
-
-    /// Material kind implied by this record (conductor iff κ ≠ 0).
-    pub fn material_kind(&self) -> MaterialKind {
-        if self.k == 0.0 {
-            MaterialKind::Insulator
-        } else {
-            MaterialKind::Conductor
-        }
-    }
 }
 
 impl Deref for IorRecord {
@@ -145,7 +136,7 @@ pub enum IorData {
 #[derive(Debug, Clone, PartialEq)]
 pub struct IorDataset {
     /// The medium this dataset describes.
-    pub medium: Medium,
+    pub medium: MediumId,
     /// Short source label (e.g. `"McPeak2015"`), also the file-name suffix.
     pub name: String,
     /// Plain-text upstream citation.
@@ -237,10 +228,10 @@ asset!(IorReg, "IorReg");
 
 /// In-memory refractive-index registry: one chosen dataset per medium.
 #[derive(Debug, Clone, Default)]
-pub struct IorReg(pub(crate) HashMap<Medium, IorDataset>);
+pub struct IorReg(pub(crate) HashMap<MediumId, IorDataset>);
 
 impl Deref for IorReg {
-    type Target = HashMap<Medium, IorDataset>;
+    type Target = HashMap<MediumId, IorDataset>;
     fn deref(&self) -> &Self::Target { &self.0 }
 }
 
@@ -255,10 +246,10 @@ impl IorReg {
     /// Refractive index of `medium` at `wavelength` (nanometres).
     ///
     /// Returns `None` if the medium is unknown to the registry or the wavelength
-    /// is outside the dataset's valid range. `Medium::Vacuum` always returns
+    /// is outside the dataset's valid range. `MediumId::Vacuum` always returns
     /// [`IorRecord::VACUUM`].
-    pub fn ior_of(&self, medium: Medium, wavelength: Nanometres) -> Option<IorRecord> {
-        if medium == Medium::Vacuum {
+    pub fn ior_of(&self, medium: MediumId, wavelength: Nanometres) -> Option<IorRecord> {
+        if medium == MediumId::VACUUM {
             return Some(IorRecord::VACUUM);
         }
         self.0
@@ -270,7 +261,7 @@ impl IorReg {
     /// out of range or the medium is unknown.
     pub fn ior_of_spectrum<A: LengthMeasurement>(
         &self,
-        medium: Medium,
+        medium: MediumId,
         wavelengths: &[Length<A>],
     ) -> Option<Box<[Ior]>> {
         wavelengths
@@ -290,7 +281,7 @@ mod tests {
 
     fn tab(samples: &[(f32, f32, f32)]) -> IorDataset {
         IorDataset {
-            medium: Medium::Aluminium,
+            medium: MediumId::AL,
             name: "test".into(),
             reference: String::new(),
             comments: String::new(),
@@ -307,7 +298,7 @@ mod tests {
     fn vacuum_is_special() {
         let reg = IorReg::new();
         assert_eq!(
-            reg.ior_of(Medium::Vacuum, nm!(500.0)),
+            reg.ior_of(MediumId::VACUUM, nm!(500.0)),
             Some(IorRecord::VACUUM)
         );
     }
@@ -315,30 +306,27 @@ mod tests {
     #[test]
     fn unknown_medium_is_none() {
         let reg = IorReg::new();
-        assert_eq!(reg.ior_of(Medium::Aluminium, nm!(500.0)), None);
+        assert_eq!(reg.ior_of(MediumId::AL, nm!(500.0)), None);
     }
 
     #[test]
     fn tabulated_exact_and_interp_and_out_of_range() {
         let mut reg = IorReg::new();
-        reg.insert(
-            Medium::Aluminium,
-            tab(&[(400.0, 1.0, 5.0), (500.0, 2.0, 7.0)]),
-        );
+        reg.insert(MediumId::AL, tab(&[(400.0, 1.0, 5.0), (500.0, 2.0, 7.0)]));
         // exact
-        assert_eq!(reg.ior_of(Medium::Aluminium, nm!(400.0)).unwrap().eta, 1.0);
+        assert_eq!(reg.ior_of(MediumId::AL, nm!(400.0)).unwrap().eta, 1.0);
         // midpoint interpolation
-        let mid = reg.ior_of(Medium::Aluminium, nm!(450.0)).unwrap();
+        let mid = reg.ior_of(MediumId::AL, nm!(450.0)).unwrap();
         assert!((mid.eta - 1.5).abs() < 1e-6 && (mid.k - 6.0).abs() < 1e-6);
         // below / above range ⇒ None (no extrapolation)
-        assert_eq!(reg.ior_of(Medium::Aluminium, nm!(399.0)), None);
-        assert_eq!(reg.ior_of(Medium::Aluminium, nm!(501.0)), None);
+        assert_eq!(reg.ior_of(MediumId::AL, nm!(399.0)), None);
+        assert_eq!(reg.ior_of(MediumId::AL, nm!(501.0)), None);
     }
 
     #[test]
     fn dispersion_eta_and_k_rules() {
         let ds = IorDataset {
-            medium: Medium::Pvc,
+            medium: MediumId::PVC,
             name: "test".into(),
             reference: String::new(),
             comments: String::new(),
@@ -352,18 +340,18 @@ mod tests {
             },
         };
         let mut reg = IorReg::new();
-        reg.insert(Medium::Pvc, ds);
+        reg.insert(MediumId::PVC, ds);
         // η from the formula, κ interpolated
-        let m = reg.ior_of(Medium::Pvc, nm!(600.0)).unwrap();
+        let m = reg.ior_of(MediumId::PVC, nm!(600.0)).unwrap();
         assert!((m.eta - 1.5).abs() < 1e-6 && (m.k - 0.2).abs() < 1e-6);
         // outside formula range ⇒ None
-        assert_eq!(reg.ior_of(Medium::Pvc, nm!(900.0)), None);
+        assert_eq!(reg.ior_of(MediumId::PVC, nm!(900.0)), None);
         // κ absent ⇒ 0
         let mut reg2 = IorReg::new();
         reg2.insert(
-            Medium::Pvc,
+            MediumId::PVC,
             IorDataset {
-                medium: Medium::Pvc,
+                medium: MediumId::PVC,
                 name: "t".into(),
                 reference: String::new(),
                 comments: String::new(),
@@ -377,21 +365,18 @@ mod tests {
                 },
             },
         );
-        assert_eq!(reg2.ior_of(Medium::Pvc, nm!(600.0)).unwrap().k, 0.0);
+        assert_eq!(reg2.ior_of(MediumId::PVC, nm!(600.0)).unwrap().k, 0.0);
     }
 
     #[test]
     fn spectrum_returns_none_if_any_out_of_range() {
         let mut reg = IorReg::new();
-        reg.insert(
-            Medium::Aluminium,
-            tab(&[(400.0, 1.0, 5.0), (500.0, 2.0, 7.0)]),
-        );
+        reg.insert(MediumId::AL, tab(&[(400.0, 1.0, 5.0), (500.0, 2.0, 7.0)]));
         assert!(reg
-            .ior_of_spectrum(Medium::Aluminium, &[nm!(420.0), nm!(480.0)])
+            .ior_of_spectrum(MediumId::AL, &[nm!(420.0), nm!(480.0)])
             .is_some());
         assert!(reg
-            .ior_of_spectrum(Medium::Aluminium, &[nm!(420.0), nm!(900.0)])
+            .ior_of_spectrum(MediumId::AL, &[nm!(420.0), nm!(900.0)])
             .is_none());
     }
 }
