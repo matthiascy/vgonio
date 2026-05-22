@@ -8,7 +8,7 @@ use super::IorReg;
 use crate::{
     optics::{IorDataset, ManifestDto},
     res::{Asset, AssetLoader, AssetTypeId, Error},
-    utils::medium::MediumId,
+    utils::medium::{merge_layers, MediumId, MergePolicy, Provenance},
 };
 use std::{
     collections::HashMap,
@@ -277,28 +277,34 @@ impl IorRegLoader {
     /// later layers override earlier per medium.
     fn load_reg(&self) -> Result<IorReg, Error> {
         let excluded = |f: &str| self.is_excluded(f);
+        let system = match &self.sys_dir {
+            Some(d) => resolve_dir(d, &excluded)?,
+            None => HashMap::new(),
+        };
+        let user = match &self.usr_dir {
+            Some(d) => resolve_dir(d, &excluded)?,
+            None => HashMap::new(),
+        };
+        let layers = [
+            (Provenance::Builtin, resolve_embedded(&excluded)?),
+            (Provenance::System, system),
+            (Provenance::User, user),
+        ];
+        let merged = merge_layers(layers, MergePolicy::LastWins)
+            .expect("merge ior layers with LastWins never returns Err");
+
         let mut reg = IorReg::new();
-        for (m, ds) in resolve_embedded(&excluded)? {
-            reg.0.insert(m, ds);
+        for (medium, (mut dataset, provenance)) in merged {
+            dataset.provenance = Some(provenance);
+            reg.0.insert(medium, dataset);
         }
-        log::debug!("  Embedded baseline: {} ior datasets", reg.0.len());
-        if let Some(d) = &self.sys_dir {
-            for (m, ds) in resolve_dir(d, &excluded)? {
-                reg.0.insert(m, ds); // system overrides embedded per medium
-            }
-            log::debug!("  After sys dir {:?}: {} ior datasets", d, reg.0.len());
-        }
-        if let Some(d) = &self.usr_dir {
-            for (m, ds) in resolve_dir(d, &excluded)? {
-                reg.0.insert(m, ds); // user overrides system + embedded per medium
-            }
-            log::debug!("  After user dir {:?}: {} ior datasets", d, reg.0.len());
-        }
+
         if reg.0.is_empty() {
             // Not an error in principle (e.g. `--no-default-features` with no
             // dirs configured), but almost always a misconfiguration.
             log::warn!("IOR registry is empty: no embedded baseline and no sys/user datasets");
         }
+        log::debug!("Loaded IOR registry: {} datasets", reg.0.len());
         Ok(reg)
     }
 }
@@ -559,5 +565,25 @@ mod tests {
             .unwrap();
         assert_eq!(reg.get(&MediumId::CU).unwrap().name, "Only");
         std::fs::remove_dir_all(&only).ok();
+    }
+
+    #[test]
+    fn user_layer_dataset_records_user_provenance() {
+        let _ = crate::utils::medium::bootstrap(None, None);
+        let root = tmpdir("prov");
+        write_dataset_file(&root.join("ior/al_U.ior.ron"), &ds(MediumId::AL, "U")).unwrap();
+        let loader = IorRegLoader::new(None, Some(&root), None);
+        let reg = *loader
+            .load(None)
+            .unwrap()
+            .into_any()
+            .downcast::<IorReg>()
+            .ok()
+            .unwrap();
+        assert_eq!(
+            reg.get(&MediumId::AL).unwrap().provenance,
+            Some(crate::utils::medium::Provenance::User)
+        );
+        std::fs::remove_dir_all(&root).ok();
     }
 }

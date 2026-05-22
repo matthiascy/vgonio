@@ -6,7 +6,7 @@
 use std::path::Path;
 use vgn_core::{
     optics::{write_dataset_file, DatasetEntry, IorDatasetDto, ManifestDto},
-    utils::medium::Medium,
+    utils::medium::MediumId,
 };
 
 fn main() {
@@ -15,10 +15,10 @@ fn main() {
     let ior = root.join("datafiles/ior");
 
     // (legacy CSV file, medium, output stem, default?, manifest path, verified)
-    let jobs: &[(&str, Medium, &str, bool, Option<&str>, bool)] = &[
+    let jobs: &[(&str, MediumId, &str, bool, Option<&str>, bool)] = &[
         (
             "air_iors_[0.23-1.69]_Ciddor1996.csv",
-            Medium::Air,
+            MediumId::AIR,
             "Ciddor1996",
             true,
             Some("other/mixed gases/air/nk/Ciddor.yml"),
@@ -26,7 +26,7 @@ fn main() {
         ),
         (
             "al_iors_[0.15-1.7]_McPeak2015.csv",
-            Medium::Aluminium,
+            MediumId::AL,
             "McPeak2015",
             true,
             Some("main/Al/nk/McPeak.yml"),
@@ -34,7 +34,7 @@ fn main() {
         ),
         (
             "al_iors_[0.225-1.0]_Cheng2016.csv",
-            Medium::Aluminium,
+            MediumId::AL,
             "Cheng2016",
             false,
             Some("main/Al/nk/Cheng.yml"),
@@ -42,7 +42,7 @@ fn main() {
         ),
         (
             "cu_iors_[0.3-1.7]_McPeak2015.csv",
-            Medium::Copper,
+            MediumId::CU,
             "McPeak2015",
             true,
             Some("main/Cu/nk/McPeak.yml"),
