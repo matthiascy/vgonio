@@ -1,6 +1,6 @@
 //! Measured BRDF models.
 use std::{fmt::Debug, ops::Index};
-use vgn_core::{math::Sph2, units::Nanometres, utils::medium::Medium};
+use vgn_core::{math::Sph2, units::Nanometres, utils::medium::MediumId};
 
 pub mod clausen;
 pub mod merl;
@@ -83,9 +83,9 @@ where
     /// The origin of the measured BRDF.
     pub origin: Origin,
     /// Incident medium.
-    pub incident_medium: Medium,
+    pub incident_medium: MediumId,
     /// Transmitted medium.
-    pub transmitted_medium: Medium,
+    pub transmitted_medium: MediumId,
     /// The parametrisation of the measured BRDF.
     pub params: Box<P>,
     /// Wavelengths at which the BRDF is measured.

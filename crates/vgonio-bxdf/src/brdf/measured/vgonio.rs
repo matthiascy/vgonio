@@ -11,7 +11,7 @@ use vgn_core::{
     math::{Sph2, Vec3},
     optics::IorReg,
     units::Nanometres,
-    utils::{medium::Medium, partition::SphericalPartition},
+    utils::{medium::MediumId, partition::SphericalPartition},
     MeasurementKind,
 };
 
@@ -100,8 +100,8 @@ impl VgonioBrdf {
     /// and outgoing directions.
     pub fn new(
         origin: Origin,
-        incident_medium: Medium,
-        transmitted_medium: Medium,
+        incident_medium: MediumId,
+        transmitted_medium: MediumId,
         params: VgonioBrdfParameterisation,
         spectrum: DyArr<Nanometres>,
         samples: DyArr<f32, 3>,

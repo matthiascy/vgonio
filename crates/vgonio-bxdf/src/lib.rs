@@ -12,7 +12,7 @@ use vgn_core::{
     math::{cos_theta, Vec3},
     optics::{fresnel, Ior, IorReg},
     units::Nanometres,
-    utils::medium::Medium,
+    utils::medium::MediumId,
     BrdfLevel, MeasurementKind,
 };
 
@@ -45,10 +45,10 @@ pub trait AnyMeasuredBrdf: Sync + Send {
     fn spectrum(&self) -> &[Nanometres];
 
     /// Returns the transmitted medium.
-    fn transmitted_medium(&self) -> Medium;
+    fn transmitted_medium(&self) -> MediumId;
 
     /// Returns the incident medium.
-    fn incident_medium(&self) -> Medium;
+    fn incident_medium(&self) -> MediumId;
 
     /// Returns a proxy for the measured BRDF.
     #[cfg(feature = "fitting")]
@@ -69,9 +69,11 @@ macro_rules! any_measured_brdf_trait_common_impl {
 
         fn spectrum(&self) -> &[Nanometres] { &self.spectrum.as_ref() }
 
-        fn transmitted_medium(&self) -> Medium { self.transmitted_medium }
+        fn transmitted_medium(&self) -> vgn_core::utils::medium::MediumId {
+            self.transmitted_medium
+        }
 
-        fn incident_medium(&self) -> Medium { self.incident_medium }
+        fn incident_medium(&self) -> vgn_core::utils::medium::MediumId { self.incident_medium }
 
         fn as_any(&self) -> &dyn std::any::Any { self }
 

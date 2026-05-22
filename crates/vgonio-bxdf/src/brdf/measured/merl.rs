@@ -16,7 +16,7 @@ use vgn_core::{
     math::Sph2,
     optics::IorReg,
     units::{nm, Nanometres, Radians},
-    utils::medium::Medium,
+    utils::medium::MediumId,
     BrdfLevel, MeasurementKind,
 };
 use vgn_jabr::array::{s, DArr, DyArr, DynArr};
@@ -194,7 +194,7 @@ impl MerlBrdf {
     pub fn load<P: AsRef<Path>>(filepath: P) -> Result<Self, VgonioError> {
         use std::{fs::File, io::Read};
 
-        use vgn_core::utils::medium::Medium;
+        use vgn_core::utils::medium::MediumId;
 
         if !filepath.as_ref().exists() {
             return Err(VgonioError::new(
@@ -220,43 +220,18 @@ impl MerlBrdf {
                 )
             })?;
 
-        let mut medium = Medium::Unknown;
-        // TODO: better parsing of the material type from the file name, e.g., using regex or a more
-        //       robust naming convention. The current parsing is very brittle and relies on the
-        //       exact file naming in the MERL BRDF dataset, which may not be consistent or
-        //       may change in the future.
-        for split in filename.split('-') {
-            if split == "aluminium" {
-                medium = Medium::Aluminium;
-                break;
-            }
-            if split == "copper" {
-                medium = Medium::Copper;
-                break;
-            }
-            if split == "pvc" {
-                medium = Medium::Pvc;
-                break;
-            }
-            if split == "nickel" {
-                medium = Medium::Nickel;
-                break;
-            }
-            if split == "chrome" {
-                medium = Medium::Chromium;
-                break;
-            }
-        }
-
-        if medium == Medium::Unknown {
-            return Err(VgonioError::new(
-                format!(
-                    "Can't read MERL BRDF from {:?}: unknown material!",
-                    filepath.as_ref()
-                ),
-                None,
-            ));
-        }
+        let medium = filename
+            .split('-')
+            .find_map(MediumId::try_from_name)
+            .ok_or_else(|| {
+                Err(VgonioError::new(
+                    format!(
+                        "Can't read MERL BRDF from {:?}: unknown material!",
+                        filepath.as_ref()
+                    ),
+                    None,
+                ))
+            });
 
         let mut file = File::open(filepath.as_ref())
             .map_err(|err| VgonioError::from_io_error(err, "Can't read MERL BRDF file!"))?;
@@ -365,7 +340,7 @@ impl MerlBrdf {
         Ok(Self {
             kind: MeasuredBrdfKind::Merl,
             origin: Origin::RealWorld,
-            incident_medium: Medium::Air,
+            incident_medium: MediumId::AIR,
             transmitted_medium: medium,
             params,
             spectrum,

@@ -19,7 +19,7 @@ use vgn_core::{
     math::Vec3,
     optics::{Ior, IorReg},
     units::{nm, Nanometres},
-    utils::{medium::Medium, range::StepRangeIncl},
+    utils::{medium::MediumId, range::StepRangeIncl},
     ErrorMetric, Symmetry, Weighting,
 };
 use vgn_jabr::array::{DyArr, DynArr};
@@ -66,9 +66,9 @@ impl AnyMeasuredBrdf for SyntheticMeasuredBrdf {
 
     fn spectrum(&self) -> &[Nanometres] { &self.spectrum }
 
-    fn transmitted_medium(&self) -> Medium { Medium::Air }
+    fn transmitted_medium(&self) -> MediumId { MediumId::AIR }
 
-    fn incident_medium(&self) -> Medium { Medium::Air }
+    fn incident_medium(&self) -> MediumId { MediumId::AIR }
 
     fn proxy(&self, _: &IorReg) -> BrdfProxy<'_> { unreachable!("not used in benches") }
 

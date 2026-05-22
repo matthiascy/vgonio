@@ -19,7 +19,7 @@ use vgn_core::{
     math::Sph2,
     optics::IorReg,
     units::{nm, Nanometres, Radians},
-    utils::medium::Medium,
+    utils::medium::MediumId,
     BrdfLevel, MeasurementKind,
 };
 use vgn_jabr::array::{DyArr, DynArr};
@@ -105,8 +105,8 @@ impl ClausenBrdf {
     /// and outgoing directions.
     pub fn new(
         origin: Origin,
-        incident_medium: Medium,
-        transmitted_medium: Medium,
+        incident_medium: MediumId,
+        transmitted_medium: MediumId,
         params: Box<ClausenBrdfParametrisation>,
         spectrum: DyArr<Nanometres>,
         samples: DyArr<f32, 3>,
@@ -351,8 +351,8 @@ impl ClausenBrdf {
         Ok(Self {
             kind: MeasuredBrdfKind::Clausen,
             origin: Origin::RealWorld,
-            incident_medium: Medium::Air,
-            transmitted_medium: Medium::Aluminium,
+            incident_medium: MediumId::AIR,
+            transmitted_medium: MediumId::AL,
             params,
             spectrum,
             samples,

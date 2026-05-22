@@ -7,16 +7,16 @@ use crate::{
     },
     impl_any_measured_trait, AnyMeasured, AnyMeasuredBrdf, MeasuredBrdfKind,
 };
+use std::fmt::Debug;
 #[cfg(feature = "io")]
 use std::path::Path;
-use std::{borrow::Cow, fmt::Debug};
 #[cfg(feature = "io")]
 use vgn_core::error::VgonioError;
 use vgn_core::{
     math::{compute_bicubic_spline_coefficients, Sph2, Vec3},
     optics::IorReg,
     units::{rad, Nanometres},
-    utils::medium::Medium,
+    utils::medium::MediumId,
     BrdfLevel, MeasurementKind,
 };
 use vgn_jabr::array::DyArr;
@@ -108,8 +108,8 @@ impl_any_measured_trait!(@single_level_brdf Yan18Brdf);
 impl Yan18Brdf {
     /// Creates a new BRDF from the given measured data.
     pub fn new(
-        incident_medium: Medium,
-        transmitted_medium: Medium,
+        incident_medium: MediumId,
+        transmitted_medium: MediumId,
         params: Yan18BrdfParameterisation,
         spectrum: DyArr<Nanometres>,
         samples: DyArr<f32, 3>,
@@ -228,8 +228,8 @@ impl Yan18Brdf {
     #[cfg(feature = "io")]
     pub fn load_from_exr<P: AsRef<Path>>(
         filepath: P,
-        incident_medium: Medium,
-        transmitted_medium: Medium,
+        incident_medium: MediumId,
+        transmitted_medium: MediumId,
     ) -> Result<Self, VgonioError> {
         use std::{cmp::Ordering, str::FromStr};
         use vgn_core::{math::Vec2, units::deg};

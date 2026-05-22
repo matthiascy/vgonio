@@ -12,7 +12,7 @@ use vgn_core::{
     math::{Sph2, Vec3},
     optics::IorReg,
     units::{deg, rad, Nanometres},
-    utils::{medium::Medium, range::StepRangeIncl},
+    utils::{medium::MediumId, range::StepRangeIncl},
     BrdfLevel, MeasurementKind,
 };
 use vgn_jabr::array::{DyArr, DynArr};
@@ -100,7 +100,7 @@ impl RglBrdf {
     /// * `path` - The path to the RGL BRDF data.
     /// * `medium` - The medium of matter.
     #[cfg(feature = "io")]
-    pub fn load(path: &Path, medium: Medium) -> Self {
+    pub fn load(path: &Path, medium: MediumId) -> Self {
         use crate::brdf::measured::Origin;
 
         let brdf = powitacq::BrdfData::new(path);
@@ -182,7 +182,7 @@ impl RglBrdf {
         Self {
             kind: MeasuredBrdfKind::Rgl,
             origin: Origin::RealWorld,
-            incident_medium: Medium::Vacuum,
+            incident_medium: MediumId::VACUUM,
             transmitted_medium: medium,
             params: Box::new(parameterisation),
             spectrum,
