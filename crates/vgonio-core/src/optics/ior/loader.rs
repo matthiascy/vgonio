@@ -67,14 +67,10 @@ impl IorRegLoader {
     }
 
     /// The error returned when an IOR load is attempted before the medium
-    /// identity registry has been bootstrapped.
-    fn spine_not_ready_error() -> Error {
-        Error::IoError(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "cannot load the IOR registry before medium::bootstrap() has run: the medium identity \
-             registry is the authority on which media exist",
-        ))
-    }
+    /// identity registry has been bootstrapped. A dedicated variant rather than
+    /// `IoError`: this is a lifecycle precondition, not an I/O failure, and
+    /// callers that retry on I/O errors must not retry on this.
+    fn spine_not_ready_error() -> Error { Error::SpineNotBootstrapped }
 }
 
 /// One layer's raw inputs: optional manifest text + an iterator of

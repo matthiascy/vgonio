@@ -96,7 +96,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{collections::HashMap, hash::Hash};
+    use std::collections::HashMap;
 
     fn layer(prov: Provenance, kvs: &[(&str, i32)]) -> (Provenance, HashMap<String, i32>) {
         (prov, kvs.iter().map(|(k, v)| (k.to_string(), *v)).collect())

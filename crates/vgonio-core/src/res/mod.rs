@@ -51,6 +51,14 @@ pub enum Error {
     /// Provided path is not a valid directory.
     #[error("Provided path '{0}' is not a valid directory")]
     InvalidDirectory(String),
+
+    /// A loader that depends on the medium identity registry was invoked before
+    /// `medium::bootstrap()` had run.
+    #[error(
+        "cannot load this asset before medium::bootstrap() has run: the medium identity registry \
+         is the authority on which media exist"
+    )]
+    SpineNotBootstrapped,
 }
 
 impl From<IorFileError> for Error {

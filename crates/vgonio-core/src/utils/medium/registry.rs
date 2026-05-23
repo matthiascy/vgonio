@@ -230,6 +230,12 @@ impl MediumRegistry {
             }
             let name_static: &'static str = intern(&name);
             let display_static: &'static str = intern(&parsed.display_name);
+            // `Box::leak` is bounded: production builds invoke `build` exactly once
+            // via the `OnceLock` in `medium::bootstrap`, so the leaked alias slice
+            // lives for the program's lifetime by design. Direct calls to `build`
+            // from tests do leak per call; the leak is small and bounded by test
+            // count. If a future caller needs to rebuild the registry repeatedly
+            // (hot reload, multi-tenant), this needs to switch to an arena.
             let aliases_static: &'static [&'static str] = {
                 let v: Vec<&'static str> = parsed.aliases.iter().map(|a| intern(a)).collect();
                 Box::leak(v.into_boxed_slice())

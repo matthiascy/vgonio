@@ -15,7 +15,17 @@ pub struct VgonioError {
 }
 
 impl Display for VgonioError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}, source: {}",
+            self.message,
+            self.source
+                .as_ref()
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "unknown".into())
+        )
+    }
 }
 
 // Override the default implementation of `source` to return the underlying error if it exists.

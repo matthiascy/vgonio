@@ -1109,7 +1109,7 @@ mod distance_tests {
     use vgn_core::{
         optics::{Ior, IorReg},
         units::{nm, Nanometres},
-        utils::medium::Medium,
+        utils::medium::MediumId,
         ErrorMetric, Weighting,
     };
     use vgn_jabr::array::{DyArr, DynArr};
@@ -1123,9 +1123,9 @@ mod distance_tests {
 
         fn spectrum(&self) -> &[Nanometres] { &self.spectrum }
 
-        fn transmitted_medium(&self) -> Medium { Medium::Air }
+        fn transmitted_medium(&self) -> MediumId { MediumId::AIR }
 
-        fn incident_medium(&self) -> Medium { Medium::Air }
+        fn incident_medium(&self) -> MediumId { MediumId::AIR }
 
         fn proxy(&self, _: &IorReg) -> BrdfProxy<'_> { unreachable!("not used in test helper") }
 
