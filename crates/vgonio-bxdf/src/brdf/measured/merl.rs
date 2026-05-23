@@ -226,7 +226,8 @@ impl MerlBrdf {
             .ok_or_else(|| {
                 VgonioError::new(
                     format!(
-                        "Can't read MERL BRDF from {:?}: unknown material!",
+                        "Can't read MERL BRDF from {:?}: filename does not contain a recognized \
+                         medium token!",
                         filepath.as_ref()
                     ),
                     None,
@@ -350,6 +351,179 @@ impl MerlBrdf {
 
     /// Returns the kind of the BRDF.
     pub fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use approx::assert_relative_eq;
+
+    fn make_brdf(samples: DyArr<f32, 4>) -> MerlBrdf {
+        MerlBrdf {
+            kind: MeasuredBrdfKind::Merl,
+            origin: Origin::RealWorld,
+            incident_medium: MediumId::AIR,
+            transmitted_medium: MediumId::AL,
+            params: Box::new(MerlBrdfParam::default()),
+            spectrum: DyArr::from_slice_1d(&MERL_BRDF_SPECTRUM),
+            samples,
+        }
+    }
+
+    fn empty_brdf() -> MerlBrdf {
+        let samples = DyArr::zeros([
+            MerlBrdfParam::RES_THETA_H as usize,
+            MerlBrdfParam::RES_THETA_D as usize,
+            MerlBrdfParam::RES_PHI_D as usize,
+            3,
+        ]);
+        make_brdf(samples)
+    }
+
+    #[test]
+    fn param_kind_is_half_vector() {
+        assert_eq!(MerlBrdfParam::kind(), BrdfParamKind::HalfVector);
+    }
+
+    #[test]
+    fn param_default_uses_bin_centers() {
+        let p = MerlBrdfParam::default();
+        // Zenith bins span [0, π/2] in 90 cells; bin centers are (i + 0.5) / 90 * π/2.
+        let zh = p.zenith_h.as_slice();
+        let zd = p.zenith_d.as_slice();
+        assert_eq!(zh.len(), 90);
+        assert_eq!(zd.len(), 90);
+        assert_relative_eq!(zh[0].as_f32(), Radians::HALF_PI.as_f32() * 0.5 / 90.0);
+        assert_relative_eq!(zh[89].as_f32(), Radians::HALF_PI.as_f32() * 89.5 / 90.0);
+        assert_relative_eq!(zd[45].as_f32(), Radians::HALF_PI.as_f32() * 45.5 / 90.0);
+        // Azimuth bins span [0, π] in 180 cells; bin centers are (i + 0.5) / 180 * π.
+        let ad = p.azimuth_d.as_slice();
+        assert_eq!(ad.len(), 180);
+        assert_relative_eq!(ad[0].as_f32(), Radians::PI.as_f32() * 0.5 / 180.0);
+        assert_relative_eq!(ad[179].as_f32(), Radians::PI.as_f32() * 179.5 / 180.0);
+    }
+
+    #[test]
+    fn merl_brdf_kind_method() {
+        assert_eq!(empty_brdf().kind(), MeasuredBrdfKind::Merl);
+    }
+
+    #[test]
+    fn merl_brdf_spectrum_is_bgr_ascending() {
+        let b = empty_brdf();
+        let s = b.spectrum.as_slice();
+        assert_eq!(s.len(), 3);
+        assert!(s[0] < s[1] && s[1] < s[2]);
+        assert_eq!(s[0], nm!(470.0));
+        assert_eq!(s[1], nm!(545.0));
+        assert_eq!(s[2], nm!(620.0));
+    }
+
+    #[test]
+    fn phi_d_index_within_range() {
+        let b = empty_brdf();
+        assert_eq!(b.phi_d_index(Radians::ZERO), 0);
+        assert_eq!(b.phi_d_index(Radians::HALF_PI), 90);
+        // A value just under π rounds up to 180 then clamps to 179.
+        let near_pi = Radians::PI - Radians::new(1e-4);
+        assert_eq!(b.phi_d_index(near_pi), 179);
+    }
+
+    #[test]
+    fn phi_d_index_wraps_negative_angles() {
+        // The lookup treats φ_d as isotropic on [0, π]; negatives shift by +π.
+        let b = empty_brdf();
+        assert_eq!(b.phi_d_index(-Radians::HALF_PI), b.phi_d_index(Radians::HALF_PI));
+        let q = Radians::PI * 0.25;
+        assert_eq!(b.phi_d_index(-q), b.phi_d_index(Radians::PI - q));
+    }
+
+    #[test]
+    fn phi_d_index_mirrors_angles_above_pi() {
+        // φ_d ≥ π is mirrored by −π so [π, 2π) maps back into [0, π).
+        let b = empty_brdf();
+        let above = Radians::PI + Radians::HALF_PI;
+        assert_eq!(b.phi_d_index(above), b.phi_d_index(Radians::HALF_PI));
+        assert_eq!(b.phi_d_index(Radians::PI), b.phi_d_index(Radians::ZERO));
+    }
+
+    #[test]
+    fn theta_d_index_boundaries_and_midpoint() {
+        let b = empty_brdf();
+        assert_eq!(b.theta_d_index(Radians::ZERO), 0);
+        assert_eq!(b.theta_d_index(Radians::HALF_PI * 0.5), 45);
+        // π/2 maps to bin 90 which clamps to the last valid bin (89).
+        assert_eq!(b.theta_d_index(Radians::HALF_PI), 89);
+    }
+
+    #[test]
+    fn theta_h_index_boundaries_and_monotonic() {
+        let b = empty_brdf();
+        assert_eq!(b.theta_h_index(Radians::ZERO), 0);
+        // The mapping is non-linear (square-root warping), but must be
+        // non-decreasing and stay within the valid bin range.
+        let mid = b.theta_h_index(Radians::HALF_PI * 0.5);
+        let upper = b.theta_h_index(Radians::HALF_PI);
+        assert!(mid <= upper, "monotonicity: mid={mid} upper={upper}");
+        assert!(upper <= (MerlBrdfParam::RES_THETA_H as usize) - 1);
+    }
+
+    #[test]
+    fn sample_at_zero_directions_reads_origin_cell() {
+        // wi = wo = (θ=0, φ=0) → half-vector and difference vector are both the
+        // pole, so all three lookup indices collapse to 0.
+        let mut samples = DyArr::zeros([
+            MerlBrdfParam::RES_THETA_H as usize,
+            MerlBrdfParam::RES_THETA_D as usize,
+            MerlBrdfParam::RES_PHI_D as usize,
+            3,
+        ]);
+        samples[[0, 0, 0, 0]] = 0.25;
+        samples[[0, 0, 0, 1]] = 0.5;
+        samples[[0, 0, 0, 2]] = 0.75;
+        let b = make_brdf(samples);
+        let z = Sph2::new(Radians::ZERO, Radians::ZERO);
+        assert_eq!(b.sample_at(z, z), [0.25, 0.5, 0.75]);
+    }
+
+    #[test]
+    fn sample_at_offaxis_directions_hits_expected_cell() {
+        // wi = (π/3, 0), wo = (π/6, 0):
+        //   h = ((sin60 + sin30, 0, cos60 + cos30)).normalize() = (π/4, 0)
+        //   d = rot_y(-π/4) * vi = (sin(π/12), 0, cos(π/12)) = (π/12, 0)
+        // Both vectors stay well off the pole, so φ is numerically stable.
+        // Index mapping (from the formulas in `MerlBrdf::*_index`):
+        //   θ_h = π/4 → ⌊√((π/4 · 0.5/π · 90) · 90)⌉ = ⌊√1012.5⌉ = 32
+        //   θ_d = π/12 → ⌊(π/12 · 2/π) · 90⌉ = 15
+        //   φ_d = 0 → 0
+        let mut samples = DyArr::zeros([
+            MerlBrdfParam::RES_THETA_H as usize,
+            MerlBrdfParam::RES_THETA_D as usize,
+            MerlBrdfParam::RES_PHI_D as usize,
+            3,
+        ]);
+        samples[[32, 15, 0, 0]] = 0.1;
+        samples[[32, 15, 0, 1]] = 0.2;
+        samples[[32, 15, 0, 2]] = 0.3;
+        let b = make_brdf(samples);
+        let wi = Sph2::new(Radians::PI / 3.0, Radians::ZERO);
+        let wo = Sph2::new(Radians::PI / 6.0, Radians::ZERO);
+        let s = b.sample_at(wi, wo);
+        assert_relative_eq!(s[0], 0.1);
+        assert_relative_eq!(s[1], 0.2);
+        assert_relative_eq!(s[2], 0.3);
+    }
+
+    #[cfg(feature = "io")]
+    #[test]
+    fn load_missing_file_returns_error() {
+        let bogus = std::path::PathBuf::from("/nonexistent/path/al-merl.binary");
+        let err = MerlBrdf::load(&bogus).expect_err("missing file must error");
+        assert!(
+            format!("{err:?}").contains("file not found"),
+            "unexpected error: {err:?}"
+        );
+    }
 }
 
 impl AnyMeasuredBrdf for MerlBrdf {
