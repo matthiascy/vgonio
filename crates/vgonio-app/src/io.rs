@@ -25,6 +25,8 @@ use vgn_core::{
     math,
 };
 
+pub(crate) mod legacy_medium;
+
 pub mod vgmo {
     use super::*;
     use crate::measure::{
