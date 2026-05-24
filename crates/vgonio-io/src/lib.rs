@@ -10,6 +10,7 @@ mod gen;
 pub use gen::*;
 pub mod dcel;
 pub mod surf;
+pub mod vgbsdf;
 
 pub mod subdivision;
 

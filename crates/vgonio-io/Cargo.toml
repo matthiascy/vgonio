@@ -19,7 +19,6 @@ name = "vgn_io"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-ahash = { workspace = true, optional = true }
 byteorder.workspace = true
 chrono.workspace = true
 clap.workspace = true
@@ -28,11 +27,15 @@ flate2.workspace = true
 glam.workspace = true
 log.workspace = true
 nohash-hasher.workspace = true
-pyo3 = { workspace = true, optional = true }
 rand.workspace = true
 rayon.workspace = true
 serde.workspace = true
-tobj = { workspace = true, optional = true }
+toml.workspace = true
 uuid.workspace = true
+zip.workspace = true
+
+ahash = { workspace = true, optional = true }
 embree = { workspace = true, optional = true }
-vgn_core.workspace = true
+pyo3 = { workspace = true, optional = true }
+tobj = { workspace = true, optional = true }
+vgn_core = { workspace = true, features = ["io"] }

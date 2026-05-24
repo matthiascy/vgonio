@@ -107,6 +107,7 @@ web-sys = "0.3.70"
 which = "4.4"
 winit = "~0.30"
 wgpu = { version = "22", features = ["wgsl"] }
+zip = { version = "7.2", default-features = false }
 vgn_jabr = { path = "crates/vgonio-jabr", package = "vgonio-jabr" }
 vgn_core = { path = "crates/vgonio-core", package = "vgonio-core" }
 vgn_io = { path = "crates/vgonio-io", package = "vgonio-io" }
