@@ -1,6 +1,13 @@
 //! End-to-end VGMO round-trip with different compression schemes. Writes a small BSDF
 //! measurement to a real .vgmo file and reads it back, asserting that samples
 //! + headers round-trip byte-indentical.
+//!
+//! Skipped when the `vdbg` feature is active: `BsdfMeasurement` then carries
+//! visual-debug fields (`trajectories`, `hit_points`) that the on-disk VGMO codec
+//! doesn't serialize, so the in-memory equality check is intentionally not
+//! applicable on that build.
+
+#![cfg(not(feature = "vdbg"))]
 
 use std::{
     fs::File,
