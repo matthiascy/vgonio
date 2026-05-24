@@ -548,7 +548,7 @@ impl BsdfMeasurement {
             trajectories: vec![vec![RayTrajectory::default()].into_boxed_slice(); n_wi]
                 .into_boxed_slice(),
             #[cfg(feature = "vdbg")]
-            hit_points: vec![vec![Vec3::zero()]; n_wi].into_boxed_slice(),
+            hit_points: vec![vec![Vec3::ZERO]; n_wi].into_boxed_slice(),
         };
         raw.assert_consistent(params);
 

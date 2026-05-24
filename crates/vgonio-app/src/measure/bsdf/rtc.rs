@@ -223,7 +223,7 @@ impl Debug for RayTrajectoryNode {
 ///
 /// The trajectory always starts with the ray that is spawned.
 #[cfg(feature = "vdbg")]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct RayTrajectory(pub(crate) Vec<RayTrajectoryNode>);
 
 #[cfg(feature = "vdbg")]
