@@ -74,6 +74,15 @@
 - Add LZ4 as a body compression scheme for cache/measurement files (`.vgmo`), alongside zlib and gzip
 - Fix zlib-compressed sample data being silently truncated on large payloads (the encoder was
   sync-flushed instead of finished, leaving an incomplete stream)
+- Bump `pyo3` 0.24.2 → 0.28.3 and `numpy` 0.24 → 0.28; drop the `extension-module` feature from
+  `vgonio-core` and `vgonio-io`'s optional `pyo3` deps
+    - `extension-module` is deprecated in pyo3 0.28; the "don't link libpython" decision now lives
+      in the `PYO3_BUILD_EXTENSION_MODULE` env var that `maturin >= 1.9.4` /
+      `setuptools-rust >= 1.12` set automatically during wheel builds
+    - removing the feature eliminates a workspace feature-unification footgun where
+      `--all-features` would silently suppress the libpython link for `vgn_app`, breaking the build
+    - sole API consequence: `Python::with_gil(...)` → `Python::attach(...)` (15 sites in
+      `crates/vgonio-app/src/pyplot.rs`), per pyo3 0.26's free-threading rename
 
 ## 0.3.2 - 2024-08-16
 
