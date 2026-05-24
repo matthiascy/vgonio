@@ -57,7 +57,7 @@ pub fn load_python_source_code(path: &Path) -> Result<CString, Box<dyn std::erro
 }
 
 pub fn plot_err(errs: &[f64], alpha: &[f64], n_digits: u32) -> PyResult<()> {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
             py,
             c_str!(include_str!("./pyplot/pyplot.py")),
@@ -75,7 +75,7 @@ pub fn plot_err(errs: &[f64], alpha: &[f64], n_digits: u32) -> PyResult<()> {
 }
 
 pub fn plot_per_wavelength_err(wavelengths: &[f32], alphas: &[f64], errors: &[f64], n_digits: u32) {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
             py,
             c_str!(include_str!("./pyplot/pyplot.py")),
@@ -106,7 +106,7 @@ pub fn plot_brdf_vgonio_clausen(
     meas: &ClausenBrdf,
     dense: bool,
 ) -> PyResult<()> {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
             py,
             c_str!(include_str!("./pyplot/pyplot.py")),
@@ -238,7 +238,7 @@ pub fn plot_brdf_slice(
     output_dir: Option<PathBuf>,
 ) -> PyResult<()> {
     let opposite_phi_o = (phi_o + Radians::PI).wrap_to_tau();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
             py,
             c_str!(include_str!("./pyplot/pyplot.py")),
@@ -317,7 +317,7 @@ pub fn plot_brdf_slice_in_plane(brdf: &[&VgonioBrdf], phi: Radians) -> PyResult<
         phi.prettified(),
         phi_opp.prettified()
     );
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
             py,
             c_str!(include_str!("./pyplot/pyplot.py")),
@@ -385,7 +385,7 @@ pub fn plot_ndf(
     filename: String,
     output: Option<PathBuf>,
 ) -> PyResult<()> {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
             py,
             c_str!(include_str!("./pyplot/pyplot.py")),
@@ -478,7 +478,7 @@ pub fn plot_ndf_fitting(
         fitted_tr.len(),
         "The number of NDFs must be equal to the number of fitted TR models."
     );
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
             py,
             c_str!(include_str!("./pyplot/pyplot.py")),
@@ -580,7 +580,7 @@ pub fn plot_gaf(
     labels: Vec<String>,
     save: Option<String>,
 ) -> PyResult<()> {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
             py,
             c_str!(include_str!("./pyplot/pyplot.py")),
@@ -650,7 +650,7 @@ pub fn plot_brdf_map(
     let layer_name = Text::new_or_panic(format!("θ{}.φ{}", theta_i_str, phi_i_str));
     let channel_name = Text::new_or_panic(format!("{}", lamda));
     log::debug!("layer_name: {}, channel_name: {}", layer_name, channel_name);
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         PyModule::from_code(
             py,
             c_str!(include_str!("./pyplot/tone_mapping.py")),
@@ -724,7 +724,7 @@ pub fn plot_brdf_map(
 }
 
 pub fn plot_surfaces(surfaces: &[&MicroSurface], downsample: u32, cmap: String) -> PyResult<()> {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
             py,
             c_str!(include_str!("./pyplot/pyplot.py")),
@@ -763,7 +763,7 @@ pub fn plot_brdf_3d(
     scale: f32,
 ) -> PyResult<()> {
     let wavelength_idx = brdf.spectrum.iter().position(|&x| x == wavelength).unwrap();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let fun: Py<PyAny> = PyModule::from_code(
             py,
             c_str!(include_str!("./pyplot/pyplot.py")),
@@ -841,7 +841,7 @@ impl BrdfFittingPlotter {
             .iter()
             .map(|(alpha_x, alpha_y)| MicrofacetBrdfTR::new(*alpha_x, *alpha_y))
             .collect::<Box<_>>();
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let fun: Py<PyAny> = PyModule::from_code(
                 py,
                 c_str!(include_str!("./pyplot/pyplot.py")),
@@ -1665,7 +1665,7 @@ impl BrdfFittingPlotter {
         let src_path = Path::new(&top_dir).join("src/pyplot/brdf_fitting_non_interactive.py");
         let src_code = load_python_source_code(&src_path)
             .map_err(|err| PyErr::new::<pyo3::exceptions::PyValueError, _>(err.to_string()))?;
-        let func: Py<PyAny> = Python::with_gil(|py| {
+        let func: Py<PyAny> = Python::attach(|py| {
             PyModule::from_code(
                 py,
                 src_code.as_c_str(),
@@ -1693,7 +1693,7 @@ impl BrdfFittingPlotter {
         // MSE of residuals per incident angle
         let mut mmaps = DynArr::<f32>::zeros(&[n_spectrum, i_count]);
 
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let i_thetas = PyArray::from_slice(py, &proxy.i_thetas.as_slice());
             let i_phis = PyArray::from_slice(py, &proxy.i_phis.as_slice());
             let (o_thetas, o_phis, offsets) = match &proxy.o_dirs {
@@ -1853,7 +1853,7 @@ impl BrdfFittingPlotter {
 
         // Plot the BRDF slice with the fitted model
         log::info!("Plotting BRDF fitting slice...");
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let func: Py<PyAny> = PyModule::from_code(
                 py,
                 c_str!(include_str!("./pyplot/pyplot.py")),

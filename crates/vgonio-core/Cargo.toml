@@ -52,7 +52,7 @@ toml.workspace = true
 static_assertions.workspace = true
 uuid.workspace = true
 winit = { workspace = true, optional = true }
-pyo3 = { workspace = true, optional = true, features = ["extension-module"] }
+pyo3 = { workspace = true, optional = true }
 
 # `vgn_core::cli` is only available under the `cli` feature; skip this test
 # target entirely when the feature is off instead of failing to compile.
