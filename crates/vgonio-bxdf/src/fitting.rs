@@ -361,6 +361,7 @@ pub mod brdf {
             max_theta_i: Option<Radians>,
             max_theta_o: Option<Radians>,
         ) -> FittingReport<Self::Model> {
+            self.assert_incident_is_dielectric("BrdfProxy::nllsq_fit");
             let cpu_count = (std::thread::available_parallelism().unwrap().get() / 2).max(1);
             let tasks = init_microfacet_brdf_models(initial, target, symmetry);
             let tasks_per_cpu = tasks.len().div_ceil(cpu_count);
@@ -462,6 +463,7 @@ pub mod brdf {
             #[cfg(feature = "cuda")] on_gpu: bool,
             alpha: Option<Roughness>, // TODO: use in isotropic case
         ) -> FittingReport<Self::Model> {
+            self.assert_incident_is_dielectric("BrdfProxy::brute_fit");
             log::debug!("start brute force fitting");
             #[cfg(not(feature = "cuda"))]
             let cpu_count = ((std::thread::available_parallelism().unwrap().get()) / 2).max(1);

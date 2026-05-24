@@ -221,6 +221,37 @@ impl<'a> BrdfProxy<'a> {
     /// Returns the refractive indices for the transmitted medium.
     pub fn iors_t(&self) -> &[Ior] { &self.iors_t }
 
+    /// Panics with a clear, domain-specific message if any incident IOR is
+    /// classified as a conductor. The Fresnel dispatch in
+    /// `vgn_core::optics::fresnel::reflectance` only implements the
+    /// dielectric → dielectric and dielectric → conductor paths; the
+    /// conductor-incident cases would otherwise hit `unimplemented!()` deep
+    /// in the call stack with no context.
+    ///
+    /// `op` is included in the panic message so the user knows which fit
+    /// entry point rejected the proxy (e.g. `"BrdfProxy::brute_fit"`).
+    #[track_caller]
+    pub fn assert_incident_is_dielectric(&self, op: &str) {
+        if let Some((idx, ior)) = self
+            .iors_i
+            .iter()
+            .enumerate()
+            .find(|(_, i)| i.is_conductor())
+        {
+            panic!(
+                "{op}: incident medium IOR at wavelength index {idx} (λ ≈ {:.1} nm) is a \
+                 conductor (η = {}, κ = {}). The Fresnel dispatch in the BRDF fitting pipeline \
+                 only supports dielectric incident media (e.g. air, water, glass). Check the \
+                 proxy's `incident_medium` and the corresponding `IorReg` dataset; conductor \
+                 incident media require the conductor→x Fresnel paths, which are not yet \
+                 implemented.",
+                self.spectrum.get(idx).map(|nm| nm.value()).unwrap_or(f32::NAN),
+                ior.eta,
+                ior.k,
+            );
+        }
+    }
+
     /// Returns single wavelength proxy.
     pub fn per_wavelength(&'a self, idx: usize) -> BrdfProxy<'a> {
         assert!(

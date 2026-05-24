@@ -37,6 +37,21 @@ pub struct Ior {
     pub k: f32,
 }
 
+/// Threshold below which the extinction coefficient `κ` is considered
+/// negligible and the material is treated as a dielectric (real-valued
+/// Fresnel formula). Chosen conservatively: typical "transparent" polymers
+/// (PVC, PMMA, PE) have `κ ≲ 10⁻³` across the visible band, while metals
+/// have `κ` in the units. Materials with `κ` in the [10⁻³, 0.5] band do
+/// exist (lightly absorbing tinted glass, weakly conductive films) and take
+/// the complex-Fresnel "conductor" path - that formula reduces to the
+/// dielectric one as `κ → 0`, so the result is correct either way; the
+/// threshold only controls which code path runs.
+///
+/// Bumped from `f32::EPSILON` (≈ 1.19 × 10⁻⁷) to `1e-3` after
+/// the PVC dataset import surfaced that the previous threshold misclassified
+/// essentially dielectric polymers as conductors.
+pub const DIELECTRIC_K_THRESHOLD: f32 = 1e-3;
+
 impl Ior {
     /// Creates a new index of refraction for insulator material.
     pub fn new_dielectric(eta: f32) -> Ior { Ior { eta, k: 0.0 } }
@@ -44,10 +59,13 @@ impl Ior {
     /// Creates a new index of refraction for conductor material.
     pub fn new_conductor(eta: f32, k: f32) -> Ior { Ior { eta, k } }
 
-    /// Checks whether the refractive index represents insulator material.
-    pub fn is_dielectric(&self) -> bool { (self.k - 0.0).abs() < f32::EPSILON }
+    /// Returns `true` if this IOR is treated as a dielectric, i.e.
+    /// `|κ| < DIELECTRIC_K_THRESHOLD`. See [`DIELECTRIC_K_THRESHOLD`] for the
+    /// rationale on the chosen value.
+    pub fn is_dielectric(&self) -> bool { self.k.abs() < DIELECTRIC_K_THRESHOLD }
 
-    /// Checks whether the refractive index represents conductor material.
+    /// Returns `true` if this IOR is treated as a conductor, i.e.
+    /// `|κ| ≥ DIELECTRIC_K_THRESHOLD`. See [`DIELECTRIC_K_THRESHOLD`].
     pub fn is_conductor(&self) -> bool { !self.is_dielectric() }
 }
 
