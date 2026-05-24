@@ -98,16 +98,6 @@ pub fn run(config: Config) -> Result<(), VgonioError> {
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    if medium::registry().is_none() {
-        log::info!("Bootstrapping medium registry...");
-        // let user_ior_path = config.user_data_dir().map(|dir| dir.join("ior"));
-        let user_ior_path = None; // TODO: re-enable system datafiles after we have a better strategy for managing them
-        let sys_ior_path = Some(config.sys_data_dir().join("ior"));
-        medium::bootstrap(sys_ior_path.as_deref(), user_ior_path).map_err(|e| {
-            VgonioError::new("Failed to bootstrap medium registry", Some(Box::new(e)))
-        })?;
-    }
-
     let mut vgonio = pollster::block_on(VgonioGuiApp::new(config, window.clone(), &event_loop))?;
 
     let mut last_frame_time = Instant::now();

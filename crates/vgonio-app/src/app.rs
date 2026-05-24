@@ -1,6 +1,10 @@
 use args::CliArgs;
 use std::io::IsTerminal;
-use vgn_core::{cli as core_cli, cli::SilentSink, error::VgonioError};
+use vgn_core::{
+    cli::{self as core_cli, SilentSink},
+    error::VgonioError,
+    utils::medium,
+};
 
 pub(crate) mod args;
 
@@ -72,6 +76,19 @@ pub fn run() -> Result<(), VgonioError> {
     core_cli::setup_logging(timestamp, args.log_level, &filters);
 
     let config = vgn_core::config::Config::load_config(args.config.as_deref())?;
+
+    // Bootstrap the medium registry before any IOR / measurement code runs.
+    // Baseline media ship embedded (`include_str!`-ed builtin.toml); only the
+    // system and user `media.toml` overrides are read from disk. No repo-root
+    // discovery.
+    if medium::registry().is_none() {
+        log::info!("Bootstrapping medium registry...");
+        let sys_media = Some(config.sys_data_dir().join("media.toml"));
+        let user_media = config.user_data_dir().map(|dir| dir.join("media.toml"));
+        medium::bootstrap(sys_media.as_deref(), user_media.as_deref()).map_err(|e| {
+            VgonioError::new("Failed to bootstrap medium registry", Some(Box::new(e)))
+        })?;
+    }
 
     match args.command {
         None => gui::run(config),
