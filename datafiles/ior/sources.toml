@@ -27,3 +27,24 @@ medium = "cu"
 default = true
 path = "main/Cu/nk/McPeak.yml"
 verified = true
+
+[[dataset]]
+file = "ni_Johnson1974.ior.ron"
+medium = "ni"
+default = true
+path = "main/Ni/nk/Johnson.yml"
+verified = true
+
+[[dataset]]
+file = "cr_Johnson1974.ior.ron"
+medium = "cr"
+default = true
+path = "main/Cr/nk/Johnson.yml"
+verified = true
+
+[[dataset]]
+file = "pvc_Zhang2020.ior.ron"
+medium = "pvc"
+default = true
+path = "organic/(C2H3Cl)n - polyvinyl chloride/nk/Zhang.yml"
+verified = true

@@ -61,6 +61,10 @@ name = "test_cli"
 path = "tests/test_cli.rs"
 required-features = ["cli"]
 
+[[example]]
+name = "add_ior"
+required-features = ["cli"]
+
 [[bench]]
 name = "compression_schemes"
 harness = false
