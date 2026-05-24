@@ -29,16 +29,19 @@ pub(crate) mod legacy_medium;
 
 pub mod vgmo {
     use super::*;
-    use crate::measure::{
-        bsdf::{
-            emitter::EmitterParams,
-            receiver::{BounceAndEnergy, ReceiverParams},
-            BsdfKind, RawBsdfMeasurement, SingleBsdfMeasurementStats,
-        },
-        mfd::MeasuredSdfData,
-        params::{
-            BsdfMeasurementParams, GafMeasurementParams, NdfMeasurementMode, NdfMeasurementParams,
-            SdfMeasurementParams, SimulationKind,
+    use crate::{
+        io::legacy_medium::{self, LegacySymbolError},
+        measure::{
+            bsdf::{
+                emitter::EmitterParams,
+                receiver::{BounceAndEnergy, ReceiverParams},
+                BsdfKind, RawBsdfMeasurement, SingleBsdfMeasurementStats,
+            },
+            mfd::MeasuredSdfData,
+            params::{
+                BsdfMeasurementParams, GafMeasurementParams, NdfMeasurementMode,
+                NdfMeasurementParams, SdfMeasurementParams, SimulationKind,
+            },
         },
     };
     use std::{
@@ -719,8 +722,10 @@ pub mod vgmo {
                     let mut buf = [0u8; 11];
                     reader.read_exact(&mut buf)?;
                     let kind = BsdfKind::from(buf[0]);
-                    let incident_medium = read_legacy_medium_field(&buf[1..4])?;
-                    let transmitted_medium = read_legacy_medium_field(&buf[4..7])?;
+                    let incident_medium =
+                        read_legacy_medium_field(&<[u8; 3]>::try_from(&buf[1..4]).unwrap())?;
+                    let transmitted_medium =
+                        read_legacy_medium_field(&<[u8; 3]>::try_from(&buf[4..7]).unwrap())?;
                     let sim_kind = SimulationKind::try_from(buf[7]).map_err(|e| {
                         std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
@@ -784,8 +789,14 @@ pub mod vgmo {
             };
             let mut buf = vec![0u8; buf_size].into_boxed_slice();
             buf[0] = self.kind as u8;
-            write_legacy_medium_field(self.incident_medium, &mut buf[1..4]);
-            write_legacy_medium_field(self.transmitted_medium, &mut buf[4..7]);
+            vgmo::write_legacy_medium_field(
+                self.incident_medium,
+                <&mut [u8; 3]>::try_from(&mut buf[1..4]).unwrap(),
+            )?;
+            vgmo::write_legacy_medium_field(
+                self.transmitted_medium,
+                <&mut [u8; 3]>::try_from(&mut buf[4..7]).unwrap(),
+            )?;
             buf[7] = self.sim_kind.as_u8();
             buf[8] = self.fresnel as u8;
             buf[9] = 0; // padding, reserved for num receivers
@@ -1517,23 +1528,45 @@ pub mod vgmo {
 
     // TEMP: filled in later (legacy BSDF medium codec). Calls here panic at
     // runtime, the workspace compiles, but BSDF read/write tests will fail.
-    fn write_legacy_medium_field(_mid: MediumId, _dst: &mut [u8]) -> std::io::Result<()> {
-        unimplemented!("medium-plan-task: legacy BSDF medium codec")
+    pub(super) fn write_legacy_medium_field(
+        mid: MediumId,
+        dst: &mut [u8; 3],
+    ) -> std::io::Result<()> {
+        legacy_medium::legacy_symbol_for_canonical_name(mid.name(), dst)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))
     }
-    fn read_legacy_medium_field(_src: &[u8]) -> std::io::Result<MediumId> {
-        unimplemented!("medium-plan-task: legacy BSDF medium codec")
+
+    pub(super) fn read_legacy_medium_field(src: &[u8; 3]) -> std::io::Result<MediumId> {
+        let name = legacy_medium::canonical_name_for_legacy_symbol(src).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                LegacySymbolError::UnknownSymbol(*src).to_string(),
+            )
+        })?;
+        MediumId::try_from_name(name).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "legacy medium symbol mapped to {name:?} but registry has no entry — \
+                     bootstrap not called or builtin.toml corrupted"
+                ),
+            )
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::measure::{
-        bsdf::{
-            emitter::EmitterParams,
-            receiver::{BounceAndEnergy, ReceiverParams},
-            BsdfKind, BsdfMeasurement, RawBsdfMeasurement, SingleBsdfMeasurementStats,
+    use crate::{
+        io::vgmo,
+        measure::{
+            bsdf::{
+                emitter::EmitterParams,
+                receiver::{BounceAndEnergy, ReceiverParams},
+                BsdfKind, BsdfMeasurement, RawBsdfMeasurement, SingleBsdfMeasurementStats,
+            },
+            params::{BsdfMeasurementParams, SimulationKind},
         },
-        params::{BsdfMeasurementParams, SimulationKind},
     };
     use std::{
         collections::HashMap,
@@ -1548,7 +1581,7 @@ mod tests {
         math::Sph2,
         units::{nm, rad, Rads},
         utils::{
-            medium::MediumId,
+            medium::{self, MediumId},
             partition::{PartitionScheme, SphericalDomain, SphericalPartition},
             range::StepRangeIncl,
         },
@@ -1559,6 +1592,8 @@ mod tests {
 
     #[test]
     fn test_bsdf_measurement_params() {
+        let _ = medium::bootstrap(None, None);
+
         let params = BsdfMeasurementParams {
             kind: BsdfKind::Brdf,
             incident_medium: MediumId::VACUUM,
@@ -1928,6 +1963,25 @@ mod tests {
                 "BSDFs data mismatch under compression {:?}",
                 compression
             );
+        }
+    }
+
+    #[test]
+    fn legacy_medium_field_round_trips_all_seven() {
+        let _ = vgn_core::utils::medium::bootstrap(None, None);
+        for mid in [
+            MediumId::VACUUM,
+            MediumId::AIR,
+            MediumId::AL,
+            MediumId::CU,
+            MediumId::NI,
+            MediumId::PVC,
+            MediumId::CR,
+        ] {
+            let mut buf = [0u8; 3];
+            vgmo::write_legacy_medium_field(mid, &mut buf).unwrap();
+            let parsed = vgmo::read_legacy_medium_field(&buf).unwrap();
+            assert_eq!(parsed, mid);
         }
     }
 }
