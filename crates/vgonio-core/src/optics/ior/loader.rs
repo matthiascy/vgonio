@@ -8,7 +8,7 @@ use super::IorReg;
 use crate::{
     optics::{IorDataset, ManifestDto},
     res::{Asset, AssetLoader, AssetTypeId, Error},
-    utils::medium::{merge_layers, MediumId, MergePolicy, Provenance},
+    utils::medium::{self, merge_layers, MediumId, MergePolicy, Provenance},
 };
 use std::{
     collections::HashMap,
@@ -310,6 +310,22 @@ impl IorRegLoader {
             // dirs configured), but almost always a misconfiguration.
             log::warn!("IOR registry is empty: no embedded baseline and no sys/user datasets");
         }
+
+        // Invariant: every medium declared in the baseline identity registry
+        // (`builtin.toml`) must have an IOR dataset. Vacuum is mathematically
+        // privileged (η=1, κ=0 at every λ) and never needs one. System/user
+        // media don't have to be IOR-covered — they may be identity-only.
+        if let Some(mreg) = medium::registry() {
+            for entry in mreg.iter() {
+                if entry.provenance != Provenance::Builtin || entry.id == MediumId::VACUUM {
+                    continue;
+                }
+                if !reg.0.contains_key(&entry.id) {
+                    return Err(Error::MissingBuiltinIor(entry.id.name().to_string()));
+                }
+            }
+        }
+
         log::debug!("Loaded IOR registry: {} datasets", reg.0.len());
         Ok(reg)
     }

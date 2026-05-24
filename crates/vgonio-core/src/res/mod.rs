@@ -59,6 +59,17 @@ pub enum Error {
          is the authority on which media exist"
     )]
     SpineNotBootstrapped,
+
+    /// A medium declared in the built-in identity registry (`builtin.toml`) has no
+    /// IOR dataset in any layer. The IOR registry must cover every baseline
+    /// medium — Vacuum is the sole exception (it's mathematically privileged and
+    /// never needs a dataset).
+    #[error(
+        "built-in medium {0:?} has no IOR dataset in the embedded/system/user layers. \
+         Add `datafiles/ior/{0}_<source>.ior.ron` and a matching `sources.toml` entry, \
+         or remove the medium from `crates/vgonio-core/src/utils/medium/builtin.toml`."
+    )]
+    MissingBuiltinIor(String),
 }
 
 impl From<IorFileError> for Error {
