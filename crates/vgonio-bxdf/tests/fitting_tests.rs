@@ -1,5 +1,7 @@
 //! Integration tests for BRDF fitting with synthetic proxy data.
 
+mod common;
+
 use rand::{Rng, SeedableRng};
 use std::borrow::Cow;
 use vgn_bxdf::{
@@ -158,6 +160,7 @@ fn brute_fit(
 
 #[test]
 fn test_brute_force_fitting_recovers_known_isotropic_parameters() {
+    common::init_test_registry();
     let true_alpha = 0.25;
     let proxy = make_proxy(true_alpha, true_alpha, &[nm!(550.0)]);
     let [ax, ay] = brute_fit(
@@ -186,6 +189,7 @@ fn test_brute_force_fitting_recovers_known_isotropic_parameters() {
 
 #[test]
 fn test_fitting_symmetry_detection() {
+    common::init_test_registry();
     let iso_proxy = make_proxy(0.2, 0.2, &[nm!(550.0)]);
     let [iso_x, iso_y] = brute_fit(
         &iso_proxy,
@@ -221,6 +225,7 @@ fn test_fitting_symmetry_detection() {
 
 #[test]
 fn test_fitting_error_metrics() {
+    common::init_test_registry();
     let proxy = make_proxy(0.27, 0.27, &[nm!(550.0)]);
     let mse = brute_fit(
         &proxy,
@@ -247,6 +252,7 @@ fn test_fitting_error_metrics() {
 
 #[test]
 fn test_per_wavelength_fitting_consistency() {
+    common::init_test_registry();
     let proxy = make_proxy(0.3, 0.3, &[nm!(450.0), nm!(550.0), nm!(650.0)]);
     let mut alphas = Vec::new();
     for idx in 0..proxy.spectrum.len() {
@@ -270,6 +276,7 @@ fn test_per_wavelength_fitting_consistency() {
 
 #[test]
 fn test_fitting_with_noise() {
+    common::init_test_registry();
     let clean = make_proxy(0.24, 0.24, &[nm!(550.0)]);
     let mut noisy_samples = clean.samples().clone();
     let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(42);
@@ -304,6 +311,7 @@ fn test_fitting_with_noise() {
 
 #[test]
 fn test_fitting_bounds_checking() {
+    common::init_test_registry();
     let proxy = make_proxy(0.01, 0.99, &[nm!(550.0)]);
     let [ax, ay] = brute_fit(
         &proxy,
@@ -328,6 +336,7 @@ fn test_fitting_bounds_checking() {
 
 #[test]
 fn test_weighting_schemes() {
+    common::init_test_registry();
     let proxy = make_proxy(0.31, 0.31, &[nm!(550.0)]);
     let none = brute_fit(
         &proxy,
@@ -355,6 +364,7 @@ fn test_weighting_schemes() {
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cpu_gpu_consistency() {
+    common::init_test_registry();
     if std::env::var("RUN_CUDA_TESTS").is_err() {
         eprintln!("Skipping CUDA fitting consistency test. Set RUN_CUDA_TESTS=1 to run.");
         return;
@@ -392,6 +402,7 @@ fn test_cpu_gpu_consistency() {
 
 #[test]
 fn test_theta_limit_filtering() {
+    common::init_test_registry();
     let proxy = make_proxy(0.25, 0.25, &[nm!(550.0)]);
     let n_full = proxy.n_filtered_samples(None, None);
     let n_limited = proxy.n_filtered_samples(

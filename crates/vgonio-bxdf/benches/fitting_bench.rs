@@ -4,8 +4,19 @@
 
 extern crate test;
 
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::OnceLock};
 use test::{black_box, Bencher};
+
+static INIT: OnceLock<()> = OnceLock::new();
+
+/// Bootstrap the process-wide medium registry exactly once before any bench
+/// runs. Cargo bench shares a process across benchmarks, so a single
+/// `OnceLock` is sufficient.
+fn init_bench_registry() {
+    INIT.get_or_init(|| {
+        let _ = vgn_core::utils::medium::bootstrap(None, None);
+    });
+}
 use vgn_bxdf::{
     brdf::{analytical::microfacet::MicrofacetBrdfTR, measured::MeasuredBrdfKind},
     distro::MicrofacetDistroKind,
@@ -241,6 +252,7 @@ fn brute_fit_anisotropic(proxy: &BrdfProxy, precision: u32) -> [f64; 2] {
 
 #[bench]
 fn bench_generate_analytical_proxy_small(b: &mut Bencher) {
+    init_bench_registry();
     let measured = make_proxy(0.25, 0.25, &[nm!(550.0)], SHAPE_SMALL);
     let model = MicrofacetBrdfTR::new(0.27, 0.27);
     b.bytes = proxy_bytes(&measured);
@@ -252,6 +264,7 @@ fn bench_generate_analytical_proxy_small(b: &mut Bencher) {
 
 #[bench]
 fn bench_generate_analytical_proxy_medium(b: &mut Bencher) {
+    init_bench_registry();
     let measured = make_proxy(
         0.25,
         0.25,
@@ -268,6 +281,7 @@ fn bench_generate_analytical_proxy_medium(b: &mut Bencher) {
 
 #[bench]
 fn bench_generate_analytical_proxy_large(b: &mut Bencher) {
+    init_bench_registry();
     let measured = make_proxy(
         0.25,
         0.25,
@@ -284,6 +298,7 @@ fn bench_generate_analytical_proxy_large(b: &mut Bencher) {
 
 #[bench]
 fn bench_proxy_distance_mse_small(b: &mut Bencher) {
+    init_bench_registry();
     let measured = make_proxy(0.25, 0.25, &[nm!(550.0)], SHAPE_SMALL);
     let model = MicrofacetBrdfTR::new(0.27, 0.27);
     let generated = measured.generate_analytical(&model);
@@ -293,6 +308,7 @@ fn bench_proxy_distance_mse_small(b: &mut Bencher) {
 
 #[bench]
 fn bench_proxy_distance_mse_medium(b: &mut Bencher) {
+    init_bench_registry();
     let measured = make_proxy(
         0.25,
         0.25,
@@ -307,6 +323,7 @@ fn bench_proxy_distance_mse_medium(b: &mut Bencher) {
 
 #[bench]
 fn bench_proxy_distance_mse_large(b: &mut Bencher) {
+    init_bench_registry();
     let measured = make_proxy(
         0.25,
         0.25,
@@ -321,6 +338,7 @@ fn bench_proxy_distance_mse_large(b: &mut Bencher) {
 
 #[bench]
 fn bench_brute_force_isotropic_medium(b: &mut Bencher) {
+    init_bench_registry();
     let measured = make_proxy(0.25, 0.25, &[nm!(550.0)], SHAPE_MEDIUM);
     b.bytes = proxy_bytes(&measured);
     b.iter(|| black_box(brute_fit_isotropic(&measured, 2)));
@@ -328,6 +346,7 @@ fn bench_brute_force_isotropic_medium(b: &mut Bencher) {
 
 #[bench]
 fn bench_brute_force_isotropic_large(b: &mut Bencher) {
+    init_bench_registry();
     let measured = make_proxy(0.25, 0.25, &[nm!(550.0)], SHAPE_LARGE);
     b.bytes = proxy_bytes(&measured);
     b.iter(|| black_box(brute_fit_isotropic(&measured, 2)));
@@ -335,6 +354,7 @@ fn bench_brute_force_isotropic_large(b: &mut Bencher) {
 
 #[bench]
 fn bench_brute_force_anisotropic_windowed_medium(b: &mut Bencher) {
+    init_bench_registry();
     let measured = make_proxy(0.15, 0.45, &[nm!(550.0)], SHAPE_MEDIUM);
     b.bytes = proxy_bytes(&measured);
     b.iter(|| black_box(brute_fit_anisotropic(&measured, 1)));
@@ -342,6 +362,7 @@ fn bench_brute_force_anisotropic_windowed_medium(b: &mut Bencher) {
 
 #[bench]
 fn bench_brute_force_anisotropic_windowed_large(b: &mut Bencher) {
+    init_bench_registry();
     let measured = make_proxy(0.15, 0.45, &[nm!(550.0)], SHAPE_LARGE);
     b.bytes = proxy_bytes(&measured);
     b.iter(|| black_box(brute_fit_anisotropic(&measured, 1)));
