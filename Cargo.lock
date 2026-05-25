@@ -4016,6 +4016,7 @@ dependencies = [
  "vgonio-uxgx",
  "wgpu",
  "winit",
+ "zip",
 ]
 
 [[package]]
@@ -4039,6 +4040,7 @@ dependencies = [
  "serde-pickle",
  "serde_json",
  "vgonio-core",
+ "vgonio-io",
  "vgonio-jabr",
  "vgonio-powitacq",
 ]

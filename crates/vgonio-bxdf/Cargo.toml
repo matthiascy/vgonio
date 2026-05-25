@@ -41,6 +41,7 @@ serde_json = { workspace = true, optional = true }
 serde-pickle = { workspace = true, optional = true }
 powitacq = { package = "vgonio-powitacq", path = "../vgonio-powitacq" }
 vgn_core.workspace = true
+vgn_io.workspace = true
 vgn_jabr.workspace = true
 
 # `vgn_bxdf::fitting` is only available under the `fitting` feature; skip these

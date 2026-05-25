@@ -150,6 +150,106 @@ impl VgonioBrdf {
         }
     }
 
+    /// Builds per-layer buffers (one per incident direction) suitable for
+    /// `vgn_core::utils::partition::write_hemisphere_exr` / `VgbsdfWriter::write_level`.
+    /// Returns owned `Vec<Vec<f32>>` of length `n_wi`, each inner vec of length
+    /// `n_spectrum * n_patches` in [channel, patch] row-major order.
+    ///
+    /// Callers wrap these into `HemisphereLayer { samples: &buf[i] }` with the layer
+    /// names from `vgbsdf_layer_names()` and channel names from
+    /// `vgbsdf_channel_names()`.
+    #[cfg(feature = "io")]
+    pub fn vgbsdf_layer_buffers(&self) -> Vec<Vec<f32>> {
+        let n_wi = self.params.incoming.len();
+        let n_spectrum = self.spectrum.len();
+        let n_patches = self.params.outgoing.n_patches();
+
+        let mut out: Vec<Vec<f32>> = Vec::with_capacity(n_wi);
+        for wi in 0..n_wi {
+            let mut buf = vec![0.0_f32; n_spectrum * n_patches];
+            for p in 0..n_patches {
+                for ch in 0..n_spectrum {
+                    // VgonioBrdf::samples is row-major [wi, patch, λ] per existing
+                    // BrdfSnapshotIterator at vgonio.rs:254-271. Re-pack to
+                    // [channel, patch] for HemisphereLayer.
+                    let src = wi * n_patches * n_spectrum + p * n_spectrum + ch;
+                    let dst = ch * n_patches + p;
+                    buf[dst] = self.samples.as_slice()[src];
+                }
+            }
+            out.push(buf);
+        }
+        out
+    }
+
+    /// Channel names for one EXR layer - one per wavelength, matching
+    /// VGONIO Conventions v1.
+    #[cfg(feature = "io")]
+    pub fn vgbsdf_channel_names(&self) -> Vec<String> {
+        use vgn_io::vgbsdf::conventions::channel_name_for_wavelength_nm;
+        self.spectrum
+            .as_slice()
+            .iter()
+            .map(|w| channel_name_for_wavelength_nm(w.as_f32()))
+            .collect()
+    }
+
+    /// Layer names - one per incident direction, formatted `θ{deg}.φ{deg}` per
+    /// the conventions.
+    #[cfg(feature = "io")]
+    pub fn vgbsdf_layer_names(&self) -> Vec<String> {
+        use vgn_io::vgbsdf::conventions::layer_name_for_wi;
+        self.params
+            .incoming
+            .as_slice()
+            .iter()
+            .map(|wi| {
+                layer_name_for_wi(wi.theta.in_degrees().as_f32(), wi.phi.in_degrees().as_f32())
+            })
+            .collect()
+    }
+
+    /// Incident-grid TOML payload - measurement-order (θ, φ) positions.
+    #[cfg(feature = "io")]
+    pub fn vgbsdf_incident_grid(&self) -> vgn_io::vgbsdf::IncidentGridToml {
+        vgn_io::vgbsdf::IncidentGridToml {
+            positions: self
+                .params
+                .incoming
+                .as_slice()
+                .iter()
+                .map(|wi| [wi.theta.as_f32(), wi.phi.as_f32()])
+                .collect(),
+        }
+    }
+
+    /// Spectrum TOML payload - wavelengths in nm, in measurement (channel) order.
+    #[cfg(feature = "io")]
+    pub fn vgbsdf_spectrum(&self) -> vgn_io::vgbsdf::SpectrumToml {
+        vgn_io::vgbsdf::SpectrumToml::nm(
+            self.spectrum
+                .as_slice()
+                .iter()
+                .map(|w| w.as_f32())
+                .collect(),
+        )
+    }
+
+    /// θ-φ output-grid dimensions derived from the partition.
+    #[cfg(feature = "io")]
+    pub fn vgbsdf_thetaphi_dims(&self) -> (u32, u32) {
+        let p = &self.params.outgoing;
+        let n_phi = p
+            .rings
+            .iter()
+            .map(|r| r.patch_count as u32)
+            .max()
+            .unwrap_or(1);
+        let n_theta = p.rings.len() as u32;
+        (n_phi, n_theta)
+    }
+
+    // TODO: remove or keep private
     /// Writes the BRDF data to an EXR file.
     #[cfg(feature = "io")]
     pub fn write_as_exr(

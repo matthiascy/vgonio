@@ -359,6 +359,7 @@ impl BsdfMeasurement {
     /// Returns the brdf at the given level.
     pub fn brdf_at(&self, level: BrdfLevel) -> Option<&VgonioBrdf> { self.bsdfs.get(&level) }
 
+    // TODO: remove or keep private
     /// Writes the BSDF data to images in exr format.
     ///
     /// Only BSDF data is written to the images. The full measurement data is
@@ -384,6 +385,108 @@ impl BsdfMeasurement {
             bsdf.write_as_exr(&filepath.with_file_name(filename), timestamp, resolution)?;
         }
         Ok(())
+    }
+
+    /// Writes the measurement as a single `.vgbsdf` archive containing one
+    /// subdirectory per `BrdfLevel` (`l0/`, `l1/`, `l1+/`, …) per the spec.
+    ///
+    /// Each level subdirectory carries three EXRs (`disc.exr`, `thetaphi.exr`,
+    /// `patches.exr`); each EXR is multi-layer over incident direction.
+    /// Manifest, partition, incident-grid, and spectrum metadata live at the
+    /// container root.
+    pub fn write_as_vgbsdf(
+        &self,
+        filepath: &Path,
+        timestamp: &chrono::DateTime<chrono::Local>,
+        disc_res: u32,
+    ) -> Result<(), VgonioError> {
+        use vgn_core::utils::partition::HemisphereLayer;
+        use vgn_io::vgbsdf::{
+            manifest::{ArchiveBlock, BsdfBlock, Manifest, MaterialBlock, VgonioBlock},
+            OutputKind, VgbsdfWriter,
+        };
+
+        // Establish the canonical (partition, spectrum, incident-grid). Every level
+        // shares them in practice (they come from the same simulation params), so
+        // pick from any level; pin a reference one for the loop.
+        let any_bsdf = self.bsdfs.values().next().ok_or_else(|| {
+            VgonioError::new("MeasuredBsdf::write_as_vgbsdf: no levels present", None)
+        })?;
+        let partition = any_bsdf.params.outgoing.clone();
+        let incident_grid = any_bsdf.vgbsdf_incident_grid();
+        let spectrum = any_bsdf.vgbsdf_spectrum();
+        let thetaphi = any_bsdf.vgbsdf_thetaphi_dims();
+
+        // BrdfLevel directory naming — uses the existing Display impl
+        // (crates/vgonio-core/src/lib.rs:363-371) which renders L0..L16 as
+        // "l0".."l16" and L1Plus as "l1+".
+        let level_dirs: Vec<(String, &VgonioBrdf)> = {
+            let mut v: Vec<_> = self
+                .bsdfs
+                .iter()
+                .map(|(level, bsdf)| (format!("{}", level), bsdf))
+                .collect();
+            // Stable, sorted output for reproducible archive bytes.
+            v.sort_by(|a, b| a.0.cmp(&b.0));
+            v
+        };
+
+        // MediumId::name() returns the canonical name (e.g. "al"), NOT the
+        // display name (e.g. "Aluminium") — see MEDIUM_DATA_DRIVEN_SPEC.md:110.
+        // The archive's material identity MUST be canonical so downstream
+        // consumers and re-opens via the medium registry agree on identity.
+        let manifest = Manifest {
+            vgonio: VgonioBlock {
+                version: env!("CARGO_PKG_VERSION").into(),
+                conventions: "v1".into(),
+            },
+            archive: ArchiveBlock {
+                created: vgn_core::utils::iso_timestamp_from_datetime(timestamp),
+                kind: "bsdf".into(),
+                description: None,
+            },
+            material: Some(MaterialBlock {
+                incident_medium: self.params.incident_medium.name().into(),
+                transmitted_medium: self.params.transmitted_medium.name().into(),
+            }),
+            bsdf: Some(BsdfBlock {
+                levels: level_dirs.iter().map(|(d, _)| d.clone()).collect(),
+                encodings: vec!["disc".into(), "thetaphi".into(), "patches".into()],
+            }),
+            provenance: None,
+        };
+
+        let mut writer = VgbsdfWriter::create(filepath)?;
+        writer.write_metadata(&manifest, &partition, Some(&incident_grid), &spectrum)?;
+
+        for (level_dir, bsdf) in &level_dirs {
+            let buffers = bsdf.vgbsdf_layer_buffers();
+            let layer_names = bsdf.vgbsdf_layer_names();
+            let channel_names = bsdf.vgbsdf_channel_names();
+            debug_assert_eq!(buffers.len(), layer_names.len());
+
+            let layers: Vec<HemisphereLayer<'_>> = buffers
+                .iter()
+                .zip(layer_names.iter())
+                .map(|(buf, name)| HemisphereLayer {
+                    layer_name: name.clone(),
+                    channel_names: channel_names.clone(),
+                    samples: buf,
+                })
+                .collect();
+
+            writer.write_level(
+                level_dir,
+                &partition,
+                &layers,
+                OutputKind::Bsdf,
+                timestamp,
+                disc_res,
+                thetaphi,
+            )?;
+        }
+
+        writer.finish()
     }
 
     /// Resamples the BSDF data to match the `ClausenBrdfParametrisation`.

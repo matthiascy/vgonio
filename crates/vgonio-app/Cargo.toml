@@ -21,6 +21,11 @@ name = "vgmo_round_trip"
 path = "tests/vgmo_round_trip.rs"
 required-features = ["test-support"]
 
+[[test]]
+name = "vgbsdf_multi_level"
+path = "tests/vgbsdf_multi_level.rs"
+required-features = ["test-support"]
+
 [features]
 default = ["dep:embree", "dep:vgn_bxdf", "vgn_bxdf/io"]
 embree = ["dep:embree", "vgn_io/embree"]
@@ -82,6 +87,7 @@ vgn_bxdf = { workspace = true, optional = true, features = ["fitting", "io"] }
 
 [dev-dependencies]
 tempfile.workspace = true
+zip.workspace = true
 
 [lints]
 workspace = true
