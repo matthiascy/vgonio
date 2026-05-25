@@ -655,6 +655,41 @@ impl SphericalPartition {
             },
         }
     }
+
+    /// Compute the patch index for each pixel of a rectangular (θ_o, φ_o) image.
+    ///
+    /// Pixel (i, j) where i is the column index and j is the row index of the pixel in the image,
+    /// and in an `n_phi × n_theta` image maps to:
+    ///   φ_o = i · (2π / n_phi)
+    ///   θ_o = j · (π/2 / n_theta)
+    ///
+    /// `indices[i + j*n_phi]` = patch index, or -1 if no patch contains (θ_o, φ_o).
+    ///
+    /// # Arguments
+    ///
+    /// * `n_phi`   - Image width (number of φ samples).
+    /// * `n_theta` - Image height (number of θ samples).
+    /// * `indices` - Output buffer, length `n_phi * n_theta`.
+    pub fn compute_thetaphi_patch_indices(&self, n_phi: u32, n_theta: u32, indices: &mut [i32]) {
+        debug_assert_eq!(
+            indices.len(),
+            (n_phi * n_theta) as usize,
+            "indices buffer must be n_phi * n_theta long"
+        );
+        let dphi = std::f32::consts::TAU / n_phi as f32;
+        let dtheta = std::f32::consts::FRAC_PI_2 / n_theta as f32;
+        for j in 0..n_theta {
+            let theta = (j as f32 + 0.5) * dtheta;
+            for i in 0..n_phi {
+                let phi = (i as f32 + 0.5) * dphi;
+                indices[(i + j * n_phi) as usize] =
+                    match self.contains(Sph2::new(rad!(theta), rad!(phi))) {
+                        Some(idx) => idx as i32,
+                        None => -1,
+                    };
+            }
+        }
+    }
 }
 
 #[cfg(feature = "io")]
@@ -849,5 +884,29 @@ mod tests {
             let (a, b) = ring.find_patch_indices(phi);
             println!("i = {}, phi = {}, a = {}, b = {}", i, phi, a, b);
         }
+    }
+
+    #[test]
+    fn thetaphi_projection_n_phi_max() {
+        let p = SphericalPartition::new_beckers(SphericalDomain::Upper, rad!(0.1));
+        // n_phi = max ring patch_count, n_theta = n_rings.
+        // For Beckers with theta_precision=0.1, outer ring has the most patches.
+        let n_phi = p
+            .rings
+            .iter()
+            .map(|r| r.patch_count as u32)
+            .max()
+            .unwrap_or(1);
+        let n_theta = p.rings.len() as u32;
+        assert!(n_phi > 0);
+        assert!(n_theta > 0);
+        // Build the projection - pixel (i,j) -> patch index.
+        let mut indices = vec![0i32; (n_phi * n_theta) as usize];
+        p.compute_thetaphi_patch_indices(n_phi, n_theta, &mut indices);
+        // No -1s expected in the upper-hemisphere thetaphi grid.
+        assert!(
+            indices.iter().all(|&i| i >= 0),
+            "all pixels should map to a patch"
+        );
     }
 }
