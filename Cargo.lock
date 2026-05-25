@@ -4099,6 +4099,7 @@ dependencies = [
  "rand",
  "rayon",
  "serde",
+ "tempfile",
  "tobj",
  "toml",
  "uuid",
