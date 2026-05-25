@@ -88,6 +88,7 @@ impl MeasuredNdfData {
         }
     }
 
+    // TODO: remove or make it internal for quick testing.
     /// Writes the measured data as an EXR file.
     pub fn write_as_exr(
         &self,
@@ -166,6 +167,257 @@ impl MeasuredNdfData {
                 None
             },
         }
+    }
+
+    /// Writes the NDF as a .vgndf archive (zip container with three EXR encodings).
+    pub fn write_as_vgndf(
+        &self,
+        filepath: &Path,
+        timestamp: &chrono::DateTime<chrono::Local>,
+        disc_res: u32,
+    ) -> Result<(), VgonioError> {
+        use vgn_io::vgbsdf::{manifest::*, spectrum::SpectrumToml, OutputKind, VgbsdfWriter};
+
+        let partition = SphericalPartition::new(
+            self.params.mode.partition_scheme_for_data_collection(),
+            SphericalDomain::Upper,
+            self.params.mode.partition_precision_for_data_collection(),
+        );
+
+        // Collect the data following the patches.
+        let mut samples_per_patch = vec![0.0; partition.n_patches()];
+        match self.params.mode {
+            NdfMeasurementMode::ByPoints { zenith, azimuth } => {
+                assert!(
+                    zenith.step_size > rad!(0.0) && azimuth.step_size > rad!(0.0),
+                    "The step size of zenith and azimuth must be greater than 0."
+                );
+                let n_theta = StepRangeIncl::zero_to_half_pi(zenith.step_size).step_count_wrapped();
+                let n_phi = StepRangeIncl::zero_to_tau(azimuth.step_size).step_count_wrapped();
+                // NDF samples in ByPoints mode are stored by azimuth first, then by zenith.
+                // We need to rearrange the data to match the patch order, which is by zenith
+                // first, then by azimuth.
+                samples_per_patch
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(i_p, v)| {
+                        let i_theta = i_p / n_phi;
+                        let i_phi = i_p % n_phi;
+                        let i_adf = i_phi * n_theta + i_theta;
+                        // In case, the number of samples is less than the number of patches.
+                        if i_adf < self.samples.len() {
+                            *v = self.samples[i_adf];
+                        }
+                    });
+            },
+            NdfMeasurementMode::ByPartition { .. } => {
+                samples_per_patch.copy_from_slice(&self.samples);
+            },
+        }
+
+        let layer = vgn_core::utils::partition::HemisphereLayer {
+            layer_name: "NDF".into(),
+            channel_names: vec!["value".into()],
+            samples: &samples_per_patch,
+        };
+
+        let n_phi = partition
+            .rings
+            .iter()
+            .map(|r| r.patch_count as u32)
+            .max()
+            .unwrap_or(1);
+        let n_theta = partition.rings.len() as u32;
+
+        let mut writer = VgbsdfWriter::create(filepath)?;
+        writer.write_metadata(
+            &Manifest {
+                vgonio: VgonioBlock {
+                    version: env!("CARGO_PKG_VERSION").into(),
+                    conventions: "v1".into(),
+                },
+                archive: ArchiveBlock {
+                    created: vgn_core::utils::iso_timestamp_from_datetime(timestamp),
+                    kind: "ndf".into(),
+                    description: None,
+                },
+                material: None,
+                bsdf: None,
+                provenance: None,
+            },
+            &partition,
+            None,
+            &SpectrumToml::scalar(), // NDF carries one scalar "value" channel
+        )?;
+        writer.write_level(
+            "l0",
+            &partition,
+            std::slice::from_ref(&layer),
+            OutputKind::Ndf,
+            timestamp,
+            disc_res,
+            (n_phi, n_theta),
+        )?;
+        writer.finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vgn_io::vgbsdf::{conventions::OutgoingEncoding, VgbsdfReader};
+
+    fn read_exr_pixels(path: &std::path::Path) -> Vec<f32> {
+        use exr::prelude::*;
+        let img = exr::prelude::read_first_flat_layer_from_file(path).unwrap();
+        let layer = &img.layer_data;
+        let ch = &layer.channel_data.list[0];
+        match &ch.sample_data {
+            FlatSamples::F32(v) => v.to_vec(),
+            _ => panic!("expected F32 samples"),
+        }
+    }
+
+    /// Smoke test: drive `write_as_vgndf` end-to-end with a tiny `ByPartition`
+    /// NDF, then re-open with `VgbsdfReader` and run the lazy validator. This
+    /// covers (1) writer-side metadata, (2) all three EXR encodings being
+    /// well-formed, and (3) reader-writer agreement on the scalar-channel
+    /// contract.
+    #[test]
+    fn write_as_vgndf_smoke() {
+        let params = NdfMeasurementParams {
+            mode: NdfMeasurementMode::ByPartition {
+                precision: rad!(0.3),
+            },
+            crop_to_disk: false,
+            use_facet_area: false,
+        };
+        let partition = SphericalPartition::new(
+            params.mode.partition_scheme_for_data_collection(),
+            SphericalDomain::Upper,
+            params.mode.partition_precision_for_data_collection(),
+        );
+        let samples: Box<[f32]> = (0..partition.n_patches())
+            .map(|i| i as f32 * 0.01)
+            .collect::<Vec<_>>()
+            .into();
+        let data = MeasuredNdfData { params, samples };
+
+        let tmp = tempfile::Builder::new()
+            .suffix(".vgndf")
+            .tempfile()
+            .unwrap();
+        let path = tmp.path().to_path_buf();
+        let ts = chrono::Local::now();
+
+        data.write_as_vgndf(&path, &ts, 64).unwrap();
+
+        let mut reader = VgbsdfReader::open(&path).unwrap();
+        assert_eq!(reader.manifest.archive.kind, "ndf");
+        assert_eq!(reader.manifest.vgonio.conventions, "v1");
+        assert!(
+            reader.spectrum.is_scalar(),
+            "NDF archive must declare scalar spectrum, got {:?}",
+            reader.spectrum
+        );
+        assert_eq!(
+            reader.partition.n_patches as usize,
+            partition.n_patches(),
+            "partition.toml n_patches drifted from the source partition"
+        );
+        assert!(
+            reader.incident_grid.is_none(),
+            "NDF archives must not carry an incident grid"
+        );
+        // Lazy validator: opens each EXR header, checks dim + channel count.
+        reader.validate_levels().unwrap();
+    }
+
+    /// Equivalence test: the disc EXR inside a `.vgndf` (written by
+    /// `write_as_vgndf`) must contain bit-identical pixel data to the
+    /// single-disc `.exr` from `write_as_exr` for the same input. Both
+    /// writers ultimately rasterize via `compute_pixel_patch_indices`, so
+    /// any drift indicates a regression in one of the two paths.
+    ///
+    /// We only compare pixel samples, not EXR attributes / layer names —
+    /// the new writer adds VGONIO Conventions v1 attrs and renames the
+    /// channel from "NDF" to "value", which is intentional.
+    #[test]
+    fn write_as_vgndf_disc_matches_write_as_exr() {
+        let params = NdfMeasurementParams {
+            mode: NdfMeasurementMode::ByPartition {
+                precision: rad!(0.3),
+            },
+            crop_to_disk: false,
+            use_facet_area: false,
+        };
+        let partition = SphericalPartition::new(
+            params.mode.partition_scheme_for_data_collection(),
+            SphericalDomain::Upper,
+            params.mode.partition_precision_for_data_collection(),
+        );
+        let samples: Box<[f32]> = (0..partition.n_patches())
+            .map(|i| 0.123 + i as f32 * 0.01)
+            .collect::<Vec<_>>()
+            .into();
+        let data = MeasuredNdfData { params, samples };
+        let ts = chrono::Local::now();
+        let resolution = 64u32;
+
+        let dir = tempfile::tempdir().unwrap();
+        let exr_path = dir.path().join("old.exr");
+        let vgndf_path = dir.path().join("new.vgndf");
+
+        data.write_as_exr(&exr_path, &ts, resolution).unwrap();
+        data.write_as_vgndf(&vgndf_path, &ts, resolution).unwrap();
+
+        // Old path: read the .exr directly.
+        let old_pixels = read_exr_pixels(&exr_path);
+
+        // New path: extract l0/disc.exr from the .vgndf zip, stage to a tempfile, read.
+        let mut reader = VgbsdfReader::open(&vgndf_path).unwrap();
+        let disc_bytes = reader
+            .read_exr_bytes("l0", OutgoingEncoding::Disc)
+            .unwrap();
+        let disc_path = dir.path().join("disc.exr");
+        std::fs::write(&disc_path, &disc_bytes).unwrap();
+        let new_pixels = read_exr_pixels(&disc_path);
+
+        assert_eq!(
+            old_pixels.len(),
+            new_pixels.len(),
+            "pixel count differs: old={} new={}",
+            old_pixels.len(),
+            new_pixels.len()
+        );
+        assert_eq!(
+            old_pixels.len(),
+            (resolution * resolution) as usize,
+            "expected {} pixels, got {}",
+            resolution * resolution,
+            old_pixels.len()
+        );
+        let mut max_delta = 0.0f32;
+        for (i, (a, b)) in old_pixels.iter().zip(new_pixels.iter()).enumerate() {
+            let d = (a - b).abs();
+            if d > max_delta {
+                max_delta = d;
+            }
+            assert!(
+                d < 1e-6,
+                "pixel {i}: write_as_exr={a} write_as_vgndf={b} (Δ={d})"
+            );
+        }
+        // Sanity: at least one non-zero pixel survived (i.e. we're not comparing
+        // two all-zero images and falsely passing).
+        assert!(
+            old_pixels.iter().any(|&v| v != 0.0),
+            "all pixels are zero — comparison would pass vacuously"
+        );
+        eprintln!(
+            "write_as_vgndf vs write_as_exr disc pixels: max Δ = {max_delta} over {} pixels",
+            old_pixels.len()
+        );
     }
 }
 
