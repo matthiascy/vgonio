@@ -13,6 +13,7 @@ use vgn_io::vgbsdf::{
     conventions::OutgoingEncoding,
     incident_grid::IncidentGridToml,
     manifest::{ArchiveBlock, BsdfBlock, MaterialBlock, VgonioBlock},
+    partition_toml::PartitionToml,
     spectrum::SpectrumToml,
     Manifest, OutputKind, VgbsdfReader, VgbsdfWriter,
 };
@@ -190,11 +191,151 @@ fn rejects_patches_exr_wrong_width() {
     );
 }
 
-fn build_minimal_bsdf_archive_for_test() -> (PathBuf, NamedTempFile) { todo!() }
-fn patch_manifest_toml(path: &Path, edit: impl FnOnce(String) -> String) { todo!() }
-fn patch_spectrum_toml(path: &Path, wavelengths: Vec<f32>) { todo!() }
-fn patch_partition_n_patches(path: &Path, n: u32) { todo!() }
-fn remove_zip_member(path: &Path, name: &str) { todo!() }
+/// Build a minimal-but-valid `.vgbsdf` BSDF archive (single level "l0", 1 wi,
+/// 2 wavelengths). Returns the path plus the `NamedTempFile` whose `Drop`
+/// cleans the file up after the test.
+fn build_minimal_bsdf_archive_for_test() -> (PathBuf, NamedTempFile) {
+    let tmp = tempfile::Builder::new()
+        .suffix(".vgbsdf")
+        .tempfile()
+        .unwrap();
+    let path = tmp.path().to_path_buf();
+
+    let partition = SphericalPartition::new_beckers(SphericalDomain::Upper, rad!(0.3));
+    let n_patches = partition.n_patches();
+    let n_spectrum = 2;
+    let samples: Vec<f32> = (0..n_spectrum * n_patches)
+        .map(|k| {
+            let ch = k / n_patches;
+            let p = k % n_patches;
+            10.0 * ch as f32 + p as f32
+        })
+        .collect();
+    let layer = HemisphereLayer {
+        layer_name: "θ00_00.φ0_00".into(),
+        channel_names: vec!["400nm".into(), "500nm".into()],
+        samples: &samples,
+    };
+
+    let manifest = Manifest {
+        vgonio: VgonioBlock {
+            version: "0.2.0".into(),
+            conventions: "v1".into(),
+        },
+        archive: ArchiveBlock {
+            created: "2026-05-14T12:34:56Z".into(),
+            kind: "bsdf".into(),
+            description: None,
+        },
+        material: Some(MaterialBlock {
+            incident_medium: "air".into(),
+            transmitted_medium: "al".into(),
+        }),
+        bsdf: Some(BsdfBlock {
+            levels: vec!["l0".into()],
+            encodings: vec!["disc".into(), "thetaphi".into(), "patches".into()],
+        }),
+        provenance: None,
+    };
+    let spectrum = SpectrumToml::nm(vec![400.0, 500.0]);
+    let incident_grid = IncidentGridToml {
+        positions: vec![[0.0, 0.0]],
+    };
+
+    let mut writer = VgbsdfWriter::create(&path).unwrap();
+    writer
+        .write_metadata(&manifest, &partition, Some(&incident_grid), &spectrum)
+        .unwrap();
+    writer
+        .write_level(
+            "l0",
+            &partition,
+            std::slice::from_ref(&layer),
+            OutputKind::Bsdf,
+            &chrono::Local::now(),
+            64,
+            (32, 8),
+        )
+        .unwrap();
+    writer.finish().unwrap();
+
+    (path, tmp)
+}
+
+/// Re-pack the archive: stream every member through `transform`. Returning
+/// `Some(new_bytes)` replaces the member; `None` drops it. All members are
+/// written back with `CompressionMethod::Stored` (matches the writer's
+/// invariant).
+fn rewrite_zip(path: &Path, mut transform: impl FnMut(&str, Vec<u8>) -> Option<Vec<u8>>) {
+    use std::io::{Cursor, Read, Write};
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
+
+    let bytes = std::fs::read(path).unwrap();
+    let mut archive = ZipArchive::new(Cursor::new(bytes)).unwrap();
+
+    let mut members: Vec<(String, Vec<u8>)> = Vec::with_capacity(archive.len());
+    for i in 0..archive.len() {
+        let mut f = archive.by_index(i).unwrap();
+        let name = f.name().to_string();
+        let mut buf = Vec::with_capacity(f.size() as usize);
+        f.read_to_end(&mut buf).unwrap();
+        members.push((name, buf));
+    }
+
+    let out_file = std::fs::File::create(path).unwrap();
+    let mut out = ZipWriter::new(std::io::BufWriter::new(out_file));
+    let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    for (name, bytes) in members {
+        if let Some(new_bytes) = transform(&name, bytes) {
+            out.start_file(&name, opts).unwrap();
+            out.write_all(&new_bytes).unwrap();
+        }
+    }
+    out.finish().unwrap();
+}
+
+fn patch_manifest_toml(path: &Path, edit: impl FnOnce(String) -> String) {
+    let mut edit_opt = Some(edit);
+    rewrite_zip(path, |name, bytes| {
+        if name == "manifest.toml" {
+            let s = String::from_utf8(bytes).unwrap();
+            let new_s = (edit_opt.take().unwrap())(s);
+            Some(new_s.into_bytes())
+        } else {
+            Some(bytes)
+        }
+    });
+}
+
+fn patch_spectrum_toml(path: &Path, wavelengths: Vec<f32>) {
+    let new_spec = SpectrumToml::nm(wavelengths);
+    let new_bytes = toml::to_string_pretty(&new_spec).unwrap().into_bytes();
+    let mut nb = Some(new_bytes);
+    rewrite_zip(path, |name, bytes| {
+        if name == "spectrum.toml" {
+            Some(nb.take().unwrap())
+        } else {
+            Some(bytes)
+        }
+    });
+}
+
+fn patch_partition_n_patches(path: &Path, n: u32) {
+    rewrite_zip(path, |name, bytes| {
+        if name == "partition.toml" {
+            let s = std::str::from_utf8(&bytes).unwrap();
+            let mut pt: PartitionToml = toml::from_str(s).unwrap();
+            pt.n_patches = n;
+            Some(toml::to_string_pretty(&pt).unwrap().into_bytes())
+        } else {
+            Some(bytes)
+        }
+    });
+}
+
+fn remove_zip_member(path: &Path, name: &str) {
+    rewrite_zip(path, |n, bytes| if n == name { None } else { Some(bytes) });
+}
 
 /// For any pixel in `disc.exr` or `thetaphi.exr` whose mapping resolves to patch index `p`, the
 /// pixel value MUST equal the value at `(p, 0)` in `patches.exr` (within floating-point
@@ -299,9 +440,7 @@ fn cross_encoding_consistency() {
 }
 
 /// Helper: read first layer, first channel of an EXR as a 2D f32 grid.
-fn read_flat_grid(
-    path: &std::path::Path,
-) -> Result<FlatImage2D, Box<dyn std::error::Error>> {
+fn read_flat_grid(path: &std::path::Path) -> Result<FlatImage2D, Box<dyn std::error::Error>> {
     use exr::prelude::*;
     let image = exr::prelude::read_first_flat_layer_from_file(path)?;
     let layer = &image.layer_data;
