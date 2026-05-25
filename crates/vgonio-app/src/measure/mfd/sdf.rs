@@ -7,10 +7,13 @@ use vgn_bxdf::impl_any_measured_trait;
 use vgn_core::{
     error::VgonioError,
     math,
-    math::{IVec2, Vec2},
+    math::{IVec2, Sph2, Vec2},
     res::{Handle, RawDataStore},
     units::{rad, Radians},
-    utils::range::StepRangeIncl,
+    utils::{
+        partition::{HemisphereLayer, SphericalDomain, SphericalPartition},
+        range::StepRangeIncl,
+    },
     MeasurementKind,
 };
 use vgn_io::MicroSurface;
@@ -202,6 +205,97 @@ impl MeasuredSdfData {
         Ok(())
     }
 
+    /// Writes the SDF as a `.vgsdf` archive (zip container with `thetaphi.exr`
+    /// + `patches.exr`; no `disc.exr` because slope-distribution data has no
+    /// natural disc projection — see spec Part 4).
+    ///
+    /// `precision` defines the angular bin size: `precision.theta` for zenith,
+    /// `precision.phi` for azimuth. The partition is `EqualAngle` over the upper
+    /// hemisphere. Each patch's sample is the *fraction* of microfacet normals
+    /// whose slope direction falls inside that patch's angular extent
+    /// (normalized so all patches sum to 1.0, modulo slopes whose direction
+    /// falls outside the hemisphere domain).
+    pub fn write_as_vgsdf(
+        &self,
+        filepath: &Path,
+        timestamp: &chrono::DateTime<chrono::Local>,
+        precision: Sph2,
+    ) -> Result<(), VgonioError> {
+        use vgn_io::vgbsdf::{
+            manifest::{ArchiveBlock, Manifest, VgonioBlock},
+            spectrum::SpectrumToml,
+            OutputKind, VgbsdfWriter,
+        };
+
+        let partition = SphericalPartition::new_equal_angle(SphericalDomain::Upper, precision);
+
+        // Bin each slope onto its containing patch. Slopes whose (θ, φ) falls
+        // outside the upper hemisphere (no patch contains them) are dropped —
+        // those are the equivalent of "out of range" in the original
+        // write_histogram_as_exr path.
+        let mut samples_per_patch = vec![0.0f32; partition.n_patches()];
+        let mut total: f32 = 0.0;
+        for s in self.slopes.iter() {
+            let r2 = s.x * s.x + s.y * s.y;
+            let theta = rad!(r2.sqrt().atan());
+            let phi = rad!(-s.y.atan2(-s.x)).wrap_to_tau();
+            if let Some(p) = partition.contains(Sph2::new(theta, phi)) {
+                samples_per_patch[p] += 1.0;
+                total += 1.0;
+            }
+        }
+        if total > 0.0 {
+            let rcp = 1.0 / total;
+            samples_per_patch.iter_mut().for_each(|v| *v *= rcp);
+        }
+
+        let layer = HemisphereLayer {
+            layer_name: "SDF".into(),
+            channel_names: vec!["value".into()],
+            samples: &samples_per_patch,
+        };
+
+        let n_phi = partition
+            .rings
+            .iter()
+            .map(|r| r.patch_count as u32)
+            .max()
+            .unwrap_or(1);
+        let n_theta = partition.rings.len() as u32;
+
+        let mut writer = VgbsdfWriter::create(filepath)?;
+        writer.write_metadata(
+            &Manifest {
+                vgonio: VgonioBlock {
+                    version: env!("CARGO_PKG_VERSION").into(),
+                    conventions: "v1".into(),
+                },
+                archive: ArchiveBlock {
+                    created: vgn_core::utils::iso_timestamp_from_datetime(timestamp),
+                    kind: "sdf".into(),
+                    description: None,
+                },
+                material: None,
+                bsdf: None,
+                provenance: None,
+            },
+            &partition,
+            None,
+            &SpectrumToml::scalar(),
+        )?;
+        writer.write_level(
+            "l0",
+            &partition,
+            std::slice::from_ref(&layer),
+            OutputKind::Sdf,
+            timestamp,
+            // disc_res is unused because OutputKind::Sdf skips the Disc encoding.
+            0,
+            (n_phi, n_theta),
+        )?;
+        writer.finish()
+    }
+
     /// Computes the histogram of the slope (PMF of the slope distribution)
     /// binned over the whole hemisphere.
     ///
@@ -240,6 +334,69 @@ impl MeasuredSdfData {
             zen_bin_width,
             hist,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vgn_io::vgbsdf::VgbsdfReader;
+
+    /// Smoke test: drive `write_as_vgsdf` end-to-end with synthetic slopes,
+    /// then re-open via `VgbsdfReader` and run the lazy validator. Confirms:
+    ///   - manifest kind = "sdf", conventions = v1
+    ///   - scalar spectrum, no incident grid
+    ///   - exactly two encodings (`thetaphi.exr`, `patches.exr`) — no disc
+    ///   - patch dims match partition.n_patches
+    #[test]
+    fn write_as_vgsdf_smoke() {
+        let params = SdfMeasurementParams { max_slope: 1.0 };
+        // Synthetic slopes spread around a circle, scaled inside the unit disc
+        // so most fall inside the upper hemisphere (θ < π/2).
+        let slopes: Box<[Slope2]> = (0..200)
+            .map(|i| {
+                let t = (i as f32) * 0.04;
+                Vec2::new(t.cos() * 0.4, t.sin() * 0.4)
+            })
+            .collect::<Vec<_>>()
+            .into();
+        let data = MeasuredSdfData { params, slopes };
+
+        let tmp = tempfile::Builder::new()
+            .suffix(".vgsdf")
+            .tempfile()
+            .unwrap();
+        let path = tmp.path().to_path_buf();
+        let ts = chrono::Local::now();
+
+        data.write_as_vgsdf(&path, &ts, Sph2::new(rad!(0.2), rad!(0.3)))
+            .unwrap();
+
+        let mut reader = VgbsdfReader::open(&path).unwrap();
+        assert_eq!(reader.manifest.archive.kind, "sdf");
+        assert_eq!(reader.manifest.vgonio.conventions, "v1");
+        assert!(
+            reader.spectrum.is_scalar(),
+            "SDF must declare scalar spectrum, got {:?}",
+            reader.spectrum
+        );
+        assert!(
+            reader.incident_grid.is_none(),
+            "SDF archives must not carry an incident grid"
+        );
+        // OutputKind::Sdf → reader expects exactly [thetaphi, patches]; validator
+        // would error if disc.exr were present (or any required member missing).
+        reader.validate_levels().unwrap();
+
+        // Spot-check: disc.exr should NOT exist in the archive.
+        let bytes = std::fs::read(&path).unwrap();
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        assert!(
+            zip.by_name("l0/disc.exr").is_err(),
+            "SDF archive must not contain l0/disc.exr"
+        );
+        assert!(zip.by_name("l0/thetaphi.exr").is_ok());
+        assert!(zip.by_name("l0/patches.exr").is_ok());
     }
 }
 
