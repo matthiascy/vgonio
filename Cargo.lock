@@ -4074,6 +4074,7 @@ dependencies = [
  "serde",
  "serde_yaml",
  "static_assertions",
+ "tempfile",
  "thiserror 2.0.11",
  "toml",
  "uuid",

@@ -21,7 +21,7 @@ fitting_api = ["bxdf_fitting_api", "mdf_fitting_api"]
 cuda = ["dep:cust"]
 bxdf_fitting_api = []
 mdf_fitting_api = []
-embed-datafiles = ["dep:include_dir"] # bake datafiles/ior/ into the binary
+embed-datafiles = ["dep:include_dir"]                 # bake datafiles/ior/ into the binary
 
 
 [dependencies]
@@ -73,4 +73,5 @@ harness = false
 criterion.workspace = true
 proptest.workspace = true
 serde_yaml.workspace = true
+tempfile.workspace = true
 env_logger.workspace = true

@@ -813,6 +813,150 @@ impl<'a> DataCarriedOnHemisphereImageWriter<'a> {
     }
 }
 
+/// Outgoing-domain encoding for hemisphere EXR output.
+#[cfg(feature = "io")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HemisphereEncoding {
+    /// Lambert azimuthal equal-area disc, resolution × resolution pixels.
+    Disc { resolution: u32 },
+    /// Rectangular (n_phi × n_theta) grid.
+    Thetaphi { n_phi: u32, n_theta: u32 },
+    /// Raw 1 × n_patches array, one pixel per patch.
+    Patches,
+}
+
+/// Layer of patch-indexed sample data: `samples[layer_idx][channel_idx][patch_idx]`.
+/// This is the "hemisphere-carried" data shape: one scalar per (patch, channel) tuple.
+#[cfg(feature = "io")]
+pub struct HemisphereLayer<'a> {
+    pub layer_name: String,
+    pub channel_names: Vec<String>,
+    /// Row-major [channel, patch]. `len = n_channels * n_patches`.
+    pub samples: &'a [f32],
+}
+
+/// Writes hemisphere-carried data as an EXR file under VGONIO Conventions v1.
+///
+/// One EXR file = one outgoing-domain encoding (caller picks). For multi-encoding
+/// outputs (BSDF, NDF, MSF), call this three times, once per encoding.
+///
+/// # Arguments
+///
+/// * `partition`      - the hemisphere partition the patch indices refer to.
+/// * `encoding`       - which of disc/thetaphi/patches to emit.
+/// * `layers`         - one layer per "outer index" (e.g. incident direction). For single-output
+///   measurements (NDF, MSF), pass one layer.
+/// * `filepath`       - target file path.
+/// * `timestamp`      - capture timestamp for the EXR attributes.
+/// * `extra_attrs`    - additional `(key, string-value)` attributes (typically the VGONIO
+///   conventions attrs from the conventions module).
+#[cfg(feature = "io")]
+pub fn write_hemisphere_exr(
+    partition: &SphericalPartition,
+    encoding: HemisphereEncoding,
+    layers: &[HemisphereLayer<'_>],
+    filepath: &Path,
+    timestamp: &chrono::DateTime<chrono::Local>,
+    extra_attrs: &[(String, String)],
+) -> Result<(), VgonioError> {
+    use exr::prelude::*;
+    use std::borrow::Cow;
+
+    let n_patches = partition.n_patches();
+
+    // Per-encoding pixel grid dims + a closure that maps (pixel_x, pixel_y) → patch_index or -1.
+    let (w, h, indices): (usize, usize, Box<[i32]>) = match encoding {
+        HemisphereEncoding::Disc { resolution } => {
+            let mut idx = vec![0i32; (resolution * resolution) as usize].into_boxed_slice();
+            partition.compute_pixel_patch_indices(resolution, resolution, &mut idx);
+            (resolution as usize, resolution as usize, idx)
+        },
+        HemisphereEncoding::Thetaphi { n_phi, n_theta } => {
+            let mut idx = vec![0i32; (n_phi * n_theta) as usize].into_boxed_slice();
+            partition.compute_thetaphi_patch_indices(n_phi, n_theta, &mut idx);
+            (n_phi as usize, n_theta as usize, idx)
+        },
+        HemisphereEncoding::Patches => {
+            // 1×n_patches image; pixel (i,0) → patch i.
+            let idx: Box<[i32]> = (0..n_patches as i32).collect::<Vec<_>>().into_boxed_slice();
+            (n_patches, 1, idx)
+        },
+    };
+
+    // Build one EXR Layer per HemisphereLayer.
+    let mut exr_layers = Vec::with_capacity(layers.len());
+    for layer in layers {
+        let n_channels = layer.channel_names.len();
+        assert_eq!(
+            layer.samples.len(),
+            n_channels * n_patches,
+            "layer {:?}: expected {} samples, got {}",
+            layer.layer_name,
+            n_channels * n_patches,
+            layer.samples.len()
+        );
+
+        // Rasterize each channel onto the image grid.
+        let mut channel_buffers: Vec<Vec<f32>> = vec![vec![0.0; w * h]; n_channels];
+        for ch in 0..n_channels {
+            let src = &layer.samples[ch * n_patches..(ch + 1) * n_patches];
+            for j in 0..h {
+                for i in 0..w {
+                    let pi = indices[i + j * w];
+                    if pi >= 0 {
+                        channel_buffers[ch][i + j * w] = src[pi as usize];
+                    }
+                }
+            }
+        }
+
+        let any_channels: Vec<AnyChannel<FlatSamples>> = layer
+            .channel_names
+            .iter()
+            .zip(channel_buffers.iter())
+            .map(|(name, buf)| {
+                AnyChannel::new(
+                    Text::new_or_panic(name),
+                    FlatSamples::F32(Cow::Owned(buf.clone())),
+                )
+            })
+            .collect();
+
+        let layer_attrs = LayerAttributes {
+            owner: Text::new_or_none("vgonio"),
+            capture_date: Text::new_or_none(crate::utils::iso_timestamp_from_datetime(timestamp)),
+            software_name: Text::new_or_none("vgonio"),
+            layer_name: Text::new_or_none(&layer.layer_name),
+            ..LayerAttributes::default()
+        };
+        exr_layers.push(Layer::new(
+            (w, h),
+            layer_attrs,
+            Encoding::SMALL_LOSSLESS,
+            AnyChannels {
+                list: SmallVec::from(any_channels),
+            },
+        ));
+    }
+
+    // Image-level attributes — VGONIO conventions go here.
+    let mut img_attrs = ImageAttributes::new(IntegerBounds::new((0, 0), (w, h)));
+    for (k, v) in extra_attrs {
+        img_attrs.other.insert(
+            Text::new_or_panic(k),
+            AttributeValue::Text(Text::new_or_panic(v)),
+        );
+    }
+
+    let image = Image::from_layers(img_attrs, exr_layers);
+    image.write().to_file(filepath).map_err(|e| {
+        VgonioError::new(
+            format!("write hemisphere EXR failed: {e}"),
+            Some(Box::new(e)),
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -908,5 +1052,42 @@ mod tests {
             indices.iter().all(|&i| i >= 0),
             "all pixels should map to a patch"
         );
+    }
+
+    #[test]
+    #[cfg(feature = "io")]
+    fn write_hemisphere_exr_three_encodings_smoke() {
+        let partition = SphericalPartition::new_beckers(SphericalDomain::Upper, rad!(0.2));
+        let n_patches = partition.n_patches();
+        let samples: Vec<f32> = (0..n_patches).map(|i| i as f32).collect();
+
+        let layer = HemisphereLayer {
+            layer_name: "test".into(),
+            channel_names: vec!["value".into()],
+            samples: &samples,
+        };
+
+        let ts = chrono::Local::now();
+        for enc in [
+            HemisphereEncoding::Disc { resolution: 64 },
+            HemisphereEncoding::Thetaphi {
+                n_phi: 32,
+                n_theta: 8,
+            },
+            HemisphereEncoding::Patches,
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("out.exr");
+            write_hemisphere_exr(
+                &partition,
+                enc,
+                std::slice::from_ref(&layer),
+                &path,
+                &ts,
+                &[],
+            )
+            .unwrap();
+            assert!(path.exists() && std::fs::metadata(&path).unwrap().len() > 0);
+        }
     }
 }
