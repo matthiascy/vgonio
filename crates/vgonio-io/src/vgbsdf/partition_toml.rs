@@ -28,6 +28,7 @@
 //! # ...
 //! ```
 use serde::{Deserialize, Serialize};
+use vgn_core::utils::partition::{PartitionScheme, SphericalDomain, SphericalPartition};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PartitionToml {
     /// "beckers" | "equal_angle".
@@ -64,8 +65,103 @@ pub struct RingToml {
     pub base_index: u32,
 }
 
+impl PartitionToml {
+    pub fn from_partition(partition: &SphericalPartition) -> Self {
+        let scheme = match partition.scheme {
+            PartitionScheme::Beckers => "beckers",
+            PartitionScheme::EqualAngle => "equal_angle",
+        }
+        .into();
+        let domain = match partition.domain {
+            SphericalDomain::Upper => "upper",
+            SphericalDomain::Lower => "lower",
+            SphericalDomain::Whole => "whole",
+        }
+        .into();
+
+        let (beckers, equal_angle) = match partition.scheme {
+            PartitionScheme::Beckers => {
+                let rings = partition
+                    .rings
+                    .iter()
+                    .map(|ring| RingToml {
+                        theta_min_rad: ring.theta_min,
+                        theta_max_rad: ring.theta_max,
+                        phi_step_rad: ring.phi_step,
+                        patch_count: ring.patch_count as u32,
+                        base_index: ring.base_index as u32,
+                    })
+                    .collect();
+                (
+                    Some(BeckersBlock {
+                        theta_precision_rad: partition.precision.theta.as_f32(),
+                        n_rings: partition.rings.len() as u32,
+                        rings,
+                    }),
+                    None,
+                )
+            },
+            PartitionScheme::EqualAngle => (
+                None,
+                Some(EqualAngleBlock {
+                    theta_precision_rad: partition.precision.theta.as_f32(),
+                    phi_precision_rad: partition.precision.phi.as_f32(),
+                }),
+            ),
+        };
+
+        Self {
+            scheme,
+            domain,
+            n_patches: partition.n_patches() as u32,
+            beckers,
+            equal_angle,
+        }
+    }
+
+    pub fn to_partition(&self) -> Result<SphericalPartition, String> {
+        use vgn_core::{math::Sph2, units::rad};
+
+        let domain = match self.domain.as_str() {
+            "upper" => SphericalDomain::Upper,
+            "lower" => SphericalDomain::Lower,
+            "whole" => SphericalDomain::Whole,
+            other => return Err(format!("unknown domain {other:?}")),
+        };
+
+        match self.scheme.as_str() {
+            "beckers" => {
+                let b = self
+                    .beckers
+                    .as_ref()
+                    .ok_or("scheme=beckers requires [beckers] block")?;
+                Ok(SphericalPartition::new_beckers(
+                    domain,
+                    rad!(b.theta_precision_rad),
+                ))
+            },
+            "equal_angle" => {
+                let e = self
+                    .equal_angle
+                    .as_ref()
+                    .ok_or("scheme=equal_angle requires [equal_angle] block")?;
+                Ok(SphericalPartition::new_equal_angle(
+                    domain,
+                    Sph2::new(rad!(e.theta_precision_rad), rad!(e.phi_precision_rad)),
+                ))
+            },
+            other => Err(format!("unknown scheme {other:?}")),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use vgn_core::{
+        units::rad,
+        utils::partition::{SphericalDomain, SphericalPartition},
+    };
+
     use super::*;
 
     fn sample_beckers() -> PartitionToml {
@@ -129,5 +225,43 @@ mod tests {
         assert_eq!(p, r);
         // Beckers section must be omitted, not emitted as empty.
         assert!(!s.contains("[beckers]"));
+    }
+
+    #[test]
+    fn beckers_round_trip_via_partition() {
+        let original = SphericalPartition::new_beckers(
+            SphericalDomain::Upper,
+            rad!(std::f32::consts::FRAC_PI_2 / 9.0), // 10°
+        );
+        let toml = PartitionToml::from_partition(&original);
+        let rebuilt = toml.to_partition().unwrap();
+
+        assert_eq!(original.n_patches(), rebuilt.n_patches());
+        assert_eq!(original.scheme, rebuilt.scheme);
+        // Patch-mapping identity check
+        let mut a = vec![0i32; 64 * 64];
+        let mut b = vec![0i32; 64 * 64];
+        original.compute_pixel_patch_indices(64, 64, &mut a);
+        rebuilt.compute_pixel_patch_indices(64, 64, &mut b);
+        assert_eq!(
+            a, b,
+            "patch mapping must be identical after TOML round-trip"
+        );
+    }
+
+    #[test]
+    fn equal_angle_round_trip_via_partition() {
+        use vgn_core::math::Sph2;
+        let original = SphericalPartition::new_equal_angle(
+            SphericalDomain::Upper,
+            Sph2::new(
+                rad!(std::f32::consts::FRAC_PI_2 / 9.0),
+                rad!(std::f32::consts::TAU / 36.0),
+            ),
+        );
+        let toml = PartitionToml::from_partition(&original);
+        let rebuilt = toml.to_partition().unwrap();
+
+        assert_eq!(original.n_patches(), rebuilt.n_patches());
     }
 }
