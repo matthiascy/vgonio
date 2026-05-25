@@ -195,3 +195,134 @@ fn patch_manifest_toml(path: &Path, edit: impl FnOnce(String) -> String) { todo!
 fn patch_spectrum_toml(path: &Path, wavelengths: Vec<f32>) { todo!() }
 fn patch_partition_n_patches(path: &Path, n: u32) { todo!() }
 fn remove_zip_member(path: &Path, name: &str) { todo!() }
+
+/// For any pixel in `disc.exr` or `thetaphi.exr` whose mapping resolves to patch index `p`, the
+/// pixel value MUST equal the value at `(p, 0)` in `patches.exr` (within floating-point
+/// representation, no compression-induced drift since EXR `SMALL_LOSSLESS`).
+#[test]
+fn cross_encoding_consistency() {
+    use exr::prelude::*;
+    use vgn_core::utils::partition::{write_hemisphere_exr, HemisphereEncoding};
+
+    let partition = SphericalPartition::new_beckers(SphericalDomain::Upper, rad!(0.25));
+    let n_patches = partition.n_patches();
+    let samples: Vec<f32> = (0..n_patches).map(|i| (i as f32) * 0.01).collect();
+    let layer = HemisphereLayer {
+        layer_name: "x".into(),
+        channel_names: vec!["value".into()],
+        samples: &samples,
+    };
+    let ts = chrono::Local::now();
+    let dir = tempfile::tempdir().unwrap();
+    let disc_p = dir.path().join("disc.exr");
+    let thetaphi_p = dir.path().join("thetaphi.exr");
+    let patches_p = dir.path().join("patches.exr");
+
+    let resolution = 128;
+    let (n_phi, n_theta) = (64, 16);
+
+    write_hemisphere_exr(
+        &partition,
+        HemisphereEncoding::Disc { resolution },
+        std::slice::from_ref(&layer),
+        &disc_p,
+        &ts,
+        &[],
+    )
+    .unwrap();
+    write_hemisphere_exr(
+        &partition,
+        HemisphereEncoding::Thetaphi { n_phi, n_theta },
+        std::slice::from_ref(&layer),
+        &thetaphi_p,
+        &ts,
+        &[],
+    )
+    .unwrap();
+    write_hemisphere_exr(
+        &partition,
+        HemisphereEncoding::Patches,
+        std::slice::from_ref(&layer),
+        &patches_p,
+        &ts,
+        &[],
+    )
+    .unwrap();
+
+    // Read patches.exr into a flat Vec keyed by patch index.
+    let patches_img = read_flat_grid(&patches_p).unwrap();
+    let mut by_patch = vec![0.0_f32; n_patches];
+    for p in 0..n_patches {
+        by_patch[p] = patches_img.sample_at(p, 0);
+    }
+
+    // Verify disc pixels match by_patch (where they map to a patch).
+    let disc_img = read_flat_grid(&disc_p).unwrap();
+    let mut disc_idx = vec![0i32; (resolution * resolution) as usize];
+    partition.compute_pixel_patch_indices(resolution, resolution, &mut disc_idx);
+    let mut mismatches = 0;
+    for j in 0..resolution {
+        for i in 0..resolution {
+            let pi = disc_idx[(i + j * resolution) as usize];
+            if pi >= 0 {
+                let want = by_patch[pi as usize];
+                let got = disc_img.sample_at(i as usize, j as usize);
+                if (want - got).abs() > 1e-6 {
+                    mismatches += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(mismatches, 0, "disc-encoding cross-consistency failed");
+
+    // Verify thetaphi pixels.
+    let tp_img = read_flat_grid(&thetaphi_p).unwrap();
+    let mut tp_idx = vec![0i32; (n_phi * n_theta) as usize];
+    partition.compute_thetaphi_patch_indices(n_phi, n_theta, &mut tp_idx);
+    let mut tp_mismatches = 0;
+    for j in 0..n_theta {
+        for i in 0..n_phi {
+            let pi = tp_idx[(i + j * n_phi) as usize];
+            if pi >= 0 {
+                let want = by_patch[pi as usize];
+                let got = tp_img.sample_at(i as usize, j as usize);
+                if (want - got).abs() > 1e-6 {
+                    tp_mismatches += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(
+        tp_mismatches, 0,
+        "thetaphi-encoding cross-consistency failed"
+    );
+}
+
+/// Helper: read first layer, first channel of an EXR as a 2D f32 grid.
+fn read_flat_grid(
+    path: &std::path::Path,
+) -> Result<FlatImage2D, Box<dyn std::error::Error>> {
+    use exr::prelude::*;
+    let image = exr::prelude::read_first_flat_layer_from_file(path)?;
+    let layer = &image.layer_data;
+    let (w, h) = (layer.size.width(), layer.size.height());
+    let ch = &layer.channel_data.list[0];
+    let data: Vec<f32> = match &ch.sample_data {
+        FlatSamples::F32(v) => v.to_vec(),
+        _ => return Err("expected F32 samples".into()),
+    };
+    Ok(FlatImage2D {
+        width: w,
+        height: h,
+        data,
+    })
+}
+
+struct FlatImage2D {
+    width: usize,
+    height: usize,
+    data: Vec<f32>,
+}
+impl FlatImage2D {
+    fn sample_at(&self, i: usize, j: usize) -> f32 { self.data[i + j * self.width] }
+}
