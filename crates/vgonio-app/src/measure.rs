@@ -184,6 +184,36 @@ impl Measurement {
                 },
                 _ => {},
             },
+            OutputFileFormatOption::Vgbsdf { disc_res } => match self.measured.kind() {
+                MeasurementKind::Bsdf => {
+                    let bsdf = self.measured.downcast_ref::<BsdfMeasurement>().unwrap();
+                    let path = filepath.with_extension("vgbsdf");
+                    bsdf.write_as_vgbsdf(&path, &self.timestamp, *disc_res)?;
+                },
+                MeasurementKind::Ndf => {
+                    let ndf = self.measured.downcast_ref::<MeasuredNdfData>().unwrap();
+                    let path = filepath.with_extension("vgndf");
+                    ndf.write_as_vgndf(&path, &self.timestamp, *disc_res)?;
+                },
+                MeasurementKind::Sdf => {
+                    let sdf = self.measured.downcast_ref::<MeasuredSdfData>().unwrap();
+                    let path = filepath.with_extension("vgsdf");
+                    // Default SDF binning: ~2° zenith × ~5° azimuth, matching the
+                    // typical pmf granularity. For finer control, call
+                    // write_as_vgsdf directly with a custom precision.
+                    let precision = Sph2::new(rad!(0.0349), rad!(0.0873));
+                    sdf.write_as_vgsdf(&path, &self.timestamp, precision)?;
+                },
+                MeasurementKind::Gaf => {
+                    return Err(VgonioError::new(
+                        "Vgbsdf output for masking-shadowing (GAF/MSF) is not implemented \
+                         yet — its 2D (view × incident) shape needs a multi-layer encoding \
+                         (see Task 15 plan note)",
+                        None,
+                    ));
+                },
+                _ => {},
+            },
         }
         Ok(())
     }
@@ -1019,5 +1049,61 @@ impl<'a> DataCarriedOnHemisphereSampler<'a, MeasuredNdfData> {
             out[i] = self.sample_point_at(Sph2::new(theta_o, phi));
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::measure::{
+        mfd::MeasuredNdfData,
+        params::{NdfMeasurementMode, NdfMeasurementParams},
+    };
+    use vgn_io::vgbsdf::VgbsdfReader;
+
+    /// CLI-dispatch smoke test: `OutputFileFormatOption::Vgbsdf` on an NDF
+    /// measurement must produce a `.vgndf` file (extension chosen per kind by
+    /// `Measurement::write_to_file`) that re-opens via `VgbsdfReader`.
+    ///
+    /// This is the only test that exercises the dispatch arm added in
+    /// Task 16; the per-kind writers themselves are covered by their own
+    /// smoke tests.
+    #[test]
+    fn write_to_file_vgbsdf_dispatches_ndf_to_vgndf() {
+        let params = NdfMeasurementParams {
+            mode: NdfMeasurementMode::ByPartition { precision: rad!(0.3) },
+            crop_to_disk: false,
+            use_facet_area: false,
+        };
+        let partition = SphericalPartition::new(
+            params.mode.partition_scheme_for_data_collection(),
+            SphericalDomain::Upper,
+            params.mode.partition_precision_for_data_collection(),
+        );
+        let samples: Box<[f32]> = (0..partition.n_patches())
+            .map(|i| i as f32)
+            .collect::<Vec<_>>()
+            .into();
+        let measured = MeasuredNdfData { params, samples };
+
+        let dir = tempfile::tempdir().unwrap();
+        // No extension — write_to_file selects "vgndf" because measured.kind() is Ndf.
+        let stem = dir.path().join("ndf_dispatch_test");
+
+        let m = Measurement {
+            name: "dispatch-test".into(),
+            source: MeasurementSource::Loaded(stem.clone()),
+            timestamp: Local::now(),
+            measured: Box::new(measured),
+        };
+        m.write_to_file(&stem, &OutputFileFormatOption::Vgbsdf { disc_res: 64 })
+            .unwrap();
+
+        let expected = stem.with_extension("vgndf");
+        assert!(expected.is_file(), "expected {} to exist", expected.display());
+
+        let reader = VgbsdfReader::open(&expected).unwrap();
+        assert_eq!(reader.manifest.archive.kind, "ndf");
+        assert_eq!(reader.manifest.vgonio.conventions, "v1");
     }
 }

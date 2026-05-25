@@ -179,6 +179,10 @@ pub enum OutputFormat {
     Exr,
     /// Vgonio interal file format together with a EXR file.
     VgmoExr,
+    /// VGONIO archival container — `.vgbsdf` / `.vgndf` / `.vgsdf`. The actual
+    /// extension is chosen per measurement kind; the umbrella name follows the
+    /// canonical BSDF case.
+    Vgbsdf,
 }
 
 impl Display for OutputFormat {
@@ -187,6 +191,7 @@ impl Display for OutputFormat {
             Self::Vgmo => write!(f, "vgmo"),
             Self::Exr => write!(f, "exr"),
             Self::VgmoExr => write!(f, "vgmo+exr"),
+            Self::Vgbsdf => write!(f, "vgbsdf"),
         }
     }
 }
@@ -195,6 +200,8 @@ impl OutputFormat {
     pub fn is_vgmo(&self) -> bool { matches!(self, Self::Vgmo | Self::VgmoExr) }
 
     pub fn is_exr(&self) -> bool { matches!(self, Self::Exr | Self::VgmoExr) }
+
+    pub fn is_vgbsdf(&self) -> bool { matches!(self, Self::Vgbsdf) }
 }
 
 /// Status color policy exposed on CLI.

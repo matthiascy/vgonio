@@ -51,6 +51,15 @@ fn parses_combined_output_format() {
 }
 
 #[test]
+fn parses_vgbsdf_output_format() {
+    let mut args = base_args();
+    args.extend(["--output-format".into(), "vgbsdf".into()]);
+    let parsed = MeasureCli::try_parse_from(args).unwrap();
+    assert_eq!(parsed.measure.output_format.to_string(), "vgbsdf");
+    assert!(parsed.measure.output_format.is_vgbsdf());
+}
+
+#[test]
 fn rejects_unknown_output_format() {
     let mut args = base_args();
     args.extend(["--output-format".into(), "unknown".into()]);

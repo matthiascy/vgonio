@@ -2005,6 +2005,13 @@ pub enum OutputFileFormatOption {
     Exr {
         resolution: u32,
     },
+    /// VGONIO archival container. Dispatches per measurement kind:
+    /// BSDF → `.vgbsdf`, NDF → `.vgndf`, SDF → `.vgsdf`. `disc_res` is the
+    /// resolution of the Lambert-disc EXR layer (unused for SDF, which has
+    /// no disc encoding per spec Part 4).
+    Vgbsdf {
+        disc_res: u32,
+    },
 }
 
 /// Writes the measured data to a file.

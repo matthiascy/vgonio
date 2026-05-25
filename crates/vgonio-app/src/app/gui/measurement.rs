@@ -314,6 +314,11 @@ impl MeasurementDialog {
                             ui.selectable_value(&mut self.format, OutputFormat::Exr, "exr");
                         }
                         ui.selectable_value(&mut self.format, OutputFormat::VgmoExr, "vgmo+exr");
+                        if self.kind != MeasurementKind::Gaf {
+                            // VGONIO archival container — no GAF/MSF support yet (see Task 15
+                            // plan note: the 2D view×incident shape needs a multi-layer encoding).
+                            ui.selectable_value(&mut self.format, OutputFormat::Vgbsdf, "vgbsdf");
+                        }
                     });
 
                     if self.format.is_vgmo() {
@@ -361,12 +366,22 @@ impl MeasurementDialog {
                             });
                     }
 
-                    if self.format.is_exr() {
-                        egui::CollapsingHeader::new("Exr Options")
+                    if self.format.is_exr() || self.format.is_vgbsdf() {
+                        let header = if self.format.is_vgbsdf() {
+                            "Vgbsdf Options"
+                        } else {
+                            "Exr Options"
+                        };
+                        egui::CollapsingHeader::new(header)
                             .default_open(true)
                             .show(ui, |ui| {
                                 ui.horizontal_wrapped(|ui| {
-                                    ui.label("Image resolution: ");
+                                    let label = if self.format.is_vgbsdf() {
+                                        "Disc resolution: "
+                                    } else {
+                                        "Image resolution: "
+                                    };
+                                    ui.label(label);
                                     ui.add(
                                         egui::DragValue::new(&mut self.img_res).range(256..=2048),
                                     );
@@ -424,6 +439,12 @@ impl MeasurementDialog {
                                         resolution: self.img_res,
                                     },
                                 ]),
+                            },
+                            OutputFormat::Vgbsdf => OutputOptions {
+                                dir: None,
+                                formats: Box::new([OutputFileFormatOption::Vgbsdf {
+                                    disc_res: self.img_res,
+                                }]),
                             },
                         });
                         self.event_loop.send_event(VgonioEvent::Measure {

@@ -268,6 +268,10 @@ pub fn run(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
                 },
             ]
             .into_boxed_slice(),
+            OutputFormat::Vgbsdf => vec![OutputFileFormatOption::Vgbsdf {
+                disc_res: opts.resolution,
+            }]
+            .into_boxed_slice(),
         };
 
         crate::io::write_measured_data_to_file(
