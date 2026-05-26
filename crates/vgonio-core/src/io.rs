@@ -247,20 +247,45 @@ impl FileEncoding {
     }
 }
 
-/// Data compression scheme while storing the data.
+/// Data compression scheme written to the on-disk header byte at offset 2 of every
+/// vgonio cache file (`.vgmo` / `.vgms`).
+///
+/// The discriminant `#[repr(u8)]` *is* the on-disk byte that never reorder, never
+/// re-number, and add new variants only at the next free value. `#[non_exhaustive]`
+/// is mandatory because consumers must wildcard-match: a worker reading a file
+/// written by a newer writer needs to fall through to a clear `unknown scheme`
+/// error, not panic.
+///
+/// # Cache vs archival - which scheme to use
+///
+/// This enum only applies to the **cache** layer (`.vgmo` / `.vgms`). The
+/// `.vgbsdf` archival container (see `vgn_io::vgbsdf`) is fixed at ZIP `Store`
+/// (method 0); its EXR members manage their own internal compression. Do not
+/// add an `Lz4` variant intending to use it inside `.vgbsdf` - there is no
+/// path that would.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[repr(u8)]
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum CompressionScheme {
-    /// No compression.
+    /// No compression. The file is the raw payload bytes.
     None = 0x00,
-    /// Zlib compression.
+    /// Zlib compression (via `flate2`). Smaller files than LZ4 at the cost of
+    /// slower decode; default for general-purpose cache files where size beats
+    /// throughput.
     Zlib = 0x01,
-    /// Gzip compression.
+    /// Gzip compression (via `flate2`). Same algorithm family as `Zlib`,
+    /// gzip-framed for compatibility with the `gzip(1)` CLI.
     Gzip = 0x02,
-    /// Lz4 frame compression - streaming, fast decode, slightly worse ratio than zlib.
-    /// For cache files; not for archival files.
+    /// LZ4 Frame format (via the pure-Rust `lz4_flex` crate, `frame` feature) -
+    /// streaming, very fast decode, slightly worse ratio than zlib. Wire-format
+    /// compatible with the reference `lz4(1)` CLI.
+    ///
+    /// **Cache-layer only.** LZ4 lives inside the worker's local
+    /// `.vgmo` / `.vgms` cache; bytes are decompressed before they cross any
+    /// `ArtifactStore` boundary, so workers never exchange LZ4-framed payloads
+    /// over the wire. The `.vgbsdf` archival container is `Store`-only - see
+    /// the type-level doc above.
     Lz4 = 0x03,
 }
 

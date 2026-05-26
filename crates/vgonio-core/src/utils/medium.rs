@@ -1,4 +1,40 @@
-//! Medium of the surface.
+//! Medium identity and registry.
+//!
+//! # The shift
+//!
+//! `Medium` used to be a closed Rust enum (`Vacuum`, `Air`, `Al`, …). Adding a
+//! new medium required editing source and recompiling the whole tree, which
+//! blocked the IOR fetch tooling from accepting arbitrary
+//! refractiveindex.info entries. This module is the data-driven replacement:
+//!
+//! - **[`MediumId`]** - a `Copy` newtype around a `&'static str` content name (`"vac"`, `"air"`,
+//!   `"al"`, ...). Equality and hashing are content-based, so `MediumId::AIR` minted in one crate
+//!   compares equal to the same name resolved through the registry in another. The static-string
+//!   backing comes from a leak-pooled intern table (see [`intern`]) seeded at bootstrap and
+//!   extended as registry entries load - there is no public `MediumId::new`, so a `MediumId` value
+//!   is always either a shipped `const` or a successfully registered name.
+//!
+//! - **[`MediumRegistry`]** - the runtime database of media: canonical name, display name, aliases,
+//!   optional IOR-data path. Built from layered sources (embedded fallback → system → user) via
+//!   [`merge_layers`]; conflicts are resolved by [`MergePolicy`] and recorded as [`Provenance`].
+//!
+//! - **[`bootstrap`]** - process-wide install of a `MediumRegistry` behind a `OnceLock`. Subsequent
+//!   calls return [`MediumLoadError::AlreadyInitialized`]. Pre-bootstrap, `MediumId::try_from_name`
+//!   returns `None` rather than panicking, and `Display` falls back to the canonical short name.
+//!
+//! # Built-ins
+//!
+//! Seven constants on [`MediumId`] (`VACUUM`, `AIR`, `AL`, `CU`, `NI`, `PVC`,
+//! `CR`) are guaranteed to exist on every binary that links this crate. The
+//! IOR loader currently rejects baseline media without IOR data (see
+//! `crates/vgonio-core/examples/add_ior.rs` for the shipping pattern).
+//!
+//! # Wire / file format compatibility
+//!
+//! `MediumId` serializes as its canonical short name string (intern-pool
+//! addresses never cross the wire). The 3-byte medium field in BSDF file
+//! headers is forward-compatible, which let the data-driven refactor land
+//! without bumping the BSDF format past v0.1.0.
 
 mod error;
 pub use error::MediumLoadError;
