@@ -287,7 +287,7 @@ impl VgonioGui {
                                 measurement.measured.kind()
                             );
                             let data = match measurement.measured.kind() {
-                                MeasurementKind::Gaf => MfdFittingData::Msf(
+                                MeasurementKind::Gaf => MfdFittingData::Gaf(
                                     measurement
                                         .measured
                                         .downcast_ref::<MeasuredGafData>()

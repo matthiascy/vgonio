@@ -97,8 +97,8 @@ pub mod vgmo {
                 VgmoHeaderExt::Ndf { params: ndf.params }
             },
             MeasurementKind::Gaf => {
-                let msf = data.downcast_ref::<MeasuredGafData>().unwrap();
-                VgmoHeaderExt::Gaf { params: msf.params }
+                let gaf = data.downcast_ref::<MeasuredGafData>().unwrap();
+                VgmoHeaderExt::Gaf { params: gaf.params }
             },
             MeasurementKind::Sdf => VgmoHeaderExt::Sdf,
             _ => {
@@ -134,7 +134,7 @@ pub mod vgmo {
                                     params.crop_to_disk as u8,
                                     params.use_facet_area as u8,
                                 ])?;
-                                write_adf_or_msf_params_to_vgmo(azimuth, zenith, writer, true)?;
+                                write_ndf_or_gaf_params_to_vgmo(azimuth, zenith, writer, true)?;
                             },
                             NdfMeasurementMode::ByPartition { precision } => {
                                 log::debug!("Writing NDF header ext (by partition) to VGMO file");
@@ -157,7 +157,7 @@ pub mod vgmo {
                     },
                     Self::Gaf { params } => {
                         writer.write_all(&[MeasurementKind::Gaf as u8])?;
-                        write_adf_or_msf_params_to_vgmo(
+                        write_ndf_or_gaf_params_to_vgmo(
                             &params.azimuth,
                             &params.zenith,
                             writer,
@@ -224,7 +224,7 @@ pub mod vgmo {
             },
             VgmoHeaderExt::Ndf { params } => {
                 log::debug!(
-                    "Reading ADF data of {} samples from VGMO file",
+                    "Reading NDF data of {} samples from VGMO file",
                     params.samples_count()
                 );
                 let samples = io::read_f32_data_samples(
@@ -241,7 +241,7 @@ pub mod vgmo {
             },
             VgmoHeaderExt::Gaf { params } => {
                 log::debug!(
-                    "Reading MSF data of {} samples from VGMO file",
+                    "Reading GAF data of {} samples from VGMO file",
                     params.samples_count()
                 );
                 let samples = io::read_f32_data_samples(
@@ -312,8 +312,8 @@ pub mod vgmo {
                         (&ndf.samples, cols)
                     },
                     MeasurementKind::Gaf => {
-                        let msf = measured.downcast_ref::<MeasuredGafData>().unwrap();
-                        (&msf.samples, msf.params.zenith.step_count_wrapped())
+                        let gaf = measured.downcast_ref::<MeasuredGafData>().unwrap();
+                        (&gaf.samples, gaf.params.zenith.step_count_wrapped())
                     },
                     _ => {
                         unreachable!("Unsupported measurement kind: {}", mfd)
@@ -379,7 +379,7 @@ pub mod vgmo {
         Ok(())
     }
 
-    fn madf_or_mmsf_samples_count(
+    fn mndf_or_mgaf_samples_count(
         zenith: &StepRangeIncl<Radians>,
         azimuth: &StepRangeIncl<Radians>,
         is_madf: bool,
@@ -393,8 +393,8 @@ pub mod vgmo {
         }
     }
 
-    /// Writes the ADF and MSF measurement parameters to the VGMO file.
-    fn write_adf_or_msf_params_to_vgmo<W: Write>(
+    /// Writes the NDF and GAF measurement parameters to the VGMO file.
+    fn write_ndf_or_gaf_params_to_vgmo<W: Write>(
         azimuth: &StepRangeIncl<Radians>,
         zenith: &StepRangeIncl<Radians>,
         writer: &mut BufWriter<W>,
@@ -404,7 +404,7 @@ pub mod vgmo {
         azimuth.write_to_buf(&mut header[0..16]);
         zenith.write_to_buf(&mut header[16..32]);
         header[32..36].copy_from_slice(
-            &(madf_or_mmsf_samples_count(zenith, azimuth, is_madf) as u32).to_le_bytes(),
+            &(mndf_or_mgaf_samples_count(zenith, azimuth, is_madf) as u32).to_le_bytes(),
         );
         writer.write_all(&header)
     }
@@ -672,7 +672,7 @@ pub mod vgmo {
 
     impl GafMeasurementParams {
         // TODO: resolve resolution and strict
-        /// Reads the MSF measurement parameters from the given reader.
+        /// Reads the GAF measurement parameters from the given reader.
         pub fn read_from_vgmo<R: Read + Seek>(
             version: Version,
             reader: &mut BufReader<R>,
@@ -701,7 +701,7 @@ pub mod vgmo {
                 },
                 _ => Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Unsupported VGMO[MsfMeasurementParams] version {}", version),
+                    format!("Unsupported VGMO[GafMeasurementParams] version {}", version),
                 )),
             }
         }

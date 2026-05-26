@@ -27,8 +27,8 @@ use vgn_core::{
 pub enum MfdFittingData<'a> {
     /// The measured NDF data.
     Ndf(&'a MeasuredNdfData),
-    /// The measured MSF data.
-    Msf(&'a MeasuredGafData),
+    /// The measured GAF data.
+    Gaf(&'a MeasuredGafData),
 }
 
 /// Fitting procedure trying to find different models for the measured
@@ -133,7 +133,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                         })
                         .collect()
                 },
-                MfdFittingData::Msf(measured) => initialise_microfacet_mdf_models(
+                MfdFittingData::Gaf(measured) => initialise_microfacet_mdf_models(
                     0.001,
                     2.0,
                     32,
@@ -148,7 +148,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                     );
                     let (model, report) = match symmetry {
                         Symmetry::Isotropic => {
-                            let problem = MsfFittingProblemProxy::<{ Symmetry::Isotropic }> {
+                            let problem = GafFittingProblemProxy::<{ Symmetry::Isotropic }> {
                                 measured,
                                 model,
                             };
@@ -156,7 +156,7 @@ impl<'a> FittingProblem for MicrofacetDistributionFittingProblem<'a> {
                             (result.model, report)
                         },
                         Symmetry::Anisotropic => {
-                            let problem = MsfFittingProblemProxy::<{ Symmetry::Anisotropic }> {
+                            let problem = GafFittingProblemProxy::<{ Symmetry::Anisotropic }> {
                                 measured,
                                 model,
                             };
@@ -232,8 +232,8 @@ impl<'a, const I: Symmetry> NdfFittingProblemProxy<'a, I> {
     }
 }
 
-/// Proxy for the MSF fitting problem.
-struct MsfFittingProblemProxy<'a, const I: Symmetry> {
+/// Proxy for the GAF fitting problem.
+struct GafFittingProblemProxy<'a, const I: Symmetry> {
     measured: &'a MeasuredGafData,
     model: Box<dyn MicrofacetDistribution<Params = [f64; 2]>>,
 }
@@ -428,7 +428,7 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for NdfFittingProblemProxy<'a, { Symm
 }
 
 impl<'a> LeastSquaresProblem<f64, Dyn, U2>
-    for MsfFittingProblemProxy<'a, { Symmetry::Anisotropic }>
+    for GafFittingProblemProxy<'a, { Symmetry::Anisotropic }>
 {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U2>;
@@ -439,19 +439,19 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U2>
     fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> {
         Some(OMatrix::<f64, Dyn, U1>::from_iterator(
             self.measured.samples.len(),
-            calc_msf_residuals(&self.measured, self.model.as_ref()),
+            calc_gaf_residuals(&self.measured, self.model.as_ref()),
         ))
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U2, Self::JacobianStorage>> {
-        Some(OMatrix::<f64, Dyn, U2>::from_row_slice(&calc_msf_jacobian(
+        Some(OMatrix::<f64, Dyn, U2>::from_row_slice(&calc_gaf_jacobian(
             &self.measured,
             self.model.as_ref(),
         )))
     }
 }
 
-impl<'a> LeastSquaresProblem<f64, Dyn, U1> for MsfFittingProblemProxy<'a, { Symmetry::Isotropic }> {
+impl<'a> LeastSquaresProblem<f64, Dyn, U1> for GafFittingProblemProxy<'a, { Symmetry::Isotropic }> {
     type ResidualStorage = VecStorage<f64, Dyn, U1>;
     type JacobianStorage = Owned<f64, Dyn, U1>;
     type ParameterStorage = Owned<f64, U1, U1>;
@@ -461,19 +461,19 @@ impl<'a> LeastSquaresProblem<f64, Dyn, U1> for MsfFittingProblemProxy<'a, { Symm
     fn residuals(&self) -> Option<Vector<f64, Dyn, Self::ResidualStorage>> {
         Some(OMatrix::<f64, Dyn, U1>::from_iterator(
             self.measured.samples.len(),
-            calc_msf_residuals(&self.measured, self.model.as_ref()),
+            calc_gaf_residuals(&self.measured, self.model.as_ref()),
         ))
     }
 
     fn jacobian(&self) -> Option<Matrix<f64, Dyn, U1, Self::JacobianStorage>> {
-        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&calc_msf_jacobian(
+        Some(OMatrix::<f64, Dyn, U1>::from_row_slice(&calc_gaf_jacobian(
             &self.measured,
             self.model.as_ref(),
         )))
     }
 }
 
-fn calc_msf_residuals<'a>(
+fn calc_gaf_residuals<'a>(
     measured: &'a MeasuredGafData,
     model: &'a dyn MicrofacetDistribution<Params = [f64; 2]>,
 ) -> impl IntoIterator<Item = f64> + 'a {
@@ -492,7 +492,7 @@ fn calc_msf_residuals<'a>(
     })
 }
 
-fn calc_msf_jacobian(
+fn calc_gaf_jacobian(
     measured: &MeasuredGafData,
     model: &dyn MicrofacetDistribution<Params = [f64; 2]>,
 ) -> Box<[f64]> {

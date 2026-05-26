@@ -23,9 +23,7 @@ use vgn_core::{
     units::{nm, Nanometres, Radians},
     BrdfLevel, MeasurementKind,
 };
-#[cfg(feature = "fitting")]
-use vgn_jabr::array::DyArr;
-#[cfg(feature = "io")]
+#[cfg(any(feature = "io", feature = "fitting"))]
 use vgn_jabr::array::DyArr;
 #[cfg(feature = "fitting")]
 use vgn_jabr::array::DynArr;
