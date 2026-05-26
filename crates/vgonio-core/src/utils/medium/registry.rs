@@ -1,9 +1,7 @@
 //! In-memory medium registry. Built once at startup from layered TOML inputs.
 
-use ron::de;
-
 use crate::utils::medium::{
-    dto::{self, MediumDto, MediumTomlFile},
+    dto::{self, MediumTomlFile},
     error::MediumLoadError,
     intern::intern,
     merge_layers, MediumId, MergePolicy, Provenance,
@@ -94,6 +92,10 @@ impl MediumRegistry {
 
     /// Number of entries (including the synthetic Vacuum).
     pub fn len(&self) -> usize { self.by_id.len() }
+
+    /// True when the registry has no entries (should never be true in practice, since Vacuum is
+    /// always seeded).
+    pub fn is_empty(&self) -> bool { self.by_id.is_empty() }
 
     /// Insert a new entry. Caller is responsible for collision checks; this
     /// method assumes the entry is valid against the cumulative state.

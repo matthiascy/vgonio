@@ -5,7 +5,7 @@
 use super::{DispersionFormula, IorData, IorDataset, IorRecord};
 use crate::{units::nanometres, utils::medium::MediumId};
 use serde::{Deserialize, Serialize};
-use std::{path::Path, str::FromStr};
+use std::path::Path;
 
 /// Current `*.ior.ron` version.
 pub const IOR_DATASET_SCHEMA_VERSION: u32 = 1;
@@ -16,14 +16,18 @@ pub enum IorFileError {
     /// I/O error.
     #[error("I/O error for {path}: {source}")]
     Io {
+        /// Path of the file that produced the error.
         path: String,
+        /// Underlying I/O error.
         #[source]
         source: std::io::Error,
     },
     /// RON (de)serialization error.
     #[error("RON error for {path}: {source}")]
     Ron {
+        /// Path of the file that produced the error.
         path: String,
+        /// Underlying RON error.
         #[source]
         source: ron::Error,
     },
@@ -32,14 +36,22 @@ pub enum IorFileError {
     Toml(String),
     /// CSV parsing error (legacy import).
     #[error("CSV error for {path}: {msg}")]
-    Csv { path: String, msg: String },
+    Csv {
+        /// Path of the CSV file being read.
+        path: String,
+        /// Human-readable description of the parse failure.
+        msg: String,
+    },
     /// Unsupported schema version.
     #[error(
         "{path}: unsupported ior dataset schema_version {found} (this build expects {expected})"
     )]
     SchemaVersion {
+        /// Path of the file declaring the unsupported version.
         path: String,
+        /// `schema_version` field as found in the file.
         found: u32,
+        /// `schema_version` this build expects (i.e. [`IOR_DATASET_SCHEMA_VERSION`]).
         expected: u32,
     },
     /// Unknown medium string.
@@ -236,7 +248,7 @@ impl IorDatasetDto {
         let pretty = ron::ser::PrettyConfig::new().struct_names(false);
         let text = ron::ser::to_string_pretty(&self, pretty).map_err(|e| IorFileError::Ron {
             path: p.clone(),
-            source: e.into(),
+            source: e,
         })?;
         std::fs::write(path, text).map_err(|source| IorFileError::Io { path: p, source })
     }
@@ -251,7 +263,7 @@ impl IorDatasetDto {
     pub fn parse(src: &str, path: Option<String>) -> Result<IorDatasetDto, IorFileError> {
         let p = path.unwrap_or_else(|| "<string>".into());
 
-        ron::from_str(&src).map_err(|e| IorFileError::Ron {
+        ron::from_str(src).map_err(|e| IorFileError::Ron {
             path: p,
             source: e.into(),
         })
@@ -341,7 +353,7 @@ impl ManifestDto {
     /// path.
     pub fn parse(src: &str, path: Option<String>) -> Result<ManifestDto, IorFileError> {
         let p = path.unwrap_or_else(|| "<manifest>".into());
-        toml::from_str(&src).map_err(|e| IorFileError::Toml(format!("{p}: {e}")))
+        toml::from_str(src).map_err(|e| IorFileError::Toml(format!("{p}: {e}")))
     }
 }
 

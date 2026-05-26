@@ -12,7 +12,7 @@ pub fn intern(s: &str) -> &'static str {
     let mut guard = POOL.lock().expect("medium intern pool poisoned");
     let pool = guard.get_or_insert_with(HashSet::new);
     if let Some(existing) = pool.get(s) {
-        return *existing;
+        return existing;
     }
     // Leak a Box<str>. Lives for process lifetime.
     let leaked: &'static str = Box::leak(s.to_owned().into_boxed_str());

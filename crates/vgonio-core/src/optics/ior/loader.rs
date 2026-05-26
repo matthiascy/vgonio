@@ -13,7 +13,6 @@ use crate::{
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    str::FromStr,
 };
 
 #[cfg(feature = "embed-datafiles")]
@@ -42,9 +41,11 @@ impl IorRegLoader {
     /// * `excluded` - The list of excluded files.
     ///
     /// Layering order (later overrides earlier for the same medium):
+    ///
     /// 1. Embedded baseline
     /// 2. System
     /// 3. User
+    ///
     /// The embeded baseline is implicit (no parameter): it is the compiled-in `datafiles/ior/`
     /// when the `embed-datafiles` feature is enabled, and empty otherwise. Pass `None` for both
     /// `sys_dir` and `usr_dir` to only load the embedded baseline.

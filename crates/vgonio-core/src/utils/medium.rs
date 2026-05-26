@@ -16,13 +16,12 @@ pub use layer::{merge_layers, Collision, MergePolicy, Provenance};
 mod registry;
 pub use registry::{MediumEntry, MediumRegistry};
 
-use crate::error::VgonioError;
-use std::str::FromStr;
-
 use std::{path::Path, sync::OnceLock};
 
 static REGISTRY: OnceLock<MediumRegistry> = OnceLock::new();
 
+/// Returns the process-wide medium registry installed by [`bootstrap`], or
+/// `None` if [`bootstrap`] has not yet been called.
 pub fn registry() -> Option<&'static MediumRegistry> { REGISTRY.get() }
 
 /// Public bootstrap entry. Builds the registry from the embedded fallback plus

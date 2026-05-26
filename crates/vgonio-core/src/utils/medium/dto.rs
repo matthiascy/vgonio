@@ -3,7 +3,7 @@
 
 use crate::utils::medium::MediumLoadError;
 use serde::Deserialize;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

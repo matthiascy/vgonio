@@ -13,25 +13,62 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DispersionFormula {
     /// Form 1 - Sellmeier: η²−1 = c0 + Σ aᵢ·λ²/(λ²−bᵢ²).
-    Sellmeier { c0: f64, terms: Vec<(f64, f64)> },
+    Sellmeier {
+        /// Constant term `c0`.
+        c0: f64,
+        /// Sum terms `(aᵢ, bᵢ)`.
+        terms: Vec<(f64, f64)>,
+    },
     /// Form 2 - Sellmeier-2: η²−1 = c0 + Σ aᵢ·λ²/(λ²−bᵢ).
-    Sellmeier2 { c0: f64, terms: Vec<(f64, f64)> },
+    Sellmeier2 {
+        /// Constant term `c0`.
+        c0: f64,
+        /// Sum terms `(aᵢ, bᵢ)`.
+        terms: Vec<(f64, f64)>,
+    },
     /// Form 3 - Polynomial: η² = c0 + Σ aᵢ·λ^bᵢ.
-    Polynomial { c0: f64, terms: Vec<(f64, f64)> },
+    Polynomial {
+        /// Constant term `c0`.
+        c0: f64,
+        /// Sum terms `(aᵢ, bᵢ)`.
+        terms: Vec<(f64, f64)>,
+    },
     /// Form 4 - refractiveindex.info full form (≤17 coefficients, trailing terms => 0):
     /// η² = c0 + c1·λ^c2/(λ²−c3^c4) + c5·λ^c6/(λ²−c7^c8) + c9·λ^c10 + c11·λ^c12 + c13·λ^c14 +
     /// c15·λ^c16.
-    RiiFull { coeffs: Vec<f64> },
+    RiiFull {
+        /// Coefficients `c0..c16`; trailing missing entries are treated as `0`.
+        coeffs: Vec<f64>,
+    },
     /// Form 5 - Cauchy: η = c0 + Σ aᵢ·λ^bᵢ.
-    Cauchy { c0: f64, terms: Vec<(f64, f64)> },
+    Cauchy {
+        /// Constant term `c0`.
+        c0: f64,
+        /// Sum terms `(aᵢ, bᵢ)`.
+        terms: Vec<(f64, f64)>,
+    },
     /// Form 6 - Gases: η−1 = c0 + Σ aᵢ/(bᵢ − λ⁻²).
-    Gases { c0: f64, terms: Vec<(f64, f64)> },
+    Gases {
+        /// Constant term `c0`.
+        c0: f64,
+        /// Sum terms `(aᵢ, bᵢ)`.
+        terms: Vec<(f64, f64)>,
+    },
     /// Form 7 - Herzberger: η = c0 + c1/(λ²−0.028) + c2/(λ²−0.028)² + c3·λ² + c4·λ⁴ + c5·λ⁶.
-    Herzberger { coeffs: [f64; 6] },
+    Herzberger {
+        /// Coefficients `[c0, c1, c2, c3, c4, c5]`.
+        coeffs: [f64; 6],
+    },
     /// Form 8 - Retro: (η²−1)/(η²+2) = c0 + c1·λ²/(λ²−c2) + c3·λ².
-    Retro { coeffs: [f64; 4] },
+    Retro {
+        /// Coefficients `[c0, c1, c2, c3]`.
+        coeffs: [f64; 4],
+    },
     /// Form 9 - Exotic: η² = c0 + c1/(λ²−c2) + c3·(λ−c4)/((λ−c4)²+c5).
-    Exotic { coeffs: [f64; 6] },
+    Exotic {
+        /// Coefficients `[c0, c1, c2, c3, c4, c5]`.
+        coeffs: [f64; 6],
+    },
 }
 
 impl DispersionFormula {

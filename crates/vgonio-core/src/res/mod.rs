@@ -65,9 +65,9 @@ pub enum Error {
     /// medium — Vacuum is the sole exception (it's mathematically privileged and
     /// never needs a dataset).
     #[error(
-        "built-in medium {0:?} has no IOR dataset in the embedded/system/user layers. \
-         Add `datafiles/ior/{0}_<source>.ior.ron` and a matching `sources.toml` entry, \
-         or remove the medium from `crates/vgonio-core/src/utils/medium/builtin.toml`."
+        "built-in medium {0:?} has no IOR dataset in the embedded/system/user layers. Add \
+         `datafiles/ior/{0}_<source>.ior.ron` and a matching `sources.toml` entry, or remove the \
+         medium from `crates/vgonio-core/src/utils/medium/builtin.toml`."
     )]
     MissingBuiltinIor(String),
 }
@@ -75,15 +75,15 @@ pub enum Error {
 impl From<IorFileError> for Error {
     fn from(e: IorFileError) -> Self {
         match e {
-            IorFileError::Io { path, source } => Error::IoError(source),
+            IorFileError::Io { path: _, source } => Error::IoError(source),
             IorFileError::Ron { path, source } => Error::IoError(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Failed to parse RON file: {source}"),
+                format!("Failed to parse RON file at {path}: {source}"),
             )),
-            IorFileError::Toml(_) => todo!(),
+            IorFileError::Toml(_) => todo!("propagate TOML errors with path and source info"),
             IorFileError::Csv { path, msg } => Error::IoError(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Failed to parse CSV file: {msg}"),
+                format!("Failed to parse CSV file at {path}: {msg}"),
             )),
             IorFileError::SchemaVersion {
                 path,
@@ -91,7 +91,9 @@ impl From<IorFileError> for Error {
                 expected,
             } => Error::IoError(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Unsupported schema version: found {found}, expected {expected}"),
+                format!(
+                    "Unsupported schema version: found {found}, expected {expected} in file {path}"
+                ),
             )),
             IorFileError::UnknownMedium(path, medium) => Error::IoError(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
