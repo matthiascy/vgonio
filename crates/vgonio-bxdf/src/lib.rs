@@ -184,7 +184,7 @@ impl Scattering {
         ior_i: &Ior,
         ior_t: &Ior,
     ) -> f64 {
-        fresnel::reflectance(cos_theta(&(-*vi)), ior_i, ior_t) as f64 * brdf.eval(vi, vo)
+        f64::from(fresnel::reflectance(cos_theta(&(-*vi)), ior_i, ior_t)) * brdf.eval(vi, vo)
     }
 
     /// Evaluates the reflectance of the given BRDF model for a spectrum.

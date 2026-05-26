@@ -240,6 +240,7 @@ where
 /// # Returns
 ///
 /// (half, difference)
+#[must_use]
 pub fn io2hd(vi: &Vec3, vo: &Vec3) -> (Vec3, Vec3) {
     let h = (*vi + *vo).normalize();
     let wh = Sph2::from_cartesian(h);
@@ -263,6 +264,7 @@ pub fn io2hd(vi: &Vec3, vo: &Vec3) -> (Vec3, Vec3) {
 /// # Returns
 ///
 /// (half, difference)
+#[must_use]
 pub fn io2hd_sph(wi: &Sph2, wo: &Sph2) -> (Sph2, Sph2) {
     let (h, d) = io2hd(&wi.to_cartesian(), &wo.to_cartesian());
     (Sph2::from_cartesian(h), Sph2::from_cartesian(d))
@@ -289,6 +291,7 @@ pub fn io2hd_sph(wi: &Sph2, wo: &Sph2) -> (Sph2, Sph2) {
 /// # Returns
 ///
 /// (incident, outgoing)
+#[must_use]
 pub fn hd2io(vh: &Vec3, vd: &Vec3) -> (Vec3, Vec3) {
     let wh = Sph2::from_cartesian(*vh);
     let phi_h = wh.phi;
@@ -311,6 +314,7 @@ pub fn hd2io(vh: &Vec3, vd: &Vec3) -> (Vec3, Vec3) {
 /// # Returns
 ///
 /// (incident, outgoing)
+#[must_use]
 pub fn hd2io_sph(wh: &Sph2, wd: &Sph2) -> (Sph2, Sph2) {
     let (i, o) = hd2io(&wh.to_cartesian(), &wd.to_cartesian());
     (Sph2::from_cartesian(i), Sph2::from_cartesian(o))

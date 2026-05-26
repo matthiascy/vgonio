@@ -45,11 +45,13 @@ impl BrdfParam for VgonioBrdfParameterisation {
 
 impl VgonioBrdfParameterisation {
     /// Returns the incoming directions in cartesian coordinates.
+    #[must_use]
     pub fn incoming_cartesian(&self) -> DyArr<Vec3> {
         DyArr::from_iterator([-1], self.incoming.iter().map(|sph| sph.to_cartesian()))
     }
 
     /// Returns the outgoing directions in cartesian coordinates.
+    #[must_use]
     pub fn outgoing_cartesian(&self) -> DyArr<Vec3> {
         DyArr::from_iterator(
             [-1],
@@ -61,6 +63,7 @@ impl VgonioBrdfParameterisation {
     }
 
     /// Returns the outgoing directions in spherical coordinates.
+    #[must_use]
     pub fn outgoing_spherical(&self) -> DyArr<Sph2> {
         DyArr::from_iterator(
             [-1],
@@ -69,15 +72,19 @@ impl VgonioBrdfParameterisation {
     }
 
     /// Returns the number of outgoing directions.
+    #[must_use]
     pub fn n_wo(&self) -> usize { self.outgoing.patches.len() }
 
     /// Returns the number of incoming directions.
+    #[must_use]
     pub fn n_wi(&self) -> usize { self.incoming.len() }
 
     /// Returns the number of incident directions along the zenith angle.
+    #[must_use]
     pub fn n_wi_zenith(&self) -> usize { self.n_zenith_i }
 
     /// Returns the number of incident directions along the azimuthal angle.
+    #[must_use]
     pub fn n_wi_azimuth(&self) -> usize { self.incoming.len() / self.n_zenith_i }
 }
 
@@ -98,6 +105,7 @@ impl_any_measured_trait!(@single_level_brdf VgonioBrdf);
 impl VgonioBrdf {
     /// Creates a new VGonio BRDF. The BRDF is parameterised in the incident
     /// and outgoing directions.
+    #[must_use]
     pub fn new(
         origin: Origin,
         incident_medium: MediumId,
@@ -118,10 +126,12 @@ impl VgonioBrdf {
     }
 
     /// Returns the kind of the measured BRDF.
+    #[must_use]
     pub fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Vgonio }
 
     /// Computes local BRDF maximum values for each snapshot, that is, for each
     /// incident direction (per wavelength).
+    #[must_use]
     pub fn compute_max_values(&self) -> DyArr<f32, 2> {
         let n_wi = self.params.incoming.len();
         let n_spectrum = self.spectrum.len();
@@ -140,6 +150,7 @@ impl VgonioBrdf {
     }
 
     /// Returns an iterator over the snapshots of the BRDF.
+    #[must_use]
     pub fn snapshots(&self) -> BrdfSnapshotIterator<'_, VgonioBrdfParameterisation, 3> {
         BrdfSnapshotIterator {
             brdf: self,

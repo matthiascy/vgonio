@@ -23,6 +23,7 @@ pub enum MicrofacetDistroKind {
 
 impl MicrofacetDistroKind {
     /// Returns the string representation of the microfacet distribution kind.
+    #[must_use]
     pub fn to_str(&self) -> &'static str {
         match self {
             MicrofacetDistroKind::Beckmann => "Beckmann",

@@ -102,9 +102,11 @@ where
     P: Clone + Send + Sync + BrdfParam + PartialEq + 'static,
 {
     /// Returns the number of wavelengths of the measured BRDF.
+    #[must_use]
     pub fn n_spectrum(&self) -> usize { self.spectrum.len() }
 
     /// Returns the number of samples of the measured BRDF.
+    #[must_use]
     pub fn n_samples(&self) -> usize { self.samples.len() }
 }
 

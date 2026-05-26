@@ -122,6 +122,7 @@ impl_any_measured_trait!(@single_level_brdf MerlBrdf);
 
 impl MerlBrdf {
     /// Lookup the index of the azimuthal angle for the difference vector.
+    #[must_use]
     pub fn phi_d_index(&self, phi_d: Radians) -> usize {
         // Make sure the angle is in the range [0, π].
         let phi_d = if phi_d < Radians::ZERO {
@@ -138,6 +139,7 @@ impl MerlBrdf {
     }
 
     /// Lookup the index of the zenith angle for the half-vector.
+    #[must_use]
     pub fn theta_d_index(&self, theta_d: Radians) -> usize {
         assert!(theta_d >= Radians::ZERO && theta_d <= Radians::HALF_PI);
         let index =
@@ -148,6 +150,7 @@ impl MerlBrdf {
     /// Lookup the index of the zenith angle for the difference vector.
     ///
     /// The mapping is not linear.
+    #[must_use]
     pub fn theta_h_index(&self, theta_h: Radians) -> usize {
         assert!(theta_h >= Radians::ZERO && theta_h <= Radians::HALF_PI);
         let theta_h_deg = theta_h * 0.5 / Radians::PI * MerlBrdfParam::RES_THETA_H as f32;
@@ -172,6 +175,7 @@ impl MerlBrdf {
     ///
     /// A 3-element array containing the value of the BRDF at the given incident
     /// and outgoing directions.
+    #[must_use]
     pub fn sample_at(&self, wi: Sph2, wo: Sph2) -> [f32; 3] {
         let (wh, wd) = io2hd_sph(&wi, &wo);
         let theta_h_index = self.theta_h_index(wh.theta);
@@ -350,6 +354,7 @@ impl MerlBrdf {
     }
 
     /// Returns the kind of the BRDF.
+    #[must_use]
     pub fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Merl }
 }
 

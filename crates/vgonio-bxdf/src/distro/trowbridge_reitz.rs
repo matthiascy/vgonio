@@ -41,6 +41,7 @@ impl Debug for TrowbridgeReitzDistribution {
 
 impl TrowbridgeReitzDistribution {
     /// Creates a new Trowbridge-Reitz distribution with the given roughness.
+    #[must_use]
     pub fn new(alpha_x: f64, alpha_y: f64) -> Self {
         TrowbridgeReitzDistribution {
             alpha_x: alpha_x.max(1.0e-6),
@@ -50,6 +51,7 @@ impl TrowbridgeReitzDistribution {
 
     /// Creates a new isotropic Trowbridge-Reitz distribution with the given
     /// roughness.
+    #[must_use]
     pub fn new_isotropic(alpha: f64) -> Self {
         TrowbridgeReitzDistribution {
             alpha_x: alpha.max(1.0e-6),
@@ -58,6 +60,7 @@ impl TrowbridgeReitzDistribution {
     }
 
     /// Returns whether the distribution is isotropic or anisotropic.
+    #[must_use]
     pub fn is_isotropic(&self) -> bool { (self.alpha_x - self.alpha_y).abs() < 1.0e-6 }
 }
 
@@ -96,7 +99,7 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
     /// $\sqrt{\alpha_x^2\cos^2\phi + \alpha_y^2\sin^2\phi}$.
     /// ```
     fn eval_lambda(&self, w: Vec3) -> f64 {
-        let cos_theta2 = cos_theta2(&w) as f64;
+        let cos_theta2 = f64::from(cos_theta2(&w));
         let tan_theta2 = (1.0 - cos_theta2) * rcp_f64(cos_theta2);
         if tan_theta2.is_infinite() {
             return f64::INFINITY;
@@ -104,7 +107,7 @@ impl MicrofacetDistribution for TrowbridgeReitzDistribution {
         let alpha2 = if self.is_isotropic() {
             sqr(self.alpha_x)
         } else {
-            let cos_phi2 = sqr(cos_phi(&w)) as f64;
+            let cos_phi2 = f64::from(sqr(cos_phi(&w)));
             let sin_phi2 = 1.0 - cos_phi2;
             sqr(self.alpha_x) * cos_phi2 + sqr(self.alpha_y) * sin_phi2
         };

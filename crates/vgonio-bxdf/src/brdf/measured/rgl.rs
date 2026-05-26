@@ -72,21 +72,27 @@ impl RglBrdfParametrisation {
     }
 
     /// Returns the number of outgoing directions.
+    #[must_use]
     pub fn n_wo(&self) -> usize { self.outgoing.len() }
 
     /// Returns the number of incident directions.
+    #[must_use]
     pub fn n_wi(&self) -> usize { self.incoming.len() }
 
     /// Returns the number of incident directions along the polar angle.
+    #[must_use]
     pub fn n_wi_zenith(&self) -> usize { self.n_zenith_i }
 
     /// Returns the number of incident directions along the azimuthal angle.
+    #[must_use]
     pub fn n_wi_azimuth(&self) -> usize { self.incoming.len() / self.n_zenith_i }
 
     /// Returns the number of outgoing directions along the polar angle.
+    #[must_use]
     pub fn n_wo_zenith(&self) -> usize { self.n_zenith_o }
 
     /// Returns the number of outgoing directions along the azimuthal angle.
+    #[must_use]
     pub fn n_wo_azimuth(&self) -> usize { self.outgoing.len() / self.n_zenith_o }
 }
 
@@ -191,9 +197,11 @@ impl RglBrdf {
     }
 
     /// Returns the kind of the BRDF.
+    #[must_use]
     pub fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Rgl }
 
     /// Returns the iterator over the BRDF snapshots.
+    #[must_use]
     pub fn snapshots(&self) -> BrdfSnapshotIterator<'_, RglBrdfParametrisation, 3> {
         BrdfSnapshotIterator {
             brdf: self,

@@ -62,19 +62,25 @@ impl BrdfParam for Yan18BrdfParameterisation {
 
 impl Yan18BrdfParameterisation {
     /// Returns the incoming directions in cartesian coordinates.
+    #[must_use = "The incoming directions in cartesian coordinates are returned as a new array; \
+                  the original array is not modified."]
     pub fn incoming_cartesian(&self) -> DyArr<Vec3> {
-        DyArr::from_iterator([-1], self.incoming.iter().map(|sph| sph.to_cartesian()))
+        DyArr::from_iterator([-1], self.incoming.iter().map(Sph2::to_cartesian))
     }
 
     ///  Returns the outgoing directions in cartesian coordinates.
+    #[must_use = "The outgoing directions in cartesian coordinates are returned as a new array; \
+                  the original array is not modified."]
     pub fn outgoing_cartesian(&self) -> DyArr<Vec3> {
-        DyArr::from_iterator([-1], self.outgoing.iter().map(|sph| sph.to_cartesian()))
+        DyArr::from_iterator([-1], self.outgoing.iter().map(Sph2::to_cartesian))
     }
 
     /// Returns the number of outgoing directions.
+    #[must_use]
     pub fn n_wo(&self) -> usize { self.outgoing.len() }
 
     /// Returns the number of incident directions.
+    #[must_use]
     pub fn n_wi(&self) -> usize { self.incoming.len() }
 }
 
@@ -96,10 +102,10 @@ impl Yan18BrdfParameterisation {
 /// Inside the VGonio framework, the measured data is stored in the form of a
 /// 3D array, where the first dimension is the incident direction, the second
 /// dimension is the outgoing direction derived from the pixel coordinates, and
-/// the third dimension is the wavelength of the measured data: [n_wi, n_wo,
-/// n_spectrum].
+/// the third dimension is the wavelength of the measured data: \[n_wi, n_wo,
+/// n_spectrum\].
 ///
-/// Actual dimensions: [n_phi_i, n_theta_i, n_wo, n_spectrum]
+/// Actual dimensions: \[n_phi_i, n_theta_i, n_wo, n_spectrum\]
 pub type Yan18Brdf = MeasuredBrdf<Yan18BrdfParameterisation, 3>;
 
 unsafe impl Send for Yan18Brdf {}
@@ -109,6 +115,7 @@ impl_any_measured_trait!(@single_level_brdf Yan18Brdf);
 
 impl Yan18Brdf {
     /// Creates a new BRDF from the given measured data.
+    #[must_use]
     pub fn new(
         incident_medium: MediumId,
         transmitted_medium: MediumId,
@@ -128,6 +135,7 @@ impl Yan18Brdf {
     }
 
     /// Returns the iterator over the BRDF snapshots.
+    #[must_use]
     pub fn snapshots(&self) -> BrdfSnapshotIterator<'_, Yan18BrdfParameterisation, 3> {
         BrdfSnapshotIterator {
             brdf: self,
@@ -144,13 +152,18 @@ impl Yan18Brdf {
     /// The exact incident direction must be provided; meanwhile, the sample
     /// values of the outgoing direction are interpolated from the recorded
     /// data using bicubic interpolation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given incident direction is not found in the BRDF.
+    #[must_use]
     pub fn sample_at(&self, wi: Sph2, wo: Sph2) -> Box<[f32]> {
         let i = self
             .params
             .incoming
             .iter()
             .position(|sph| sph == &wi)
-            .unwrap_or_else(|| panic!("The incident direction {:?} is not found in the BRDF.", wi));
+            .unwrap_or_else(|| panic!("The incident direction {wi:?} is not found in the BRDF."));
         let uv = Self::spherical_coord_to_uv(wo);
         self.bicubic_interpolate(i, uv)
     }
@@ -158,6 +171,7 @@ impl Yan18Brdf {
     /// Returns the sample values (per wavelength) of the BRDF with the given
     /// incident direction index and the pixel coordinates of the outgoing
     /// direction.
+    #[must_use]
     pub fn sample_at_pixel_coord(&self, wi_idx: usize, r: usize, c: usize) -> Box<[f32]> {
         let n_spectrum = self.spectrum.len();
         let mut out = vec![0.0; n_spectrum];
@@ -173,6 +187,7 @@ impl Yan18Brdf {
     /// Returns derivative of the sample values (per wavelength) respective to
     /// the vertical direction of the BRDF with the given incident direction
     /// index and the pixel coordinates of the outgoing direction.
+    #[must_use]
     pub fn sample_dy_at(&self, wi_idx: usize, r: usize, c: usize) -> Box<[f32]> {
         let samples_prev = self.sample_at_pixel_coord(wi_idx, r.saturating_sub(1), c);
         let samples_next =
@@ -188,6 +203,7 @@ impl Yan18Brdf {
     /// the horizontal direction of the BRDF with the given incident
     /// direction index and the pixel coordinates of the outgoing direction.
     /// Note: x is the row index and y is the column index.
+    #[must_use]
     pub fn sample_dx_at(&self, wi_idx: usize, r: usize, c: usize) -> Box<[f32]> {
         let samples_prev = self.sample_at_pixel_coord(wi_idx, r, c.saturating_sub(1));
         let samples_next =
@@ -203,6 +219,7 @@ impl Yan18Brdf {
     /// to both the vertical and horizontal directions of the BRDF with the
     /// given incident direction index and the pixel coordinates of the
     /// outgoing direction.
+    #[must_use]
     pub fn sample_dxy_at(&self, wi_idx: usize, r: usize, c: usize) -> Box<[f32]> {
         let rnext = (r + 1) % self.params.height as usize;
         let cnext = (c + 1) % self.params.width as usize;
@@ -412,6 +429,7 @@ impl Yan18Brdf {
 
     /// Converts the pixel coordinates to the outgoing direction in
     /// spherical coordinates (theta, phi).
+    #[must_use]
     pub fn pixel_coord_to_spherical_coord(
         px: usize,
         py: usize,
@@ -446,6 +464,7 @@ impl Yan18Brdf {
     /// in integer values but the pixel coordinates in the range [0, 1].
     /// To map back to the pixel coordinates, the returned value must be
     /// multiplied by the width and height of the image.
+    #[must_use]
     pub fn spherical_coord_to_uv(sph: Sph2) -> [f32; 2] {
         let x = sph.phi.sin() * sph.theta.sin();
         let y = sph.phi.cos() * sph.theta.sin();
@@ -458,6 +477,7 @@ impl Yan18Brdf {
     /// The UV coordinates are in the range [0, 1].
     ///
     /// Note: u is the horizontal coordinate and v is the vertical coordinate.
+    #[must_use]
     pub fn bicubic_interpolate(&self, wi_idx: usize, uv: [f32; 2]) -> Box<[f32]> {
         let [u, v] = uv;
         let n_spectrum = self.spectrum.len();

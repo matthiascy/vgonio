@@ -103,6 +103,7 @@ impl_any_measured_trait!(@single_level_brdf ClausenBrdf);
 impl ClausenBrdf {
     /// Creates a new Clausen BRDF. The BRDF is parameterised in the incident
     /// and outgoing directions.
+    #[must_use]
     pub fn new(
         origin: Origin,
         incident_medium: MediumId,
@@ -123,16 +124,20 @@ impl ClausenBrdf {
     }
 
     /// Returns the kind of the measured BRDF.
+    #[must_use]
     pub fn kind(&self) -> MeasuredBrdfKind { MeasuredBrdfKind::Clausen }
 
     /// Return the number of incident directions in the measured BRDF.
+    #[must_use]
     pub fn n_wi(&self) -> usize { self.params.incoming.len() }
 
     /// Return the number of outgoing directions for each incident direction.
+    #[must_use]
     pub fn n_wo(&self) -> usize { self.params.n_wo }
 
     /// Computes the local BRDF maximum values for each snapshot, that is, for
     /// each incident direction (per wavelength).
+    #[must_use]
     pub fn compute_max_values(&self) -> DyArr<f32, 2> {
         let (n_wi, n_wo, n_spectrum) = (self.n_wi(), self.n_wo(), self.spectrum.len());
         let mut max_values = DyArr::splat(-1.0f32, [n_wi, n_spectrum]);

@@ -41,6 +41,7 @@ pub type MicrofacetBrdfBK = MicrofacetBrdf<BeckmannDistribution>;
 
 impl MicrofacetBrdfBK {
     /// Creates a new Beckmann microfacet BRDF model.
+    #[must_use]
     pub fn new(alpha_x: f64, alpha_y: f64) -> Self {
         MicrofacetBrdf::from(BeckmannDistribution::new(alpha_x, alpha_y))
     }

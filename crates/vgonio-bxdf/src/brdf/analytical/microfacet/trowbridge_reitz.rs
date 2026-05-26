@@ -43,6 +43,7 @@ pub type MicrofacetBrdfTR = MicrofacetBrdf<TrowbridgeReitzDistribution>;
 
 impl MicrofacetBrdfTR {
     /// Creates a new microfacet BRDF model with the given roughness parameters.
+    #[must_use]
     pub fn new(alpha_x: f64, alpha_y: f64) -> Self {
         MicrofacetBrdf::from(TrowbridgeReitzDistribution::new(alpha_x, alpha_y))
     }
@@ -459,6 +460,7 @@ pub struct TrowbridgeReitzBrdfModel {
 
 impl TrowbridgeReitzBrdfModel {
     /// Creates a new Trowbridge-Reitz (GGX) microfacet BRDF model.
+    #[must_use]
     pub fn new(alpha_x: f64, alpha_y: f64) -> Self {
         TrowbridgeReitzBrdfModel {
             alpha_x: alpha_x.max(1.0e-6),

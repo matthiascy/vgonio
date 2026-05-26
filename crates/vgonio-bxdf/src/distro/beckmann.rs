@@ -34,6 +34,7 @@ impl Debug for BeckmannDistribution {
 }
 
 impl BeckmannDistribution {
+    #[must_use = "The new Beckmann distribution is returned as a new instance."]
     /// Creates a new Beckmann distribution with the given roughness parameters.
     pub fn new(alpha_x: f64, alpha_y: f64) -> Self {
         BeckmannDistribution {
@@ -43,6 +44,7 @@ impl BeckmannDistribution {
     }
 
     /// Creates a new isotropic Beckmann distribution with the given roughness.
+    #[must_use = "The new isotropic Beckmann distribution is returned as a new instance."]
     pub fn new_isotropic(alpha: f64) -> Self {
         BeckmannDistribution {
             alpha_x: alpha.max(1.0e-6),
@@ -52,6 +54,7 @@ impl BeckmannDistribution {
 
     /// Returns whether the distribution is isotropic or anisotropic.
     #[inline]
+    #[must_use]
     pub fn is_isotropic(&self) -> bool { (self.alpha_x - self.alpha_y).abs() < 1.0e-8 }
 }
 
@@ -86,7 +89,7 @@ impl MicrofacetDistribution for BeckmannDistribution {
         let alpha = if self.is_isotropic() {
             self.alpha_x
         } else {
-            let cos_phi2 = sqr(cos_phi(&w) as f64);
+            let cos_phi2 = sqr(f64::from(cos_phi(&w)));
             let sin_phi2 = 1.0 - cos_phi2;
             let alpha2 = sqr(self.alpha_x) * cos_phi2 + sqr(self.alpha_y) * sin_phi2;
             alpha2.sqrt()
