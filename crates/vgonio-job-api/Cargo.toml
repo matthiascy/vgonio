@@ -1,0 +1,30 @@
+[package]
+name = "vgonio-job-api"
+description = "Versioned job envelope, context, and DTOs for vgonio's executor."
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+license-file.workspace = true
+version.workspace = true
+
+[lib]
+name = "vgn_job_api"
+
+[features]
+default = []
+
+[dependencies]
+bytes.workspace = true
+chrono = { workspace = true, features = ["serde"] }
+hex.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+uuid = { workspace = true, features = ["serde", "v4"] }
+
+[dev-dependencies]
+proptest.workspace = true
+
+
+[lints]
+workspace = true

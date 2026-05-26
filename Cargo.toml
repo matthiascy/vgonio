@@ -34,6 +34,7 @@ approx = "0.5"
 bincode = "1"
 bytemuck = { version = "1.12", features = ["derive"] }
 byteorder = "1.4"
+bytes = "1"
 cfg-if = "1.0"
 chrono = "0.4"
 clap = { version = "~4", features = ["derive", "wrap_help"] }
@@ -65,6 +66,7 @@ flate2 = { version = "~1.0", features = [
 ], default-features = false }
 futures-intrusive = "0.5"
 glam = { version = "~0.28", features = ["serde", "bytemuck"] }
+hex = "0.4"
 image = { version = "0.25", default-features = false, features = ["png"] }
 include_dir = "0.7"
 indicatif = { version = "0.17", features = ["rayon"] }
