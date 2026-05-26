@@ -4127,6 +4127,7 @@ dependencies = [
 name = "vgonio-job-api"
 version = "0.3.2"
 dependencies = [
+ "base64 0.21.7",
  "bytes",
  "chrono",
  "hex",

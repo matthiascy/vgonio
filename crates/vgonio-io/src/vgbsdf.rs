@@ -18,7 +18,7 @@
 //! my_measurement.vgbsdf            (zip, Store method, no container compression)
 //! ├── manifest.toml                (top-level metadata + provenance)
 //! ├── partition.toml               (SphericalPartition descriptor, lossless)
-//! ├── incident_grid.toml           (BSDF only — per-(θᵢ,φᵢ) measurement order)
+//! ├── incident_grid.toml           (BSDF only; per-(θᵢ,φᵢ) measurement order)
 //! ├── spectrum.toml                (wavelengths in nm, or "scalar")
 //! └── l0/                          (single-bounce; siblings: l1/, l1+/)
 //!     ├── disc.exr                 (omitted for SDF)
@@ -34,7 +34,7 @@
 //!
 //! All measurement archive kinds use the same container shape; only the file
 //! extension and the manifest's `output_kind` differ. See the
-//! `EXTENSION_*` constants below — `.vgbsdf` for BSDF, `.vgndf` for NDF,
+//! `EXTENSION_*` constants below: `.vgbsdf` for BSDF, `.vgndf` for NDF,
 //! `.vgmsf` for MSF, `.vgsdf` for SDF, `.vgsurf` for heightfields. The
 //! capability that produced each archive maps one-to-one to a
 //! `CapabilityId` in `vgonio-job-api` (see that crate's docs for the

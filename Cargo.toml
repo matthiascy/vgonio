@@ -31,6 +31,7 @@ codegen-units = 16
 [workspace.dependencies]
 ahash = "0.8"
 approx = "0.5"
+base64 = "0.21"
 bincode = "1"
 bytemuck = { version = "1.12", features = ["derive"] }
 byteorder = "1.4"
