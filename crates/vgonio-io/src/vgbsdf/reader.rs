@@ -2,9 +2,8 @@
 //! reader contract.
 
 use std::{
-    fmt::format,
     fs::File,
-    io::{BufReader, Cursor, Read},
+    io::{BufReader, Read},
     path::Path,
 };
 use vgn_core::error::VgonioError;
@@ -32,8 +31,11 @@ use crate::vgbsdf::{
 /// 7. For spectral archives (BSDF/MSF), the EXR channel count equals `spectrum.wavelengths.len()`.
 pub struct VgbsdfReader {
     archive: ZipArchive<BufReader<File>>,
+    /// Parsed `manifest.toml` describing the archive.
     pub manifest: Manifest,
+    /// Parsed `partition.toml` describing the outgoing-domain partition.
     pub partition: PartitionToml,
+    /// Parsed `spectrum.toml` describing the wavelength axis.
     pub spectrum: SpectrumToml,
     /// Present only when manifest.archive.type == "bsdf".
     pub incident_grid: Option<IncidentGridToml>,
@@ -119,11 +121,10 @@ impl VgbsdfReader {
     /// Cost model:
     /// - **IO:** O(zip central directory + sum of EXR header sizes). We pass the zip member's
     ///   reader directly to `exr::meta::MetaData::read_from_buffered`, which streams just enough
-    ///   bytes to parse the magic-bytes + per-part headers
-    ///   + channel descriptors (a few hundred bytes per member). Once `read_from_buffered`
-    ///   returns we drop the reader, abandoning any unread pixel bytes; for `Store`
-    ///   members (our default container compression) those bytes are never even read
-    ///   from the underlying file because the zip iterator is sequential.
+    ///   bytes to parse the magic-bytes + per-part headers + channel descriptors (a few hundred
+    ///   bytes per member). Once `read_from_buffered` returns we drop the reader, abandoning any
+    ///   unread pixel bytes; for `Store` members (our default container compression) those bytes
+    ///   are never even read from the underlying file because the zip iterator is sequential.
     /// - **Memory:** O(per-EXR header size), not O(member size). We never allocate a buffer the
     ///   size of the entire pixel payload.
     ///
@@ -234,13 +235,11 @@ impl VgbsdfReader {
                 let h = first.layer_size.height();
                 let n_chan = first.channels.list.len();
 
-                if enc == OutgoingEncoding::Patches {
-                    if w != n_patches || h != 1 {
-                        return Err(VgonioError::new(
-                            format!("{name}: patches.exr dims {w}x{h}, expected {n_patches}x1"),
-                            None,
-                        ));
-                    }
+                if enc == OutgoingEncoding::Patches && (w != n_patches || h != 1) {
+                    return Err(VgonioError::new(
+                        format!("{name}: patches.exr dims {w}x{h}, expected {n_patches}x1"),
+                        None,
+                    ));
                 }
 
                 let expected = self.spectrum.expected_channel_count();

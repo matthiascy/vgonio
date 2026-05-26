@@ -18,6 +18,7 @@ pub mod measured;
 /// # Type Parameters
 ///
 /// * `P` - The type of BRDF model's parameters.
+#[allow(clippy::doc_markdown, reason = "method docs contain LaTeX math notation")]
 pub trait AnalyticalBrdf<P>: Send + Sync + Debug + AnalyticalBrdfClone<P> + 'static {
     /// The name of the BRDF model.
     fn name(&self) -> &str;
@@ -48,7 +49,7 @@ pub trait AnalyticalBrdf<P>: Send + Sync + Debug + AnalyticalBrdfClone<P> + 'sta
     ///
     /// # Note
     ///
-    /// This only evaluates the D * G / (4 * cos_i * cos_o) term of the microfacet BRDF. The Fresnel
+    /// This only evaluates the D * G / (4 * `cos_i` * `cos_o`) term of the microfacet BRDF. The Fresnel
     /// term is not included in this evaluation. This allows us to fit the microfacet distribution
     /// and masking-shadowing function separately from the Fresnel term, which is important for
     /// fitting measured BRDFs with a known Fresnel term. To include the Fresnel term, multiply the
@@ -102,7 +103,7 @@ pub trait AnalyticalBrdf<P>: Send + Sync + Debug + AnalyticalBrdfClone<P> + 'sta
     /// Evaluates the projected BRDF with importance sampling.
     fn evalp_is(&self, u: f32, v: f32, vo: &Vec3, vi: &mut Vec3, pdf: &mut f32) -> f64;
 
-    /// Importance sample f_r * cos_theta_i using two uniform variates.
+    /// Importance sample `f_r` * `cos_theta_i` using two uniform variates.
     ///
     /// # Arguments
     ///
@@ -186,7 +187,7 @@ pub trait AnalyticalBrdf<P>: Send + Sync + Debug + AnalyticalBrdfClone<P> + 'sta
     fn pd_iso(&self, vi: &Vec3, vo: &Vec3, ior_i: &Ior, ior_t: &Ior) -> f64;
 }
 
-/// Trait to enable cloning of boxed AnalyticalBrdf trait objects.
+/// Trait to enable cloning of boxed `AnalyticalBrdf` trait objects.
 ///
 /// # Type Parameters
 ///
@@ -208,7 +209,7 @@ where
     fn clone_box(&self) -> Box<dyn AnalyticalBrdf<P>> { Box::new(self.clone()) }
 }
 
-/// Enables cloning of boxed AnalyticalBrdf trait objects.
+/// Enables cloning of boxed `AnalyticalBrdf` trait objects.
 ///
 /// This implementation allows `Box<dyn AnalyticalBrdf<Params = P>>` to be
 /// cloned by delegating to the `clone_box` method provided by the trait.
@@ -240,6 +241,7 @@ where
 /// # Returns
 ///
 /// (half, difference)
+#[allow(clippy::doc_markdown, reason = "doc contains LaTeX math notation")]
 #[must_use]
 pub fn io2hd(vi: &Vec3, vo: &Vec3) -> (Vec3, Vec3) {
     let h = (*vi + *vo).normalize();
@@ -291,6 +293,7 @@ pub fn io2hd_sph(wi: &Sph2, wo: &Sph2) -> (Sph2, Sph2) {
 /// # Returns
 ///
 /// (incident, outgoing)
+#[allow(clippy::doc_markdown, reason = "doc contains LaTeX math notation")]
 #[must_use]
 pub fn hd2io(vh: &Vec3, vd: &Vec3) -> (Vec3, Vec3) {
     let wh = Sph2::from_cartesian(*vh);

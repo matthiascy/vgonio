@@ -10,7 +10,7 @@ use crate::fitting::proxy::BrdfProxy;
 use std::fmt::Debug;
 use vgn_core::{
     math::{cos_theta, Vec3},
-    optics::{fresnel, Ior, IorReg},
+    optics::{fresnel, Ior},
     units::Nanometres,
     utils::medium::MediumId,
     BrdfLevel, MeasurementKind,
@@ -21,6 +21,9 @@ pub mod distro;
 
 #[cfg(feature = "fitting")]
 pub mod fitting;
+
+#[cfg(feature = "fitting")]
+use vgn_core::optics::IorReg;
 
 /// Different kinds of BRDFs.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
@@ -38,10 +41,10 @@ pub enum BrdfFamily {
 
 /// Common interface for measured BRDFs.
 pub trait AnyMeasuredBrdf: Sync + Send {
-    /// Returns the kind of the measured BxDF.
+    /// Returns the kind of the measured `BxDF`.
     fn kind(&self) -> MeasuredBrdfKind;
 
-    /// Returns the wavelengths at which the BxDF is measured.
+    /// Returns the wavelengths at which the `BxDF` is measured.
     fn spectrum(&self) -> &[Nanometres];
 
     /// Returns the transmitted medium.

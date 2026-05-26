@@ -1,25 +1,35 @@
 //! BRDF data from the MERL database.
+#[cfg(feature = "io")]
+use crate::brdf::measured::Origin;
 #[cfg(feature = "fitting")]
 use crate::fitting::proxy::{BrdfProxy, OutgoingDirs, ProxySource};
 use crate::{
     brdf::{
         io2hd_sph,
-        measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
+        measured::{BrdfParam, BrdfParamKind, MeasuredBrdf},
     },
     impl_any_measured_trait, AnyMeasured, AnyMeasuredBrdf, MeasuredBrdfKind,
 };
+#[cfg(feature = "fitting")]
 use std::borrow::Cow;
 #[cfg(feature = "io")]
 use std::path::Path;
+#[cfg(feature = "io")]
+use vgn_core::error::VgonioError;
+#[cfg(feature = "fitting")]
+use vgn_core::optics::IorReg;
 use vgn_core::{
-    error::VgonioError,
     math::Sph2,
-    optics::IorReg,
     units::{nm, Nanometres, Radians},
-    utils::medium::MediumId,
     BrdfLevel, MeasurementKind,
 };
-use vgn_jabr::array::{s, DArr, DyArr, DynArr};
+#[cfg(feature = "fitting")]
+use vgn_jabr::array::DyArr;
+#[cfg(feature = "io")]
+use vgn_jabr::array::DyArr;
+#[cfg(feature = "fitting")]
+use vgn_jabr::array::DynArr;
+use vgn_jabr::array::{s, DArr};
 
 /// The wavelengths of the channels used in this loader, in nanometres.
 ///
@@ -27,7 +37,7 @@ use vgn_jabr::array::{s, DArr, DyArr, DynArr};
 /// measurements**. Instead, they come from an RGB Bayer filter camera, so each
 /// channel is a broad, overlapping spectral sensitivity band integrated against
 /// the lamp spectrum (not a monochromatic wavelength). In Wojciech Matusik's
-/// measurement setup, the BRDFs were captured with a QImaging Retiga 1300 color
+/// measurement setup, the BRDFs were captured with a `QImaging` Retiga 1300 color
 /// CCD, under a xenon lamp (which has a continuous spectrum).
 ///
 /// According to paper "Recovering Spectral Data from Natural Scenes with an RGB
@@ -38,6 +48,7 @@ use vgn_jabr::array::{s, DArr, DyArr, DynArr};
 /// - Blue channel: ~470nm (broadly ~400-550nm)
 /// - Green channel: ~540-550nm (broadly ~450-600nm)
 /// - Red channel: ~610-620nm (broadly ~520-700nm)
+///
 /// Channel order is BGR (blue, green, red) so that wavelength indices are
 /// increasing.
 const MERL_BRDF_SPECTRUM: [Nanometres; 3] = [nm!(470.0), nm!(545.0), nm!(620.0)];
@@ -103,12 +114,12 @@ impl BrdfParam for MerlBrdfParam {
 /// BRDF from the MERL database: <http://www.merl.com/brdf/>
 ///
 /// The original data of MERL BRDF is stored as row-major order in a 1D array
-/// with dimensions: (channel, theta_h, theta_d, phi_d), where channel is the
+/// with dimensions: (channel, `theta_h`, `theta_d`, `phi_d`), where channel is the
 /// index of the RGB colour channels (0: Red, 1: Green, 2: Blue). The right-most
 /// index is the fastest varying index.
 ///
 /// Inside the `MerlBrdf` structure, the data is stored as a 4D row-majored
-/// array with dimensions: (theta_h, theta_d, phi_d, lambda), where lambda is
+/// array with dimensions: (`theta_h`, `theta_d`, `phi_d`, lambda), where lambda is
 /// the wavelength index from smallest to largest. Therefore, the RGB channels
 /// in the original data are reversed as BGR as Blue has the smallest
 /// wavelength. The chosen wavelengths of the BGR channels are 470, 545, and
@@ -139,6 +150,10 @@ impl MerlBrdf {
     }
 
     /// Lookup the index of the zenith angle for the half-vector.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `theta_d` is outside `[0, π/2]`.
     #[must_use]
     pub fn theta_d_index(&self, theta_d: Radians) -> usize {
         assert!(theta_d >= Radians::ZERO && theta_d <= Radians::HALF_PI);
@@ -150,6 +165,10 @@ impl MerlBrdf {
     /// Lookup the index of the zenith angle for the difference vector.
     ///
     /// The mapping is not linear.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `theta_h` is outside `[0, π/2]`.
     #[must_use]
     pub fn theta_h_index(&self, theta_h: Radians) -> usize {
         assert!(theta_h >= Radians::ZERO && theta_h <= Radians::HALF_PI);
@@ -361,7 +380,10 @@ impl MerlBrdf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::brdf::measured::Origin;
     use approx::assert_relative_eq;
+    use vgn_core::utils::medium::MediumId;
+    use vgn_jabr::array::DyArr;
 
     fn make_brdf(samples: DyArr<f32, 4>) -> MerlBrdf {
         MerlBrdf {
@@ -438,7 +460,10 @@ mod tests {
     fn phi_d_index_wraps_negative_angles() {
         // The lookup treats φ_d as isotropic on [0, π]; negatives shift by +π.
         let b = empty_brdf();
-        assert_eq!(b.phi_d_index(-Radians::HALF_PI), b.phi_d_index(Radians::HALF_PI));
+        assert_eq!(
+            b.phi_d_index(-Radians::HALF_PI),
+            b.phi_d_index(Radians::HALF_PI)
+        );
         let q = Radians::PI * 0.25;
         assert_eq!(b.phi_d_index(-q), b.phi_d_index(Radians::PI - q));
     }

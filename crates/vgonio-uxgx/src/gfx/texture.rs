@@ -29,6 +29,7 @@ pub struct Texture {
 impl Texture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
+    #[must_use]
     pub fn new(
         device: &wgpu::Device,
         desc: &wgpu::TextureDescriptor,
@@ -58,6 +59,7 @@ impl Texture {
         }
     }
 
+    #[must_use]
     pub fn create_depth_texture(
         device: &wgpu::Device,
         width: u32,
@@ -105,6 +107,12 @@ impl Texture {
         }
     }
 
+    /// Creates a texture from the given bytes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the bytes cannot be loaded as an image.
+    #[must_use]
     pub fn create_from_bytes(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -116,6 +124,7 @@ impl Texture {
         Self::create_from_dynamic_image(device, queue, &image, sampler, label)
     }
 
+    #[must_use]
     pub fn create_from_dynamic_image(
         device: &wgpu::Device,
         queue: &wgpu::Queue,

@@ -10,6 +10,13 @@ pub struct VertexLayout {
 }
 
 impl VertexLayout {
+    /// Creates a new vertex layout from the given attribute formats and an optional location
+    /// offset.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `attrib_formats` is empty, as a vertex layout must have at least one attribute.
+    #[must_use]
     pub fn new(attrib_formats: &[VertexFormat], location_offset: Option<u32>) -> Self {
         assert!(
             !attrib_formats.is_empty(),
@@ -18,7 +25,7 @@ impl VertexLayout {
         let len = attrib_formats.len();
         let offsets_and_stride = {
             let mut offsets = vec![0; len + 1];
-            for i in 1..(len + 1) {
+            for i in 1..=len {
                 offsets[i] = offsets[i - 1] + attrib_formats[i - 1].size();
             }
             offsets
@@ -41,6 +48,7 @@ impl VertexLayout {
         Self { attributes, stride }
     }
 
+    #[must_use]
     pub fn buffer_layout(&self, step_mode: wgpu::VertexStepMode) -> wgpu::VertexBufferLayout {
         wgpu::VertexBufferLayout {
             array_stride: self.stride,
@@ -49,6 +57,7 @@ impl VertexLayout {
         }
     }
 
+    #[must_use]
     pub fn stride(&self) -> BufferAddress { self.stride }
 }
 
@@ -63,6 +72,7 @@ unsafe impl bytemuck::Zeroable for Vertex {}
 unsafe impl bytemuck::Pod for Vertex {}
 
 impl Vertex {
+    #[must_use]
     pub fn layout() -> VertexLayout {
         VertexLayout::new(&[VertexFormat::Float32x3, VertexFormat::Float32x2], None)
     }

@@ -743,6 +743,14 @@ impl MicroSurface {
     }
 }
 
+/// Type alias for the triangulation function used in regular grid triangulation.
+///
+/// The function takes the current vertex index `i`, the column index `col`, a mutable reference to
+/// the current triangle index `tri`, and a mutable reference to the array of triangle indices
+/// `indices`. The function is responsible for filling the `indices` array with the appropriate
+/// vertex indices for the triangles based on the specified triangulation pattern.
+type TriangulateFn<'a> = Box<dyn FnMut(usize, usize, &mut usize, &mut [u32]) + 'a>;
+
 /// Generate triangle indices for grid triangulation.
 ///
 /// The grid is assumed to be a regular grid with `cols` columns and `rows`
@@ -763,7 +771,7 @@ pub fn regular_grid_triangulation(
     cols: usize,
     pattern: TriangulationPattern,
 ) -> Box<[u32]> {
-    let mut triangulate: Box<dyn FnMut(usize, usize, &mut usize, &mut [u32])> = match pattern {
+    let mut triangulate: TriangulateFn<'_> = match pattern {
         TriangulationPattern::BottomLeftToTopRight => Box::new(
             |i: usize, col: usize, tri: &mut usize, indices: &mut [u32]| {
                 if col > 0 {

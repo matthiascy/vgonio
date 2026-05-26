@@ -4,8 +4,10 @@ use crate::gfx::{
     texture::Texture,
 };
 use bytemuck::{Pod, Zeroable};
+use image::{ImageBuffer, Luma};
 use std::sync::Arc;
 use vgn_core::{error::VgonioError, math::Mat4};
+use wgpu::PipelineCompilationOptions;
 
 /// Render pass generating depth map (from light P.O.V.) used later for shadow
 /// mapping.
@@ -42,6 +44,7 @@ pub struct DepthPassUniforms {
 }
 
 impl ShadowPass {
+    #[must_use]
     pub fn new(
         ctx: &GpuContext,
         width: u32,
@@ -126,7 +129,7 @@ impl ShadowPass {
                 vertex: wgpu::VertexState {
                     module: &shader_module,
                     entry_point: "vs_main",
-                    compilation_options: Default::default(),
+                    compilation_options: PipelineCompilationOptions::default(),
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: 12,
                         step_mode: wgpu::VertexStepMode::Vertex,
@@ -226,6 +229,12 @@ impl ShadowPass {
         };
     }
 
+    /// Updates the uniform buffer with the given model, view, and projection matrices.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the uniform buffer is not created, as it is required to store the matrices for the
+    /// shader.
     pub fn update_uniforms(&self, queue: &wgpu::Queue, model: Mat4, view: Mat4, proj: Mat4) {
         queue.write_buffer(
             &self.inner.uniform_buffers.as_ref().unwrap()[0],
@@ -324,7 +333,6 @@ impl ShadowPass {
                         .collect::<Vec<u8>>()
                 };
 
-                use image::{ImageBuffer, Luma};
                 ImageBuffer::<Luma<u8>, _>::from_raw(self.width, self.height, data)
                     .ok_or_else(|| {
                         VgonioError::new(
@@ -350,6 +358,14 @@ impl ShadowPass {
         }
     }
 
+    /// Computes the number of pixels in the depth map that are not at the far plane.
+    ///
+    /// This can be used as a rough estimation of the shadowed area in the scene.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the depth attachment storage buffer is not created, as it is required to read the
+    /// depth values.
     pub fn compute_pixels_count(&self, device: &wgpu::Device) -> u32 {
         if let Some(buffer) = &self.depth_attachment_storage {
             use rayon::iter::{IntoParallelRefIterator, ParallelIterator};

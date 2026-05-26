@@ -43,6 +43,7 @@ pub use app::{cli::MeasureOptions, run};
 pub const MACHINE_EPSILON: f32 = f32::EPSILON * 0.5;
 
 /// Returns the gamma factor for a floating point number.
+#[must_use]
 pub const fn gamma_f32(n: f32) -> f32 { (n * MACHINE_EPSILON) / (1.0 - n * MACHINE_EPSILON) }
 
 pub fn run_vgonio_compute() {

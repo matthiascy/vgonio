@@ -35,15 +35,21 @@ use serde::{Deserialize, Serialize};
 /// Top-level archive manifest.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Manifest {
+    /// Identifies the writing vgonio version and conventions revision.
     pub vgonio: VgonioBlock,
+    /// Archive creation metadata.
     pub archive: ArchiveBlock,
+    /// Optional material identity (incident/transmitted media).
     pub material: Option<MaterialBlock>,
+    /// Optional BSDF-specific layout block.
     #[serde(default)]
     pub bsdf: Option<BsdfBlock>,
+    /// Optional provenance for citation / reproducibility.
     #[serde(default)]
     pub provenance: Option<ProvenanceBlock>,
 }
 
+/// Identifies the writing vgonio version and the conventions revision.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VgonioBlock {
     /// Vgonio version that produced this archive (e.g. "0.2.0").
@@ -52,6 +58,7 @@ pub struct VgonioBlock {
     pub conventions: String,
 }
 
+/// Archive creation metadata.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ArchiveBlock {
     /// RFC 3339 timestamp of archive creation.
@@ -59,15 +66,20 @@ pub struct ArchiveBlock {
     /// "bsdf" | "ndf" | "msf" | "sdf" | "heightfield".
     #[serde(rename = "type")]
     pub kind: String,
+    /// Free-form human-readable description.
     pub description: Option<String>,
 }
 
+/// Material identity — the media on either side of the surface.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MaterialBlock {
+    /// Canonical name of the incident-side medium in vgonio's registry.
     pub incident_medium: String,
+    /// Canonical name of the transmitted-side medium in vgonio's registry.
     pub transmitted_medium: String,
 }
 
+/// BSDF-specific archive layout — which levels and encodings are present.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BsdfBlock {
     /// Which BrdfLevel directories are present, e.g. ["l0", "l1", "l1+"].
@@ -77,10 +89,14 @@ pub struct BsdfBlock {
     pub encodings: Vec<String>,
 }
 
+/// Optional provenance information for citation and reproducibility.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct ProvenanceBlock {
+    /// Name and version of the software that produced this archive.
     pub software: Option<String>,
+    /// Git commit hash of the producing software, if available.
     pub git_commit: Option<String>,
+    /// Identifier (path or hash) of the input surface used.
     pub input_surface: Option<String>,
 }
 

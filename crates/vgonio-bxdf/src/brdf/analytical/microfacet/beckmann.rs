@@ -48,7 +48,7 @@ impl MicrofacetBrdfBK {
 }
 
 impl AnalyticalBrdf<<BeckmannDistribution as MicrofacetDistribution>::Params> for MicrofacetBrdfBK {
-    fn name(&self) -> &str { "Microfacet@Beckmann" }
+    fn name(&self) -> &'static str { "Microfacet@Beckmann" }
 
     fn family(&self) -> BrdfFamily { BrdfFamily::Microfacet }
 
@@ -69,7 +69,7 @@ impl AnalyticalBrdf<<BeckmannDistribution as MicrofacetDistribution>::Params> fo
         debug_assert!(o.is_normalized(), "Outgoing direction is not normalized");
         let cos_theta_i = cos_theta(i);
         let cos_theta_o = cos_theta(o);
-        let cos_theta_io = (cos_theta_i * cos_theta_o) as f64;
+        let cos_theta_io = f64::from(cos_theta_i * cos_theta_o);
         if cos_theta_io <= 1e-16 {
             return 0.0;
         }
@@ -87,7 +87,7 @@ impl AnalyticalBrdf<<BeckmannDistribution as MicrofacetDistribution>::Params> fo
         self.eval(&i, &o)
     }
 
-    fn evalp(&self, i: &Vec3, o: &Vec3) -> f64 { self.eval(i, o) * cos_theta(i) as f64 }
+    fn evalp(&self, i: &Vec3, o: &Vec3) -> f64 { self.eval(i, o) * f64::from(cos_theta(i)) }
 
     fn evalp_hd(&self, h: &Vec3, d: &Vec3) -> f64 {
         let (i, o) = hd2io(h, d);
@@ -122,7 +122,7 @@ impl AnalyticalBrdf<<BeckmannDistribution as MicrofacetDistribution>::Params> fo
             return 0.0;
         }
         let wh = (*i + *o).normalize();
-        let cos_theta_h = wh.z as f64;
+        let cos_theta_h = f64::from(wh.z);
         if cos_theta_h <= 0.0 {
             return 0.0;
         }
@@ -131,7 +131,7 @@ impl AnalyticalBrdf<<BeckmannDistribution as MicrofacetDistribution>::Params> fo
             .distro
             .eval_ndf(wh_sph.theta.as_f64().cos(), wh_sph.phi.as_f64().cos());
         let pdf_wh = d * cos_theta_h;
-        let denom = 4.0 * o.dot(wh) as f64;
+        let denom = 4.0 * f64::from(o.dot(wh));
         if denom.abs() < 1.0e-9 {
             return 0.0;
         }
@@ -218,8 +218,8 @@ impl AnalyticalBrdf<<BeckmannDistribution as MicrofacetDistribution>::Params> fo
         let d_o = (-bo2).exp() * ao * tan_theta_ho * rcp_f64(sqrt_pi);
         let gi = 1.0 + erf_bi + d_i;
         let go = 1.0 + erf_bo + d_o;
-        let gi2 = sqr(gi);
-        let go2 = sqr(go);
+        // let gi2 = sqr(gi);
+        // let go2 = sqr(go);
 
         let nominator_x = c
             * sec_theta_h4
@@ -344,8 +344,8 @@ impl AnalyticalBrdf<<BeckmannDistribution as MicrofacetDistribution>::Params> fo
 /// Samples a Beckmann half-vector by drawing isotropic slopes and stretching
 /// them with `alpha_x/alpha_y`, following the slope remapping of Heitz (2014).
 fn sample_half_beckmann([alpha_x, alpha_y]: [f64; 2], u1: f32, u2: f32) -> Vec3 {
-    let u1 = u1.clamp(1.0e-6, 1.0 - 1.0e-6) as f64;
-    let u2 = u2 as f64;
+    let u1 = f64::from(u1.clamp(1.0e-6, 1.0 - 1.0e-6));
+    let u2 = f64::from(u2);
     let tan_theta2 = -(1.0_f64) * (1.0 - u1).ln();
     let cos_theta = 1.0 / (1.0 + tan_theta2).sqrt();
     let sin_theta = (1.0 - cos_theta * cos_theta).max(0.0).sqrt();

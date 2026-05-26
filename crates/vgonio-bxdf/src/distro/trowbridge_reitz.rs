@@ -19,6 +19,7 @@ use vgn_core::{
 ///
 /// $$ D(\mathbf{m}) = \frac{\alpha_x \alpha_y}{\pi \cos^4 \theta_m (\alpha_x^2
 /// \cos^2 \phi_m + \alpha_y^2 \sin^2 \phi_m) (\alpha^2 + \tan^2 \theta_m)^2} $$
+#[allow(clippy::doc_markdown, reason = "doc contains LaTeX math notation")]
 #[derive(Copy, Clone)]
 pub struct TrowbridgeReitzDistribution {
     /// Parameter of the microfacet area distribution function along the

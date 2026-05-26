@@ -94,7 +94,7 @@ impl MicrofacetDistribution for BeckmannDistribution {
             let alpha2 = sqr(self.alpha_x) * cos_phi2 + sqr(self.alpha_y) * sin_phi2;
             alpha2.sqrt()
         };
-        let tan_theta = tan_theta(&w) as f64;
+        let tan_theta = f64::from(tan_theta(&w));
         if tan_theta.is_infinite() {
             return f64::INFINITY;
         }

@@ -818,9 +818,17 @@ impl<'a> DataCarriedOnHemisphereImageWriter<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HemisphereEncoding {
     /// Lambert azimuthal equal-area disc, resolution × resolution pixels.
-    Disc { resolution: u32 },
+    Disc {
+        /// Square edge length, in pixels.
+        resolution: u32,
+    },
     /// Rectangular (n_phi × n_theta) grid.
-    Thetaphi { n_phi: u32, n_theta: u32 },
+    Thetaphi {
+        /// Number of φ samples (columns).
+        n_phi: u32,
+        /// Number of θ samples (rows).
+        n_theta: u32,
+    },
     /// Raw 1 × n_patches array, one pixel per patch.
     Patches,
 }
@@ -829,7 +837,9 @@ pub enum HemisphereEncoding {
 /// This is the "hemisphere-carried" data shape: one scalar per (patch, channel) tuple.
 #[cfg(feature = "io")]
 pub struct HemisphereLayer<'a> {
+    /// Name of the EXR layer (e.g. the incident-direction tag).
     pub layer_name: String,
+    /// Name of each channel within the layer, in channel order.
     pub channel_names: Vec<String>,
     /// Row-major [channel, patch]. `len = n_channels * n_patches`.
     pub samples: &'a [f32],
@@ -898,13 +908,14 @@ pub fn write_hemisphere_exr(
 
         // Rasterize each channel onto the image grid.
         let mut channel_buffers: Vec<Vec<f32>> = vec![vec![0.0; w * h]; n_channels];
-        for ch in 0..n_channels {
+
+        for (ch, buf) in channel_buffers.iter_mut().enumerate().take(n_channels) {
             let src = &layer.samples[ch * n_patches..(ch + 1) * n_patches];
             for j in 0..h {
                 for i in 0..w {
                     let pi = indices[i + j * w];
                     if pi >= 0 {
-                        channel_buffers[ch][i + j * w] = src[pi as usize];
+                        buf[i + j * w] = src[pi as usize];
                     }
                 }
             }

@@ -1,6 +1,8 @@
 //! Microfacet distribution function models.
 
+/// Beckmann microfacet distribution implementation.
 mod beckmann;
+/// Trowbridge-Reitz (GGX) microfacet distribution implementation.
 mod trowbridge_reitz;
 
 pub use beckmann::*;
@@ -33,6 +35,7 @@ impl MicrofacetDistroKind {
 }
 
 /// Common interface for microfacet distribution functions.
+#[allow(clippy::doc_markdown, reason = "method docs contain LaTeX math notation")]
 pub trait MicrofacetDistribution: Debug + Send + Sync {
     /// The type of the parameters of the distribution model.
     type Params = [f64; 2];

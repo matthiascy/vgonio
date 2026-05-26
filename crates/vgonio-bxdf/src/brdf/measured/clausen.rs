@@ -7,22 +7,31 @@ use crate::{
     brdf::measured::{BrdfParam, BrdfParamKind, MeasuredBrdf, Origin},
     impl_any_measured_trait, AnyMeasured, AnyMeasuredBrdf, MeasuredBrdfKind,
 };
+use std::f32;
+#[cfg(feature = "fitting")]
+use std::borrow::Cow;
+#[cfg(feature = "io")]
 use std::{
-    borrow::Cow,
-    f32,
     fs::File,
     io::{BufRead, BufReader},
     path::Path,
 };
+#[cfg(feature = "io")]
 use vgn_core::{
     error::VgonioError,
+    units::{nm, Radians},
+};
+#[cfg(feature = "fitting")]
+use vgn_core::optics::IorReg;
+use vgn_core::{
     math::Sph2,
-    optics::IorReg,
-    units::{nm, Nanometres, Radians},
+    units::Nanometres,
     utils::medium::MediumId,
     BrdfLevel, MeasurementKind,
 };
-use vgn_jabr::array::{DyArr, DynArr};
+use vgn_jabr::array::DyArr;
+#[cfg(feature = "fitting")]
+use vgn_jabr::array::DynArr;
 
 // TODO: relayout in theta_i, phi_i, theta_o, phi_o format
 /// Parametrisation for the Clausen BRDF.

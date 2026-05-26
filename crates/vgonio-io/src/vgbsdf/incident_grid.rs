@@ -12,6 +12,7 @@
 //! ```
 use serde::{Deserialize, Serialize};
 
+/// TOML schema describing the grid of measured incident directions.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct IncidentGridToml {
     /// One entry per incident direction wi, in measurement order.

@@ -29,43 +29,61 @@
 //! ```
 use serde::{Deserialize, Serialize};
 use vgn_core::utils::partition::{PartitionScheme, SphericalDomain, SphericalPartition};
+/// TOML representation of a [`SphericalPartition`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PartitionToml {
     /// "beckers" | "equal_angle".
     pub scheme: String,
     /// "upper" | "lower" | "whole".
     pub domain: String,
+    /// Total number of patches across the hemisphere.
     pub n_patches: u32,
 
+    /// Beckers-scheme parameters, present when `scheme = "beckers"`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub beckers: Option<BeckersBlock>,
+    /// Equal-angle-scheme parameters, present when `scheme = "equal_angle"`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub equal_angle: Option<EqualAngleBlock>,
 }
 
+/// Parameters for the Beckers partition scheme.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BeckersBlock {
+    /// θ-precision input used to construct the partition (radians).
     pub theta_precision_rad: f32,
+    /// Number of θ rings.
     pub n_rings: u32,
+    /// Per-ring breakdown.
     pub rings: Vec<RingToml>,
 }
 
+/// Parameters for the equal-angle partition scheme.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EqualAngleBlock {
+    /// θ-precision (radians).
     pub theta_precision_rad: f32,
+    /// φ-precision (radians).
     pub phi_precision_rad: f32,
 }
 
+/// One ring of a Beckers partition.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RingToml {
+    /// Inclusive minimum θ of the ring (radians).
     pub theta_min_rad: f32,
+    /// Exclusive maximum θ of the ring (radians).
     pub theta_max_rad: f32,
+    /// Azimuthal step between patches in this ring (radians).
     pub phi_step_rad: f32,
+    /// Number of patches in this ring.
     pub patch_count: u32,
+    /// Index of the first patch in this ring, in the global patch ordering.
     pub base_index: u32,
 }
 
 impl PartitionToml {
+    /// Builds a TOML representation from a runtime [`SphericalPartition`].
     pub fn from_partition(partition: &SphericalPartition) -> Self {
         let scheme = match partition.scheme {
             PartitionScheme::Beckers => "beckers",
@@ -119,6 +137,7 @@ impl PartitionToml {
         }
     }
 
+    /// Reconstructs a runtime [`SphericalPartition`] from this TOML representation.
     pub fn to_partition(&self) -> Result<SphericalPartition, String> {
         use vgn_core::{math::Sph2, units::rad};
 

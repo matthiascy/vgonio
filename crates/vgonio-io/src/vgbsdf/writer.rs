@@ -21,11 +21,17 @@ use crate::vgbsdf::{
     spectrum::SpectrumToml,
     INCIDENT_GRID_FILENAME, MANIFEST_FILENAME, PARTITION_FILENAME, SPECTRUM_FILENAME,
 };
+/// Writer that produces a `.vgbsdf` zip archive on disk.
 pub struct VgbsdfWriter {
     zip: ZipWriter<BufWriter<File>>,
 }
 
 impl VgbsdfWriter {
+    /// Creates a new archive at `path`, overwriting any existing file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the target file cannot be created.
     pub fn create<P: AsRef<Path>>(path: P) -> Result<Self, VgonioError> {
         let file = File::create(path.as_ref()).map_err(|e| {
             VgonioError::new(
@@ -171,6 +177,11 @@ impl VgbsdfWriter {
         Ok(())
     }
 
+    /// Finalises the zip central directory and closes the archive.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing the zip footer fails.
     pub fn finish(self) -> Result<(), VgonioError> {
         self.zip
             .finish()

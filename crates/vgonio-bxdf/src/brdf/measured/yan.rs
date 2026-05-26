@@ -16,7 +16,6 @@ use std::path::Path;
 use vgn_core::error::VgonioError;
 use vgn_core::{
     math::{compute_bicubic_spline_coefficients, Sph2, Vec3},
-    optics::IorReg,
     units::{rad, Nanometres},
     utils::medium::MediumId,
     BrdfLevel, MeasurementKind,
@@ -24,6 +23,9 @@ use vgn_core::{
 use vgn_jabr::array::DyArr;
 #[cfg(feature = "fitting")]
 use vgn_jabr::array::DynArr;
+
+#[cfg(feature = "fitting")]
+use vgn_core::optics::IorReg;
 
 /// Parameterisation of the BRDF simulated from the paper "Rendering Specular
 /// Microgeometry with Wave Optics" by Yan et al. 2018.
@@ -37,11 +39,11 @@ pub struct Yan18BrdfParameterisation {
     /// range [0, pi] and the azimuth angle is in the range [0, 2pi]; the zenith
     /// angle increases from the top to the bottom, and inside, inside the data,
     /// the zenith angle increases first compared to the azimuth angle.
-    /// Actual dimensions: [n_phi_i, n_theta_i]
+    /// Actual dimensions: [`n_phi_i`, `n_theta_i`]
     pub incoming: DyArr<Sph2>,
     /// The outgoing directions of the BRDF. The directions are stored in
     /// spherical coordinates (theta, phi).
-    /// Actual dimensions: [n_theta_o, n_phi_o]
+    /// Actual dimensions: [`n_theta_o`, `n_phi_o`]
     pub outgoing: DyArr<Sph2>,
     /// The mapping from the pixel index to the outgoing direction index.
     /// The pixel index is the index of the pixel in the EXR file, and the
@@ -93,19 +95,19 @@ impl Yan18BrdfParameterisation {
 /// output exr file can storage the measured data for only one incident
 /// direction.
 ///
-/// To make the data usable in the VGonio framework, the following updates are
+/// To make the data usable in the `VGonio` framework, the following updates are
 /// made:
 ///
 /// - The measured data is stored directly without any conversion.
 /// - The output exr file stores the measured data for all incident directions.
 ///
-/// Inside the VGonio framework, the measured data is stored in the form of a
+/// Inside the `VGonio` framework, the measured data is stored in the form of a
 /// 3D array, where the first dimension is the incident direction, the second
 /// dimension is the outgoing direction derived from the pixel coordinates, and
-/// the third dimension is the wavelength of the measured data: \[n_wi, n_wo,
-/// n_spectrum\].
+/// the third dimension is the wavelength of the measured data: \[`n_wi`, `n_wo`,
+/// `n_spectrum`\].
 ///
-/// Actual dimensions: \[n_phi_i, n_theta_i, n_wo, n_spectrum\]
+/// Actual dimensions: \[`n_phi_i`, `n_theta_i`, `n_wo`, `n_spectrum`\]
 pub type Yan18Brdf = MeasuredBrdf<Yan18BrdfParameterisation, 3>;
 
 unsafe impl Send for Yan18Brdf {}
@@ -513,13 +515,13 @@ impl Yan18Brdf {
             // The values and derivatives of the BRDF at the four corners of the
             // interpolation region.
             #[rustfmt::skip]
-            let x = [
+            let xs = [
                 x0y0[k], x1y0[k], x0y1[k], x1y1[k],
                 dx_x0y0[k], dx_x1y0[k], dx_x0y1[k], dx_x1y1[k],
                 dy_x0y0[k], dy_x1y0[k], dy_x0y1[k], dy_x1y1[k],
                 dxy_x0y0[k], dxy_x1y0[k], dxy_x0y1[k], dxy_x1y1[k],
             ];
-            compute_bicubic_spline_coefficients(&mut alpha, &x);
+            compute_bicubic_spline_coefficients(&mut alpha, &xs);
             for i in 0..4 {
                 for j in 0..4 {
                     samples[k] += alpha[i * 4 + j] * (dy.powi(i as i32) * dx.powi(j as i32));

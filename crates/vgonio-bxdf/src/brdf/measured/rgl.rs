@@ -5,19 +5,29 @@ use crate::{
     brdf::measured::{BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf},
     impl_any_measured_trait, AnyMeasured, AnyMeasuredBrdf, MeasuredBrdfKind,
 };
-use std::borrow::Cow;
 #[cfg(feature = "io")]
 use std::path::Path;
 use vgn_core::{
     math::{Sph2, Vec3},
-    optics::IorReg,
-    units::{deg, rad, Nanometres},
-    utils::{medium::MediumId, range::StepRangeIncl},
+    units::Nanometres,
     BrdfLevel, MeasurementKind,
 };
-use vgn_jabr::array::{DyArr, DynArr};
 
-/// Parametrisation of the BRDF measured in RGL (https://rgl.epfl.ch/pages/lab/material-database) at EPFL by Jonathan Dupuy and Wenzel Jakob.
+#[cfg(feature = "fitting")]
+use std::borrow::Cow;
+use vgn_jabr::array::DyArr;
+#[cfg(feature = "fitting")]
+use vgn_jabr::array::DynArr;
+#[cfg(feature = "fitting")]
+use vgn_core::optics::IorReg;
+#[cfg(feature = "io")]
+use vgn_core::units::{deg, rad};
+#[cfg(feature = "io")]
+use vgn_core::utils::medium::MediumId;
+#[cfg(feature = "io")]
+use vgn_core::utils::range::StepRangeIncl;
+
+/// Parametrisation of the BRDF measured in RGL (<https://rgl.epfl.ch/pages/lab/material-database>) at EPFL by Jonathan Dupuy and Wenzel Jakob.
 pub type RglBrdf = MeasuredBrdf<RglBrdfParametrisation, 3>;
 
 impl_any_measured_trait!(@single_level_brdf RglBrdf);
@@ -31,7 +41,7 @@ unsafe impl Sync for RglBrdf {}
 /// `powitacq` instead of reading the raw data (pickled Python files) directly.
 ///
 /// TODO: Read the raw data directly.
-/// TODO: use theta_i, phi_i, theta_o, phi_o, lambda
+/// TODO: use `theta_i`, `phi_i`, `theta_o`, `phi_o`, lambda
 #[derive(Clone, PartialEq, Debug)]
 pub struct RglBrdfParametrisation {
     /// Number of zenith angles for the incident directions.

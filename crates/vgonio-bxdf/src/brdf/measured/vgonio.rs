@@ -1,4 +1,4 @@
-//! BRDF from the VGonio simulator.
+//! BRDF from the `VGonio` simulator.
 use crate::{
     brdf::measured::{
         BrdfParam, BrdfParamKind, BrdfSnapshot, BrdfSnapshotIterator, MeasuredBrdf, Origin,
@@ -9,7 +9,6 @@ use vgn_core::BrdfLevel;
 
 use vgn_core::{
     math::{Sph2, Vec3},
-    optics::IorReg,
     units::Nanometres,
     utils::{medium::MediumId, partition::SphericalPartition},
     MeasurementKind,
@@ -17,14 +16,21 @@ use vgn_core::{
 
 #[cfg(feature = "fitting")]
 use crate::fitting::proxy::{BrdfProxy, OutgoingDirs, ProxySource};
+#[cfg(feature = "fitting")]
+use crate::IorReg;
 #[cfg(feature = "io")]
 use chrono::{DateTime, Local};
+#[cfg(feature = "fitting")]
 use std::borrow::Cow;
 #[cfg(feature = "io")]
 use std::path::Path;
-use vgn_jabr::array::{DyArr, DynArr};
+#[cfg(feature = "fitting")]
+use vgn_jabr::array::DArr;
+use vgn_jabr::array::DyArr;
+#[cfg(feature = "fitting")]
+use vgn_jabr::array::DynArr;
 
-/// Parameterisation of the VGonio BRDF.
+/// Parameterisation of the `VGonio` BRDF.
 #[derive(Clone, PartialEq, Debug)]
 pub struct VgonioBrdfParameterisation {
     /// Number of incident directions along the polar angle.
@@ -33,7 +39,7 @@ pub struct VgonioBrdfParameterisation {
     /// spherical coordinates, i.e. azimuthal and zenith angles; the azimuthal
     /// angle is in the range `[0, 2π]` and the zenith angle is in the range
     /// `[0, π/2]`; the zenith angle increases first.
-    /// Actual dimensions: [n_phi_i, n_theta_i]
+    /// Actual dimensions: [`n_phi_i`, `n_theta_i`]
     pub incoming: DyArr<Sph2>,
     /// The outgoing directions of the BRDF.
     pub outgoing: SphericalPartition,
@@ -47,7 +53,10 @@ impl VgonioBrdfParameterisation {
     /// Returns the incoming directions in cartesian coordinates.
     #[must_use]
     pub fn incoming_cartesian(&self) -> DyArr<Vec3> {
-        DyArr::from_iterator([-1], self.incoming.iter().map(|sph| sph.to_cartesian()))
+        DyArr::from_iterator(
+            [-1],
+            self.incoming.iter().map(vgn_core::math::Sph2::to_cartesian),
+        )
     }
 
     /// Returns the outgoing directions in cartesian coordinates.
@@ -67,7 +76,10 @@ impl VgonioBrdfParameterisation {
     pub fn outgoing_spherical(&self) -> DyArr<Sph2> {
         DyArr::from_iterator(
             [-1],
-            self.outgoing.patches.iter().map(|patch| patch.center()),
+            self.outgoing
+                .patches
+                .iter()
+                .map(vgn_core::utils::partition::Patch::center),
         )
     }
 
@@ -88,11 +100,11 @@ impl VgonioBrdfParameterisation {
     pub fn n_wi_azimuth(&self) -> usize { self.incoming.len() / self.n_zenith_i }
 }
 
-/// BRDF from the VGonio simulator.
+/// BRDF from the `VGonio` simulator.
 ///
 /// Sampled BRDF data has three dimensions: ωi, ωo, λ.
-/// NOTO: the actual dimensions are [n_phi_i, n_theta_i, n_theta_o, n_phi_o,
-/// n_spectrum]. TODO: decompose the ωi into θi and φi.
+/// NOTO: the actual dimensions are [`n_phi_i`, `n_theta_i`, `n_theta_o`, `n_phi_o`,
+/// `n_spectrum`]. TODO: decompose the ωi into θi and φi.
 pub type VgonioBrdf = MeasuredBrdf<VgonioBrdfParameterisation, 3>;
 
 unsafe impl Send for VgonioBrdf {}
@@ -103,7 +115,7 @@ impl_any_measured_trait!(@single_level_brdf VgonioBrdf);
 // TODO: extract the common code to save data carried on the hemisphere to exr.
 
 impl VgonioBrdf {
-    /// Creates a new VGonio BRDF. The BRDF is parameterised in the incident
+    /// Creates a new `VGonio` BRDF. The BRDF is parameterised in the incident
     /// and outgoing directions.
     #[must_use]
     pub fn new(

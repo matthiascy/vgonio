@@ -35,7 +35,7 @@ use vgn_bxdf::{
 use vgn_core::{
     math::{self, Sph2},
     optics::IorReg,
-    units::{nm, rad, Degrees, Nanometres, Radians, Rads},
+    units::{nm, rad, Degrees, Length, Nanometres, Radians, Rads},
     utils::range::{StepRangeExcl, StepRangeIncl},
     BrdfLevel, ErrorMetric, MeasurementKind, Weighting,
 };
@@ -347,7 +347,7 @@ pub fn plot_brdf_slice_in_plane(brdf: &[&VgonioBrdf], phi: Radians) -> PyResult<
                         .collect::<Vec<_>>();
                     let wavelength = PyArray1::from_vec(
                         py,
-                        brdf.spectrum.iter().map(|x| x.as_f32()).collect::<Vec<_>>(),
+                        brdf.spectrum.iter().map(Length::as_f32).collect::<Vec<_>>(),
                     );
                     let (slices_phi, slices_phi_opp): (Vec<Vec<_>>, Vec<Vec<_>>) = theta_i
                         .iter()
@@ -359,7 +359,7 @@ pub fn plot_brdf_slice_in_plane(brdf: &[&VgonioBrdf], phi: Radians) -> PyResult<
                             (slice_phi, slice_phi_opp)
                         })
                         .unzip();
-                    for theta in theta_i.iter_mut() {
+                    for theta in &mut theta_i {
                         *theta = theta.to_degrees();
                     }
                     (slices_phi, slices_phi_opp, theta_i, theta_o, wavelength)
@@ -399,10 +399,7 @@ pub fn plot_ndf(
             ndf.iter()
                 .enumerate()
                 .map(|(i, &ndf)| {
-                    let label = labels
-                        .get(i)
-                        .cloned()
-                        .unwrap_or_else(|| format!("NDF {}", i));
+                    let label = labels.get(i).cloned().unwrap_or_else(|| format!("NDF {i}"));
                     match ndf.params.mode {
                         NdfMeasurementMode::ByPoints { zenith, .. } => {
                             let theta = zenith
@@ -426,7 +423,8 @@ pub fn plot_ndf(
                                 .iter()
                                 .enumerate()
                                 .for_each(|(i, ring)| unsafe {
-                                    theta.as_slice_mut().unwrap()[i] = ring.zenith_center().as_f32()
+                                    theta.as_slice_mut().unwrap()[i] =
+                                        ring.zenith_center().as_f32();
                                 });
                             let phi_opp = (phi + Radians::PI).wrap_to_tau();
                             let slice_phi = numpy::PyArray1::from_vec(
@@ -781,7 +779,7 @@ pub fn plot_brdf_3d(
             .collect::<Vec<_>>();
         let phi = StepRangeIncl::new(0.0, 360.0, 5.0f32)
             .values()
-            .map(|x| x.to_radians())
+            .map(f32::to_radians)
             .collect::<Vec<_>>();
         let n_theta = theta.len();
         let n_phi = phi.len();
@@ -892,7 +890,7 @@ impl BrdfFittingPlotter {
                         .collect::<Vec<_>>();
                     let phi_o = StepRangeExcl::new(0.0f32, 360.0, 15.0)
                         .values()
-                        .map(|x| x.to_radians())
+                        .map(f32::to_radians)
                         .collect::<Vec<_>>();
                     let n_theta_i = theta_i.len();
                     let n_phi_i = phi_i.len();
@@ -1022,11 +1020,11 @@ impl BrdfFittingPlotter {
                         .collect::<Vec<_>>();
                     let theta_o = StepRangeExcl::new(0.0f32, 90.0, 1.0)
                         .values()
-                        .map(|x| x.to_radians())
+                        .map(f32::to_radians)
                         .collect::<Vec<_>>();
                     let phi_o = StepRangeExcl::new(0.0f32, 360.0, 60.0)
                         .values()
-                        .map(|x| x.to_radians())
+                        .map(f32::to_radians)
                         .collect::<Vec<_>>();
                     let n_theta_i = theta_i.len();
                     let n_phi_i = phi_i.len();
@@ -1115,7 +1113,7 @@ impl BrdfFittingPlotter {
                     let phi_o = PyArray1::from_vec(py, phi_o);
                     let wavelength = PyArray1::from_vec(
                         py,
-                        brdf.spectrum.iter().map(|x| x.as_f32()).collect::<Vec<_>>(),
+                        brdf.spectrum.iter().map(Length::as_f32).collect::<Vec<_>>(),
                     );
                     let fitted_bk = fitted_bk
                         .reshape((n_models, n_theta_i, n_phi_i, n_phi_o, n_theta_o, n_spectrum))?;
@@ -1143,7 +1141,7 @@ impl BrdfFittingPlotter {
                         .unwrap();
                     let wavelength = PyArray1::from_vec(
                         py,
-                        brdf.spectrum.iter().map(|x| x.as_f32()).collect::<Vec<_>>(),
+                        brdf.spectrum.iter().map(Length::as_f32).collect::<Vec<_>>(),
                     );
                     let n_spectrum = brdf.n_spectrum();
                     let mut theta_i = vec![];
@@ -1355,11 +1353,11 @@ impl BrdfFittingPlotter {
                         .collect::<Vec<_>>();
                     let theta_o = StepRangeIncl::new(0.0f32, 80.0, 1.0)
                         .values()
-                        .map(|x| x.to_radians())
+                        .map(f32::to_radians)
                         .collect::<Vec<_>>();
                     let phi_o = StepRangeExcl::new(0.0f32, 360.0, 30.0)
                         .values()
-                        .map(|x| x.to_radians())
+                        .map(f32::to_radians)
                         .collect::<Vec<_>>();
                     let n_theta_i = theta_i.len();
                     let n_phi_i = phi_i.len();
@@ -1479,11 +1477,11 @@ impl BrdfFittingPlotter {
                     let n_spectrum = merl_brdf.n_spectrum();
                     let i_thetas = StepRangeIncl::new(0.0f32, 89.0, 1.0)
                         .values()
-                        .map(|x| x.to_radians())
+                        .map(f32::to_radians)
                         .collect::<Vec<_>>();
                     let i_phis = StepRangeIncl::new(0.0f32, 360.0, 30.0)
                         .values()
-                        .map(|x| x.to_radians())
+                        .map(f32::to_radians)
                         .collect::<Vec<_>>();
                     let o_thetas = i_thetas.clone();
                     let o_phis = i_phis.clone();
@@ -1817,7 +1815,7 @@ impl BrdfFittingPlotter {
             }
         });
 
-        return Ok(());
+        Ok(())
     }
 
     pub fn plot_brdf_fitting_slice(
@@ -1847,7 +1845,7 @@ impl BrdfFittingPlotter {
             .spectrum()
             .iter()
             .position(|x| (x.as_f32() - lambda).abs() < 1e-6)
-            .unwrap_or_else(|| panic!("Wavelength {} not found in the spectrum!", lambda));
+            .unwrap_or_else(|| panic!("Wavelength {lambda} not found in the spectrum!"));
 
         let n_spectrum = brdf.spectrum().len();
 
@@ -1922,8 +1920,8 @@ impl BrdfFittingPlotter {
                 "none"
             };
 
-            let n_bk_models = bk_models.as_ref().map(|ms| ms.len()).unwrap_or(1);
-            let n_tr_models = tr_models.as_ref().map(|ms| ms.len()).unwrap_or(1);
+            let n_bk_models = bk_models.as_ref().map_or(1, |ms| ms.len());
+            let n_tr_models = tr_models.as_ref().map_or(1, |ms| ms.len());
 
             let (n_theta_o, o_thetas, samples, samples_opp) = match brdf.kind() {
                 // MeasuredBrdfKind::Clausen => {}
@@ -2009,13 +2007,15 @@ impl BrdfFittingPlotter {
                             // phi == 180, we populate the data with the
                             // opposite direction.
                             if (theta_i_idx == 0 && phi_i_idx == 0) || i == 0 {
-                                samples_opp_mut[i] = proxy_samples
-                                    [[theta_i_idx, phi_i_idx, i, phi_o_idx, lambda_idx]]
-                                    as f64
+                                samples_opp_mut[i] = f64::from(
+                                    proxy_samples
+                                        [[theta_i_idx, phi_i_idx, i, phi_o_idx, lambda_idx]],
+                                )
                             } else {
-                                samples_opp_mut[i] = proxy_samples
-                                    [[theta_i_idx, phi_i_idx, i, phi_o_opp_idx, lambda_idx]]
-                                    as f64;
+                                samples_opp_mut[i] = f64::from(
+                                    proxy_samples
+                                        [[theta_i_idx, phi_i_idx, i, phi_o_opp_idx, lambda_idx]],
+                                );
                             }
                         }
                     }

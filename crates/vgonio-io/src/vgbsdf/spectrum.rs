@@ -11,6 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 
+/// TOML schema describing the wavelength axis of an archive.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SpectrumToml {
     /// "nm" for spectral data, "scalar" for non-spectral.
@@ -20,6 +21,12 @@ pub struct SpectrumToml {
 }
 
 impl SpectrumToml {
+    /// Construct the spectral form with the given per-channel wavelengths (nm).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `wavelengths` is empty; use [`SpectrumToml::scalar`] for
+    /// non-spectral outputs instead.
     pub fn nm(wavelengths: Vec<f32>) -> Self {
         assert!(
             !wavelengths.is_empty(),

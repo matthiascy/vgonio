@@ -633,7 +633,7 @@ pub mod brdf {
                         .zip(pbs.iter())
                         .enumerate()
                         .par_bridge()
-                        .for_each(|(i, ((err_chunks, alpha_chunks), pb))| {
+                        .for_each(|(_i, ((err_chunks, alpha_chunks), pb))| {
                             #[cfg(feature = "cuda")]
                             if on_gpu {
                                 CurrentContext::set_current(context.as_ref().unwrap()).unwrap();

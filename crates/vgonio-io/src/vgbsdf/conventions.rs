@@ -6,39 +6,52 @@ pub const CONVENTIONS_V1: &str = "v1";
 
 /// Top-level EXR attribute keys.
 pub mod attr_key {
+    /// Conventions version key.
     pub const CONVENTIONS: &str = "vgonio.conventions";
+    /// Name and version of the writing software.
     pub const SOFTWARE: &str = "vgonio.software";
+    /// File creation timestamp.
     pub const CREATED: &str = "vgonio.created";
+    /// Discriminator for the contained output ([`OutputKind`]).
     pub const OUTPUT_KIND: &str = "vgonio.output_kind";
+    /// Outgoing-domain encoding ([`OutgoingEncoding`]).
     pub const ENCODING: &str = "vgonio.encoding";
+    /// Reference to the partition descriptor file.
     pub const PARTITION_REF: &str = "vgonio.partition_ref";
 
-    // disc-specific
+    /// Projection used for the disc encoding.
     pub const DISC_PROJECTION: &str = "vgonio.disc.projection";
+    /// Pixel resolution of the disc encoding.
     pub const DISC_RESOLUTION: &str = "vgonio.disc.resolution";
 
-    // thetaphi-specific
+    /// Number of θ samples in the thetaphi encoding.
     pub const THETAPHI_N_THETA: &str = "vgonio.thetaphi.n_theta";
+    /// Number of φ samples in the thetaphi encoding.
     pub const THETAPHI_N_PHI: &str = "vgonio.thetaphi.n_phi";
+    /// Inclusive `[min, max]` θ range (radians) of the thetaphi encoding.
     pub const THETAPHI_THETA_RANGE: &str = "vgonio.thetaphi.theta_range_rad";
+    /// Inclusive `[min, max]` φ range (radians) of the thetaphi encoding.
     pub const THETAPHI_PHI_RANGE: &str = "vgonio.thetaphi.phi_range_rad";
 
-    // patches-specific
+    /// Number of patches in the patches encoding.
     pub const PATCHES_N_PATCHES: &str = "vgonio.patches.n_patches";
 }
 /// Conventions version handle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConventionsVersion {
+    /// Version 1 of the EXR conventions.
     V1,
 }
 
 impl ConventionsVersion {
+    /// Returns the textual representation written to EXR attributes.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::V1 => CONVENTIONS_V1,
         }
     }
 
+    /// Parses the textual representation back into a version handle.
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "v1" => Some(Self::V1),
@@ -50,14 +63,20 @@ impl ConventionsVersion {
 /// Output kind discriminator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OutputKind {
+    /// Bidirectional Scattering Distribution Function.
     Bsdf,
+    /// Normal Distribution Function.
     Ndf,
+    /// Masking-Shadowing Function.
     Msf,
+    /// Slope Distribution Function.
     Sdf,
+    /// Heightfield data.
     Heightfield,
 }
 
 impl OutputKind {
+    /// Returns the textual tag written to EXR attributes.
     pub fn as_str(self) -> &'static str {
         match self {
             OutputKind::Bsdf => "bsdf",
@@ -68,6 +87,7 @@ impl OutputKind {
         }
     }
 
+    /// Parses the textual tag back into an [`OutputKind`].
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "bsdf" => Some(OutputKind::Bsdf),
@@ -83,12 +103,16 @@ impl OutputKind {
 /// Outgoing-domain encoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OutgoingEncoding {
+    /// Outgoing directions projected onto a 2D disc image.
     Disc,
+    /// Outgoing directions parameterised as a (θ, φ) grid.
     Thetaphi,
+    /// Outgoing directions binned by partition patch.
     Patches,
 }
 
 impl OutgoingEncoding {
+    /// Returns the textual tag written to EXR attributes.
     pub fn as_str(self) -> &'static str {
         match self {
             OutgoingEncoding::Disc => "disc",
@@ -97,6 +121,7 @@ impl OutgoingEncoding {
         }
     }
 
+    /// Parses the textual tag back into an [`OutgoingEncoding`].
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "disc" => Some(OutgoingEncoding::Disc),
