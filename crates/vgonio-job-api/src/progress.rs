@@ -40,14 +40,17 @@ use serde::{Deserialize, Serialize};
 
 /// One structured observation about a job's progress.
 ///
-/// Wire shape is externally tagged: `{"queued": {"at": "..."}}`,
-/// `{"progress": {"fraction": 0.5, ...}}`, etc. Variant discriminants are
-/// `snake_case`. `#[non_exhaustive]` so new event kinds can land without a
-/// protocol bump; receivers should accept unknown variants tolerantly (today
-/// that means a deserialization error, which Phase 3 will soften via a
-/// catch-all wrapper at the transport layer).
+/// Wire shape is internally tagged on the `type` discriminator:
+/// `{"type":"queued","at":"..."}`, `{"type":"progress","fraction":0.5,...}`,
+/// etc. The discriminator is named `type` rather than `kind` because
+/// [`Self::Progress`] already exposes a `kind` field of its own
+/// ([`ProgressKind`]); colliding the two would force renaming a documented
+/// field. Variant discriminants are `snake_case`. `#[non_exhaustive]` so new
+/// event kinds can land without a protocol bump; receivers should accept
+/// unknown variants tolerantly (today that means a deserialization error,
+/// which Phase 3 will soften via a catch-all wrapper at the transport layer).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum ProgressEvent {
     /// The executor accepted the envelope and is holding it in the run queue;
@@ -239,10 +242,11 @@ mod tests {
 
     #[test]
     fn variants_wire_as_snake_case() {
-        // Spot-check the externally-tagged + snake_case wire shape so a stray
+        // Spot-check the internally-tagged + snake_case wire shape so a stray
         // edit to the `#[serde(...)]` attribute on `ProgressEvent` is caught.
         let queued = serde_json::to_value(ProgressEvent::Queued { at: ts() }).unwrap();
-        assert!(queued.get("queued").is_some(), "expected `queued` key, got {queued}");
+        assert_eq!(queued.get("type").and_then(|v| v.as_str()), Some("queued"));
+        assert!(queued.get("at").is_some(), "internal tag must keep `at` as a sibling");
 
         let progress = serde_json::to_value(ProgressEvent::Progress {
             fraction: 0.5,
@@ -250,8 +254,11 @@ mod tests {
             kind: ProgressKind::PerStep,
         })
         .unwrap();
-        let body = progress.get("progress").expect("progress key");
-        assert_eq!(body.get("kind").and_then(|v| v.as_str()), Some("per_step"));
+        assert_eq!(progress.get("type").and_then(|v| v.as_str()), Some("progress"));
+        // The variant's own `kind` field must stay reachable under its own
+        // name; this is why the discriminator is `type`, not `kind`.
+        assert_eq!(progress.get("kind").and_then(|v| v.as_str()), Some("per_step"));
+        assert_eq!(progress.get("fraction").and_then(serde_json::Value::as_f64), Some(0.5));
     }
 
     #[test]
