@@ -1,0 +1,26 @@
+[package]
+name = "vgonio-executor"
+description = "Executor abstraction for vgonio: dispatches typed capability requests."
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+license-file.workspace = true
+version.workspace = true
+
+[lib]
+name = "vgn_executor"
+
+[dependencies]
+chrono.workspace = true
+bytes.workspace = true
+log.workspace = true
+thiserror.workspace = true
+vgonio-job-api = { path = "../vgonio-job-api" }
+vgonio-artifact = { path = "../vgonio-artifact" }
+vgonio-core = { path = "../vgonio-core", features = ["cli"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

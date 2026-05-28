@@ -38,13 +38,13 @@ use crate::{
 pub struct JobEnvelope {
     /// Server-assigned ID for *this attempt*. See [`crate::ids::JobId`] for
     /// the JobId-vs-IdempotencyKey distinction.
-    pub id: JobId,
+    pub job_id: JobId,
     /// Wire protocol version: always [`crate::PROTOCOL_VERSION`] for envelopes
     /// produced by this crate.
     pub protocol_version: u32,
     /// Which capability is being invoked. See [`crate::ids::CapabilityId`]
     /// for the canonical set.
-    pub capability: CapabilityId,
+    pub capability_id: CapabilityId,
     /// Per-capability payload schema version (independent of
     /// `protocol_version`).
     pub capability_version: u32,
@@ -72,7 +72,7 @@ impl JobEnvelope {
     /// Builds a new envelope with `protocol_version` correctly seeded from
     /// [`crate::PROTOCOL_VERSION`] and `id` minted fresh.
     pub fn new(
-        capability: CapabilityId,
+        capability_id: CapabilityId,
         capability_version: u32,
         payload_encoding: PayloadEncoding,
         payload: Bytes,
@@ -82,9 +82,9 @@ impl JobEnvelope {
         trace: TraceContext,
     ) -> Self {
         Self {
-            id: JobId::new(),
+            job_id: JobId::new(),
             protocol_version: crate::PROTOCOL_VERSION,
-            capability,
+            capability_id,
             capability_version,
             payload_encoding,
             payload,
@@ -183,9 +183,9 @@ mod tests {
         let json = serde_json::to_string(&env).unwrap();
         let back: JobEnvelope = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(env.id, back.id);
+        assert_eq!(env.job_id, back.job_id);
         assert_eq!(env.protocol_version, back.protocol_version);
-        assert_eq!(env.capability, back.capability);
+        assert_eq!(env.capability_id, back.capability_id);
         assert_eq!(env.capability_version, back.capability_version);
         assert_eq!(env.payload_encoding, back.payload_encoding);
         assert_eq!(env.payload, back.payload);

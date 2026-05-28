@@ -132,7 +132,4 @@ mod tests {
         assert_eq!(a.checksum, b.checksum);
         assert_eq!(a.size_bytes, b.size_bytes);
     }
-
-    #[test]
-    fn
 }

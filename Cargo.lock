@@ -4164,6 +4164,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "vgonio-executor"
+version = "0.3.2"
+dependencies = [
+ "bytes",
+ "chrono",
+ "log",
+ "tempfile",
+ "thiserror 2.0.11",
+ "vgonio-artifact",
+ "vgonio-core",
+ "vgonio-job-api",
+]
+
+[[package]]
 name = "vgonio-io"
 version = "0.3.2"
 dependencies = [
