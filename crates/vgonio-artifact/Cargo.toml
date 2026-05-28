@@ -1,0 +1,25 @@
+[package]
+name = "vgonio-artifact"
+description = "Artifact store implementations for vgonio's executor."
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+license-file.workspace = true
+version.workspace = true
+
+[lib]
+name = "vgn_artifact"
+
+[dependencies]
+bytes.workspace = true
+sha2.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+log.workspace = true
+vgonio-job-api = { path = "../vgonio-job-api" }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

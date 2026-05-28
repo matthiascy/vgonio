@@ -117,13 +117,14 @@ pub struct JobContext {
 ///
 /// `Send + Sync + Debug` because:
 /// - `Send + Sync` so an [`Arc<dyn ArtifactStore>`] can be cloned into helper threads.
-/// - `Debug` so a future `#[derive(Debug)]` on [`JobContext`] doesn't require manual impl gymnastics.
+/// - `Debug` so a future `#[derive(Debug)]` on [`JobContext`] doesn't require manual impl
+///   gymnastics.
 pub trait ArtifactStore: Send + Sync + Debug {
     /// Resolves an input artifact reference. Phase 1 returns the resolved ref
     /// after verifying the blob is present; Phase 3 may return a re-issued
     /// reference whose `origin` is updated to a local path after the worker
     /// pulled the bytes from the remote store.
-    fn resolve(&self, id: &ArtifactRef) -> Result<ArtifactRef, JobError>;
+    fn resolve(&self, id: &ArtifactRef) -> Result<ArtifactHandle, JobError>;
     /// Publishes a freshly-produced output blob and returns the ref the
     /// handler should include in its result. The store assigns the
     /// [`crate::ids::ArtifactId`] and computes the checksum.
@@ -280,7 +281,10 @@ mod tests {
 
         // Cancel via one clone, observe via the other.
         cloned.cancel();
-        assert!(original.is_cancelled(), "cancel on clone must be visible on original");
+        assert!(
+            original.is_cancelled(),
+            "cancel on clone must be visible on original"
+        );
     }
 
     #[test]
@@ -302,7 +306,10 @@ mod tests {
             true
         });
         t.cancel();
-        assert!(handle.join().unwrap(), "helper thread did not observe cancellation");
+        assert!(
+            handle.join().unwrap(),
+            "helper thread did not observe cancellation"
+        );
     }
 
     // ----- ProgressSender -----
@@ -331,7 +338,10 @@ mod tests {
         sender.send(ProgressEvent::Completed { at: ts() });
         assert!(matches!(rx.recv().unwrap(), ProgressEvent::Queued { .. }));
         assert!(matches!(rx.recv().unwrap(), ProgressEvent::Started { .. }));
-        assert!(matches!(rx.recv().unwrap(), ProgressEvent::Completed { .. }));
+        assert!(matches!(
+            rx.recv().unwrap(),
+            ProgressEvent::Completed { .. }
+        ));
     }
 
     #[test]
@@ -356,7 +366,10 @@ mod tests {
         sender.send(ProgressEvent::Queued { at: ts() });
         helper.send(ProgressEvent::Completed { at: ts() });
         assert!(matches!(rx.recv().unwrap(), ProgressEvent::Queued { .. }));
-        assert!(matches!(rx.recv().unwrap(), ProgressEvent::Completed { .. }));
+        assert!(matches!(
+            rx.recv().unwrap(),
+            ProgressEvent::Completed { .. }
+        ));
     }
 
     // ----- ArtifactHandle -----
@@ -400,7 +413,11 @@ mod tests {
     impl ArtifactStore for MockStore {
         fn resolve(&self, r: &ArtifactRef) -> Result<ArtifactRef, JobError> { Ok(r.clone()) }
 
-        fn publish(&self, kind: ArtifactKind, bytes: bytes::Bytes) -> Result<ArtifactRef, JobError> {
+        fn publish(
+            &self,
+            kind: ArtifactKind,
+            bytes: bytes::Bytes,
+        ) -> Result<ArtifactRef, JobError> {
             Ok(ArtifactRef {
                 id: ArtifactId::new(),
                 kind,

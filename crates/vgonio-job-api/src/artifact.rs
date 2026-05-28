@@ -1,4 +1,6 @@
 //! Artifact references: the wire-side handle to an immutable byte blob.
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 use crate::ids::ArtifactId;
@@ -54,7 +56,7 @@ pub enum ArtifactOrigin {
     /// Path on the local filesystem of whichever process is reading the ref.
     /// Only valid within a single host (the local executor / single-machine
     /// worker).
-    LocalPath(String),
+    LocalPath(PathBuf),
     /// HTTP(S) URL the consumer can fetch.
     HttpUrl(String),
     /// The bytes live in an in-process [`crate::context::JobContext`] artifact
