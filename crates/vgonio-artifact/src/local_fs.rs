@@ -12,6 +12,7 @@ use vgn_job_api::{
     error::{JobError, JobErrorCode},
     ids::ArtifactId,
 };
+use uuid::Uuid;
 
 #[derive(Debug)]
 pub struct LocalFsStore {
@@ -62,7 +63,9 @@ impl ArtifactStore for LocalFsStore {
         if !target.exists() {
             // Atomic publish via temp file + rename. If the target already exists, we can skip this
             // step since the content is identical.
-            let tmp = target.with_extension("tmp");
+            // Append uuid to avoid two publishers both write to the same tmp name.
+            let uuid  = Uuid::new_v4();
+            let tmp = target.with_extension(format!("tmp.{}", uuid));
             {
                 let mut f = fs::File::create(&tmp).map_err(io_to_job_error)?;
                 std::io::Write::write_all(&mut f, &bytes).map_err(io_to_job_error)?;
@@ -129,4 +132,7 @@ mod tests {
         assert_eq!(a.checksum, b.checksum);
         assert_eq!(a.size_bytes, b.size_bytes);
     }
+
+    #[test]
+    fn
 }
