@@ -6,13 +6,14 @@ mod beckmann;
 mod trowbridge_reitz;
 
 pub use beckmann::*;
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 pub use trowbridge_reitz::*;
 use vgn_core::{math::Vec3, Symmetry};
 
 /// Different kinds of microfacet distribution functions.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum MicrofacetDistroKind {
     /// Beckmann microfacet distribution.
     #[cfg_attr(feature = "cli", clap(alias = "bk", name = "beckmann"))]
@@ -35,7 +36,10 @@ impl MicrofacetDistroKind {
 }
 
 /// Common interface for microfacet distribution functions.
-#[allow(clippy::doc_markdown, reason = "method docs contain LaTeX math notation")]
+#[allow(
+    clippy::doc_markdown,
+    reason = "method docs contain LaTeX math notation"
+)]
 pub trait MicrofacetDistribution: Debug + Send + Sync {
     /// The type of the parameters of the distribution model.
     type Params = [f64; 2];

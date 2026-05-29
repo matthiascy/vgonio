@@ -1,20 +1,17 @@
 use super::{docking::DockSpace, event::EventResponse};
 use crate::app::cache::Cache;
-use crate::{
-    app::gui::{
-        data::PropertyData,
-        event::{EventLoopProxy, OutlinerEvent, SurfaceViewerEvent, VgonioEvent},
-        file_drop::FileDragDrop,
-        // gizmo::NavigationGizmo,
-        icons,
-        measurement::MeasurementDialog,
-        notify::{NotifyKind, NotifySystem},
-        outliner::OutlinerItem,
-        plotter::{PlotInspector, PlottingWidget},
-        tools::{SamplingInspector, Scratch, Tools},
-        DebuggingInspector,
-    },
-    measure::Measurement,
+use crate::app::gui::{
+    data::PropertyData,
+    event::{EventLoopProxy, OutlinerEvent, SurfaceViewerEvent, VgonioEvent},
+    file_drop::FileDragDrop,
+    // gizmo::NavigationGizmo,
+    icons,
+    measurement::MeasurementDialog,
+    notify::{NotifyKind, NotifySystem},
+    outliner::OutlinerItem,
+    plotter::{PlotInspector, PlottingWidget},
+    tools::{SamplingInspector, Scratch, Tools},
+    DebuggingInspector,
 };
 #[cfg(feature = "fitting")]
 use crate::{
@@ -39,10 +36,10 @@ use vgn_core::utils::range::StepRangeIncl;
 use vgn_core::{
     config::Config,
     io::{CompressionScheme, FileEncoding},
-    res::{DataStore, Handle},
+    res::Handle,
     BrdfLevel, MeasurementKind, Weighting,
 };
-use vgn_io::{HeightOffset, MicroSurface, MicroSurfaceMesh};
+use vgn_io::{HeightOffset, MicroSurface};
 use vgn_uxgx::{
     gfx::{context::GpuContext, mesh::RenderableMesh},
     gui::{theme::ThemeKind, UiRenderer},

@@ -53,7 +53,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-pub use compute::{ComputeCache, MicroSurfaceRecord};
+pub use compute::ComputeCache;
 pub use ui::UiCache;
 /// A thread-safe cache. Wraps a [`UiCache`] (which embeds [`ComputeCache`])
 /// behind a single `RwLock`. The closure-based `read`/`write` API is

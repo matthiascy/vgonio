@@ -37,7 +37,7 @@ use vgn_bxdf::{
 };
 use vgn_core::{
     asset,
-    cli::{self, cli_step, Indent},
+    cli::{cli_step, Indent},
     error::VgonioError,
     io::{
         Header, HeaderMeta, ReadFileError, ReadFileErrorKind, WriteFileError, WriteFileErrorKind,
@@ -51,7 +51,7 @@ use vgn_core::{
     },
     MeasurementKind, Version,
 };
-use vgn_io::{MicroSurface, MicroSurfaceMesh};
+use vgn_io::MicroSurfaceMesh;
 
 /// Where the measurement data is loaded from.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -206,9 +206,9 @@ impl Measurement {
                 },
                 MeasurementKind::Gaf => {
                     return Err(VgonioError::new(
-                        "Vgbsdf output for masking-shadowing (GAF/MSF) is not implemented \
-                         yet — its 2D (view × incident) shape needs a multi-layer encoding \
-                         (see Task 15 plan note)",
+                        "Vgbsdf output for masking-shadowing (GAF/MSF) is not implemented yet — \
+                         its 2D (view × incident) shape needs a multi-layer encoding (see Task 15 \
+                         plan note)",
                         None,
                     ));
                 },
@@ -1071,7 +1071,9 @@ mod tests {
     #[test]
     fn write_to_file_vgbsdf_dispatches_ndf_to_vgndf() {
         let params = NdfMeasurementParams {
-            mode: NdfMeasurementMode::ByPartition { precision: rad!(0.3) },
+            mode: NdfMeasurementMode::ByPartition {
+                precision: rad!(0.3),
+            },
             crop_to_disk: false,
             use_facet_area: false,
         };
@@ -1100,7 +1102,11 @@ mod tests {
             .unwrap();
 
         let expected = stem.with_extension("vgndf");
-        assert!(expected.is_file(), "expected {} to exist", expected.display());
+        assert!(
+            expected.is_file(),
+            "expected {} to exist",
+            expected.display()
+        );
 
         let reader = VgbsdfReader::open(&expected).unwrap();
         assert_eq!(reader.manifest.archive.kind, "ndf");

@@ -17,6 +17,7 @@ use vgn_core::utils::{
 };
 #[cfg(feature = "vdbg")]
 use vgn_core::{math::Sph2, units::Rads};
+#[cfg(feature = "vdbg")]
 use vgn_uxgx::gui::widgets::ToggleSwitch;
 
 impl BsdfKind {

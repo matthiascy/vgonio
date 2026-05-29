@@ -36,10 +36,7 @@ use crate::{
     error::RuntimeError,
     measure,
 };
-use vgn_core::{
-    error::VgonioError,
-    utils::{input::InputState, medium},
-};
+use vgn_core::{error::VgonioError, utils::input::InputState};
 use vgn_uxgx::{
     gfx::context::{GpuContext, WgpuConfig, WindowSurface},
     gui::theme::{DarkTheme, LightTheme, Theme, ThemeKind},
@@ -73,10 +70,7 @@ use crate::{
     io::OutputOptions,
     measure::params::MeasurementParams,
 };
-use vgn_core::{
-    config::Config,
-    res::{DataStore, RawDataStore},
-};
+use vgn_core::config::Config;
 
 /// Launches Vgonio GUI application native window.
 pub fn run(config: Config) -> Result<(), VgonioError> {
@@ -147,7 +141,7 @@ pub struct VgonioGuiApp {
     /// The configuration of the app. See [`Config`].
     config: Arc<Config>,
     /// The cache of the app including preloaded datafiles. See
-    /// [`DataStore`].
+    /// [`DataStore`](crate::res::DataStore).
     cache: Cache,
     /// Input states collected from the window.
     input: InputState,

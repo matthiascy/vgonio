@@ -17,10 +17,9 @@ use std::{
 use uuid::Uuid;
 use vgn_core::{
     math::{Mat4, Vec4},
-    res::{Handle, RawDataStore},
+    res::Handle,
     utils::input::InputState,
 };
-use vgn_io::MicroSurface;
 use vgn_uxgx::{
     gfx::{
         camera::{ProjectionKind, ViewProjUniform},

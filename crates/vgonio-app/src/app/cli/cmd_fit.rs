@@ -1,14 +1,62 @@
 //! CLI shape for the `fit` subcommand. Orchestration lives in
-//! [`crate::fitting_orchestration`]; this file is clap parsing + dispatch only.
+//! [`crate::orchestration::fitting`]; this file is clap parsing + dispatch only.
 
-use crate::fitting_orchestration::{self, FittingMethod};
+use crate::{
+    app::executor,
+    orchestration::fitting::{self, FitRequest, FittingMethod},
+};
 use clap::builder::ValueParser;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 use vgn_bxdf::{brdf::measured::MeasuredBrdfKind, distro::MicrofacetDistroKind, BrdfFamily};
 use vgn_core::{config::Config, error::VgonioError, BrdfLevel, ErrorMetric, Symmetry, Weighting};
+use vgn_executor::{Executor, LocalStatusBridge};
+use vgn_job_api::{
+    envelope::{JobEnvelope, PayloadEncoding, TraceContext},
+    ids::{CapabilityId, IdempotencyKey, JobId},
+    resources::ResourceHints,
+};
 
 pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
-    crate::fitting_orchestration::run(opts, config)
+    let executor = executor::build_local_executor(Arc::new(config));
+    let request = FitRequest::try_from(&opts)?;
+    let payload = serde_json::to_vec(&request)
+        .map_err(|e| VgonioError::new(format!("Failed to serialize FitRequest: {e}"), None))?;
+    let envelope = JobEnvelope {
+        job_id: JobId::new(),
+        protocol_version: vgn_job_api::PROTOCOL_VERSION,
+        capability_id: CapabilityId::fit(),
+        capability_version: 1,
+        payload_encoding: PayloadEncoding::Json,
+        payload: payload.into(),
+        resources: ResourceHints::default(),
+        inputs: vec![],
+        idempotency_key: IdempotencyKey("cli-fit".into()),
+        trace: TraceContext::default(),
+    };
+    let handle = executor
+        .submit(envelope)
+        .map_err(|e| VgonioError::new(e.to_string(), None))?;
+
+    // Render events while waiting on result.
+    let bridge = LocalStatusBridge::new();
+    let result_rx = handle.result;
+    let events_rx = handle.events;
+    let bridge_handle = std::thread::spawn(move || bridge.run(events_rx));
+    let outcome = result_rx
+        .recv()
+        .map_err(|e| VgonioError::new(format!("Failed to receive fit result: {e}"), None))?
+        .map(|_| ())
+        // Use `e.message` (not `{e}`): `JobError`'s Display is
+        // `"{code:?}: {message}"`, which would compound with the handler's
+        // own context and surface as "Fit job failed: HandlerError: ...".
+        .map_err(|e| VgonioError::new(format!("Fit job failed: {}", e.message), None));
+    // Join the bridge so the terminal event (e.g. Completed) is rendered
+    // before we return. `result_rx.recv()` can resolve before the bridge has
+    // drained the event channel, and the bridge renders the final line at
+    // default verbosity; dropping the handle would risk a missing/flaky
+    // trailing line.
+    let _ = bridge_handle.join();
+    outcome
 }
 
 // TODO: separate the NDF fitting & the BRDF fitting
@@ -26,7 +74,7 @@ pub struct FitOptions {
     #[clap(
         long = "ax",
         value_name = "START:END:STEP",
-        value_parser = ValueParser::new(fitting_orchestration::parse_roughness_values),
+        value_parser = ValueParser::new(fitting::parse_roughness_values),
         requires("ay"),
         help = "Anisotropic roughness in x direction (inclusive)."
     )]
@@ -35,7 +83,7 @@ pub struct FitOptions {
     #[clap(
         long = "ay",
         value_name = "START:END:STEP",
-        value_parser = ValueParser::new(fitting_orchestration::parse_roughness_values),
+        value_parser = ValueParser::new(fitting::parse_roughness_values),
         requires("ax"),
         help = "Anisotropic roughness in y direction (inclusive)."
     )]
@@ -66,7 +114,7 @@ pub struct FitOptions {
     #[clap(
         long = "a",
         value_name = "START:END:STEP",
-        value_parser = ValueParser::new(fitting_orchestration::parse_roughness_values),
+        value_parser = ValueParser::new(fitting::parse_roughness_values),
         conflicts_with_all(&["ax", "ay", "per_wavelength_ax", "per_wavelength_ay", "per_wavelength_a"]),
         help = "Isotropic roughness (inclusive)."
     )]

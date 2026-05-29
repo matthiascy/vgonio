@@ -11,9 +11,9 @@ use vgn_core::{
     error::VgonioError,
     math,
     math::{theta, Sph2, Vec3Swizzles},
-    res::{Handle, RawDataStore},
+    res::Handle,
     units,
-    units::{deg, rad, Radians},
+    units::{rad, Radians},
     utils::{
         partition::{DataCarriedOnHemisphereImageWriter, SphericalDomain, SphericalPartition},
         range::StepRangeIncl,
@@ -376,9 +376,7 @@ mod tests {
 
         // New path: extract l0/disc.exr from the .vgndf zip, stage to a tempfile, read.
         let mut reader = VgbsdfReader::open(&vgndf_path).unwrap();
-        let disc_bytes = reader
-            .read_exr_bytes("l0", OutgoingEncoding::Disc)
-            .unwrap();
+        let disc_bytes = reader.read_exr_bytes("l0", OutgoingEncoding::Disc).unwrap();
         let disc_path = dir.path().join("disc.exr");
         std::fs::write(&disc_path, &disc_bytes).unwrap();
         let new_pixels = read_exr_pixels(&disc_path);

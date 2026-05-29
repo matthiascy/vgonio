@@ -24,15 +24,13 @@ pub mod fitting;
 #[cfg(not(any(test, feature = "test-support")))]
 mod io;
 
-#[cfg(feature = "fitting")]
-mod fitting_orchestration;
 // The VGMO codec (`BsdfMeasurement::{read,write}_to_vgmo`) lives here; its
 // inherent methods are only reachable from integration tests if the enclosing
 // module is public. Expose it solely under `test-support`.
 #[cfg(any(test, feature = "test-support"))]
 pub mod io;
 pub mod measure;
-mod measure_orchestration;
+mod orchestration;
 pub(crate) mod pyplot;
 
 #[cfg(feature = "fitting")]

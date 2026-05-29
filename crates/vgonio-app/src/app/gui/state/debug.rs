@@ -17,10 +17,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 use vgn_core::{
     math::{Mat4, Sph2, Vec3},
-    res::{DataStore, Handle},
+    res::Handle,
     utils::partition::SphericalPartition,
 };
-use vgn_io::{MicroSurface, MicroSurfaceMesh};
 use vgn_uxgx::gfx::{context::GpuContext, render_pass::RenderPass, vertex::VertexLayout};
 use wgpu::util::DeviceExt;
 
@@ -41,7 +40,7 @@ struct PushConstants {
     model: mat4x4<f32>,
     color: vec4<f32>,
 }
- 
+
 var<push_constant> pcs: PushConstants;
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;

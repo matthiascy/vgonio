@@ -24,7 +24,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
             "Executing 'vgonio measure' with a thread pool of size: {}",
             rayon::current_num_threads()
         );
-        crate::measure_orchestration::run(opts, config)
+        crate::orchestration::measure::run(opts, config)
     };
 
     if let Some(nthreads) = opts.nthreads {

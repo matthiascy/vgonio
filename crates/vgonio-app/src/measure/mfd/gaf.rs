@@ -9,12 +9,11 @@ use vgn_core::{
     error::VgonioError,
     math,
     math::{Mat4, Vec3},
-    res::{Handle, RawDataStore},
+    res::Handle,
     units::Radians,
     utils::range::StepRangeIncl,
     MeasurementKind,
 };
-use vgn_io::MicroSurface;
 
 use vgn_uxgx::gfx::{
     camera::{Camera, Projection},

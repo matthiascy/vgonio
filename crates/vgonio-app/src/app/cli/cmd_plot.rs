@@ -23,7 +23,7 @@ use vgn_bxdf::{
     AnyMeasured,
 };
 use vgn_core::{
-    cli::{self, cli_note, Indent},
+    cli::{cli_note, Indent},
     config::Config,
     error::VgonioError,
     math::Sph2,

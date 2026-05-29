@@ -8,7 +8,7 @@ use std::{
 };
 
 /// Vgonio configuration.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// Path to the configuration directory.
     pub sys_config_dir: PathBuf,
@@ -28,7 +28,7 @@ pub struct Config {
 }
 
 /// Options configured by user.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserConfig {
     /// Path to user-defined cache directory.
     /// If not set, the default cache directory is used.

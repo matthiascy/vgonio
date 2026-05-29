@@ -8,7 +8,7 @@ use crate::{
         event::EventLoopProxy,
         plotter::{angle_knob, Curve, VariantData},
     },
-    measure::{mfd::MeasuredNdfData, Measurement},
+    measure::mfd::MeasuredNdfData,
 };
 #[cfg(feature = "fitting")]
 use vgn_core::Symmetry;
@@ -26,7 +26,7 @@ use vgn_bxdf::{
     distro::MicrofacetDistroKind,
     fitting::{FittedModel, FittingProblemKind},
 };
-use vgn_core::res::{DataStore, Handle, RawDataStore};
+use vgn_core::res::Handle;
 
 struct ModelSelector {
     model: MicrofacetDistroKind,

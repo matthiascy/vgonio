@@ -19,6 +19,7 @@
 // whole project. #![feature(effects)]
 
 use error::VgonioError;
+use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Debug, Display, Formatter},
     hash::Hash,
@@ -76,7 +77,7 @@ pub mod cuda {
 
 /// Indicates whether something is uniform in all directions or not.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[derive(Debug, Copy, Clone, ConstParamTy)]
+#[derive(Debug, Copy, Clone, ConstParamTy, Serialize, Deserialize)]
 pub enum Symmetry {
     /// Uniformity in all directions.
     #[cfg_attr(feature = "cli", clap(alias = "iso"))]
@@ -175,7 +176,7 @@ impl Display for Version {
 
 /// Metrics to use for the error/distance computation.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ErrorMetric {
     /// L1 norm: sum of the absolute differences between the observed data and
     /// the predicted model values.
@@ -207,7 +208,7 @@ impl Display for ErrorMetric {
 
 /// Weighting function to apply to the observed data and predicted model values.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Weighting {
     /// Nothing applied to the measured data and model values.
     #[cfg_attr(feature = "cli", clap(name = "none"))]
@@ -228,7 +229,7 @@ pub enum Weighting {
 /// energy of rays at the given bounce.
 #[repr(u32)]
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize,
 )]
 pub enum BrdfLevel {
     /// The level of the measured BRDF that includes the energy of rays at
@@ -372,7 +373,7 @@ impl Display for BrdfLevel {
 
 /// Kind of different measurements.
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MeasurementKind {
     /// BSDF measurement.
     Bsdf = 0x00,
@@ -429,7 +430,7 @@ impl MeasurementKind {
 }
 
 /// Triangulation pattern for grid triangulation.
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TriangulationPattern {
     /// Triangulate from top to bottom, left to right.

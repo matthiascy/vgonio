@@ -11,11 +11,7 @@ use exr::{
     prelude::Text,
 };
 use numpy::{PyArray, PyArray1, PyArray2, PyArrayMethods, PyUntypedArrayMethods};
-use pyo3::{
-    ffi::c_str,
-    prelude::*,
-    types::{PyList, PyNone, PyTuple},
-};
+use pyo3::{ffi::c_str, prelude::*, types::PyList};
 use std::{
     ffi::CString,
     fs::File,
@@ -24,7 +20,7 @@ use std::{
 };
 use vgn_bxdf::{
     brdf::{
-        analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR, TrowbridgeReitzBrdfModel},
+        analytical::microfacet::{MicrofacetBrdfBK, MicrofacetBrdfTR},
         measured::{rgl::RglBrdf, ClausenBrdf, MeasuredBrdfKind, MerlBrdf, VgonioBrdf, Yan18Brdf},
         AnalyticalBrdf,
     },
@@ -35,9 +31,9 @@ use vgn_bxdf::{
 use vgn_core::{
     math::{self, Sph2},
     optics::IorReg,
-    units::{nm, rad, Degrees, Length, Nanometres, Radians, Rads},
+    units::{rad, Degrees, Length, Nanometres, Radians, Rads},
     utils::range::{StepRangeExcl, StepRangeIncl},
-    BrdfLevel, ErrorMetric, MeasurementKind, Weighting,
+    BrdfLevel, ErrorMetric, MeasurementKind,
 };
 use vgn_io::MicroSurface;
 use vgn_jabr::array::{shape, DyArr, DynArr};

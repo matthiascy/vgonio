@@ -7,6 +7,7 @@
 use crate::brdf::{measured::MeasuredBrdfKind, AnalyticalBrdf};
 #[cfg(feature = "fitting")]
 use crate::fitting::proxy::BrdfProxy;
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use vgn_core::{
     math::{cos_theta, Vec3},
@@ -27,7 +28,7 @@ use vgn_core::optics::IorReg;
 
 /// Different kinds of BRDFs.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BrdfFamily {
     /// Microfacet-based BRDF.
     Microfacet,

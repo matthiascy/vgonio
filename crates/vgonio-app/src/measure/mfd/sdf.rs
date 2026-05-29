@@ -8,7 +8,7 @@ use vgn_core::{
     error::VgonioError,
     math,
     math::{IVec2, Sph2, Vec2},
-    res::{Handle, RawDataStore},
+    res::Handle,
     units::{rad, Radians},
     utils::{
         partition::{HemisphereLayer, SphericalDomain, SphericalPartition},
@@ -16,7 +16,6 @@ use vgn_core::{
     },
     MeasurementKind,
 };
-use vgn_io::MicroSurface;
 
 /// Slope of the microfacet normal, i.e. the normal of the microfacet in the
 /// tangent space or the slope space.

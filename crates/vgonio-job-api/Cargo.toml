@@ -4,7 +4,6 @@ description = "Versioned job envelope, context, and DTOs for vgonio's executor."
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
-license-file.workspace = true
 version.workspace = true
 
 [lib]

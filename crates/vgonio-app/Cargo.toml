@@ -41,6 +41,7 @@ cuda = ["vgn_core/cuda", "vgn_bxdf/cuda"]
 test-support = []
 
 [dependencies]
+bytes.workspace = true
 chrono.workspace = true
 clap.workspace = true
 egui.workspace = true
@@ -60,6 +61,7 @@ lz4_flex.workspace = true
 rand.workspace = true
 rayon.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 serde_yaml.workspace = true
 uuid.workspace = true
 approx.workspace = true
@@ -84,8 +86,12 @@ vgn_jabr.workspace = true
 vgn_uxgx = { workspace = true, features = ["gfx", "gui"] }
 vgn_core = { workspace = true, features = ["cli", "winit", "io", "config"] }
 vgn_bxdf = { workspace = true, optional = true, features = ["fitting", "io"] }
+vgonio-job-api = { path = "../vgonio-job-api" }
+vgonio-executor = { path = "../vgonio-executor" }
 
 [dev-dependencies]
+proptest.workspace = true
+serde_json.workspace = true
 tempfile.workspace = true
 zip.workspace = true
 

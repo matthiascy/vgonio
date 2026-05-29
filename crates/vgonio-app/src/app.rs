@@ -10,6 +10,7 @@ pub(crate) mod args;
 
 pub mod cache;
 pub mod cli;
+mod executor;
 pub(crate) mod gui;
 
 /// Main entry point for the VGonio app.

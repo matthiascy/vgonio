@@ -1,4 +1,5 @@
 //! Measured BRDF models.
+use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, ops::Index};
 use vgn_core::{math::Sph2, units::Nanometres, utils::medium::MediumId};
 
@@ -18,7 +19,7 @@ pub use yan::*;
 
 /// The kind of the measured BRDF.
 #[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MeasuredBrdfKind {
     #[cfg_attr(feature = "cli", clap(name = "clausen"))]
     /// The measured BRDF by Clausen.

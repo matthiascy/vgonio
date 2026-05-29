@@ -11,7 +11,7 @@ use std::{
 };
 use vgn_core::{
     cli::ansi, config::Config, error::VgonioError, optics::IorReg, res::Handle,
-    utils::medium::MediumId, TriangulationPattern,
+    TriangulationPattern,
 };
 use vgn_io::{subdivision::Subdivision, HeightOffset, MicroSurface, MicroSurfaceMesh};
 
