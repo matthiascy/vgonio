@@ -34,20 +34,63 @@ use crate::{
     measure,
     measure::params::{MeasurementDescription, MeasurementParams, NdfMeasurementMode},
 };
-use std::time::Instant;
+use serde::{Deserialize, Serialize};
+use std::{path::PathBuf, sync::Arc, time::Instant};
 use vgn_core::{
     cli::{cli_error, cli_note, cli_step, cli_success, Indent},
     config::Config,
     error::VgonioError,
+    io::{CompressionScheme, FileEncoding},
 };
 
-pub fn run(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
+/// Top-level capability request for `vgonio measure`. Mirrors the runtime
+/// fields of [`MeasureOptions`] in a serde-friendly form.
+///
+/// Phase 1 treats the whole CLI invocation as one batched capability call:
+/// the orchestration loads every description from `inputs`, resolves their
+/// surfaces, dispatches per-kind internally, and writes outputs. Phase 2
+/// will split per-measurement-kind (BSDF / NDF / MSF / SDF), at which point
+/// `cmd_measure` will emit one envelope per description instead.
+///
+/// CLI-shell concerns (`nthreads`, `print_stats`) do not belong on the
+/// request: rayon pool sizing is set up at the adapter before submission
+/// and `print_stats` is presently unused.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeasureRequest {
+    /// Measurement description files (or directories containing them).
+    pub inputs: Vec<PathBuf>,
+    /// Output directory. `None` defers to the configuration's default.
+    pub output: Option<PathBuf>,
+    /// Selects which file format(s) the writer emits.
+    pub output_format: OutputFormat,
+    /// Resolution for image-shaped outputs (EXR; the Vgbsdf disc grid).
+    pub resolution: u32,
+    /// On-disk encoding for the Vgmo container.
+    pub encoding: FileEncoding,
+    /// On-disk compression for the Vgmo container.
+    pub compression: CompressionScheme,
+}
+
+impl From<&MeasureOptions> for MeasureRequest {
+    fn from(opts: &MeasureOptions) -> Self {
+        Self {
+            inputs: opts.inputs.clone(),
+            output: opts.output.clone(),
+            output_format: opts.output_format,
+            resolution: opts.resolution,
+            encoding: opts.encoding,
+            compression: opts.compression,
+        }
+    }
+}
+
+pub fn run(req: MeasureRequest, config: Arc<Config>) -> Result<(), VgonioError> {
     // [0.5] ADAPTER print moved to `cmd_measure::measure` (the ROOT
     // "Executing 'vgonio measure' …" banner). Nothing prints here anymore.
 
     // [0.5] orchestration → Phase 1 ProgressEvent::Step
     cli_step!(Indent::SECTION, "Reading measurement description files...");
-    let measurements = opts
+    let measurements = req
         .inputs
         .iter()
         .flat_map(|meas_path| {
@@ -248,28 +291,28 @@ pub fn run(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
             measurement_start_time.elapsed().unwrap().as_secs_f32()
         );
 
-        let formats = match opts.output_format {
+        let formats = match req.output_format {
             OutputFormat::Vgmo => vec![OutputFileFormatOption::Vgmo {
-                encoding: opts.encoding,
-                compression: opts.compression,
+                encoding: req.encoding,
+                compression: req.compression,
             }]
             .into_boxed_slice(),
             OutputFormat::Exr => vec![OutputFileFormatOption::Exr {
-                resolution: opts.resolution,
+                resolution: req.resolution,
             }]
             .into_boxed_slice(),
             OutputFormat::VgmoExr => vec![
                 OutputFileFormatOption::Vgmo {
-                    encoding: opts.encoding,
-                    compression: opts.compression,
+                    encoding: req.encoding,
+                    compression: req.compression,
                 },
                 OutputFileFormatOption::Exr {
-                    resolution: opts.resolution,
+                    resolution: req.resolution,
                 },
             ]
             .into_boxed_slice(),
             OutputFormat::Vgbsdf => vec![OutputFileFormatOption::Vgbsdf {
-                disc_res: opts.resolution,
+                disc_res: req.resolution,
             }]
             .into_boxed_slice(),
         };
@@ -279,7 +322,7 @@ pub fn run(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
             &cache,
             &config,
             OutputOptions {
-                dir: opts.output.clone(),
+                dir: req.output.clone(),
                 formats,
             },
         )?;
@@ -296,4 +339,79 @@ pub fn run(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MeasureRequest;
+    use crate::app::{args::OutputFormat, cli::MeasureOptions};
+    use std::path::PathBuf;
+    use vgn_core::io::{CompressionScheme, FileEncoding};
+
+    /// Returns a `MeasureOptions` with a non-default value for every runtime
+    /// field. CLI-shell fields (`nthreads`, `print_stats`) are also set so
+    /// the test can assert they do NOT leak onto the request.
+    fn fully_populated_options() -> MeasureOptions {
+        MeasureOptions {
+            inputs: vec![PathBuf::from("a.yaml"), PathBuf::from("b.yaml")],
+            output: Some(PathBuf::from("/out/dir")),
+            output_format: OutputFormat::VgmoExr,
+            resolution: 1024,
+            encoding: FileEncoding::Ascii,
+            compression: CompressionScheme::Zlib,
+            nthreads: Some(8),
+            print_stats: true,
+        }
+    }
+
+    fn fully_populated_request() -> MeasureRequest {
+        MeasureRequest {
+            inputs: vec![PathBuf::from("a.yaml"), PathBuf::from("b.yaml")],
+            output: Some(PathBuf::from("/out/dir")),
+            output_format: OutputFormat::VgmoExr,
+            resolution: 1024,
+            encoding: FileEncoding::Ascii,
+            compression: CompressionScheme::Zlib,
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // From<&MeasureOptions> for MeasureRequest: every runtime field on
+    // the options struct must be mirrored onto the request, and the
+    // CLI-shell-only fields must NOT leak onto the request. When a new
+    // field is added to `MeasureOptions`, update both `fully_populated_*`
+    // helpers and the assertions below.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn measure_request_from_options_mirrors_runtime_fields() {
+        let opts = fully_populated_options();
+        let req = MeasureRequest::from(&opts);
+        assert_eq!(req.inputs, opts.inputs);
+        assert_eq!(req.output, opts.output);
+        assert_eq!(req.output_format, opts.output_format);
+        assert_eq!(req.resolution, opts.resolution);
+        assert_eq!(req.encoding, opts.encoding);
+        assert_eq!(req.compression, opts.compression);
+    }
+
+    // ------------------------------------------------------------------
+    // serde round-trip: the request crosses a JSON wire on every
+    // envelope, so any `#[serde(rename_all = ...)]` change on a nested
+    // enum (OutputFormat, FileEncoding, CompressionScheme) that breaks
+    // decode would silently break envelopes. Encode + decode + re-encode
+    // and compare; structural equality via re-encoded bytes avoids
+    // needing PartialEq on the request, matching the FitRequest pattern.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn measure_request_serde_round_trip() {
+        let req = fully_populated_request();
+        let encoded = serde_json::to_string(&req).expect("MeasureRequest should serialize");
+        let decoded: MeasureRequest =
+            serde_json::from_str(&encoded).expect("MeasureRequest should deserialize");
+        let re_encoded = serde_json::to_string(&decoded)
+            .expect("decoded MeasureRequest should serialize");
+        assert_eq!(encoded, re_encoded);
+    }
 }

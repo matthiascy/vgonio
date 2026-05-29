@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
-#[cfg(feature = "fitting")]
 use bytes::Bytes;
 use vgn_core::config::Config;
 use vgn_executor::{CapabilityRegistry, LocalExecutor};
-#[cfg(feature = "fitting")]
 use vgn_job_api::{
     error::{JobError, JobErrorCode},
     ids::CapabilityId,
@@ -12,6 +10,14 @@ use vgn_job_api::{
 
 #[cfg(feature = "fitting")]
 use crate::orchestration::fitting::FitRequest;
+use crate::orchestration::measure::MeasureRequest;
+
+/// Wire ID for the Phase 1 `vgonio measure` batch wrapper. The per-kind
+/// `measure-{bsdf,ndf,msf,sdf}` IDs declared in [`CapabilityId`] are the
+/// long-term protocol; Phase 1's CLI submits one batched envelope that
+/// internally iterates over per-description dispatch. Phase 2 will split
+/// per-kind and retire this string.
+pub(crate) const MEASURE_BATCH_CAPABILITY: &str = "measure";
 
 pub fn build_local_executor(config: Arc<Config>) -> LocalExecutor {
     // Extract before any handler closure consumes `config`; the closures use
@@ -23,6 +29,7 @@ pub fn build_local_executor(config: Arc<Config>) -> LocalExecutor {
 
     #[cfg(feature = "fitting")]
     {
+        let config_for_fit = Arc::clone(&config);
         reg.register(
             CapabilityId::fit(),
             Arc::new(move |envelope, _ctx| {
@@ -33,7 +40,7 @@ pub fn build_local_executor(config: Arc<Config>) -> LocalExecutor {
                         retriable: false,
                         details: None,
                     })?;
-                crate::orchestration::fitting::run(req, Arc::clone(&config))
+                crate::orchestration::fitting::run(req, Arc::clone(&config_for_fit))
                     .map(|_| Bytes::new())
                     .map_err(|e| JobError {
                         // The CLI adapter adds its own "Fit job failed:"
@@ -48,19 +55,57 @@ pub fn build_local_executor(config: Arc<Config>) -> LocalExecutor {
         );
     }
 
-    // TODO: register measurement handler here once it's implemented. It will
-    // also need to capture `Arc::clone(&config)` (cloned BEFORE the closure
-    // is created if `config` is still owned here, or via a separate binding
-    // if multiple handlers each take their own clone).
-    // reg.register(
-    //     CapabilityId::measure(),
-    //     Arc::new(move |envelope, _ctx| {
-    //         todo!(
-    //             "Implement the measure capability handler. The handler should deserialize the \
-    //              request, run the measurement, and serialize the response."
-    //         )
-    //     }),
-    // );
+    {
+        let config_for_measure = Arc::clone(&config);
+        reg.register(
+            CapabilityId(MEASURE_BATCH_CAPABILITY.into()),
+            Arc::new(move |envelope, _ctx| {
+                let req: MeasureRequest =
+                    serde_json::from_slice(&envelope.payload).map_err(|e| JobError {
+                        code: JobErrorCode::HandlerError,
+                        message: format!("Failed to deserialize MeasureRequest: {e}"),
+                        retriable: false,
+                        details: None,
+                    })?;
+                // `LocalExecutor` runs each handler on a fresh OS thread that
+                // has no rayon-pool affinity, so any `par_iter` inside the
+                // orchestration falls back to the rayon global pool by
+                // default. Honor the submitter's `cpu_cores` hint by
+                // installing a pool here, around the orchestration call;
+                // a missing hint keeps the global-pool default.
+                let config_clone = Arc::clone(&config_for_measure);
+                let run = move || {
+                    crate::orchestration::measure::run(req, config_clone)
+                        .map(|_| Bytes::new())
+                        .map_err(|e| JobError {
+                            code: JobErrorCode::HandlerError,
+                            message: e.to_string(),
+                            retriable: false,
+                            details: None,
+                        })
+                };
+                match envelope.resources.cpu_cores {
+                    Some(cores) => {
+                        let pool = rayon::ThreadPoolBuilder::new()
+                            .num_threads(cores as usize)
+                            .build()
+                            .map_err(|e| JobError {
+                                code: JobErrorCode::HandlerError,
+                                message: format!(
+                                    "Failed to create measurement thread pool with {} \
+                                     threads: {}",
+                                    cores, e
+                                ),
+                                retriable: false,
+                                details: None,
+                            })?;
+                        pool.install(run)
+                    },
+                    None => run(),
+                }
+            }),
+        );
+    }
 
     LocalExecutor::from_cache_dir(reg, cache_dir).expect("Failed to create LocalExecutor")
 }

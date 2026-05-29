@@ -13,7 +13,7 @@
 //! # CLI-print inventory
 //!
 //! Every `cli_*` call here is ORCHESTRATION -- there is no top-level ADAPTER
-//! banner to move (unlike `measure_orchestration`; `fit` never printed an
+//! banner to move (unlike [`crate::orchestration::measure`]; `fit` never printed an
 //! `Indent::ROOT` "Executing 'vgonio fit'…" line). When Capability Separation
 //! moves this module into a capability crate, `vgn_core::cli` is unreachable;
 //! Contracts + local executor replaces each call with a `ProgressEvent`.
@@ -2002,5 +2002,46 @@ mod tests {
         // the message so the operator can correlate envelope vs data.
         assert!(err.message().contains("1/1"));
         assert!(err.message().contains("(3)"));
+    }
+
+    // ------------------------------------------------------------------
+    // source_kind(): the CSV `kind` column reflects the user-passed
+    // `--kind`, not the runtime brdf type. The Vgonio+Clausen resample
+    // path is the regression-pinning row: the resampled brdf is a
+    // `ClausenBrdf`, but the CSV must still record "Vgonio".
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn source_kind_reflects_user_kind_for_each_brdf_source() {
+        let cases: &[(MeasuredBrdfKind, bool, MeasuredBrdfKind)] = &[
+            // (--kind, --clausen, expected source_kind)
+            (MeasuredBrdfKind::Vgonio, false, MeasuredBrdfKind::Vgonio),
+            // Resampling against Clausen reference data does NOT change the
+            // reported kind: the user asked to fit Vgonio simulation output.
+            (MeasuredBrdfKind::Vgonio, true, MeasuredBrdfKind::Vgonio),
+            (MeasuredBrdfKind::Clausen, false, MeasuredBrdfKind::Clausen),
+            (MeasuredBrdfKind::Merl, false, MeasuredBrdfKind::Merl),
+            (MeasuredBrdfKind::Rgl, false, MeasuredBrdfKind::Rgl),
+            (MeasuredBrdfKind::Yan2018, false, MeasuredBrdfKind::Yan2018),
+            (MeasuredBrdfKind::Utia, false, MeasuredBrdfKind::Utia),
+            (MeasuredBrdfKind::Unknown, false, MeasuredBrdfKind::Unknown),
+        ];
+        for &(kind, clausen, expected) in cases {
+            // Paired inputs needed for the clausen-resample TryFrom path:
+            // the boundary doesn't actually open them, but the request
+            // build itself doesn't enforce the parity check (the chunk-2
+            // assertion runs at `run` time). One input is enough here.
+            let mut opts = default_fit_options();
+            opts.kind = kind;
+            opts.clausen = clausen;
+            let req = brdf_request_from(&opts);
+            assert_eq!(
+                req.source_kind(),
+                expected,
+                "source_kind mismatch for kind={:?} clausen={}",
+                kind,
+                clausen
+            );
+        }
     }
 }
