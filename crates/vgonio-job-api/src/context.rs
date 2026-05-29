@@ -55,7 +55,7 @@
 use std::{
     fmt::Debug,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU32, Ordering},
         Arc,
     },
     time::Instant,
@@ -66,7 +66,7 @@ use crate::{
     envelope::TraceContext,
     error::{JobError, JobErrorCode},
     ids::{IdempotencyKey, JobId},
-    progress::ProgressEvent,
+    progress::{Activity, JobEvent, Lifecycle, PhaseInstanceId},
 };
 
 /// Execution-time context handed to a capability handler.
@@ -87,9 +87,15 @@ pub struct JobContext {
     /// directly, but it's threaded through so per-job state stores (caches,
     /// resumable checkpoints) can be keyed by it instead of `job_id`.
     pub idempotency_key: IdempotencyKey,
-    /// Channel the handler emits [`ProgressEvent`]s on. Drops events silently
-    /// if no one is listening; see [`ProgressSender`].
+    /// Channel the handler emits [`JobEvent`]s on. Drops events silently
+    /// if no one is listening; see [`ProgressSender`]. Handlers should
+    /// only emit [`Activity`] variants via `progress.activity(...)`;
+    /// [`Lifecycle`] is owned by the executor.
     pub progress: ProgressSender,
+    /// Monotonic counter for minting [`PhaseInstanceId`]s within this
+    /// job. Shared across clones so helper threads emitting their own
+    /// phases get unique ids. The executor allocates this from zero.
+    pub phase_counter: Arc<AtomicU32>,
     /// Cooperative cancellation. Handlers should call
     /// [`CancellationToken::check`] at natural boundaries (between iterations,
     /// before expensive I/O) and propagate the resulting error.
@@ -107,6 +113,16 @@ pub struct JobContext {
     /// circuit long iterations rather than relying solely on the executor
     /// firing the cancellation token at the deadline.
     pub deadline: Option<Instant>,
+}
+
+impl JobContext {
+    /// Mints a fresh [`PhaseInstanceId`] from this context's shared
+    /// counter. Each call returns a value greater than the previous one
+    /// across all clones of this context, so helper threads that emit
+    /// their own phases get distinct ids.
+    pub fn next_phase_id(&self) -> PhaseInstanceId {
+        PhaseInstanceId(self.phase_counter.fetch_add(1, Ordering::Relaxed))
+    }
 }
 
 /// Handler-facing artifact store.
@@ -145,24 +161,39 @@ pub enum ArtifactHandle {
     Bytes(bytes::Bytes),
 }
 
-/// Send side of the progress channel.
+/// Send side of the job-event channel.
 ///
 /// Backed by a [`std::sync::mpsc::Sender`]; cheap to clone (one `Arc` bump).
-/// Send is best-effort: if the receiver is gone, the event is dropped on the
-/// floor. Capability code is *not* expected to handle send errors; the
-/// progress stream is observability, not the source of truth for results.
+/// Send is best-effort: if the receiver is gone, the event is dropped on
+/// the floor. Capability code is *not* expected to handle send errors;
+/// the progress stream is observability, not the source of truth for
+/// results.
+///
+/// Two helpers, one channel: [`Self::activity`] wraps an [`Activity`] in
+/// [`JobEvent::Activity`] for the handler; [`Self::lifecycle`] wraps a
+/// [`Lifecycle`] in [`JobEvent::Lifecycle`] for the executor. Handlers
+/// MUST NOT call [`Self::lifecycle`]; the executor owns those transitions.
 #[derive(Clone)]
 pub struct ProgressSender {
-    tx: std::sync::mpsc::Sender<ProgressEvent>,
+    tx: std::sync::mpsc::Sender<JobEvent>,
 }
 
 impl ProgressSender {
     /// Wraps an existing mpsc sender. The executor builds the channel and
     /// owns the receiver side; this is the only constructor handlers need.
-    pub fn new(tx: std::sync::mpsc::Sender<ProgressEvent>) -> Self { Self { tx } }
+    pub fn new(tx: std::sync::mpsc::Sender<JobEvent>) -> Self { Self { tx } }
 
-    /// Best-effort send: drops the event silently if the receiver is gone.
-    pub fn send(&self, event: ProgressEvent) { let _ = self.tx.send(event); }
+    /// Raw best-effort send. Drops the event silently if the receiver is
+    /// gone. Prefer [`Self::activity`] / [`Self::lifecycle`] which wrap
+    /// the inner enum for you.
+    pub fn send(&self, event: JobEvent) { let _ = self.tx.send(event); }
+
+    /// Emit an [`Activity`] event. Handler-facing API.
+    pub fn activity(&self, event: Activity) { self.send(JobEvent::Activity(event)); }
+
+    /// Emit a [`Lifecycle`] event. Executor-facing API; handlers MUST NOT
+    /// call this.
+    pub fn lifecycle(&self, event: Lifecycle) { self.send(JobEvent::Lifecycle(event)); }
 }
 
 /// Cooperative cancellation flag.
@@ -321,26 +352,51 @@ mod tests {
     }
 
     #[test]
-    fn progress_sender_delivers_event_to_receiver() {
+    fn progress_sender_delivers_lifecycle_event() {
         let (tx, rx) = mpsc::channel();
         let sender = ProgressSender::new(tx);
-        sender.send(ProgressEvent::Started { at: ts() });
+        sender.lifecycle(Lifecycle::Started { at: ts() });
         let received = rx.recv().expect("receiver got nothing");
-        assert!(matches!(received, ProgressEvent::Started { .. }));
+        assert!(matches!(
+            received,
+            JobEvent::Lifecycle(Lifecycle::Started { .. })
+        ));
+    }
+
+    #[test]
+    fn progress_sender_delivers_activity_event() {
+        let (tx, rx) = mpsc::channel();
+        let sender = ProgressSender::new(tx);
+        sender.activity(Activity::Message {
+            phase: PhaseInstanceId(7),
+            level: 0,
+            text: "hi".into(),
+        });
+        let received = rx.recv().expect("receiver got nothing");
+        assert!(matches!(
+            received,
+            JobEvent::Activity(Activity::Message { .. })
+        ));
     }
 
     #[test]
     fn progress_sender_preserves_order() {
         let (tx, rx) = mpsc::channel();
         let sender = ProgressSender::new(tx);
-        sender.send(ProgressEvent::Queued { at: ts() });
-        sender.send(ProgressEvent::Started { at: ts() });
-        sender.send(ProgressEvent::Completed { at: ts() });
-        assert!(matches!(rx.recv().unwrap(), ProgressEvent::Queued { .. }));
-        assert!(matches!(rx.recv().unwrap(), ProgressEvent::Started { .. }));
+        sender.lifecycle(Lifecycle::Queued { at: ts() });
+        sender.lifecycle(Lifecycle::Started { at: ts() });
+        sender.lifecycle(Lifecycle::Completed { at: ts() });
         assert!(matches!(
             rx.recv().unwrap(),
-            ProgressEvent::Completed { .. }
+            JobEvent::Lifecycle(Lifecycle::Queued { .. })
+        ));
+        assert!(matches!(
+            rx.recv().unwrap(),
+            JobEvent::Lifecycle(Lifecycle::Started { .. })
+        ));
+        assert!(matches!(
+            rx.recv().unwrap(),
+            JobEvent::Lifecycle(Lifecycle::Completed { .. })
         ));
     }
 
@@ -352,7 +408,7 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         let sender = ProgressSender::new(tx);
         drop(rx);
-        sender.send(ProgressEvent::Completed { at: ts() });
+        sender.lifecycle(Lifecycle::Completed { at: ts() });
         // Reaching this line is the assertion.
     }
 
@@ -363,13 +419,40 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         let sender = ProgressSender::new(tx);
         let helper = sender.clone();
-        sender.send(ProgressEvent::Queued { at: ts() });
-        helper.send(ProgressEvent::Completed { at: ts() });
-        assert!(matches!(rx.recv().unwrap(), ProgressEvent::Queued { .. }));
+        sender.lifecycle(Lifecycle::Queued { at: ts() });
+        helper.lifecycle(Lifecycle::Completed { at: ts() });
         assert!(matches!(
             rx.recv().unwrap(),
-            ProgressEvent::Completed { .. }
+            JobEvent::Lifecycle(Lifecycle::Queued { .. })
         ));
+        assert!(matches!(
+            rx.recv().unwrap(),
+            JobEvent::Lifecycle(Lifecycle::Completed { .. })
+        ));
+    }
+
+    #[test]
+    fn next_phase_id_monotonic_across_clones() {
+        // Helper threads must mint distinct ids; the counter lives on the
+        // context (Arc'd) so clones share it.
+        let counter = Arc::new(AtomicU32::new(0));
+        let (tx, _rx) = mpsc::channel();
+        let ctx = JobContext {
+            job_id: JobId::new(),
+            idempotency_key: IdempotencyKey("test".into()),
+            progress: ProgressSender::new(tx),
+            cancel: CancellationToken::new(),
+            artifacts: Arc::new(MockStore),
+            trace: TraceContext::default(),
+            deadline: None,
+            phase_counter: counter,
+        };
+        let a = ctx.next_phase_id();
+        let b = ctx.clone().next_phase_id();
+        let c = ctx.next_phase_id();
+        assert_eq!(a, PhaseInstanceId(0));
+        assert_eq!(b, PhaseInstanceId(1));
+        assert_eq!(c, PhaseInstanceId(2));
     }
 
     // ----- ArtifactHandle -----
@@ -411,7 +494,9 @@ mod tests {
     struct MockStore;
 
     impl ArtifactStore for MockStore {
-        fn resolve(&self, r: &ArtifactRef) -> Result<ArtifactRef, JobError> { Ok(r.clone()) }
+        fn resolve(&self, _r: &ArtifactRef) -> Result<ArtifactHandle, JobError> {
+            Ok(ArtifactHandle::Bytes(bytes::Bytes::from_static(b"")))
+        }
 
         fn publish(
             &self,
@@ -428,7 +513,7 @@ mod tests {
         }
     }
 
-    fn sample_context() -> (JobContext, mpsc::Receiver<ProgressEvent>) {
+    fn sample_context() -> (JobContext, mpsc::Receiver<JobEvent>) {
         let (tx, rx) = mpsc::channel();
         let ctx = JobContext {
             job_id: JobId::new(),
@@ -438,6 +523,7 @@ mod tests {
             artifacts: Arc::new(MockStore),
             trace: TraceContext::default(),
             deadline: None,
+            phase_counter: Arc::new(AtomicU32::new(0)),
         };
         (ctx, rx)
     }
@@ -463,8 +549,11 @@ mod tests {
 
         // A progress event sent on one clone must reach the original
         // receiver (sender clones share the channel).
-        cloned.progress.send(ProgressEvent::Started { at: ts() });
-        assert!(matches!(rx.recv().unwrap(), ProgressEvent::Started { .. }));
+        cloned.progress.lifecycle(Lifecycle::Started { at: ts() });
+        assert!(matches!(
+            rx.recv().unwrap(),
+            JobEvent::Lifecycle(Lifecycle::Started { .. })
+        ));
     }
 
     #[test]

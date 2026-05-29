@@ -3,30 +3,32 @@
 //! [`crate::app::cli::cmd_measure`]; Phase 2 moves this module into a
 //! capability crate.
 //!
-//! # CLI-print inventory (DIST Plan Task 0.5)
+//! # CLI-print inventory (DIST Plan Task 0.5 / 1.15)
 //!
-//! Every `cli_*` call here is ORCHESTRATION (the one ADAPTER print — the
-//! `vgonio measure` ROOT banner — was moved to `cmd_measure::measure`). When
-//! Phase 2 moves this module into a capability crate, `vgn_core::cli` is no
-//! longer reachable; Phase 1 replaces each call below with a `ProgressEvent`
-//! emission. Mapping (line numbers approximate, see inline `[0.5]` tags):
+//! Every `cli_*` call here is ORCHESTRATION (the one ADAPTER print, the
+//! `vgonio measure` ROOT banner, was moved to `cmd_measure::measure`).
+//! When Phase 2 moves this module into a capability crate, `vgn_core::cli`
+//! is unreachable; Task 1.15 replaces each call below with an
+//! [`vgn_job_api::progress::Activity`] emission through `ctx.progress`.
 //!
-//! | Site | Text | → Phase 1 |
-//! |---|---|---|
-//! | "Reading measurement description files..." | step | `ProgressEvent::Step` |
-//! | "{N} measurement(s)" | success | `ProgressEvent::Success` |
-//! | "Loading data files..." | step | `ProgressEvent::Step` |
-//! | "Successfully loaded data files" | success | `ProgressEvent::Success` |
-//! | "Resolving and loading micro-surfaces..." | step | `ProgressEvent::Step` |
-//! | "{N} micro-surface(s) loaded" | success | `ProgressEvent::Success` |
-//! | per-surface path note (debug) | note | `ProgressEvent::Note` |
-//! | "No micro-surface to measure" | error | `ProgressEvent::Error` |
-//! | per-kind "Launch/Measuring …" banners (BSDF/NDF/GAF/SDF) | step | `ProgressEvent::Step` |
-//! | "Measurement finished in … secs" | success | `ProgressEvent::Success` |
-//! | "Done!" / "Finished in … s" | success | `ProgressEvent::Success` |
+//! The `cli_step!` / `cli_success!` pair around each phase ("Reading
+//! measurement description files..." / "{N} measurement(s)") becomes one
+//! [`Activity::PhaseBegin`] + one [`Activity::PhaseEnd`] with a
+//! [`vgn_job_api::progress::PhaseKind`] from the `measure.*` namespace
+//! (`measure.read_descriptions`, `measure.load_iors`,
+//! `measure.load_surfaces`, `measure.bsdf` / `.ndf` / `.msf` / `.sdf`,
+//! `measure.write_output`). Free-form per-surface notes become
+//! [`Activity::Message`] under the surrounding phase. The non-fatal
+//! `cli_error!` ("No micro-surface to measure...") becomes
+//! [`Activity::Warning`]. Fatal errors return `Err(VgonioError)` and
+//! surface through [`vgn_job_api::progress::Lifecycle::Failed`].
 //!
-//! Do NOT migrate to `ProgressEvent` in Phase 0 — `vgonio-job-api` does not
-//! exist yet. This block is the migration checklist for Phase 1.
+//! Do NOT migrate in Phase 0; this is the Task 1.15 checklist.
+//!
+//! [`Activity::PhaseBegin`]: vgn_job_api::progress::Activity::PhaseBegin
+//! [`Activity::PhaseEnd`]: vgn_job_api::progress::Activity::PhaseEnd
+//! [`Activity::Message`]: vgn_job_api::progress::Activity::Message
+//! [`Activity::Warning`]: vgn_job_api::progress::Activity::Warning
 
 use crate::{
     app::{args::OutputFormat, cache::Cache, cli::MeasureOptions},
@@ -42,7 +44,6 @@ use vgn_core::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
 };
-
 /// Top-level capability request for `vgonio measure`. Mirrors the runtime
 /// fields of [`MeasureOptions`] in a serde-friendly form.
 ///
@@ -410,8 +411,8 @@ mod tests {
         let encoded = serde_json::to_string(&req).expect("MeasureRequest should serialize");
         let decoded: MeasureRequest =
             serde_json::from_str(&encoded).expect("MeasureRequest should deserialize");
-        let re_encoded = serde_json::to_string(&decoded)
-            .expect("decoded MeasureRequest should serialize");
+        let re_encoded =
+            serde_json::to_string(&decoded).expect("decoded MeasureRequest should serialize");
         assert_eq!(encoded, re_encoded);
     }
 }

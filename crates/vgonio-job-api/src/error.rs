@@ -2,7 +2,7 @@
 //!
 //! [`JobError`] is the structured failure record that capability handlers
 //! produce when a job cannot complete. It is nested directly into
-//! [`crate::progress::ProgressEvent::Failed`] (the canonical channel), and is
+//! [`crate::progress::Lifecycle::Failed`] (the canonical channel), and is
 //! never duplicated on a side result channel; see the progress-module docs for
 //! the rationale.
 //!
@@ -35,7 +35,7 @@ use thiserror::Error;
 /// Structured failure record returned by a capability handler.
 ///
 /// `JobError` is `Clone` + `Serialize` + `Deserialize` so it can be (a) nested
-/// into [`crate::progress::ProgressEvent::Failed`], (b) shipped over the
+/// into [`crate::progress::Lifecycle::Failed`], (b) shipped over the
 /// transport, and (c) handed back to the original submitter for inspection.
 ///
 /// It also implements [`std::error::Error`] via `thiserror`, so handlers may

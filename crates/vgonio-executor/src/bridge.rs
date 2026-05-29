@@ -1,11 +1,12 @@
-//! Renders a job's [`ProgressEvent`] stream into the existing CLI reporter.
+//! Renders a job's [`JobEvent`] stream into the existing CLI reporter.
 //!
-//! Capability handlers emit structured [`ProgressEvent`]s instead of
-//! calling the `cli_*!` macros directly; [`LocalStatusBridge`] turns those
-//! events back into CLI lines so end-user-visible output stays unchanged once
-//! the executor seam is in place. The same bridge type will eventually back
-//! the remote-executor path too; only the event source changes, not the
-//! rendering.
+//! Capability handlers emit structured [`Activity`] events through
+//! `ctx.progress` instead of calling the `cli_*!` macros directly;
+//! [`LocalStatusBridge`] turns those events (plus the executor-owned
+//! [`Lifecycle`] bracket) back into CLI lines, so end-user-visible output
+//! stays close to what users see today once the executor seam is in
+//! place. The same bridge type will eventually back the remote-executor
+//! path too; only the event source changes, not the rendering.
 //!
 //! # Layering
 //!
@@ -28,33 +29,43 @@
 //! let _outcome = handle.result.recv().unwrap();
 //! ```
 //!
-//! Nested orchestrations (a job that submits child jobs) should build a
-//! bridge per nesting level with [`LocalStatusBridge::with_indent`] so the
-//! child output sits visually under the parent.
+//! # Phase indent
+//!
+//! Phases nest, and the bridge tracks open phases so each
+//! [`Activity::PhaseBegin`]'s indent reflects its depth in the tree:
+//! a top-level phase renders at `indent_base`, a phase nested inside it
+//! renders at `indent_base + 2`, and so on. [`Activity::Message`] and
+//! [`Activity::Progress`] within a phase render at one extra level of
+//! indent so they sit visually under the phase heading.
 //!
 //! # Pitfalls noted in the plan
 //!
-//! - **Default-verbosity noise.** Some events (`Started`) are intentionally surfaced only at
-//!   verbosity ≥ 1 so the default-verbose CLI output stays close to what users see today.
+//! - **Default-verbosity noise.** Lifecycle `Started` / `Queued` are surfaced only at verbosity ≥ 1
+//!   so the default-verbose CLI output stays close to what users see today.
 //! - **Indent inheritance.** Capability handlers don't know which indent level the caller wants;
 //!   the bridge fixes a base indent at construction and uses it consistently. Multi-level
 //!   orchestrations construct a bridge with the right base before submitting nested jobs.
 
-use std::sync::mpsc;
+use std::{collections::HashMap, sync::mpsc, time::Duration};
 
-use vgn_core::cli::{self, Indent};
-use vgn_job_api::progress::{ProgressEvent, ProgressKind};
+use vgn_core::cli::{self, format_duration, Indent};
+use vgn_job_api::progress::{
+    Activity, JobEvent, Lifecycle, PhaseInstanceId, PhaseOutcome, ProgressUnits,
+};
 
-/// Consumes a [`ProgressEvent`] receiver and renders each event to the
+/// Consumes a [`JobEvent`] receiver and renders each event to the
 /// process-wide CLI reporter ([`vgn_core::cli`]).
 ///
-/// Stateless apart from the configured `indent_base`. The same bridge value
-/// can render any number of jobs sequentially, but its [`Self::run`] method
-/// takes the receiver by value so each call drains exactly one stream.
+/// Stateless apart from the configured `indent_base`. The same bridge
+/// value can render any number of jobs sequentially, but its
+/// [`Self::run`] method takes the receiver by value so each call drains
+/// exactly one stream. Per-stream state (open-phase indent tracking)
+/// lives in a local map inside `run`, so two bridges driven concurrently
+/// from different threads cannot trample each other's state.
 pub struct LocalStatusBridge {
-    /// Spaces of indentation prepended to every rendered line. Sub-lines
-    /// (e.g. `PerStep` / `PerItem` progress ticks) add a fixed two-space
-    /// extra indent on top of this base.
+    /// Spaces of indentation prepended to top-level rendered lines.
+    /// Nested phases add `2 * depth` extra columns; sub-lines under a
+    /// phase add another two.
     indent_base: u32,
 }
 
@@ -89,72 +100,166 @@ impl LocalStatusBridge {
     /// Blocks the calling thread. If the caller wants the bridge to run
     /// alongside other work, spawn it: the receiver is [`Send`], and
     /// [`LocalStatusBridge`] holds no thread-bound state.
-    pub fn run(self, events: mpsc::Receiver<ProgressEvent>) {
+    pub fn run(self, events: mpsc::Receiver<JobEvent>) {
+        let mut open: HashMap<PhaseInstanceId, u32> = HashMap::new();
         for ev in events.iter() {
-            self.render(&ev);
+            self.render(&mut open, &ev);
         }
     }
 
     /// Maps one event to the equivalent CLI emission. Split out so tests can
     /// drive it directly without standing up a channel.
-    fn render(&self, ev: &ProgressEvent) {
-        let base = self.indent_base;
-        // The `PerStep` / `PerItem` ticks sit one level deeper than the
-        // overall progress line to mirror the logical nesting in output.
-        let detail = base + 2;
+    ///
+    /// `open` tracks the depth (0 = top-level) of every phase currently
+    /// open in this stream; `PhaseBegin` inserts, `PhaseEnd` removes.
+    fn render(&self, open: &mut HashMap<PhaseInstanceId, u32>, ev: &JobEvent) {
         match ev {
-            ProgressEvent::Queued { .. } => {
-                // Surfaced only with --verbose; "queued" rarely tells the
-                // user anything they don't already know.
+            JobEvent::Lifecycle(ev) => self.render_lifecycle(ev),
+            JobEvent::Activity(ev) => self.render_activity(open, ev),
+            // `JobEvent` is `#[non_exhaustive]`; surface unknowns to the
+            // diag log rather than panic.
+            other => log::debug!("LocalStatusBridge: unknown job event: {other:?}"),
+        }
+    }
+
+    fn render_lifecycle(&self, ev: &Lifecycle) {
+        let base = self.indent_base;
+        match ev {
+            Lifecycle::Queued { .. } => {
                 cli::step_v(1, base, format_args!("queued"));
             },
-            ProgressEvent::Started { .. } => {
+            Lifecycle::Started { .. } => {
                 cli::step_v(1, base, format_args!("started"));
             },
-            ProgressEvent::Progress {
-                fraction,
-                message,
-                kind,
-            } => {
-                // Clamp first so NaN/out-of-range from a buggy producer
-                // collapses to 0 without UB on the f32->u32 cast.
-                let pct = (fraction.clamp(0.0, 1.0) * 100.0).round() as u32;
-                let suffix = message.as_deref().unwrap_or("");
-                // `ProgressKind` is `#[non_exhaustive]`; the wildcard arm
-                // covers any future variant by rendering it as a per-step
-                // tick rather than panicking.
-                match kind {
-                    ProgressKind::Overall => {
-                        cli::step(base, format_args!("{pct:>3}% {suffix}"));
-                    },
-                    _ => {
-                        cli::note(detail, format_args!("{pct:>3}% {suffix}"));
-                    },
-                }
-            },
-            ProgressEvent::Note { level, message } => {
-                cli::note_v(*level, detail, format_args!("{message}"));
-            },
-            ProgressEvent::Warning { message } => {
-                cli::warning(base, format_args!("{message}"));
-            },
-            ProgressEvent::Completed { .. } => {
+            Lifecycle::Completed { .. } => {
                 cli::success(base, format_args!("completed"));
             },
-            ProgressEvent::Failed { error, .. } => {
+            Lifecycle::Failed { error, .. } => {
                 let msg = &error.message;
                 cli::error(base, format_args!("{msg}"));
             },
-            ProgressEvent::Cancelled { .. } => {
+            Lifecycle::Cancelled { .. } => {
                 cli::warning(base, format_args!("cancelled"));
             },
-            // `ProgressEvent` is `#[non_exhaustive]`. A new variant from a
+            // `Lifecycle` is `#[non_exhaustive]`. A new variant from a
             // newer producer must not silently disappear; surface it
             // through the diagnostic log channel.
-            ev => {
-                log::debug!("LocalStatusBridge: unhandled progress event: {ev:?}");
-            },
+            ev => log::debug!("LocalStatusBridge: unhandled lifecycle event: {ev:?}"),
         }
+    }
+
+    fn render_activity(&self, open: &mut HashMap<PhaseInstanceId, u32>, ev: &Activity) {
+        match ev {
+            Activity::PhaseBegin {
+                instance,
+                parent,
+                label,
+                ..
+            } => {
+                // Depth inherits from parent (parent.depth + 1); a top-level
+                // phase sits at depth 0 / base indent. An unknown parent
+                // (out-of-order event) is treated as depth 0 rather than
+                // panicking; the diag log records it.
+                let depth = parent
+                    .and_then(|p| {
+                        open.get(&p).copied().or_else(|| {
+                            log::debug!(
+                                "LocalStatusBridge: PhaseBegin references unknown parent {p:?}"
+                            );
+                            None
+                        })
+                    })
+                    .map(|d| d + 1)
+                    .unwrap_or(0);
+                open.insert(*instance, depth);
+                let indent = self.indent_base + 2 * depth;
+                cli::step(indent, format_args!("{label}"));
+            },
+            Activity::PhaseEnd {
+                instance,
+                outcome,
+                duration_micros,
+                summary,
+                ..
+            } => {
+                let depth = open.remove(instance).unwrap_or_else(|| {
+                    log::debug!(
+                        "LocalStatusBridge: PhaseEnd for unknown instance {instance:?}"
+                    );
+                    0
+                });
+                let indent = self.indent_base + 2 * depth;
+                let body = format_phase_end_body(summary.as_deref(), *duration_micros);
+                match outcome {
+                    PhaseOutcome::Ok => cli::success(indent, format_args!("{body}")),
+                    PhaseOutcome::Skipped { reason } => {
+                        cli::note(indent, format_args!("skipped: {reason}"))
+                    },
+                    PhaseOutcome::PartialFailure { detail } => {
+                        cli::warning(indent, format_args!("{body} ({detail})"))
+                    },
+                    PhaseOutcome::Failed { error } => {
+                        cli::error(indent, format_args!("{}", error.message))
+                    },
+                    // `PhaseOutcome` is `#[non_exhaustive]`.
+                    other => log::debug!(
+                        "LocalStatusBridge: unhandled phase outcome: {other:?}"
+                    ),
+                }
+            },
+            Activity::Message { phase, level, text } => {
+                // Messages inside a phase sit one indent deeper than the
+                // phase's heading line so the hierarchy reads correctly.
+                let indent = self.indent_base + 2 * open.get(phase).copied().unwrap_or(0) + 2;
+                cli::note_v(*level, indent, format_args!("{text}"));
+            },
+            Activity::Progress {
+                phase,
+                fraction,
+                units,
+                label,
+            } => {
+                let indent = self.indent_base + 2 * open.get(phase).copied().unwrap_or(0) + 2;
+                let pct = (fraction.clamp(0.0, 1.0) * 100.0).round() as u32;
+                let suffix = label.as_deref().unwrap_or("");
+                let counter = format_progress_counter(*fraction, units);
+                cli::note(indent, format_args!("{pct:>3}% {counter}{suffix}"));
+            },
+            Activity::Warning { phase, text } => {
+                let indent = self.indent_base + 2 * open.get(phase).copied().unwrap_or(0);
+                cli::warning(indent, format_args!("{text}"));
+            },
+            // `Activity` is `#[non_exhaustive]`.
+            other => log::debug!("LocalStatusBridge: unhandled activity event: {other:?}"),
+        }
+    }
+}
+
+fn format_phase_end_body(summary: Option<&str>, duration_micros: u64) -> String {
+    let dur = format_duration(Duration::from_micros(duration_micros));
+    match summary {
+        Some(s) => format!("{s} ({dur})"),
+        None => format!("done ({dur})"),
+    }
+}
+
+fn format_progress_counter(fraction: f32, units: &ProgressUnits) -> String {
+    match units {
+        ProgressUnits::Items { total } => {
+            let done = (fraction.clamp(0.0, 1.0) * *total as f32).round() as u64;
+            format!("({done}/{total}) ")
+        },
+        ProgressUnits::Bytes { total } => {
+            let done = (fraction.clamp(0.0, 1.0) * *total as f32).round() as u64;
+            format!("({done}/{total} B) ")
+        },
+        ProgressUnits::Steps { total } => {
+            let done = (fraction.clamp(0.0, 1.0) * *total as f32).round() as u32;
+            format!("(step {done}/{total}) ")
+        },
+        ProgressUnits::Ratio => String::new(),
+        // `ProgressUnits` is `#[non_exhaustive]`.
+        _ => String::new(),
     }
 }
 
@@ -166,7 +271,8 @@ mod tests {
     use vgn_core::cli::{set_status_sink, SilentSink};
     use vgn_job_api::{
         error::{JobError, JobErrorCode},
-        progress::{ProgressEvent, ProgressKind},
+        progress::{Activity, JobEvent, Lifecycle, PhaseInstanceId, PhaseKind, PhaseOutcome,
+                   ProgressUnits},
     };
 
     use super::*;
@@ -194,92 +300,122 @@ mod tests {
             .with_timezone(&Utc)
     }
 
-    fn all_event_variants() -> Vec<ProgressEvent> {
+    fn err() -> JobError {
+        JobError {
+            code: JobErrorCode::HandlerError,
+            message: "fit did not converge".into(),
+            retriable: false,
+            details: None,
+        }
+    }
+
+    fn all_event_variants() -> Vec<JobEvent> {
+        let phase = PhaseInstanceId(1);
+        let nested = PhaseInstanceId(2);
         vec![
-            ProgressEvent::Queued { at: ts() },
-            ProgressEvent::Started { at: ts() },
-            ProgressEvent::Progress {
-                fraction: 0.5,
-                message: Some("tracing rays".into()),
-                kind: ProgressKind::Overall,
-            },
-            ProgressEvent::Progress {
-                fraction: 0.0,
-                message: None,
-                kind: ProgressKind::PerStep,
-            },
-            ProgressEvent::Progress {
-                fraction: 1.0,
-                message: Some("patch 12/48".into()),
-                kind: ProgressKind::PerItem,
-            },
-            ProgressEvent::Note {
-                level: 4,
-                message: "loaded heightfield".into(),
-            },
-            ProgressEvent::Warning {
-                message: "clamped negative reflectance".into(),
-            },
-            ProgressEvent::Completed { at: ts() },
-            ProgressEvent::Failed {
+            JobEvent::Lifecycle(Lifecycle::Queued { at: ts() }),
+            JobEvent::Lifecycle(Lifecycle::Started { at: ts() }),
+            JobEvent::Activity(Activity::PhaseBegin {
+                instance: phase,
+                parent: None,
+                kind: PhaseKind::measure_load_surfaces(),
+                label: "Loading 12 surfaces".into(),
                 at: ts(),
-                error: JobError {
-                    code: JobErrorCode::HandlerError,
-                    message: "fit did not converge".into(),
-                    retriable: false,
-                    details: None,
+            }),
+            JobEvent::Activity(Activity::PhaseBegin {
+                instance: nested,
+                parent: Some(phase),
+                kind: PhaseKind::measure_load_iors(),
+                label: "IOR database".into(),
+                at: ts(),
+            }),
+            JobEvent::Activity(Activity::Message {
+                phase: nested,
+                level: 4,
+                text: "loaded heightfield".into(),
+            }),
+            JobEvent::Activity(Activity::Progress {
+                phase: nested,
+                fraction: 0.5,
+                units: ProgressUnits::Items { total: 132 },
+                label: Some("patch 66/132".into()),
+            }),
+            JobEvent::Activity(Activity::Progress {
+                fraction: 1.0,
+                phase: nested,
+                units: ProgressUnits::Bytes { total: 1024 },
+                label: None,
+            }),
+            JobEvent::Activity(Activity::Warning {
+                phase: nested,
+                text: "clamped negative reflectance".into(),
+            }),
+            JobEvent::Activity(Activity::PhaseEnd {
+                instance: nested,
+                outcome: PhaseOutcome::Ok,
+                duration_micros: 340_000,
+                summary: Some("4 files".into()),
+                at: ts(),
+            }),
+            JobEvent::Activity(Activity::PhaseEnd {
+                instance: phase,
+                outcome: PhaseOutcome::PartialFailure {
+                    detail: "1 unreadable".into(),
                 },
-            },
-            ProgressEvent::Cancelled { at: ts() },
+                duration_micros: 1_200_000,
+                summary: Some("11 of 12 surfaces".into()),
+                at: ts(),
+            }),
+            JobEvent::Lifecycle(Lifecycle::Completed { at: ts() }),
+            JobEvent::Lifecycle(Lifecycle::Failed {
+                at: ts(),
+                error: err(),
+            }),
+            JobEvent::Lifecycle(Lifecycle::Cancelled { at: ts() }),
         ]
     }
 
     #[test]
-    fn render_handles_every_progress_event_variant() {
-        // Smoke test: pushing every variant through `render` must not
-        // panic. The `#[non_exhaustive]` arm in `render` catches anything
-        // we forget; this test catches panics in the rendering itself.
+    fn render_handles_every_job_event_variant() {
+        // Smoke test: pushing every variant through `render` must not panic.
         let _g = silence_cli();
         let bridge = LocalStatusBridge::new();
+        let mut open = HashMap::new();
         for ev in all_event_variants() {
-            bridge.render(&ev);
+            bridge.render(&mut open, &ev);
         }
     }
 
     #[test]
     fn run_returns_when_sender_drops() {
-        // The executor closes the channel when the job finishes. The
-        // bridge must observe that and stop waiting, otherwise CLI
-        // adapters would hang forever after the job's terminal event.
+        // The executor closes the channel when the job finishes. The bridge
+        // must observe that and stop waiting, otherwise CLI adapters would
+        // hang forever after the job's terminal event.
         let _g = silence_cli();
-        let (tx, rx) = mpsc::channel::<ProgressEvent>();
-        tx.send(ProgressEvent::Started { at: ts() }).unwrap();
-        tx.send(ProgressEvent::Completed { at: ts() }).unwrap();
+        let (tx, rx) = mpsc::channel::<JobEvent>();
+        tx.send(JobEvent::Lifecycle(Lifecycle::Started { at: ts() }))
+            .unwrap();
+        tx.send(JobEvent::Lifecycle(Lifecycle::Completed { at: ts() }))
+            .unwrap();
         drop(tx);
         LocalStatusBridge::new().run(rx); // returns
     }
 
     #[test]
     fn run_returns_immediately_on_empty_closed_channel() {
-        // Degenerate but real: the executor could close the channel
-        // without sending anything (e.g. an error before the worker
-        // thread even starts). `run` must still return cleanly.
+        // Degenerate but real: the executor could close the channel without
+        // sending anything (e.g. an error before the worker thread even
+        // starts). `run` must still return cleanly.
         let _g = silence_cli();
-        let (tx, rx) = mpsc::channel::<ProgressEvent>();
+        let (tx, rx) = mpsc::channel::<JobEvent>();
         drop(tx);
         LocalStatusBridge::new().run(rx);
     }
 
     #[test]
     fn run_drains_all_events_in_order() {
-        // We can't easily observe the rendered text from outside the
-        // process-global sink without standing up a custom recorder, but
-        // we can confirm `run` consumes the entire stream by counting
-        // what's left on a tee'd channel. Set up two parallel channels
-        // and feed events into both; after `run` returns, the tee must
-        // be drained too.
         let _g = silence_cli();
-        let (tx, rx) = mpsc::channel::<ProgressEvent>();
+        let (tx, rx) = mpsc::channel::<JobEvent>();
         let mut sent = 0usize;
         for ev in all_event_variants() {
             tx.send(ev).unwrap();
@@ -287,12 +423,11 @@ mod tests {
         }
         drop(tx);
 
-        // Use try_iter from a separate handle to peek? Simpler: count
-        // what `run` sees via an instrumented bridge.
         let bridge = LocalStatusBridge::new();
+        let mut open = HashMap::new();
         let mut received = 0usize;
         for ev in &rx {
-            bridge.render(&ev);
+            bridge.render(&mut open, &ev);
             received += 1;
         }
         assert_eq!(received, sent);
@@ -300,10 +435,6 @@ mod tests {
 
     #[test]
     fn with_indent_overrides_default() {
-        // Building two bridges with different indents must produce two
-        // distinct configurations. This is the only externally visible
-        // distinction `LocalStatusBridge` exposes; check by struct
-        // field, since render output goes to a side-effectful sink.
         let default = LocalStatusBridge::new();
         let nested = LocalStatusBridge::with_indent(Indent::SUBSECTION);
         assert_eq!(default.indent_base, Indent::SECTION.as_u32());
@@ -312,18 +443,107 @@ mod tests {
 
     #[test]
     fn render_clamps_out_of_range_fraction() {
-        // f32 NaN survives JSON as null and breaks math; the producer is
-        // supposed to clamp, but the bridge must also clamp defensively
-        // so a stray NaN/negative/over-1 from a buggy capability doesn't
-        // panic during the cast to u32.
+        // The producer is supposed to clamp, but the bridge must clamp
+        // defensively so a stray NaN/negative/over-1 from a buggy capability
+        // doesn't panic during the cast to u32.
         let _g = silence_cli();
         let bridge = LocalStatusBridge::new();
+        let mut open = HashMap::new();
+        let phase = PhaseInstanceId(0);
+        open.insert(phase, 0);
         for fraction in [-1.0_f32, 0.0, 0.5, 1.0, 2.0, f32::NAN, f32::INFINITY] {
-            bridge.render(&ProgressEvent::Progress {
-                fraction,
-                message: None,
-                kind: ProgressKind::Overall,
-            });
+            bridge.render(
+                &mut open,
+                &JobEvent::Activity(Activity::Progress {
+                    phase,
+                    fraction,
+                    units: ProgressUnits::Ratio,
+                    label: None,
+                }),
+            );
         }
+    }
+
+    #[test]
+    fn phase_depth_tracks_parent_child_chain() {
+        // Nested PhaseBegin -> child sits one indent below parent. Verify
+        // by inspecting the open-phase map after the events.
+        let _g = silence_cli();
+        let bridge = LocalStatusBridge::new();
+        let mut open = HashMap::new();
+        let p = PhaseInstanceId(1);
+        let c = PhaseInstanceId(2);
+        bridge.render(
+            &mut open,
+            &JobEvent::Activity(Activity::PhaseBegin {
+                instance: p,
+                parent: None,
+                kind: PhaseKind::measure_load_surfaces(),
+                label: "Outer".into(),
+                at: ts(),
+            }),
+        );
+        bridge.render(
+            &mut open,
+            &JobEvent::Activity(Activity::PhaseBegin {
+                instance: c,
+                parent: Some(p),
+                kind: PhaseKind::measure_load_iors(),
+                label: "Inner".into(),
+                at: ts(),
+            }),
+        );
+        assert_eq!(open.get(&p), Some(&0));
+        assert_eq!(open.get(&c), Some(&1));
+    }
+
+    #[test]
+    fn phase_end_removes_open_entry() {
+        let _g = silence_cli();
+        let bridge = LocalStatusBridge::new();
+        let mut open = HashMap::new();
+        let p = PhaseInstanceId(7);
+        bridge.render(
+            &mut open,
+            &JobEvent::Activity(Activity::PhaseBegin {
+                instance: p,
+                parent: None,
+                kind: PhaseKind::measure_bsdf(),
+                label: "x".into(),
+                at: ts(),
+            }),
+        );
+        assert!(open.contains_key(&p));
+        bridge.render(
+            &mut open,
+            &JobEvent::Activity(Activity::PhaseEnd {
+                instance: p,
+                outcome: PhaseOutcome::Ok,
+                duration_micros: 0,
+                summary: None,
+                at: ts(),
+            }),
+        );
+        assert!(!open.contains_key(&p));
+    }
+
+    #[test]
+    fn phase_end_for_unknown_instance_does_not_panic() {
+        // Receivers may see a `PhaseEnd` for a phase whose `PhaseBegin` was
+        // dropped (e.g. partial replay, executor restart). The bridge must
+        // not panic; the diag log records it.
+        let _g = silence_cli();
+        let bridge = LocalStatusBridge::new();
+        let mut open = HashMap::new();
+        bridge.render(
+            &mut open,
+            &JobEvent::Activity(Activity::PhaseEnd {
+                instance: PhaseInstanceId(99),
+                outcome: PhaseOutcome::Ok,
+                duration_micros: 0,
+                summary: None,
+                at: ts(),
+            }),
+        );
     }
 }

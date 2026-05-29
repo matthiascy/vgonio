@@ -17,13 +17,13 @@
 //!   handler directly on a rayon thread; `RemoteExecutor` (Phase 3) serializes the envelope, ships
 //!   it to a worker host, and streams progress back. Same trait surface in both cases. The executor
 //!   also owns the cross-cutting middleware: timeouts, deadline enforcement, retries, bridging the
-//!   [`progress::ProgressEvent`] stream to the caller, and the
+//!   [`progress::JobEvent`] stream to the caller, and the
 //!   [`ids::IdempotencyKey`]-keyed dedup cache.
 //! - **Capability handler** (also called the *service*) — the *pure-compute* implementation of one
 //!   named operation. The canonical handlers are `FittingService` (capability id `"fit"`) and
 //!   `MeasurementService` (`"measure-bsdf"` / `"measure-ndf"` / `"measure-msf"` /
 //!   `"measure-sdf"`); see [`ids::CapabilityId`] for the full canonical set. A handler takes a typed
-//!   request plus a [`context::JobContext`], emits [`progress::ProgressEvent`]s, calls
+//!   request plus a [`context::JobContext`], emits [`progress::JobEvent`]s, calls
 //!   [`context::CancellationToken::check`] at boundaries, publishes outputs via
 //!   [`context::ArtifactStore::publish`], and returns a typed result. It does **not** know about
 //!   transport, CLI printing, the local-vs-remote distinction, or worker process boundaries.

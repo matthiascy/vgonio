@@ -42,9 +42,9 @@
 //! | [`executor`] | [`Executor`] trait, [`JobHandle`], [`JobOutcome`], [`ExecutorError`]. |
 //! | [`registry`] | [`CapabilityRegistry`] + the [`Handler`] closure type used by `LocalExecutor`. |
 //! | [`local`] | [`LocalExecutor`]: in-process dispatch on a per-job OS thread. |
-//! | [`bridge`] | [`LocalStatusBridge`]: renders a job's [`ProgressEvent`] stream to the CLI reporter. |
+//! | [`bridge`] | [`LocalStatusBridge`]: renders a job's [`JobEvent`] stream to the CLI reporter. |
 //!
-//! [`ProgressEvent`]: vgn_job_api::progress::ProgressEvent
+//! [`JobEvent`]: vgn_job_api::progress::JobEvent
 //!
 //! # Quick start
 //!

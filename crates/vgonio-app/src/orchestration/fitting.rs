@@ -10,30 +10,37 @@
 //! request by design: This module will be moved into `vgonio-fitting`
 //! where those concepts do not exist.
 //!
-//! # CLI-print inventory
+//! # CLI-print inventory (DIST Plan Task 0.5 / 1.15)
 //!
-//! Every `cli_*` call here is ORCHESTRATION -- there is no top-level ADAPTER
-//! banner to move (unlike [`crate::orchestration::measure`]; `fit` never printed an
-//! `Indent::ROOT` "Executing 'vgonio fit'…" line). When Capability Separation
-//! moves this module into a capability crate, `vgn_core::cli` is unreachable;
-//! Contracts + local executor replaces each call with a `ProgressEvent`.
-//! Mapping (see inline `[0.5]`):
+//! Every `cli_*` call here is ORCHESTRATION: there is no top-level ADAPTER
+//! banner to move (unlike [`crate::orchestration::measure`]; `fit` never
+//! printed an `Indent::ROOT` "Executing 'vgonio fit'…" line). When
+//! Capability Separation moves this module into a capability crate,
+//! `vgn_core::cli` is unreachable; Task 1.15 replaces each call below
+//! with an [`vgn_job_api::progress::Activity`] emission through
+//! `ctx.progress`.
 //!
-//! | Site | Context | -> Phase 1 |
-//! |---|---|---|
-//! | "Fitting (…) to model: …" | `measured_brdf_fitting` | `ProgressEvent::Step` |
-//! | "Fitting with brute force method…" | `brdf_fitting_brute_force` | `ProgressEvent::Step` |
-//! | "Pre-allocating GPU memory…" | cuda path | `ProgressEvent::Step` |
-//! | "Fitting for wavelength: …" | per-λ brute loop | `ProgressEvent::Step` |
-//! | "Took: …" | timing | `ProgressEvent::Note` |
-//! | "λ = …:" | per-λ report header | `ProgressEvent::Step` |
-//! | "Fitting to distribution @…" | NDF branch in `run` | `ProgressEvent::Step` |
-//! | "Fitting to model …@…" | BRDF branch in `run` | `ProgressEvent::Step` |
-//! | "Fitting simulated data to Clausen's data." | clausen path | `ProgressEvent::Step` |
-//! | "Unknown measured BRDF kind…" | error arm | `ProgressEvent::Error` |
+//! Phase headings ("Fitting to distribution @...", "Fitting to model
+//! ...@...", per-λ banners, "Fitting with brute force method...") become
+//! [`Activity::PhaseBegin`] + [`Activity::PhaseEnd`] keyed on the
+//! `fit.*` namespace ([`PhaseKind::fit_ndf`], [`PhaseKind::fit_brdf`],
+//! [`PhaseKind::fit_brdf_measured`], [`PhaseKind::fit_brdf_brute_force`]
+//! and friends). Timing notes ("Took: ...") become the
+//! `duration_micros` on the corresponding `PhaseEnd`. Free-form info
+//! ("λ = ...") becomes [`Activity::Message`] under the active brute /
+//! nllsq phase. The `cli_error!` for the unknown-source arm becomes
+//! [`Activity::Warning`] (it does not abort).
 //!
-//! Do NOT migrate to `ProgressEvent` in Phase 0 (`vgonio-job-api` does not
-//! exist yet). This is the Phase 1 migration checklist.
+//! Do NOT migrate in Phase 0; this is the Task 1.15 checklist.
+//!
+//! [`Activity::PhaseBegin`]: vgn_job_api::progress::Activity::PhaseBegin
+//! [`Activity::PhaseEnd`]: vgn_job_api::progress::Activity::PhaseEnd
+//! [`Activity::Message`]: vgn_job_api::progress::Activity::Message
+//! [`Activity::Warning`]: vgn_job_api::progress::Activity::Warning
+//! [`PhaseKind::fit_ndf`]: vgn_job_api::progress::PhaseKind::fit_ndf
+//! [`PhaseKind::fit_brdf`]: vgn_job_api::progress::PhaseKind::fit_brdf
+//! [`PhaseKind::fit_brdf_measured`]: vgn_job_api::progress::PhaseKind::fit_brdf_measured
+//! [`PhaseKind::fit_brdf_brute_force`]: vgn_job_api::progress::PhaseKind::fit_brdf_brute_force
 
 use crate::{measure::bsdf::BsdfMeasurement, pyplot::plot_err, FitOptions};
 use serde::{Deserialize, Serialize};

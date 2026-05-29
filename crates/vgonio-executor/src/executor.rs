@@ -13,7 +13,7 @@ use vgn_job_api::{
     envelope::JobEnvelope,
     error::JobError,
     ids::{CapabilityId, JobId},
-    progress::ProgressEvent,
+    progress::JobEvent,
 };
 
 /// What a successfully completed job returns to its submitter.
@@ -44,7 +44,7 @@ pub struct JobOutcome {
 /// Returned by [`Executor::submit`]. Carries:
 ///
 /// - the [`JobId`] minted for this attempt (use it with [`Executor::cancel`]),
-/// - a receiver of [`ProgressEvent`]s, drained either directly or via [`crate::LocalStatusBridge`],
+/// - a receiver of [`JobEvent`]s, drained either directly or via [`crate::LocalStatusBridge`],
 /// - a one-shot receiver of the final [`Result<JobOutcome, JobError>`].
 ///
 /// # Channel lifecycle
@@ -63,9 +63,9 @@ pub struct JobOutcome {
 pub struct JobHandle {
     /// The minted attempt ID. Pass back to [`Executor::cancel`] to abort.
     pub job_id: JobId,
-    /// Stream of progress observations. See [`ProgressEvent`] for the
-    /// lifecycle contract.
-    pub events: Receiver<ProgressEvent>,
+    /// Stream of progress observations. See [`JobEvent`] for the lifecycle
+    /// + activity contract.
+    pub events: Receiver<JobEvent>,
     /// One-shot delivery of the terminal result.
     pub result: Receiver<Result<JobOutcome, JobError>>,
 }

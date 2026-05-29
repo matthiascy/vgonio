@@ -3,8 +3,8 @@
 //! [`LocalExecutor`] dispatches each accepted envelope to a registered
 //! capability handler on a freshly spawned OS thread, sets up the progress /
 //! result channels the caller observes through [`crate::JobHandle`], and
-//! brackets the run with `Started` / `Completed` (or `Failed`)
-//! [`ProgressEvent`]s.
+//! brackets the run with [`Lifecycle::Started`] / [`Lifecycle::Completed`]
+//! (or [`Lifecycle::Failed`]) events wrapped in [`JobEvent`]s.
 //!
 //! # What this implementation deliberately does NOT do (yet)
 //!
@@ -27,12 +27,14 @@ use std::{
 };
 
 use vgn_artifact::LocalFsStore;
+use std::sync::atomic::AtomicU32;
+
 use vgn_job_api::{
     context::{ArtifactStore, CancellationToken, JobContext, ProgressSender},
     envelope::JobEnvelope,
     error::JobError,
     ids::JobId,
-    progress::ProgressEvent,
+    progress::{JobEvent, Lifecycle},
     PROTOCOL_VERSION,
 };
 
@@ -125,7 +127,7 @@ impl Executor for LocalExecutor {
         };
 
         // 3. Build the channels the caller sees through the JobHandle.
-        let (event_tx, event_rx) = mpsc::channel::<ProgressEvent>();
+        let (event_tx, event_rx) = mpsc::channel::<JobEvent>();
         let (result_tx, result_rx) = mpsc::channel::<Result<JobOutcome, JobError>>();
 
         // 4. Register a cancellation token under this attempt's JobId so
@@ -155,18 +157,19 @@ impl Executor for LocalExecutor {
                     artifacts,
                     trace,
                     deadline: None,
+                    phase_counter: Arc::new(AtomicU32::new(0)),
                 };
 
                 // `Started` brackets the handler call; pair with the
                 // terminal event below.
-                progress.send(ProgressEvent::Started {
+                progress.lifecycle(Lifecycle::Started {
                     at: chrono::Utc::now(),
                 });
 
                 let out = handler(&envelope_owned, ctx);
                 let outcome = match out {
                     Ok(payload) => {
-                        progress.send(ProgressEvent::Completed {
+                        progress.lifecycle(Lifecycle::Completed {
                             at: chrono::Utc::now(),
                         });
                         // `artifacts` is always empty in Phase 1; capability
@@ -182,7 +185,7 @@ impl Executor for LocalExecutor {
                         // sending it before the result so consumers that watch
                         // events also see the failure even if they drop the
                         // result receiver.
-                        progress.send(ProgressEvent::Failed {
+                        progress.lifecycle(Lifecycle::Failed {
                             error: err.clone(),
                             at: chrono::Utc::now(),
                         });
@@ -227,7 +230,7 @@ mod tests {
         envelope::{JobEnvelope, PayloadEncoding, TraceContext},
         error::{JobError, JobErrorCode},
         ids::{CapabilityId, IdempotencyKey, JobId},
-        progress::ProgressEvent,
+        progress::{Activity, JobEvent, Lifecycle, PhaseInstanceId, ProgressUnits},
         resources::ResourceHints,
     };
 
@@ -382,14 +385,20 @@ mod tests {
         let handle = exec.submit(smoke_envelope("ok")).unwrap();
         // Wait for terminal result so the worker has finished sending.
         let _ = handle.result.recv().unwrap();
-        let events: Vec<ProgressEvent> = handle.events.iter().collect();
+        let events: Vec<JobEvent> = handle.events.iter().collect();
         assert!(
-            matches!(events.first(), Some(ProgressEvent::Started { .. })),
-            "first event must be Started, got {events:?}",
+            matches!(
+                events.first(),
+                Some(JobEvent::Lifecycle(Lifecycle::Started { .. }))
+            ),
+            "first event must be Lifecycle::Started, got {events:?}",
         );
         assert!(
-            matches!(events.last(), Some(ProgressEvent::Completed { .. })),
-            "last event must be Completed, got {events:?}",
+            matches!(
+                events.last(),
+                Some(JobEvent::Lifecycle(Lifecycle::Completed { .. }))
+            ),
+            "last event must be Lifecycle::Completed, got {events:?}",
         );
     }
 
@@ -411,11 +420,16 @@ mod tests {
         let exec = LocalExecutor::from_cache_dir(reg, dir.path()).unwrap();
         let handle = exec.submit(smoke_envelope("nope")).unwrap();
         let _ = handle.result.recv().unwrap();
-        let events: Vec<ProgressEvent> = handle.events.iter().collect();
-        assert!(matches!(events.first(), Some(ProgressEvent::Started { .. })));
+        let events: Vec<JobEvent> = handle.events.iter().collect();
+        assert!(matches!(
+            events.first(),
+            Some(JobEvent::Lifecycle(Lifecycle::Started { .. }))
+        ));
         match events.last() {
-            Some(ProgressEvent::Failed { error, .. }) => assert_eq!(error.message, "nope"),
-            other => panic!("expected Failed last, got {other:?}"),
+            Some(JobEvent::Lifecycle(Lifecycle::Failed { error, .. })) => {
+                assert_eq!(error.message, "nope")
+            },
+            other => panic!("expected Lifecycle::Failed last, got {other:?}"),
         }
     }
 
@@ -426,10 +440,11 @@ mod tests {
         reg.register(
             CapabilityId("ticky".into()),
             Arc::new(|_env, ctx| {
-                ctx.progress.send(ProgressEvent::Progress {
+                ctx.progress.activity(Activity::Progress {
+                    phase: PhaseInstanceId(0),
                     fraction: 0.5,
-                    message: Some("halfway".into()),
-                    kind: vgn_job_api::progress::ProgressKind::Overall,
+                    units: ProgressUnits::Ratio,
+                    label: Some("halfway".into()),
                 });
                 Ok(Bytes::new())
             }),
@@ -437,10 +452,14 @@ mod tests {
         let exec = LocalExecutor::from_cache_dir(reg, dir.path()).unwrap();
         let handle = exec.submit(smoke_envelope("ticky")).unwrap();
         let _ = handle.result.recv().unwrap();
-        let events: Vec<ProgressEvent> = handle.events.iter().collect();
-        let saw_progress = events
-            .iter()
-            .any(|e| matches!(e, ProgressEvent::Progress { fraction, .. } if (*fraction - 0.5).abs() < 1e-6));
+        let events: Vec<JobEvent> = handle.events.iter().collect();
+        let saw_progress = events.iter().any(|e| {
+            matches!(
+                e,
+                JobEvent::Activity(Activity::Progress { fraction, .. })
+                    if (*fraction - 0.5).abs() < 1e-6
+            )
+        });
         assert!(saw_progress, "expected a Progress(0.5) event in {events:?}");
     }
 
@@ -457,9 +476,10 @@ mod tests {
             CapabilityId("quiet".into()),
             Arc::new(|_env, ctx| {
                 for _ in 0..16 {
-                    ctx.progress.send(ProgressEvent::Note {
+                    ctx.progress.activity(Activity::Message {
+                        phase: PhaseInstanceId(0),
                         level: 7,
-                        message: "spam".into(),
+                        text: "spam".into(),
                     });
                 }
                 Ok(Bytes::from_static(b"done"))
@@ -583,7 +603,7 @@ mod tests {
         let handle = exec.submit(smoke_envelope("done")).unwrap();
         let _ = handle.result.recv().unwrap();
         // Drain all events; the iterator stops cleanly when the sender drops.
-        let _events: Vec<ProgressEvent> = handle.events.iter().collect();
+        let _events: Vec<JobEvent> = handle.events.iter().collect();
         // A further recv must observe the closed channel.
         assert!(matches!(handle.events.recv(), Err(smpsc::RecvError)));
     }
