@@ -32,7 +32,7 @@ use vgn_artifact::LocalFsStore;
 use vgn_job_api::{
     context::{ArtifactStore, CancellationToken, JobContext, ProgressSender},
     envelope::JobEnvelope,
-    error::JobError,
+    error::{JobError, JobErrorCode},
     ids::JobId,
     progress::{JobEvent, Lifecycle},
     PROTOCOL_VERSION,
@@ -184,10 +184,23 @@ impl Executor for LocalExecutor {
                         // sending it before the result so consumers that watch
                         // events also see the failure even if they drop the
                         // result receiver.
-                        progress.emit_lifecycle(Lifecycle::Failed {
-                            error: err.clone(),
-                            at: chrono::Utc::now(),
-                        });
+                        //
+                        // `JobErrorCode::Cancelled` gets its own terminal
+                        // lifecycle so the bridge can render `! cancelled`
+                        // (a warning, not an error). The `JobError` itself
+                        // still rides on the `result` channel so the CLI
+                        // adapter can format a `Measure job failed: ...`
+                        // line uniformly.
+                        if matches!(err.code, JobErrorCode::Cancelled) {
+                            progress.emit_lifecycle(Lifecycle::Cancelled {
+                                at: chrono::Utc::now(),
+                            });
+                        } else {
+                            progress.emit_lifecycle(Lifecycle::Failed {
+                                error: err.clone(),
+                                at: chrono::Utc::now(),
+                            });
+                        }
                         Err(err)
                     },
                 };

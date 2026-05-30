@@ -642,7 +642,15 @@ impl VgonioGuiApp {
                                 {
                                     use crate::measure::bsdf::BsdfMeasurement;
                                     let measured = self.cache.read(|cache| {
-                                        measure::bsdf::measure_bsdf_rt(params, &surfaces, cache)
+                                        // GUI does not yet route through the
+                                        // executor; fresh, never-cancelled
+                                        // token preserves pre-Phase-1
+                                        // behaviour.
+                                        let cancel =
+                                            vgn_job_api::context::CancellationToken::new();
+                                        measure::bsdf::measure_bsdf_rt(
+                                            params, &surfaces, cache, &cancel,
+                                        )
                                     });
                                     let bsdf = measured[0]
                                         .measured
@@ -659,7 +667,12 @@ impl VgonioGuiApp {
 
                                 #[cfg(not(feature = "vdbg"))]
                                 self.cache.read(|cache| {
-                                    measure::bsdf::measure_bsdf_rt(params, &surfaces, cache)
+                                    // GUI does not yet route through the
+                                    // executor; pass a fresh, never-cancelled
+                                    // token so the measurement runs to
+                                    // completion as it did pre-Phase-1.
+                                    let cancel = vgn_job_api::context::CancellationToken::new();
+                                    measure::bsdf::measure_bsdf_rt(params, &surfaces, cache, &cancel)
                                 })
                             },
                             MeasurementParams::Sdf(params) => self.cache.read(|cache| {

@@ -55,7 +55,7 @@ fn submit(
     config: Arc<Config>,
     cpu_cores: Option<u16>,
 ) -> Result<(), VgonioError> {
-    let executor = executor::build_local_executor(config);
+    let executor = Arc::new(executor::build_local_executor(config));
     let payload = serde_json::to_vec(&request)
         .map_err(|e| VgonioError::new(format!("Failed to serialize MeasureRequest: {e}"), None))?;
     let envelope = JobEnvelope {
@@ -76,6 +76,17 @@ fn submit(
     let handle = executor
         .submit(envelope)
         .map_err(|e| VgonioError::new(e.to_string(), None))?;
+    let job_id = handle.job_id;
+
+    // Forward Ctrl-C to the executor so a long-running measurement drains
+    // through cancellation rather than dying mid-write. `ctrlc::set_handler`
+    // is process-global and errors on a second registration, so we swallow
+    // the error: in test runs that exercise `measure` twice in one process
+    // the first registration wins, and that's the correct behaviour.
+    let executor_for_signal = Arc::clone(&executor);
+    let _ = ctrlc::set_handler(move || {
+        let _ = executor_for_signal.cancel(job_id);
+    });
 
     // Render events while waiting on the result. Bridge runs on its own
     // thread so it can drain `events` concurrently with `recv`; join it

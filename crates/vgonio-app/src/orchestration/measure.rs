@@ -229,6 +229,12 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
 
     let start_time = Instant::now();
     for (desc, surfaces) in tasks {
+        // Catch cancellation between measurements: if the user Ctrl-C'd while
+        // the previous one was writing out, drop the remaining queue rather
+        // than launching another Embree run.
+        ctx.cancel
+            .check()
+            .map_err(|e| VgonioError::new(e.message, None))?;
         let measurement_start_time = std::time::SystemTime::now();
         // Each per-kind launch banner in this `match` opens a measurement
         // phase (`measure.bsdf` / `.ndf` / `.msf` / `.sdf`); the matching
@@ -295,7 +301,9 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
                         ),
                     });
                 }
-                cache.read(|cache| measure::bsdf::measure_bsdf_rt(params, &surfaces, cache))
+                cache.read(|cache| {
+                    measure::bsdf::measure_bsdf_rt(params, &surfaces, cache, &ctx.cancel)
+                })
             },
             MeasurementParams::Ndf(measurement) => {
                 let label = match &measurement.mode {
@@ -368,6 +376,14 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
                 })
             },
         };
+
+        // `measure_*_rt` returns whatever it had accumulated when it observed
+        // the cancel flag; if that happened mid-run the partial slice is not
+        // a publishable result. Bail before the write phase so we don't land
+        // truncated data on disk.
+        ctx.cancel
+            .check()
+            .map_err(|e| VgonioError::new(e.message, None))?;
 
         ctx.progress.emit_activity(Activity::PhaseEnd {
             instance: meas_phase,

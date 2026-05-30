@@ -43,6 +43,7 @@ use vgn_core::{
 };
 use vgn_io::{MicroSurface, MicroSurfaceMesh};
 use vgn_jabr::array::DyArr;
+use vgn_job_api::context::CancellationToken;
 
 pub mod emitter;
 pub(crate) mod params;
@@ -1430,6 +1431,7 @@ pub fn measure_bsdf_rt(
     params: BsdfMeasurementParams,
     handles: &[Handle],
     cache: &ComputeCache,
+    cancel: &CancellationToken,
 ) -> Box<[Measurement]> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
@@ -1503,6 +1505,17 @@ pub fn measure_bsdf_rt(
                 let (_, scene, geometry) = embr::create_resources(mesh);
                 for sector in emitter.circular_sectors() {
                     for (i, wi) in sector.measpts.iter().enumerate() {
+                        // Per-incident-direction is the finest cancellation
+                        // granularity that doesn't reach into Embree. A single
+                        // `simulate_bsdf_measurement_single_point` typically
+                        // runs for seconds with `num_rays` in the millions;
+                        // bailing here gives Ctrl-C a sub-snapshot response.
+                        // The orchestration re-checks cancellation after the
+                        // function returns and skips the write phase, so the
+                        // partial `measurements` slice never lands on disk.
+                        if cancel.is_cancelled() {
+                            return measurements.into_boxed_slice();
+                        }
                         #[cfg(feature = "bench")]
                         let t = std::time::Instant::now();
                         let single_result = match method {

@@ -74,14 +74,35 @@ pub fn build_local_executor(config: Arc<Config>) -> LocalExecutor {
                 // installing a pool here, around the orchestration call;
                 // a missing hint keeps the global-pool default.
                 let config_clone = Arc::clone(&config_for_measure);
+                // Snapshot the cancel handle: the orchestration owns `ctx`
+                // by move, so after `run` returns we can no longer reach
+                // `ctx.cancel`. The cloned token shares the same atomic
+                // flag, so the post-call check sees the same state the
+                // orchestration acted on.
+                let cancel = ctx.cancel.clone();
                 let run = move || {
                     crate::orchestration::measure::run(req, config_clone, ctx)
                         .map(|_| Bytes::new())
-                        .map_err(|e| JobError {
-                            code: JobErrorCode::HandlerError,
-                            message: e.to_string(),
-                            retriable: false,
-                            details: None,
+                        .map_err(|e| {
+                            // If the cancel flag is set, the orchestration's
+                            // early-return path is the cause; surface that as
+                            // a structured Cancelled so the bridge renders
+                            // `! cancelled` rather than a generic error line.
+                            if cancel.is_cancelled() {
+                                JobError {
+                                    code: JobErrorCode::Cancelled,
+                                    message: "measurement cancelled".into(),
+                                    retriable: false,
+                                    details: None,
+                                }
+                            } else {
+                                JobError {
+                                    code: JobErrorCode::HandlerError,
+                                    message: e.to_string(),
+                                    retriable: false,
+                                    details: None,
+                                }
+                            }
                         })
                 };
                 match envelope.resources.cpu_cores {
