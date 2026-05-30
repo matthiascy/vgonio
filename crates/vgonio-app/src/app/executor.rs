@@ -32,7 +32,7 @@ pub fn build_local_executor(config: Arc<Config>) -> LocalExecutor {
         let config_for_fit = Arc::clone(&config);
         reg.register(
             CapabilityId::fit(),
-            Arc::new(move |envelope, _ctx| {
+            Arc::new(move |envelope, ctx| {
                 let req: FitRequest =
                     serde_json::from_slice(&envelope.payload).map_err(|e| JobError {
                         code: JobErrorCode::HandlerError,
@@ -40,7 +40,7 @@ pub fn build_local_executor(config: Arc<Config>) -> LocalExecutor {
                         retriable: false,
                         details: None,
                     })?;
-                crate::orchestration::fitting::run(req, Arc::clone(&config_for_fit))
+                crate::orchestration::fitting::run(req, Arc::clone(&config_for_fit), ctx)
                     .map(|_| Bytes::new())
                     .map_err(|e| JobError {
                         // The CLI adapter adds its own "Fit job failed:"
@@ -59,7 +59,7 @@ pub fn build_local_executor(config: Arc<Config>) -> LocalExecutor {
         let config_for_measure = Arc::clone(&config);
         reg.register(
             CapabilityId(MEASURE_BATCH_CAPABILITY.into()),
-            Arc::new(move |envelope, _ctx| {
+            Arc::new(move |envelope, ctx| {
                 let req: MeasureRequest =
                     serde_json::from_slice(&envelope.payload).map_err(|e| JobError {
                         code: JobErrorCode::HandlerError,
@@ -75,7 +75,7 @@ pub fn build_local_executor(config: Arc<Config>) -> LocalExecutor {
                 // a missing hint keeps the global-pool default.
                 let config_clone = Arc::clone(&config_for_measure);
                 let run = move || {
-                    crate::orchestration::measure::run(req, config_clone)
+                    crate::orchestration::measure::run(req, config_clone, ctx)
                         .map(|_| Bytes::new())
                         .map_err(|e| JobError {
                             code: JobErrorCode::HandlerError,
@@ -92,8 +92,7 @@ pub fn build_local_executor(config: Arc<Config>) -> LocalExecutor {
                             .map_err(|e| JobError {
                                 code: JobErrorCode::HandlerError,
                                 message: format!(
-                                    "Failed to create measurement thread pool with {} \
-                                     threads: {}",
+                                    "Failed to create measurement thread pool with {} threads: {}",
                                     cores, e
                                 ),
                                 retriable: false,

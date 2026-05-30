@@ -26,8 +26,8 @@ use std::{
     thread,
 };
 
-use vgn_artifact::LocalFsStore;
 use std::sync::atomic::AtomicU32;
+use vgn_artifact::LocalFsStore;
 
 use vgn_job_api::{
     context::{ArtifactStore, CancellationToken, JobContext, ProgressSender},
@@ -47,11 +47,11 @@ use crate::{
 ///
 /// Owns:
 ///
-/// - a [`CapabilityRegistry`] guarded by an [`RwLock`] (so handlers can in principle be added
-///   after construction, though Phase 1 uses startup-only registration);
+/// - a [`CapabilityRegistry`] guarded by an [`RwLock`] (so handlers can in principle be added after
+///   construction, though Phase 1 uses startup-only registration);
 /// - an [`Arc`] of the artifact store the executor injects into every [`JobContext`];
-/// - a `JobId → CancellationToken` table for in-flight jobs, so [`Self::cancel`] can flip the
-///   right token.
+/// - a `JobId → CancellationToken` table for in-flight jobs, so [`Self::cancel`] can flip the right
+///   token.
 ///
 /// Cheap to clone behind an `Arc` (all internal handles are `Arc`/`RwLock`).
 /// The struct itself isn't `Clone`; wrap it in `Arc<LocalExecutor>` when
@@ -115,9 +115,8 @@ impl Executor for LocalExecutor {
             });
         }
 
-        // 2. Look up the handler. Hold the read lock only long enough to
-        //    clone the `Arc<Handler>`; never call the handler while holding
-        //    it.
+        // 2. Look up the handler. Hold the read lock only long enough to clone the `Arc<Handler>`;
+        //    never call the handler while holding it.
         let handler = {
             let registry = self.registry.read().unwrap();
             registry
@@ -130,8 +129,8 @@ impl Executor for LocalExecutor {
         let (event_tx, event_rx) = mpsc::channel::<JobEvent>();
         let (result_tx, result_rx) = mpsc::channel::<Result<JobOutcome, JobError>>();
 
-        // 4. Register a cancellation token under this attempt's JobId so
-        //    `cancel(job_id)` can flip it.
+        // 4. Register a cancellation token under this attempt's JobId so `cancel(job_id)` can flip
+        //    it.
         let cancel = CancellationToken::new();
         self.cancels
             .write()
@@ -144,8 +143,8 @@ impl Executor for LocalExecutor {
         let trace = envelope.trace.clone();
         let envelope_owned = envelope;
 
-        // 5. Spawn the worker thread. Phase 1 = one OS thread per job; see
-        //    module docs for the thread-pool roadmap.
+        // 5. Spawn the worker thread. Phase 1 = one OS thread per job; see module docs for the
+        //    thread-pool roadmap.
         thread::Builder::new()
             .name(format!("vgn-job-{job_id}"))
             .spawn(move || {
@@ -162,14 +161,14 @@ impl Executor for LocalExecutor {
 
                 // `Started` brackets the handler call; pair with the
                 // terminal event below.
-                progress.lifecycle(Lifecycle::Started {
+                progress.emit_lifecycle(Lifecycle::Started {
                     at: chrono::Utc::now(),
                 });
 
                 let out = handler(&envelope_owned, ctx);
                 let outcome = match out {
                     Ok(payload) => {
-                        progress.lifecycle(Lifecycle::Completed {
+                        progress.emit_lifecycle(Lifecycle::Completed {
                             at: chrono::Utc::now(),
                         });
                         // `artifacts` is always empty in Phase 1; capability
@@ -185,7 +184,7 @@ impl Executor for LocalExecutor {
                         // sending it before the result so consumers that watch
                         // events also see the failure even if they drop the
                         // result receiver.
-                        progress.lifecycle(Lifecycle::Failed {
+                        progress.emit_lifecycle(Lifecycle::Failed {
                             error: err.clone(),
                             at: chrono::Utc::now(),
                         });
@@ -440,7 +439,7 @@ mod tests {
         reg.register(
             CapabilityId("ticky".into()),
             Arc::new(|_env, ctx| {
-                ctx.progress.activity(Activity::Progress {
+                ctx.progress.emit_activity(Activity::Progress {
                     phase: PhaseInstanceId(0),
                     fraction: 0.5,
                     units: ProgressUnits::Ratio,
@@ -476,7 +475,7 @@ mod tests {
             CapabilityId("quiet".into()),
             Arc::new(|_env, ctx| {
                 for _ in 0..16 {
-                    ctx.progress.activity(Activity::Message {
+                    ctx.progress.emit_activity(Activity::Message {
                         phase: PhaseInstanceId(0),
                         level: 7,
                         text: "spam".into(),

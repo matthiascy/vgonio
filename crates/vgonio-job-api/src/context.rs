@@ -189,11 +189,11 @@ impl ProgressSender {
     pub fn send(&self, event: JobEvent) { let _ = self.tx.send(event); }
 
     /// Emit an [`Activity`] event. Handler-facing API.
-    pub fn activity(&self, event: Activity) { self.send(JobEvent::Activity(event)); }
+    pub fn emit_activity(&self, event: Activity) { self.send(JobEvent::Activity(event)); }
 
     /// Emit a [`Lifecycle`] event. Executor-facing API; handlers MUST NOT
     /// call this.
-    pub fn lifecycle(&self, event: Lifecycle) { self.send(JobEvent::Lifecycle(event)); }
+    pub fn emit_lifecycle(&self, event: Lifecycle) { self.send(JobEvent::Lifecycle(event)); }
 }
 
 /// Cooperative cancellation flag.
@@ -355,7 +355,7 @@ mod tests {
     fn progress_sender_delivers_lifecycle_event() {
         let (tx, rx) = mpsc::channel();
         let sender = ProgressSender::new(tx);
-        sender.lifecycle(Lifecycle::Started { at: ts() });
+        sender.emit_lifecycle(Lifecycle::Started { at: ts() });
         let received = rx.recv().expect("receiver got nothing");
         assert!(matches!(
             received,
@@ -367,7 +367,7 @@ mod tests {
     fn progress_sender_delivers_activity_event() {
         let (tx, rx) = mpsc::channel();
         let sender = ProgressSender::new(tx);
-        sender.activity(Activity::Message {
+        sender.emit_activity(Activity::Message {
             phase: PhaseInstanceId(7),
             level: 0,
             text: "hi".into(),
@@ -383,9 +383,9 @@ mod tests {
     fn progress_sender_preserves_order() {
         let (tx, rx) = mpsc::channel();
         let sender = ProgressSender::new(tx);
-        sender.lifecycle(Lifecycle::Queued { at: ts() });
-        sender.lifecycle(Lifecycle::Started { at: ts() });
-        sender.lifecycle(Lifecycle::Completed { at: ts() });
+        sender.emit_lifecycle(Lifecycle::Queued { at: ts() });
+        sender.emit_lifecycle(Lifecycle::Started { at: ts() });
+        sender.emit_lifecycle(Lifecycle::Completed { at: ts() });
         assert!(matches!(
             rx.recv().unwrap(),
             JobEvent::Lifecycle(Lifecycle::Queued { .. })
@@ -408,7 +408,7 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         let sender = ProgressSender::new(tx);
         drop(rx);
-        sender.lifecycle(Lifecycle::Completed { at: ts() });
+        sender.emit_lifecycle(Lifecycle::Completed { at: ts() });
         // Reaching this line is the assertion.
     }
 
@@ -419,8 +419,8 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         let sender = ProgressSender::new(tx);
         let helper = sender.clone();
-        sender.lifecycle(Lifecycle::Queued { at: ts() });
-        helper.lifecycle(Lifecycle::Completed { at: ts() });
+        sender.emit_lifecycle(Lifecycle::Queued { at: ts() });
+        helper.emit_lifecycle(Lifecycle::Completed { at: ts() });
         assert!(matches!(
             rx.recv().unwrap(),
             JobEvent::Lifecycle(Lifecycle::Queued { .. })
@@ -549,7 +549,9 @@ mod tests {
 
         // A progress event sent on one clone must reach the original
         // receiver (sender clones share the channel).
-        cloned.progress.lifecycle(Lifecycle::Started { at: ts() });
+        cloned
+            .progress
+            .emit_lifecycle(Lifecycle::Started { at: ts() });
         assert!(matches!(
             rx.recv().unwrap(),
             JobEvent::Lifecycle(Lifecycle::Started { .. })

@@ -2,14 +2,13 @@
 //!
 //! Two orthogonal axes ride on the same channel:
 //!
-//! - **Lifecycle** ([`Lifecycle`]): the job's state machine as a whole. Owned
-//!   by the executor; handlers MUST NOT emit lifecycle events. Exactly one
-//!   terminal lifecycle event ([`Lifecycle::Completed`] / [`Lifecycle::Failed`]
-//!   / [`Lifecycle::Cancelled`]) is emitted per job.
-//! - **Activity** ([`Activity`]): the structured stream of what is happening
-//!   inside the job. Owned by the handler via `ctx.progress`. Phases form a
-//!   tree per job; messages, ratios, and warnings attach to the phase they
-//!   happened in.
+//! - **Lifecycle** ([`Lifecycle`]): the job's state machine as a whole. Owned by the executor;
+//!   handlers MUST NOT emit lifecycle events. Exactly one terminal lifecycle event
+//!   ([`Lifecycle::Completed`] / [`Lifecycle::Failed`] / [`Lifecycle::Cancelled`]) is emitted per
+//!   job.
+//! - **Activity** ([`Activity`]): the structured stream of what is happening inside the job. Owned
+//!   by the handler via `ctx.progress`. Phases form a tree per job; messages, ratios, and warnings
+//!   attach to the phase they happened in.
 //!
 //! Both ride on a single [`JobEvent`] union so the wire stream is one
 //! ordered sequence, but the types are split so the borrow checker enforces
@@ -102,9 +101,7 @@ impl PhaseKind {
     pub fn fit_brdf_measured() -> Self { Self("fit.brdf.measured".into()) }
 
     /// Clausen-pair resampling under `fit.brdf`.
-    pub fn fit_brdf_clausen_resample() -> Self {
-        Self("fit.brdf.clausen_resample".into())
-    }
+    pub fn fit_brdf_clausen_resample() -> Self { Self("fit.brdf.clausen_resample".into()) }
 
     /// Brute-force grid search under `fit.brdf.measured`.
     pub fn fit_brdf_brute_force() -> Self { Self("fit.brdf.brute_force".into()) }
@@ -124,19 +121,18 @@ impl PhaseKind {
 
     // ---------------- measure (vgonio measure ...) ----------------
 
+    /// Top-level measurement phase.
+    pub fn measure_root() -> Self { Self("measure".into()) }
+
     /// Reading measurement description files.
-    pub fn measure_read_descriptions() -> Self {
-        Self("measure.read_descriptions".into())
-    }
+    pub fn measure_read_descriptions() -> Self { Self("measure.read_descriptions".into()) }
 
     /// Loading shared data files (IOR / spectral data) needed by BSDF.
     pub fn measure_load_iors() -> Self { Self("measure.load_iors".into()) }
 
     /// Resolving and loading the micro-surface files referenced by the
     /// loaded descriptions.
-    pub fn measure_load_surfaces() -> Self {
-        Self("measure.load_surfaces".into())
-    }
+    pub fn measure_load_surfaces() -> Self { Self("measure.load_surfaces".into()) }
 
     /// Per-description BSDF measurement.
     pub fn measure_bsdf() -> Self { Self("measure.bsdf".into()) }
@@ -151,9 +147,7 @@ impl PhaseKind {
     pub fn measure_sdf() -> Self { Self("measure.sdf".into()) }
 
     /// Writing measurement outputs to disk.
-    pub fn measure_write_output() -> Self {
-        Self("measure.write_output".into())
-    }
+    pub fn measure_write_output() -> Self { Self("measure.write_output".into()) }
 
     /// Returns the raw wire string.
     pub fn as_str(&self) -> &str { &self.0 }
@@ -237,7 +231,7 @@ pub enum Activity {
         /// timestamps) so distributed workers report their own elapsed,
         /// not transport jitter, and each event is self-describing for
         /// log consumers.
-        duration_micros: u64,
+        duration_micros: Option<u64>,
         /// Optional one-line summary for the renderer
         /// (`"12 surfaces (3 skipped)"`). Not parsed.
         summary: Option<String>,
@@ -357,7 +351,10 @@ mod tests {
             Lifecycle::Queued { at: ts() },
             Lifecycle::Started { at: ts() },
             Lifecycle::Completed { at: ts() },
-            Lifecycle::Failed { at: ts(), error: err() },
+            Lifecycle::Failed {
+                at: ts(),
+                error: err(),
+            },
             Lifecycle::Cancelled { at: ts() },
         ] {
             rt_json(&ev);
@@ -377,7 +374,7 @@ mod tests {
         rt_json(&Activity::PhaseEnd {
             instance: phase,
             outcome: PhaseOutcome::Ok,
-            duration_micros: 340_000,
+            duration_micros: Some(340_000),
             summary: Some("12 surfaces (0 skipped)".into()),
             at: ts(),
         });
@@ -401,8 +398,12 @@ mod tests {
     #[test]
     fn phase_outcome_each_variant_roundtrips() {
         rt_json(&PhaseOutcome::Ok);
-        rt_json(&PhaseOutcome::Skipped { reason: "no inputs".into() });
-        rt_json(&PhaseOutcome::PartialFailure { detail: "3 of 12 failed".into() });
+        rt_json(&PhaseOutcome::Skipped {
+            reason: "no inputs".into(),
+        });
+        rt_json(&PhaseOutcome::PartialFailure {
+            detail: "3 of 12 failed".into(),
+        });
         rt_json(&PhaseOutcome::Failed { error: err() });
     }
 
@@ -482,10 +483,13 @@ mod tests {
 
     #[test]
     fn job_event_wire_shape_carries_channel_discriminator() {
-        let v = serde_json::to_value(JobEvent::Lifecycle(Lifecycle::Completed { at: ts() }))
-            .unwrap();
+        let v =
+            serde_json::to_value(JobEvent::Lifecycle(Lifecycle::Completed { at: ts() })).unwrap();
         assert_eq!(v.get("channel").and_then(|s| s.as_str()), Some("lifecycle"));
-        assert!(v.get("event").is_some(), "channel-tagged content must keep event");
+        assert!(
+            v.get("event").is_some(),
+            "channel-tagged content must keep event"
+        );
 
         let v = serde_json::to_value(JobEvent::Activity(Activity::Warning {
             phase: PhaseInstanceId(7),
@@ -502,7 +506,7 @@ mod tests {
             event: JobEvent::Activity(Activity::PhaseEnd {
                 instance: PhaseInstanceId(42),
                 outcome: PhaseOutcome::Ok,
-                duration_micros: 12_345,
+                duration_micros: Some(12_345),
                 summary: None,
                 at: ts(),
             }),

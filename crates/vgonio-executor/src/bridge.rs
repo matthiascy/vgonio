@@ -114,7 +114,7 @@ impl LocalStatusBridge {
     /// open in this stream; `PhaseBegin` inserts, `PhaseEnd` removes.
     fn render(&self, open: &mut HashMap<PhaseInstanceId, u32>, ev: &JobEvent) {
         match ev {
-            JobEvent::Lifecycle(ev) => self.render_lifecycle(ev),
+            JobEvent::Lifecycle(ev) => self.render_lifecycle(open, ev),
             JobEvent::Activity(ev) => self.render_activity(open, ev),
             // `JobEvent` is `#[non_exhaustive]`; surface unknowns to the
             // diag log rather than panic.
@@ -122,7 +122,7 @@ impl LocalStatusBridge {
         }
     }
 
-    fn render_lifecycle(&self, ev: &Lifecycle) {
+    fn render_lifecycle(&self, open: &mut HashMap<PhaseInstanceId, u32>, ev: &Lifecycle) {
         let base = self.indent_base;
         match ev {
             Lifecycle::Queued { .. } => {
@@ -135,16 +135,46 @@ impl LocalStatusBridge {
                 cli::success(base, format_args!("completed"));
             },
             Lifecycle::Failed { error, .. } => {
-                let msg = &error.message;
-                cli::error(base, format_args!("{msg}"));
+                // The progress protocol requires receivers to reconcile any
+                // phase still open at a terminal lifecycle event. A handler
+                // that bubbles an error via `Result::Err` does not emit a
+                // closing `PhaseEnd`, so close the dangling phases here
+                // (deepest first) before the job-level error line.
+                self.reconcile_open_phases(open, true);
+                cli::error(base, format_args!("{}", error.message));
             },
             Lifecycle::Cancelled { .. } => {
+                self.reconcile_open_phases(open, false);
                 cli::warning(base, format_args!("cancelled"));
             },
             // `Lifecycle` is `#[non_exhaustive]`. A new variant from a
             // newer producer must not silently disappear; surface it
             // through the diagnostic log channel.
             ev => log::debug!("LocalStatusBridge: unhandled lifecycle event: {ev:?}"),
+        }
+    }
+
+    /// Closes every phase left open at a terminal lifecycle event, rendering
+    /// a short marker per phase so the user sees they did not complete. The
+    /// terminal error / cancellation message is rendered separately by the
+    /// caller, so the per-phase markers stay terse to avoid repeating it.
+    /// Phases are closed innermost-first (deepest indent first) for readable
+    /// nesting, and `open` is emptied so the renderer's state is consistent.
+    fn reconcile_open_phases(&self, open: &mut HashMap<PhaseInstanceId, u32>, failed: bool) {
+        if open.is_empty() {
+            return;
+        }
+        let mut dangling: Vec<(PhaseInstanceId, u32)> =
+            open.drain().map(|(id, depth)| (id, depth)).collect();
+        // Deepest first; ties broken by instance id for deterministic output.
+        dangling.sort_by(|a, b| b.1.cmp(&a.1).then(a.0 .0.cmp(&b.0 .0)));
+        for (_, depth) in dangling {
+            let indent = self.indent_base + 2 * depth;
+            if failed {
+                cli::error(indent, format_args!("interrupted"));
+            } else {
+                cli::warning(indent, format_args!("cancelled"));
+            }
         }
     }
 
@@ -183,9 +213,7 @@ impl LocalStatusBridge {
                 ..
             } => {
                 let depth = open.remove(instance).unwrap_or_else(|| {
-                    log::debug!(
-                        "LocalStatusBridge: PhaseEnd for unknown instance {instance:?}"
-                    );
+                    log::debug!("LocalStatusBridge: PhaseEnd for unknown instance {instance:?}");
                     0
                 });
                 let indent = self.indent_base + 2 * depth;
@@ -202,9 +230,7 @@ impl LocalStatusBridge {
                         cli::error(indent, format_args!("{}", error.message))
                     },
                     // `PhaseOutcome` is `#[non_exhaustive]`.
-                    other => log::debug!(
-                        "LocalStatusBridge: unhandled phase outcome: {other:?}"
-                    ),
+                    other => log::debug!("LocalStatusBridge: unhandled phase outcome: {other:?}"),
                 }
             },
             Activity::Message { phase, level, text } => {
@@ -235,11 +261,24 @@ impl LocalStatusBridge {
     }
 }
 
-fn format_phase_end_body(summary: Option<&str>, duration_micros: u64) -> String {
-    let dur = format_duration(Duration::from_micros(duration_micros));
+fn format_phase_end_body(summary: Option<&str>, duration_micros: Option<u64>) -> String {
     match summary {
-        Some(s) => format!("{s} ({dur})"),
-        None => format!("done ({dur})"),
+        Some(s) => {
+            if duration_micros.is_some() {
+                let dur = format_duration(Duration::from_micros(duration_micros.unwrap()));
+                format!("{s} ({dur})")
+            } else {
+                s.to_string()
+            }
+        },
+        None => {
+            if duration_micros.is_some() {
+                let dur = format_duration(Duration::from_micros(duration_micros.unwrap()));
+                format!("done ({dur})")
+            } else {
+                "done".into()
+            }
+        },
     }
 }
 
@@ -271,8 +310,9 @@ mod tests {
     use vgn_core::cli::{set_status_sink, SilentSink};
     use vgn_job_api::{
         error::{JobError, JobErrorCode},
-        progress::{Activity, JobEvent, Lifecycle, PhaseInstanceId, PhaseKind, PhaseOutcome,
-                   ProgressUnits},
+        progress::{
+            Activity, JobEvent, Lifecycle, PhaseInstanceId, PhaseKind, PhaseOutcome, ProgressUnits,
+        },
     };
 
     use super::*;
@@ -353,7 +393,7 @@ mod tests {
             JobEvent::Activity(Activity::PhaseEnd {
                 instance: nested,
                 outcome: PhaseOutcome::Ok,
-                duration_micros: 340_000,
+                duration_micros: Some(340_000),
                 summary: Some("4 files".into()),
                 at: ts(),
             }),
@@ -362,7 +402,7 @@ mod tests {
                 outcome: PhaseOutcome::PartialFailure {
                     detail: "1 unreadable".into(),
                 },
-                duration_micros: 1_200_000,
+                duration_micros: Some(1_200_000),
                 summary: Some("11 of 12 surfaces".into()),
                 at: ts(),
             }),
@@ -519,7 +559,7 @@ mod tests {
             &JobEvent::Activity(Activity::PhaseEnd {
                 instance: p,
                 outcome: PhaseOutcome::Ok,
-                duration_micros: 0,
+                duration_micros: Some(0),
                 summary: None,
                 at: ts(),
             }),
@@ -540,10 +580,91 @@ mod tests {
             &JobEvent::Activity(Activity::PhaseEnd {
                 instance: PhaseInstanceId(99),
                 outcome: PhaseOutcome::Ok,
-                duration_micros: 0,
+                duration_micros: Some(0),
                 summary: None,
                 at: ts(),
             }),
         );
+    }
+
+    /// Helper: open `n` nested phases (each the child of the previous) without
+    /// closing them, then return the populated `open` map.
+    fn open_nested_phases(bridge: &LocalStatusBridge, n: u32) -> HashMap<PhaseInstanceId, u32> {
+        let mut open = HashMap::new();
+        let mut parent = None;
+        for i in 0..n {
+            let id = PhaseInstanceId(i);
+            bridge.render(
+                &mut open,
+                &JobEvent::Activity(Activity::PhaseBegin {
+                    instance: id,
+                    parent,
+                    kind: PhaseKind::measure_bsdf(),
+                    label: format!("phase {i}"),
+                    at: ts(),
+                }),
+            );
+            parent = Some(id);
+        }
+        open
+    }
+
+    #[test]
+    fn failed_lifecycle_reconciles_open_phases() {
+        // The progress protocol requires receivers to treat phases still open
+        // at a terminal `Failed` as ended. A handler that returns `Err`
+        // emits no closing `PhaseEnd`, so the bridge must empty `open` itself.
+        let _g = silence_cli();
+        let bridge = LocalStatusBridge::new();
+        let mut open = open_nested_phases(&bridge, 3);
+        assert_eq!(open.len(), 3);
+        bridge.render(
+            &mut open,
+            &JobEvent::Lifecycle(Lifecycle::Failed {
+                at: ts(),
+                error: JobError {
+                    code: JobErrorCode::HandlerError,
+                    message: "boom".into(),
+                    retriable: false,
+                    details: None,
+                },
+            }),
+        );
+        assert!(
+            open.is_empty(),
+            "open phases must be reconciled on Lifecycle::Failed"
+        );
+    }
+
+    #[test]
+    fn cancelled_lifecycle_reconciles_open_phases() {
+        let _g = silence_cli();
+        let bridge = LocalStatusBridge::new();
+        let mut open = open_nested_phases(&bridge, 2);
+        assert_eq!(open.len(), 2);
+        bridge.render(
+            &mut open,
+            &JobEvent::Lifecycle(Lifecycle::Cancelled { at: ts() }),
+        );
+        assert!(
+            open.is_empty(),
+            "open phases must be reconciled on Lifecycle::Cancelled"
+        );
+    }
+
+    #[test]
+    fn completed_lifecycle_leaves_open_map_untouched() {
+        // `Completed` is the normal-success terminal; a well-behaved handler
+        // closed its phases already. The bridge does not force-close on
+        // success (a stray open phase there is a handler bug, surfaced by the
+        // missing `✓`, not something the renderer should paper over).
+        let _g = silence_cli();
+        let bridge = LocalStatusBridge::new();
+        let mut open = open_nested_phases(&bridge, 1);
+        bridge.render(
+            &mut open,
+            &JobEvent::Lifecycle(Lifecycle::Completed { at: ts() }),
+        );
+        assert_eq!(open.len(), 1, "Completed must not reconcile open phases");
     }
 }

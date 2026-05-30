@@ -10,28 +10,27 @@
 //! request by design: This module will be moved into `vgonio-fitting`
 //! where those concepts do not exist.
 //!
-//! # CLI-print inventory (DIST Plan Task 0.5 / 1.15)
+//! # Progress reporting (DIST Plan Task 1.15, done)
 //!
-//! Every `cli_*` call here is ORCHESTRATION: there is no top-level ADAPTER
-//! banner to move (unlike [`crate::orchestration::measure`]; `fit` never
-//! printed an `Indent::ROOT` "Executing 'vgonio fit'…" line). When
-//! Capability Separation moves this module into a capability crate,
-//! `vgn_core::cli` is unreachable; Task 1.15 replaces each call below
-//! with an [`vgn_job_api::progress::Activity`] emission through
-//! `ctx.progress`.
+//! This module is reporter-clean: it emits [`vgn_job_api::progress::Activity`]
+//! events through `ctx.progress` rather than calling `vgn_core::cli`, so it can
+//! move into a capability crate where `vgn_core::cli` is unreachable. There is
+//! no top-level ADAPTER banner here (unlike [`crate::orchestration::measure`];
+//! `fit` never printed an `Indent::ROOT` "Executing 'vgonio fit'…" line).
 //!
 //! Phase headings ("Fitting to distribution @...", "Fitting to model
-//! ...@...", per-λ banners, "Fitting with brute force method...") become
+//! ...@...", "Fitting with brute force method...") are
 //! [`Activity::PhaseBegin`] + [`Activity::PhaseEnd`] keyed on the
 //! `fit.*` namespace ([`PhaseKind::fit_ndf`], [`PhaseKind::fit_brdf`],
 //! [`PhaseKind::fit_brdf_measured`], [`PhaseKind::fit_brdf_brute_force`]
-//! and friends). Timing notes ("Took: ...") become the
-//! `duration_micros` on the corresponding `PhaseEnd`. Free-form info
-//! ("λ = ...") becomes [`Activity::Message`] under the active brute /
-//! nllsq phase. The `cli_error!` for the unknown-source arm becomes
-//! [`Activity::Warning`] (it does not abort).
-//!
-//! Do NOT migrate in Phase 0; this is the Task 1.15 checklist.
+//! and friends). Timing rides on `duration_micros` of the corresponding
+//! `PhaseEnd` (the old "Took: ..." note is gone). Free-form info
+//! ("λ = ...", per-wavelength banners) is [`Activity::Message`] under the
+//! active brute / nllsq phase. The unknown-source arm emits
+//! [`Activity::Warning`] (it does not abort). Fatal errors return
+//! `Err(VgonioError)` and surface through
+//! [`vgn_job_api::progress::Lifecycle::Failed`], which reconciles any open
+//! phase.
 //!
 //! [`Activity::PhaseBegin`]: vgn_job_api::progress::Activity::PhaseBegin
 //! [`Activity::PhaseEnd`]: vgn_job_api::progress::Activity::PhaseEnd
@@ -51,13 +50,16 @@ use std::{
     sync::Arc,
 };
 use vgn_core::{
-    cli::{self, cli_error, cli_note, cli_step, format_duration, Indent},
     config::Config,
     error::VgonioError,
     optics::IorReg,
     units::{Nanometres, Radians, Rads},
     utils::range::StepRangeIncl,
     BrdfLevel, ErrorMetric, Symmetry, Weighting,
+};
+use vgn_job_api::{
+    context::JobContext,
+    progress::{Activity, PhaseInstanceId, PhaseKind, PhaseOutcome},
 };
 
 use crate::{
@@ -491,21 +493,28 @@ fn resolve_output(opts: &FitOptions) -> Result<Option<PathBuf>, VgonioError> {
     ))))
 }
 
-pub fn run(req: FitRequest, config: Arc<Config>) -> Result<(), VgonioError> {
+pub fn run(req: FitRequest, config: Arc<Config>, ctx: JobContext) -> Result<(), VgonioError> {
     // Re-validate structural invariants here: the request may have arrived
     // via JSON/envelope rather than `TryFrom<&FitOptions>`, and validating
     // at the run boundary is what makes the contract enforceable end-to-end.
     req.validate()?;
     match req {
-        FitRequest::Ndf(req) => run_ndf(req, &config),
-        FitRequest::Brdf(req) => run_brdf(req, &config),
+        FitRequest::Ndf(req) => run_ndf(req, &config, ctx),
+        FitRequest::Brdf(req) => run_brdf(req, &config, ctx),
     }
 }
 
-fn run_ndf(req: NdfFitRequest, config: &Config) -> Result<(), VgonioError> {
+fn run_ndf(req: NdfFitRequest, config: &Config, ctx: JobContext) -> Result<(), VgonioError> {
     let cache = Cache::new(config.cache_dir());
-    // [0.5] orchestration → Phase 1 ProgressEvent::Step
-    cli_step!(Indent::SECTION, "Fitting to distribution @{:?}", req.distro);
+    let phase = ctx.next_phase_id();
+    let started = std::time::Instant::now();
+    ctx.progress.emit_activity(Activity::PhaseBegin {
+        instance: phase,
+        parent: None,
+        kind: PhaseKind::fit_ndf(),
+        label: format!("Fitting to distribution @{:?}", req.distro),
+        at: chrono::Utc::now(),
+    });
     cache.write(|cache| {
         cache.load_ior_database(&config);
         for input in req.inputs.iter() {
@@ -533,32 +542,54 @@ fn run_ndf(req: NdfFitRequest, config: &Config) -> Result<(), VgonioError> {
             report.print_fitting_report(0, 4);
         }
     });
+    ctx.progress.emit_activity(Activity::PhaseEnd {
+        instance: phase,
+        outcome: PhaseOutcome::Ok,
+        duration_micros: Some(started.elapsed().as_micros() as u64),
+        summary: None,
+        at: chrono::Utc::now(),
+    });
     Ok(())
 }
 
-fn run_brdf(req: BrdfFitRequest, config: &Config) -> Result<(), VgonioError> {
+fn run_brdf(req: BrdfFitRequest, config: &Config, ctx: JobContext) -> Result<(), VgonioError> {
     let cache = Cache::new(config.cache_dir());
-    // [0.5] orchestration → Phase 1 ProgressEvent::Step
-    // Guarded on `source_invokes_fit()` because `validate()` deliberately
-    // allows `Utia` / `Unknown` sources to omit `distro` (they short-circuit
-    // in the match below). Unwrapping unconditionally would panic on
-    // deserialized envelopes for those no-op sources.
+    // The `fit.brdf` phase is opened only for sources that actually fit:
+    // `validate()` deliberately allows `Utia` / `Unknown` to omit `distro`
+    // (they short-circuit in the match below), so unwrapping it for the
+    // banner label would panic on deserialized envelopes for those no-op
+    // sources.
+    let brdf_phase = ctx.next_phase_id();
+    let started = std::time::Instant::now();
     if req.source_invokes_fit() {
-        cli_step!(
-            Indent::SECTION,
-            "Fitting to model {:?}@{:?}",
-            req.family,
-            req.distro
-                .expect("distro: invariant guaranteed by BrdfFitRequest::validate()")
-        );
+        ctx.progress.emit_activity(Activity::PhaseBegin {
+            instance: brdf_phase,
+            parent: None,
+            kind: PhaseKind::fit_brdf(),
+            label: format!(
+                "Fitting to model {:?}@{:?}",
+                req.family,
+                req.distro
+                    .expect("distro: invariant guaranteed by BrdfFitRequest::validate()")
+            ),
+            at: chrono::Utc::now(),
+        });
     }
-    cache.write(|cache| {
+    let result = cache.write(|cache| {
         cache.load_ior_database(&config);
         match &req.source {
             BrdfSource::Vgonio {
                 level,
                 clausen_resample: Some(resample),
-            } => fit_vgonio_clausen_pairs(&req, *level, resample.clone(), cache, &config),
+            } => fit_vgonio_clausen_pairs(
+                &req,
+                *level,
+                resample.clone(),
+                cache,
+                &config,
+                &ctx,
+                brdf_phase,
+            ),
             BrdfSource::Vgonio {
                 level: _,
                 clausen_resample: None,
@@ -567,29 +598,65 @@ fn run_brdf(req: BrdfFitRequest, config: &Config) -> Result<(), VgonioError> {
                 // `VgonioBrdf`; the `level` selector only matters for the
                 // multi-level `BsdfMeasurement` consumed by the Clausen
                 // resample path below.
-                load_and_fit::<VgonioBrdf>(&req, cache, &config)
+                load_and_fit::<VgonioBrdf>(&req, cache, &config, &ctx, brdf_phase)
             },
-            BrdfSource::Clausen => load_and_fit::<ClausenBrdf>(&req, cache, &config),
-            BrdfSource::Merl => load_and_fit::<MerlBrdf>(&req, cache, &config),
-            BrdfSource::Rgl => load_and_fit::<RglBrdf>(&req, cache, &config),
-            BrdfSource::Yan2018 => load_and_fit::<Yan18Brdf>(&req, cache, &config),
+            BrdfSource::Clausen => {
+                load_and_fit::<ClausenBrdf>(&req, cache, &config, &ctx, brdf_phase)
+            },
+            BrdfSource::Merl => load_and_fit::<MerlBrdf>(&req, cache, &config, &ctx, brdf_phase),
+            BrdfSource::Rgl => load_and_fit::<RglBrdf>(&req, cache, &config, &ctx, brdf_phase),
+            BrdfSource::Yan2018 => {
+                load_and_fit::<Yan18Brdf>(&req, cache, &config, &ctx, brdf_phase)
+            },
             BrdfSource::Utia => Ok(()),
             BrdfSource::Unknown => {
-                // [0.5] orchestration → Phase 1 ProgressEvent::Error
-                cli_error!(
-                    Indent::SECTION,
-                    "Unknown measured BRDF kind specified, cannot fit!"
-                );
+                // `source_invokes_fit()` is false for `Unknown`, so no
+                // `fit.brdf` phase was opened above. Open one here so the
+                // warning attaches to a real phase, then close it `Skipped`
+                // (this arm is a non-fatal no-op, not an error).
+                let phase = ctx.next_phase_id();
+                ctx.progress.emit_activity(Activity::PhaseBegin {
+                    instance: phase,
+                    parent: None,
+                    kind: PhaseKind::fit_brdf(),
+                    label: "Fitting BRDF".into(),
+                    at: chrono::Utc::now(),
+                });
+                ctx.progress.emit_activity(Activity::Warning {
+                    phase,
+                    text: "Unknown measured BRDF kind specified, cannot fit!".into(),
+                });
+                ctx.progress.emit_activity(Activity::PhaseEnd {
+                    instance: phase,
+                    outcome: PhaseOutcome::Skipped {
+                        reason: "unknown measured BRDF kind".into(),
+                    },
+                    duration_micros: None,
+                    summary: None,
+                    at: chrono::Utc::now(),
+                });
                 Ok(())
             },
         }
-    })
+    });
+    if req.source_invokes_fit() && result.is_ok() {
+        ctx.progress.emit_activity(Activity::PhaseEnd {
+            instance: brdf_phase,
+            outcome: PhaseOutcome::Ok,
+            duration_micros: Some(started.elapsed().as_micros() as u64),
+            summary: None,
+            at: chrono::Utc::now(),
+        });
+    }
+    result
 }
 
 fn load_and_fit<F: AnyMeasured + AnyMeasuredBrdf + 'static>(
     req: &BrdfFitRequest,
     cache: &mut UiCache,
     config: &Config,
+    ctx: &JobContext,
+    parent: PhaseInstanceId,
 ) -> Result<(), VgonioError> {
     for input in &req.inputs {
         let measurement = cache.load_micro_surface_measurement(config, input).unwrap();
@@ -601,7 +668,7 @@ fn load_and_fit<F: AnyMeasured + AnyMeasuredBrdf + 'static>(
         {
             #[cfg(debug_assertions)]
             log::debug!("BRDF incident medium {:?}", brdf.incident_medium());
-            measured_brdf_fitting(req, brdf, &cache.iors)?;
+            measured_brdf_fitting(req, brdf, &cache.iors, ctx, parent)?;
         }
     }
     Ok(())
@@ -613,9 +680,18 @@ fn fit_vgonio_clausen_pairs(
     resample: ClausenResample,
     cache: &mut UiCache,
     config: &Config,
+    ctx: &JobContext,
+    parent: PhaseInstanceId,
 ) -> Result<(), VgonioError> {
-    // [0.5] orchestration → Phase 1 ProgressEvent::Step
-    cli_step!(Indent::SECTION, "Fitting simulated data to Clausen's data.");
+    let phase = ctx.next_phase_id();
+    let started = std::time::Instant::now();
+    ctx.progress.emit_activity(Activity::PhaseBegin {
+        instance: phase,
+        parent: Some(parent),
+        kind: PhaseKind::fit_brdf_clausen_resample(),
+        label: "Fitting simulated data to Clausen's data.".into(),
+        at: chrono::Utc::now(),
+    });
     if req.inputs.len() % 2 != 0 {
         return Err(VgonioError::new(
             "The input files should be in pairs of measured data and corresponding Clausen's data.",
@@ -664,8 +740,15 @@ fn fit_vgonio_clausen_pairs(
             simulated_brdf.resample(&clausen_brdf.params, level, resample.dense, Rads::ZERO)
         };
         log::debug!("BRDF extraction done, starting fitting.");
-        measured_brdf_fitting(req, &brdf, &cache.iors)?;
+        measured_brdf_fitting(req, &brdf, &cache.iors, ctx, phase)?;
     }
+    ctx.progress.emit_activity(Activity::PhaseEnd {
+        instance: phase,
+        outcome: PhaseOutcome::Ok,
+        duration_micros: Some(started.elapsed().as_micros() as u64),
+        summary: None,
+        at: chrono::Utc::now(),
+    });
     Ok(())
 }
 
@@ -673,27 +756,35 @@ fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
     req: &BrdfFitRequest,
     brdf: &F,
     iors: &IorReg,
+    ctx: &JobContext,
+    parent: PhaseInstanceId,
 ) -> Result<(), VgonioError> {
     let limit = req.theta_limit.unwrap_or(Radians::HALF_PI);
-    // [0.5] orchestration → Phase 1 ProgressEvent::Step
-    cli_step!(
-        Indent::SUBSECTION,
-        "Fitting ({:?}) to model: {:?}, distro: {:?}, symmetry: {}, method: {:?}, error metric: \
-         {}, weighting: {:?}, θ < {}",
-        brdf.kind(),
-        req.family,
-        req.distro
-            .expect("distro: invariant guaranteed by BrdfFitRequest::validate()"),
-        req.symmetry,
-        req.method,
-        if req.method == FittingMethod::Brute {
-            req.error_metric.unwrap_or(ErrorMetric::Mse)
-        } else {
-            ErrorMetric::Nllsq
-        },
-        req.weighting,
-        limit.prettified()
-    );
+    let phase = ctx.next_phase_id();
+    let started = std::time::Instant::now();
+    ctx.progress.emit_activity(Activity::PhaseBegin {
+        instance: phase,
+        parent: Some(parent),
+        kind: PhaseKind::fit_brdf_measured(),
+        label: format!(
+            "Fitting ({:?}) to model: {:?}, distro: {:?}, symmetry: {}, method: {:?}, error \
+             metric: {}, weighting: {:?}, θ < {}",
+            brdf.kind(),
+            req.family,
+            req.distro
+                .expect("distro: invariant guaranteed by BrdfFitRequest::validate()"),
+            req.symmetry,
+            req.method,
+            if req.method == FittingMethod::Brute {
+                req.error_metric.unwrap_or(ErrorMetric::Mse)
+            } else {
+                ErrorMetric::Nllsq
+            },
+            req.weighting,
+            limit.prettified()
+        ),
+        at: chrono::Utc::now(),
+    });
 
     let mut out = req.output.as_ref().map(|path| {
         let exists = path.exists();
@@ -713,13 +804,23 @@ fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
         writer
     });
 
-    match req.method {
-        FittingMethod::Brute => brdf_fitting_brute_force(brdf, req, iors, out.as_mut()),
+    let result = match req.method {
+        FittingMethod::Brute => brdf_fitting_brute_force(brdf, req, iors, out.as_mut(), ctx, phase),
         FittingMethod::Nllsq => {
-            brdf_fitting_nllsq(brdf, req, iors, out.as_mut());
+            brdf_fitting_nllsq(brdf, req, iors, out.as_mut(), ctx, phase);
             Ok(())
         },
+    };
+    if result.is_ok() {
+        ctx.progress.emit_activity(Activity::PhaseEnd {
+            instance: phase,
+            outcome: PhaseOutcome::Ok,
+            duration_micros: Some(started.elapsed().as_micros() as u64),
+            summary: None,
+            at: chrono::Utc::now(),
+        });
     }
+    result
 }
 
 // TODO: error handling
@@ -774,23 +875,30 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
     req: &BrdfFitRequest,
     iors: &IorReg,
     writer: Option<&mut BufWriter<File>>,
+    ctx: &JobContext,
+    parent: PhaseInstanceId,
 ) -> Result<(), VgonioError> {
-    // [0.5] orchestration → Phase 1 ProgressEvent::Step
     // TODO [cli-report worthy]: brute force searches a roughness grid
     // (START:END:STEP, possibly thousands of points) after this single banner
-    // with no further feedback until the report. Phase 1 should emit a
-    // ProgressEvent with percent/ETA across the grid (and per-wavelength when
-    // `req.per_wavelength`), not just a start line.
-    cli_step!(
-        Indent::DETAIL,
-        "Fitting with brute force method... {} {}",
-        if req.per_wavelength {
-            "per wavelength"
-        } else {
-            ""
-        },
-        if req.on_cpu() { "on CPU" } else { "on GPU" }
-    );
+    // with no further feedback until the report. The fitter should emit
+    // `Activity::Progress` with percent/ETA across the grid (and per-wavelength
+    // when `req.per_wavelength`), not just a start line.
+    let phase = ctx.next_phase_id();
+    ctx.progress.emit_activity(Activity::PhaseBegin {
+        instance: phase,
+        parent: Some(parent),
+        kind: PhaseKind::fit_brdf_brute_force(),
+        label: format!(
+            "Fitting with brute force method... {} {}",
+            if req.per_wavelength {
+                "per wavelength"
+            } else {
+                ""
+            },
+            if req.on_cpu() { "on CPU" } else { "on GPU" }
+        ),
+        at: chrono::Utc::now(),
+    });
     let start = std::time::Instant::now();
     log::debug!(
         "BRDF proxy created, starting fitting. Number of wavelengths: {}, {:?}",
@@ -807,19 +915,31 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
         // wavelength data in one operation instead of per-wavelength transfers.
         #[cfg(feature = "cuda")]
         let wavelength_proxies: Option<Vec<_>> = if req.cuda {
-            // [0.5] orchestration → Phase 1 ProgressEvent::Step
-            cli_step!(
-                Indent::DETAIL,
-                "Pre-allocating GPU memory for {} wavelengths...",
-                wavelengths.len()
-            );
-            Some(
-                wavelengths
-                    .iter()
-                    .enumerate()
-                    .map(|(i, _)| full_proxy.per_wavelength(i))
-                    .collect(),
-            )
+            let prealloc_phase = ctx.next_phase_id();
+            let prealloc_started = std::time::Instant::now();
+            ctx.progress.emit_activity(Activity::PhaseBegin {
+                instance: prealloc_phase,
+                parent: Some(phase),
+                kind: PhaseKind::fit_brdf_brute_force_gpu_prealloc(),
+                label: format!(
+                    "Pre-allocating GPU memory for {} wavelengths...",
+                    wavelengths.len()
+                ),
+                at: chrono::Utc::now(),
+            });
+            let proxies = wavelengths
+                .iter()
+                .enumerate()
+                .map(|(i, _)| full_proxy.per_wavelength(i))
+                .collect();
+            ctx.progress.emit_activity(Activity::PhaseEnd {
+                instance: prealloc_phase,
+                outcome: PhaseOutcome::Ok,
+                duration_micros: Some(prealloc_started.elapsed().as_micros() as u64),
+                summary: None,
+                at: chrono::Utc::now(),
+            });
+            Some(proxies)
         } else {
             None
         };
@@ -856,28 +976,28 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
                 },
             };
 
-            // [0.5] orchestration → Phase 1 ProgressEvent::Step (per wavelength)
-            cli_step!(
-                Indent::DETAIL,
-                "Fitting for wavelength: {:?}, in range ax: {}, ay: {}",
-                w,
-                ax_str,
-                ay_str
-            );
+            ctx.progress.emit_activity(Activity::Message {
+                phase,
+                level: 0,
+                text: format!(
+                    "Fitting for wavelength: {:?}, in range ax: {}, ay: {}",
+                    w, ax_str, ay_str
+                ),
+            });
 
             // Call fitting with pre-allocated proxy (GPU) or create on-demand (CPU)
             #[cfg(feature = "cuda")]
             let report = if let Some(prealloc) = wavelength_proxies.as_ref() {
-                brdf_fitting_brute_force_inner(&prealloc[i], req, 0, Some(*w), alpha)
+                brdf_fitting_brute_force_inner(&prealloc[i], req, 0, Some(*w), alpha, ctx, phase)
             } else {
                 let proxy = full_proxy.per_wavelength(i);
-                brdf_fitting_brute_force_inner(&proxy, req, 0, Some(*w), alpha)
+                brdf_fitting_brute_force_inner(&proxy, req, 0, Some(*w), alpha, ctx, phase)
             };
 
             #[cfg(not(feature = "cuda"))]
             let report = {
                 let proxy = full_proxy.per_wavelength(i);
-                brdf_fitting_brute_force_inner(&proxy, req, 0, Some(*w), alpha)
+                brdf_fitting_brute_force_inner(&proxy, req, 0, Some(*w), alpha, ctx, phase)
             };
 
             reports[i].write((Some(*w), report));
@@ -891,12 +1011,17 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
         };
         Box::new([(
             None,
-            brdf_fitting_brute_force_inner(&full_proxy, req, 4, None, alpha),
+            brdf_fitting_brute_force_inner(&full_proxy, req, 4, None, alpha, ctx, phase),
         )])
     };
     let end = std::time::Instant::now();
-    // [0.5] orchestration → Phase 1 ProgressEvent::Note
-    cli_note!(Indent::SUBSECTION, "Took: {}", format_duration(end - start));
+    ctx.progress.emit_activity(Activity::PhaseEnd {
+        instance: phase,
+        outcome: PhaseOutcome::Ok,
+        duration_micros: Some((end - start).as_micros() as u64),
+        summary: None,
+        at: chrono::Utc::now(),
+    });
 
     let surface = req
         .inputs
@@ -959,6 +1084,8 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
         n: usize,
         w: Option<Nanometres>,
         alpha: Option<BxdfRoughness>,
+        ctx: &JobContext,
+        phase: PhaseInstanceId,
     ) -> FittingReport<Box<dyn AnalyticalBrdf<[f64; 2]>>> {
         let report = proxy.brute_fit(
             req.distro
@@ -974,7 +1101,11 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
             alpha,
         );
         if let Some(w) = w {
-            cli::step_inline(6, format_args!("λ = {:?}:", w));
+            ctx.progress.emit_activity(Activity::Message {
+                phase,
+                level: 0,
+                text: format!("λ = {:?}:", w),
+            });
         }
         report.print_fitting_report(n, 6);
         report
@@ -992,18 +1123,35 @@ fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(
     req: &BrdfFitRequest,
     iors: &IorReg,
     writer: Option<&mut BufWriter<File>>,
+    ctx: &JobContext,
+    parent: PhaseInstanceId,
 ) {
+    let phase = ctx.next_phase_id();
+    let started = std::time::Instant::now();
+    ctx.progress.emit_activity(Activity::PhaseBegin {
+        instance: phase,
+        parent: Some(parent),
+        kind: PhaseKind::fit_brdf_nllsq(),
+        label: "Fitting with nonlinear least squares method...".into(),
+        at: chrono::Utc::now(),
+    });
     let full_proxy = brdf.proxy(iors);
     let reports = if req.per_wavelength {
         let mut reports = Box::new_uninit_slice(brdf.spectrum().len());
         let wavelengths = brdf.spectrum();
         for (i, w) in wavelengths.iter().enumerate() {
             let proxy = full_proxy.per_wavelength(i);
-            reports[i].write((Some(*w), brdf_fitting_nllsq_inner(&proxy, req, 0, Some(*w))));
+            reports[i].write((
+                Some(*w),
+                brdf_fitting_nllsq_inner(&proxy, req, 0, Some(*w), ctx, phase),
+            ));
         }
         unsafe { reports.assume_init() }
     } else {
-        Box::new([(None, brdf_fitting_nllsq_inner(&full_proxy, req, 4, None))])
+        Box::new([(
+            None,
+            brdf_fitting_nllsq_inner(&full_proxy, req, 4, None, ctx, phase),
+        )])
     };
 
     let surface = req
@@ -1023,11 +1171,21 @@ fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(
         &reports,
     );
 
+    ctx.progress.emit_activity(Activity::PhaseEnd {
+        instance: phase,
+        outcome: PhaseOutcome::Ok,
+        duration_micros: Some(started.elapsed().as_micros() as u64),
+        summary: None,
+        at: chrono::Utc::now(),
+    });
+
     fn brdf_fitting_nllsq_inner(
         proxy: &BrdfProxy,
         req: &BrdfFitRequest,
         n: usize,
         w: Option<Nanometres>,
+        ctx: &JobContext,
+        phase: PhaseInstanceId,
     ) -> FittingReport<Box<dyn AnalyticalBrdf<[f64; 2]>>> {
         let alpha = match req.symmetry {
             Symmetry::Isotropic => {
@@ -1059,8 +1217,11 @@ fn brdf_fitting_nllsq<F: AnyMeasuredBrdf>(
             req.theta_limit,
         );
         if let Some(w) = w {
-            // [0.5] orchestration → Phase 1 ProgressEvent::Step (per-λ report header)
-            cli_step!(Indent::DETAIL, "λ = {:?}:", w);
+            ctx.progress.emit_activity(Activity::Message {
+                phase,
+                level: 0,
+                text: format!("λ = {:?}:", w),
+            });
         }
         report.print_fitting_report(n, 6);
         report
