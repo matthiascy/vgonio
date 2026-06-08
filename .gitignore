@@ -18,3 +18,4 @@ rustc-ice-**.txt
 rvbrdf/*
 interim/
 .zed/
+**.**
