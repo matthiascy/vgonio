@@ -603,3 +603,62 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use embree::{Config, Device, IntersectContext, Ray, RayHit, SceneFlags};
+    use vgn_core::{units::LengthUnit, TriangulationPattern};
+    use vgn_io::{HeightOffset, MicroSurface};
+
+    /// A ray fired straight down at a flat micro-surface must hit it at the
+    /// surface plane, with the geometric normal pointing along the surface's
+    /// up-axis. This exercises the full
+    /// `MicroSurface -> MicroSurfaceMesh -> embree Geometry -> intersection`
+    /// path, verifying the embree binding actually traces rays (not just that
+    /// it compiles and links).
+    #[test]
+    fn ray_hits_flat_microsurface() {
+        // Flat 5x5 surface at height 0, 1-unit spacing. Vertices lie in the
+        // z = 0 plane spanning x,y in [-2, 2], with the center vertex at the
+        // origin (see `MicroSurface::generate_vertices`).
+        let surf = MicroSurface::new(5, 5, 1.0, 1.0, 0.0, LengthUnit::UM);
+        let mesh = surf.as_micro_surface_mesh(
+            HeightOffset::None,
+            TriangulationPattern::BottomLeftToTopRight,
+            None,
+        );
+
+        // Minimal closest-hit scene from the mesh: no custom intersect filter,
+        // unlike `create_resources` (we want a plain query here).
+        let device = Device::with_config(Config::default()).unwrap();
+        let mut scene = device.create_scene().unwrap();
+        scene.set_flags(SceneFlags::ROBUST);
+        let mut geom = mesh.as_embree_geometry(&device);
+        geom.commit();
+        scene.attach_geometry(&geom);
+        scene.commit();
+
+        // Fire a ray from 10 units above, slightly off-center so it lands
+        // inside a triangle rather than exactly on a vertex/edge.
+        let mut ctx = IntersectContext::coherent();
+        let mut rayhit =
+            RayHit::from_ray(Ray::segment([0.25, 0.25, 10.0], [0.0, 0.0, -1.0], 0.0, f32::INFINITY));
+        scene.intersect(&mut ctx, &mut rayhit);
+
+        assert!(rayhit.hit.is_valid(), "ray should hit the surface");
+        // Travelled from z = 10 down to the z = 0 plane => distance 10.
+        assert!(
+            (rayhit.ray.tfar - 10.0).abs() < 1e-3,
+            "expected hit distance ~10, got {}",
+            rayhit.ray.tfar
+        );
+        assert!(
+            rayhit.ray.hit_point()[2].abs() < 1e-3,
+            "expected hit at z ~ 0, got {}",
+            rayhit.ray.hit_point()[2]
+        );
+        // Geometric normal of a z = 0 plane points along +/- z.
+        let n = rayhit.hit.unit_normal();
+        assert!(n[2].abs() > 0.99, "expected normal along z, got {:?}", n);
+    }
+}
