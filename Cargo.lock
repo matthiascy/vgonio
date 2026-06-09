@@ -4314,6 +4314,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "vgonio-measurement-cuda"
+version = "0.3.2"
+dependencies = [
+ "log",
+ "vgonio-measurement",
+]
+
+[[package]]
+name = "vgonio-measurement-embree"
+version = "0.3.2"
+dependencies = [
+ "embree3",
+ "log",
+ "rayon",
+ "vgonio-core",
+ "vgonio-io",
+ "vgonio-jabr",
+ "vgonio-measurement",
+]
+
+[[package]]
+name = "vgonio-measurement-wgpu"
+version = "0.3.2"
+dependencies = [
+ "bytemuck",
+ "log",
+ "pollster",
+ "vgonio-core",
+ "vgonio-io",
+ "vgonio-jabr",
+ "vgonio-measurement",
+ "vgonio-uxgx",
+ "wgpu",
+]
+
+[[package]]
 name = "vgonio-powitacq"
 version = "0.0.1"
 dependencies = [

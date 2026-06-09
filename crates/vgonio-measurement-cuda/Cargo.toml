@@ -1,0 +1,20 @@
+[package]
+name = "vgonio-measurement-cuda"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[lib]
+name = "vgn_measurement_cuda"
+
+[features]
+vdbg = ["vgonio-measurement/vdbg"]
+vvdbg = ["vgonio-measurement/vvdbg"]
+
+[dependencies]
+log.workspace = true
+vgonio-measurement = { path = "../vgonio-measurement" }
+
+[lints]
+workspace = true

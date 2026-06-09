@@ -1,0 +1,29 @@
+[package]
+name = "vgonio-measurement-embree"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[lib]
+name = "vgn_measurement_embree"
+
+# vdbg/vvdbg/bench gates inside the moved embr.rs (Task 2.8) must match the
+# trait def's gates in vgonio-measurement; propagate via dep: syntax (§3.6).
+[features]
+vdbg = ["vgonio-measurement/vdbg"]
+vvdbg = ["vgonio-measurement/vvdbg"]
+bench = ["vgonio-measurement/bench"]
+
+[dependencies]
+embree.workspace = true
+log.workspace = true
+rayon.workspace = true
+vgn_core = { workspace = true, features = ["io"] }
+# MicroSurfaceMesh::as_embree_geometry is gated on vgn_io's `embree` feature.
+vgn_io = { workspace = true, features = ["embree"] }
+vgn_jabr.workspace = true
+vgonio-measurement = { path = "../vgonio-measurement" }
+
+[lints]
+workspace = true

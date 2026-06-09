@@ -1,0 +1,30 @@
+[package]
+name = "vgonio-measurement-wgpu"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[lib]
+name = "vgn_measurement_wgpu"
+
+[features]
+vdbg = ["vgonio-measurement/vdbg"]
+vvdbg = ["vgonio-measurement/vvdbg"]
+
+[dependencies]
+bytemuck.workspace = true
+log.workspace = true
+pollster.workspace = true
+wgpu.workspace = true
+vgn_core = { workspace = true, features = ["io", "winit"] }
+vgn_io.workspace = true
+vgn_jabr.workspace = true
+# GAF uses vgn_uxgx::gfx primitives (Camera/Projection/RenderPass/Texture hang
+# off GpuContext, gaf.rs:18). `gfx` pulls the graphics surface, not the GUI
+# shell. Q20 tracks porting GAF off these so this dep can be dropped.
+vgn_uxgx = { workspace = true, features = ["gfx"] }
+vgonio-measurement = { path = "../vgonio-measurement" }
+
+[lints]
+workspace = true

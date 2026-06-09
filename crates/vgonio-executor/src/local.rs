@@ -165,7 +165,27 @@ impl Executor for LocalExecutor {
                     at: chrono::Utc::now(),
                 });
 
-                let out = handler(&envelope_owned, ctx);
+                // A panic inside the handler (e.g. a null backend's
+                // "no backend compiled in") must become a structured error,
+                // not a process abort. `AssertUnwindSafe` is required because
+                // the handler closure isn't `UnwindSafe`; safe here because the
+                // captured state is never reused after a panic (one call/job).
+                let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    handler(&envelope_owned, ctx)
+                }))
+                .unwrap_or_else(|payload| {
+                    let msg = payload
+                        .downcast_ref::<&'static str>()
+                        .map(|s| (*s).to_string())
+                        .or_else(|| payload.downcast_ref::<String>().cloned())
+                        .unwrap_or_else(|| "handler panicked (non-string payload)".to_string());
+                    Err(JobError {
+                        code: JobErrorCode::HandlerError,
+                        message: format!("handler panicked: {msg}"),
+                        retriable: false,
+                        details: None,
+                    })
+                });
                 let outcome = match out {
                     Ok(payload) => {
                         progress.emit_lifecycle(Lifecycle::Completed {
@@ -331,6 +351,32 @@ mod tests {
     }
 
     // ----- submit: failure modes -----
+
+    #[test]
+    fn handler_panic_becomes_job_error_not_abort() {
+        // A panicking handler (e.g. a null backend's "no backend compiled in")
+        // must be caught and surfaced as a structured JobError, not abort the
+        // worker thread / process.
+        let dir = tempdir().unwrap();
+        let mut reg = CapabilityRegistry::new();
+        reg.register(
+            CapabilityId("boom".into()),
+            Arc::new(|_env, _ctx| panic!("no BSDF backend compiled in")),
+        );
+        let exec = LocalExecutor::from_cache_dir(reg, dir.path()).unwrap();
+        let handle = exec.submit(smoke_envelope("boom")).unwrap();
+        let err = handle
+            .result
+            .recv()
+            .unwrap()
+            .expect_err("panicking handler must yield Err, not Ok");
+        assert_eq!(err.code, JobErrorCode::HandlerError);
+        assert!(
+            err.message.contains("handler panicked") && err.message.contains("no BSDF backend"),
+            "message should carry the panic payload: {}",
+            err.message
+        );
+    }
 
     #[test]
     fn rejects_unknown_capability() {
