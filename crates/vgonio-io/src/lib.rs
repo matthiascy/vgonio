@@ -15,7 +15,7 @@ pub mod vgbsdf;
 pub mod subdivision;
 
 #[cfg(feature = "embree")]
-use embree::{BufferUsage, Device, Format, Geometry, GeometryKind};
+use embree::{BufferUsage, Device, Format, GeometryBuilder, GeometryKind};
 pub use vgn_core::{asset, TriangulationPattern};
 
 use crate::dcel::HalfEdgeMesh;
@@ -921,13 +921,16 @@ impl MicroSurfaceMesh {
         (p0 + p1 + p2) / 3.0
     }
 
-    /// Constructs an embree geometry from the `MicroSurfaceMesh`.
+    /// Constructs an embree triangle-geometry builder from the
+    /// `MicroSurfaceMesh`.
+    ///
+    /// The returned [`GeometryBuilder`] has its vertex and index buffers
+    /// populated but is left uncommitted, so callers can attach an intersect
+    /// filter before calling [`GeometryBuilder::commit`].
     #[cfg(feature = "embree")]
-    pub fn as_embree_geometry(&self, device: &Device) -> Geometry {
+    pub fn as_embree_geometry<'a>(&self, device: &Device) -> GeometryBuilder<'a> {
         let mut geom = device.create_geometry(GeometryKind::TRIANGLE).unwrap();
-        geom.set_new_buffer(BufferUsage::VERTEX, 0, Format::FLOAT3, 16, self.num_verts)
-            .unwrap()
-            .view_mut::<[f32; 4]>()
+        geom.set_new_buffer::<[f32; 4]>(BufferUsage::VERTEX, 0, Format::FLOAT3, 16, self.num_verts)
             .unwrap()
             .iter_mut()
             .zip(self.verts.iter())
@@ -937,12 +940,9 @@ impl MicroSurfaceMesh {
                 vert[2] = pos.z;
                 vert[3] = 1.0;
             });
-        geom.set_new_buffer(BufferUsage::INDEX, 0, Format::UINT3, 12, self.num_facets)
-            .unwrap()
-            .view_mut::<u32>()
+        geom.set_new_buffer::<u32>(BufferUsage::INDEX, 0, Format::UINT3, 12, self.num_facets)
             .unwrap()
             .copy_from_slice(&self.facets);
-        geom.commit();
         geom
     }
 

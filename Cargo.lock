@@ -1203,9 +1203,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "embree"
-version = "0.3.7"
-source = "git+https://github.com/matthiascy/embree-rs.git?branch=own#be36911a21ce1d64207e6ecc282a47559aead986"
+name = "embree3"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18186a66f10d926fcd6f37ec70d261f41bbb2efdf4049c6e298ed0efbbc5ed33"
 
 [[package]]
 name = "encode_unicode"
@@ -4076,7 +4077,7 @@ dependencies = [
  "egui_dock",
  "egui_extras",
  "egui_plot",
- "embree",
+ "embree3",
  "env_logger",
  "exr",
  "flate2",
@@ -4213,7 +4214,7 @@ dependencies = [
  "byteorder",
  "chrono",
  "clap",
- "embree",
+ "embree3",
  "exr",
  "flate2",
  "glam 0.28.0",

@@ -202,11 +202,15 @@ type QueryContext<'a> = IntersectContextExt<SoARayStreamMut<'a>>;
 fn intersect_filter_stream<'a>(
     rays: RayN<'a>,
     hits: HitN<'a>,
-    mut valid: ValidityN,
-    ctx: &mut QueryContext,
-    _user_data: Option<&mut ()>,
+    mut valid: ValidityN<'a>,
+    ctx: &mut IntersectContext,
+    _user_data: Option<&()>,
 ) {
     let n = rays.len();
+    // SAFETY: `simulate_bsdf_measurement_single_point` always drives this
+    // geometry's queries with an `IntersectContextExt<SoARayStreamMut>`, so the
+    // base context handed to this filter carries a matching `ext` payload.
+    let ext = unsafe { ctx.ext_mut::<SoARayStreamMut>() };
     for i in 0..n {
         // Ignore invalid rays.
         if valid[i] != ValidMask::Valid {
@@ -220,7 +224,7 @@ fn intersect_filter_stream<'a>(
             #[cfg(all(debug_assertions, feature = "vvdbg"))]
             log::trace!("ray {} -- hit: {}", ray_id, prim_id);
 
-            let hit_info = &mut ctx.ext.last_hit[ray_id];
+            let hit_info = &mut ext.last_hit[ray_id];
             if prim_id != INVALID_ID && prim_id == hit_info.last_prim_id {
                 #[cfg(all(debug_assertions, feature = "vvdbg"))]
                 log::trace!("nudging ray origin");
@@ -237,25 +241,19 @@ fn intersect_filter_stream<'a>(
 
                 #[cfg(feature = "vdbg")]
                 {
-                    let traj_node = ctx.ext.trajectory[ray_id].last_mut().unwrap();
+                    let traj_node = ext.trajectory[ray_id].last_mut().unwrap();
                     traj_node.org += hit_info.last_normal * 1e-4;
                 }
             } else {
                 // calculate the intersection point using the u,v coordinates
                 let [u, v] = hits.uv(i);
-                let [i0, i1, i2] = ctx
-                    .ext
+                let [i0, i1, i2] = ext
                     .msurf
-                    .get_buffer(BufferUsage::INDEX, 0)
-                    .unwrap()
-                    .view::<[u32; 3]>()
+                    .map_buffer::<[u32; 3]>(BufferUsage::INDEX, 0)
                     .unwrap()[prim_id as usize];
-                let vertices = ctx
-                    .ext
+                let vertices = ext
                     .msurf
-                    .get_buffer(BufferUsage::VERTEX, 0)
-                    .unwrap()
-                    .view::<[f32; 4]>()
+                    .map_buffer::<[f32; 4]>(BufferUsage::VERTEX, 0)
                     .unwrap();
                 let v0 = {
                     let v = vertices[i0 as usize];
@@ -285,9 +283,9 @@ fn intersect_filter_stream<'a>(
                 let cos_i = ray_dir.dot(normal);
                 #[cfg(feature = "vdbg")]
                 {
-                    let last_id = ctx.ext.trajectory[ray_id].len() - 1;
-                    ctx.ext.trajectory[ray_id][last_id].cos = Some(cos_i);
-                    ctx.ext.trajectory[ray_id].push(RayTrajectoryNode {
+                    let last_id = ext.trajectory[ray_id].len() - 1;
+                    ext.trajectory[ray_id][last_id].cos = Some(cos_i);
+                    ext.trajectory[ray_id].push(RayTrajectoryNode {
                         org: point,
                         dir: new_dir,
                         cos: None,
@@ -319,10 +317,11 @@ pub fn create_resources(mesh: &MicroSurfaceMesh) -> (Device, Scene, Arc<Geometry
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
 
-    // Upload the surface's mesh to the Embree scene.
-    let mut geometry = mesh.as_embree_geometry(&device);
-    geometry.set_intersect_filter_function(intersect_filter_stream);
-    geometry.commit();
+    // Upload the surface's mesh to the Embree scene. The filter is registered
+    // on the builder, then `commit` consumes it into the final geometry.
+    let mut builder = mesh.as_embree_geometry(&device);
+    builder.set_intersect_filter_function(intersect_filter_stream);
+    let geometry = builder.commit();
 
     scene.attach_geometry(&geometry);
     scene.commit();
@@ -633,9 +632,8 @@ mod tests {
         let device = Device::with_config(Config::default()).unwrap();
         let mut scene = device.create_scene().unwrap();
         scene.set_flags(SceneFlags::ROBUST);
-        let mut geom = mesh.as_embree_geometry(&device);
-        geom.commit();
-        scene.attach_geometry(&geom);
+        let geometry = mesh.as_embree_geometry(&device).commit();
+        scene.attach_geometry(&geometry);
         scene.commit();
 
         // Fire a ray from 10 units above, slightly off-center so it lands
