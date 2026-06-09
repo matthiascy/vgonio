@@ -82,7 +82,13 @@ impl<'g> SoARayStreams<'g> {
         #[cfg(not(feature = "vdbg"))] iors_t: &'g [Ior],
     ) -> Self {
         let n_stream = compute_num_of_streams(n_ray);
-        let last_stream_size = n_ray % Self::RAY_STREAM_SIZE;
+        // A count that is an exact multiple of `RAY_STREAM_SIZE` fills the last
+        // stream completely; `n_ray % RAY_STREAM_SIZE` would make it zero-length
+        // (and the per-stream `last_hit` slice empty), so clamp it up.
+        let last_stream_size = match n_ray % Self::RAY_STREAM_SIZE {
+            0 if n_ray > 0 => Self::RAY_STREAM_SIZE,
+            rem => rem,
+        };
         let total_stream_size = n_stream * Self::RAY_STREAM_SIZE;
         let last_hit = vec![HitInfo::new(); n_ray].into_boxed_slice();
         Self {
@@ -787,5 +793,31 @@ mod tests {
             total_rays,
             max_bounces
         );
+    }
+
+    /// Regression: when the emitted-ray count is an exact multiple of
+    /// `RAY_STREAM_SIZE`, `SoARayStreams` must still cover every ray. The old
+    /// `last_stream_size = n_ray % RAY_STREAM_SIZE` made the final stream
+    /// zero-length for multiples of 1024, so `intersect_filter_stream` indexed
+    /// an empty `last_hit` slice and aborted the measurement mid-run.
+    #[test]
+    fn streams_cover_all_rays_when_count_is_multiple_of_stream_size() {
+        let iors = [Ior::new_dielectric(1.0)];
+
+        let surf = MicroSurface::new(5, 5, 1.0, 1.0, 0.0, LengthUnit::UM);
+        let mesh = surf.as_micro_surface_mesh(
+            HeightOffset::None,
+            TriangulationPattern::BottomLeftToTopRight,
+            None,
+        );
+        let (_device, _scene, geometry) = create_resources(&mesh);
+
+        // Exact multiple of RAY_STREAM_SIZE: the case that crashed a real
+        // `measure` run with `num_rays = 1024`.
+        let n_ray = SoARayStreams::RAY_STREAM_SIZE * 2;
+        let mut stream_data = SoARayStreams::new(geometry.clone(), n_ray, &iors, &iors);
+
+        let covered: usize = stream_data.streams_mut().map(|s| s.last_hit.len()).sum();
+        assert_eq!(covered, n_ray, "streams must cover all {n_ray} rays, covered {covered}");
     }
 }

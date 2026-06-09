@@ -533,4 +533,142 @@ mod tests {
             serde_json::to_string(&decoded).expect("decoded MeasureRequest should serialize");
         assert_eq!(encoded, re_encoded);
     }
+
+    // ------------------------------------------------------------------
+    // End-to-end: the whole `measure` pipeline on a generated flat surface,
+    // driven through the real local executor (the same path `cmd_measure`
+    // uses). Builds a flat micro-surface + a BSDF description on disk, submits
+    // a `MeasureRequest`, and asserts it drives parse -> load -> embree trace
+    // -> receiver collect -> write and lands a `.vgmo`. Uses `vac`/`vac` media
+    // so no IOR database is required. Mirrors the manual CLI run.
+    // ------------------------------------------------------------------
+    #[cfg(feature = "embree")]
+    #[test]
+    fn measure_pipeline_writes_vgmo_for_flat_surface() {
+        use super::run;
+        use std::sync::{atomic::AtomicU32, Arc};
+        use vgn_core::{
+            config::{Config, UserConfig},
+            units::LengthUnit,
+            TriangulationPattern,
+        };
+        use vgn_io::MicroSurface;
+        use vgn_job_api::{
+            artifact::{ArtifactKind, ArtifactRef},
+            context::{
+                ArtifactHandle, ArtifactStore, CancellationToken, JobContext, ProgressSender,
+            },
+            envelope::TraceContext,
+            error::JobError,
+            ids::{IdempotencyKey, JobId},
+        };
+
+        // The measure orchestration never touches the artifact store, so a
+        // panicking stub is safe and keeps the test off the executor's plumbing.
+        #[derive(Debug)]
+        struct NoArtifacts;
+        impl ArtifactStore for NoArtifacts {
+            fn resolve(&self, _: &ArtifactRef) -> Result<ArtifactHandle, JobError> {
+                unimplemented!("measure does not resolve artifacts")
+            }
+            fn publish(&self, _: ArtifactKind, _: bytes::Bytes) -> Result<ArtifactRef, JobError> {
+                unimplemented!("measure does not publish artifacts")
+            }
+        }
+
+        // The media registry is a process-wide OnceLock the real app installs
+        // at startup; bootstrap it here so the description's medium tokens
+        // parse. Ignore `AlreadyInitialized` if another test got there first.
+        let _ = vgn_core::utils::medium::bootstrap(None, None);
+
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let cache_dir = root.join("cache");
+        let out_dir = root.join("out");
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        std::fs::create_dir_all(&out_dir).unwrap();
+
+        // Flat micro-surface on disk.
+        let surf_path = root.join("flat.vgms");
+        MicroSurface::new(64, 64, 0.1, 0.1, 0.0, LengthUnit::UM)
+            .write_to_file(&surf_path, FileEncoding::Binary, CompressionScheme::None)
+            .unwrap();
+
+        // BSDF description on disk. `vac`/`vac` => no IOR database; `num_rays`
+        // is not a multiple of the ray-stream size.
+        let desc_path = root.join("brdf.yml");
+        std::fs::write(
+            &desc_path,
+            format!(
+                r#"---
+type: !bsdf
+  kind: brdf
+  sim_kind: !geom-optics embree
+  incident_medium: vac
+  transmitted_medium: vac
+  fresnel: false
+  emitter:
+    num_rays: 512
+    num_sectors: 1
+    max_bounces: 4
+    zenith: 0deg .. =30deg / 30deg
+    azimuth: 0deg .. =360deg / 120deg
+    spectrum: 400 nm .. =400 nm / 100 nm
+  receivers:
+    - domain: upper_hemisphere
+      precision:
+        theta: 2.0 deg
+        phi: 2.0 deg
+      scheme: beckers
+surfaces:
+  - {surface}
+"#,
+                surface = surf_path.display()
+            ),
+        )
+        .unwrap();
+
+        let config = Config {
+            sys_config_dir: root.to_path_buf(),
+            sys_cache_dir: cache_dir.clone(),
+            sys_data_dir: root.join("data"),
+            cwd: root.to_path_buf(),
+            user: UserConfig {
+                cache_dir: Some(cache_dir),
+                output_dir: Some(out_dir.clone()),
+                data_dir: None,
+                triangulation: TriangulationPattern::default(),
+                excluded_ior_files: None,
+            },
+        };
+
+        let request = MeasureRequest {
+            inputs: vec![desc_path],
+            output: Some(out_dir.clone()),
+            output_format: OutputFormat::Vgmo,
+            resolution: 64,
+            encoding: FileEncoding::Binary,
+            compression: CompressionScheme::None,
+        };
+
+        let (tx, _events) = std::sync::mpsc::channel();
+        let ctx = JobContext {
+            job_id: JobId::new(),
+            idempotency_key: IdempotencyKey("test-measure".into()),
+            progress: ProgressSender::new(tx),
+            phase_counter: Arc::new(AtomicU32::new(0)),
+            cancel: CancellationToken::new(),
+            artifacts: Arc::new(NoArtifacts),
+            trace: TraceContext::default(),
+            deadline: None,
+        };
+
+        run(request, Arc::new(config), ctx).expect("measure run should succeed");
+
+        let wrote_vgmo = std::fs::read_dir(&out_dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|e| e.path().extension().is_some_and(|ext| ext == "vgmo"));
+        assert!(wrote_vgmo, "expected a .vgmo output in {}", out_dir.display());
+    }
 }
