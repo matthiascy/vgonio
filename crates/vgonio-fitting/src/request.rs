@@ -186,7 +186,7 @@ impl BrdfFitRequest {
     /// `load_and_fit` call), so their distro is never read; every other
     /// variant flows into `brdf_fitting_brute_force` / `brdf_fitting_nllsq`
     /// where `req.distro.expect(...)` would otherwise panic.
-    fn source_invokes_fit(&self) -> bool {
+    pub fn source_invokes_fit(&self) -> bool {
         !matches!(self.source, BrdfSource::Utia | BrdfSource::Unknown)
     }
 
@@ -194,7 +194,7 @@ impl BrdfFitRequest {
     /// Used for the CSV `kind` column so the Vgonio+Clausen resample path
     /// records "Vgonio" rather than the resampled brdf's "Clausen", matching
     /// the original (pre-request) orchestration.
-    fn source_kind(&self) -> MeasuredBrdfKind {
+    pub fn source_kind(&self) -> MeasuredBrdfKind {
         match self.source {
             BrdfSource::Vgonio { .. } => MeasuredBrdfKind::Vgonio,
             BrdfSource::Clausen => MeasuredBrdfKind::Clausen,
@@ -252,170 +252,4 @@ pub enum FittingMethod {
     Brute,
     /// Non-linear least squares fitting method.
     Nllsq,
-}
-
-impl TryFrom<&FitOptions> for FitRequest {
-    type Error = VgonioError;
-
-    fn try_from(opts: &FitOptions) -> Result<Self, Self::Error> {
-        if opts.inputs.is_empty() {
-            return Err(VgonioError::new(
-                "No input files specified or some files do not exist.",
-                None,
-            ));
-        }
-
-        if opts.ndf {
-            let distro = opts.distro.ok_or_else(|| {
-                VgonioError::new("NDF fitting requires --distro to be set.", None)
-            })?;
-            return Ok(FitRequest::Ndf(NdfFitRequest {
-                inputs: opts.inputs.clone(),
-                distro,
-            }));
-        }
-
-        if opts.clausen && opts.kind != MeasuredBrdfKind::Vgonio {
-            return Err(VgonioError::new(
-                "--clausen is only supported with --kind vgonio.",
-                None,
-            ));
-        }
-
-        let source = match opts.kind {
-            MeasuredBrdfKind::Vgonio => BrdfSource::Vgonio {
-                level: opts.level,
-                clausen_resample: opts.clausen.then(|| ClausenResample { dense: opts.dense }),
-            },
-            MeasuredBrdfKind::Clausen => BrdfSource::Clausen,
-            MeasuredBrdfKind::Merl => BrdfSource::Merl,
-            MeasuredBrdfKind::Rgl => BrdfSource::Rgl,
-            MeasuredBrdfKind::Yan2018 => BrdfSource::Yan2018,
-            MeasuredBrdfKind::Utia => BrdfSource::Utia,
-            MeasuredBrdfKind::Unknown => BrdfSource::Unknown,
-        };
-
-        let roughness = build_roughness(opts)?;
-        let theta_limit = opts.theta_limit.map(Radians::from_degrees);
-        let output = resolve_output(opts)?;
-
-        Ok(FitRequest::Brdf(BrdfFitRequest {
-            inputs: opts.inputs.clone(),
-            source,
-            family: opts.family,
-            distro: opts.distro,
-            symmetry: opts.symmetry,
-            roughness,
-            method: opts.method,
-            brute_precision: opts.brute_precision,
-            error_metric: opts.error_metric,
-            weighting: opts.weighting,
-            theta_limit,
-            per_wavelength: opts.per_wavelength,
-            plot: opts.plot,
-            #[cfg(feature = "cuda")]
-            cuda: opts.cuda,
-            output,
-        }))
-    }
-}
-
-fn build_roughness(opts: &FitOptions) -> Result<Roughness, VgonioError> {
-    let to_range = |[s, e, t]: [f64; 3]| StepRangeIncl::new(s, e, t);
-
-    // Per-wavelength anisotropic file pair — clap guarantees both are set
-    // together (`requires`) and conflict with the single ax/ay/a inputs.
-    if let (Some(ax_path), Some(ay_path)) = (
-        opts.per_wavelength_ax.as_ref(),
-        opts.per_wavelength_ay.as_ref(),
-    ) {
-        let ax = read_per_wavelength_roughness_values_unbounded(ax_path).map_err(|e| {
-            VgonioError::new(&format!("Failed to read --per-wl-ax file: {}", e), None)
-        })?;
-        let ay = read_per_wavelength_roughness_values_unbounded(ay_path).map_err(|e| {
-            VgonioError::new(&format!("Failed to read --per-wl-ay file: {}", e), None)
-        })?;
-        if ax.len() != ay.len() {
-            return Err(VgonioError::new(
-                &format!(
-                    "--per-wl-ax has {} entries but --per-wl-ay has {}.",
-                    ax.len(),
-                    ay.len()
-                ),
-                None,
-            ));
-        }
-        return Ok(Roughness::PerWavelengthAniso { ax, ay });
-    }
-
-    // The TODO from the original code (--per-wl-a) is preserved: there is
-    // no isotropic per-wavelength path yet. If a user supplies it, surface
-    // a clear error rather than silently producing an empty Roughness.
-    if opts.per_wavelength_a.is_some() {
-        return Err(VgonioError::new(
-            "--per-wl-a is not yet supported (per-wavelength isotropic ranges).",
-            None,
-        ));
-    }
-
-    if let Some(a) = opts.a {
-        return Ok(Roughness::Iso(to_range(a)));
-    }
-
-    if let (Some(ax), Some(ay)) = (opts.ax, opts.ay) {
-        return Ok(Roughness::Aniso {
-            ax: to_range(ax),
-            ay: to_range(ay),
-        });
-    }
-
-    Ok(Roughness::Default)
-}
-
-fn resolve_output(opts: &FitOptions) -> Result<Option<PathBuf>, VgonioError> {
-    let Some(raw) = opts.output.as_ref() else {
-        return Ok(None);
-    };
-    if raw != "auto" {
-        return Ok(Some(PathBuf::from(raw)));
-    }
-    // "auto" magic: build a filename from the first input + error metric +
-    // distro + weighting. The original CLI would `unwrap()` and panic here;
-    // we promote each missing input to a structured error so a user that
-    // asked for output never silently gets none written.
-    let first_input = opts.inputs.first().ok_or_else(|| {
-        VgonioError::new(
-            "--output auto requires at least one input file to derive a stem from.",
-            None,
-        )
-    })?;
-    let stem = first_input
-        .file_stem()
-        .ok_or_else(|| {
-            VgonioError::new(
-                format!(
-                    "--output auto requires the first input ({}) to have a file stem.",
-                    first_input.display()
-                ),
-                None,
-            )
-        })?
-        .to_string_lossy()
-        .into_owned();
-    let err = opts.error_metric.ok_or_else(|| {
-        VgonioError::new(
-            "--output auto requires --err to be set so the filename can encode it.",
-            None,
-        )
-    })?;
-    let distro = opts.distro.ok_or_else(|| {
-        VgonioError::new(
-            "--output auto requires --distro to be set so the filename can encode it.",
-            None,
-        )
-    })?;
-    Ok(Some(PathBuf::from(format!(
-        "{}_{}_{:?}_{:?}.csv",
-        stem, err, distro, opts.weighting
-    ))))
 }

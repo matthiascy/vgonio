@@ -31,7 +31,7 @@ default = ["embree", "dep:vgn_bxdf", "vgn_bxdf/io"]
 embree = ["dep:embree", "vgn_io/embree"]
 optix = []
 bench = ["vgn_io/bench"]
-fitting = ["dep:vgn_bxdf", "vgn_bxdf/fitting"]
+fitting = ["dep:vgonio-fitting", "dep:vgn_bxdf", "vgn_bxdf/fitting"]
 surf-obj = ["vgn_io/surf-obj"]
 surf-gen = ["vgn_io/surf-gen"]
 vdbg = []
@@ -87,6 +87,7 @@ vgn_jabr.workspace = true
 vgn_uxgx = { workspace = true, features = ["gfx", "gui"] }
 vgn_core = { workspace = true, features = ["cli", "winit", "io", "config"] }
 vgn_bxdf = { workspace = true, optional = true, features = ["fitting", "io"] }
+vgonio-fitting = { path = "../vgonio-fitting", optional = true }
 vgonio-job-api = { path = "../vgonio-job-api" }
 vgonio-executor = { path = "../vgonio-executor" }
 vgonio-measurement = { path = "../vgonio-measurement" }

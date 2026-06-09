@@ -8,6 +8,10 @@ use vgn_bxdf::{
     },
     fitting::{FittingProblem, FittingReport, MinimisationReport, Roughness},
 };
+use vgn_measurement::{
+    mfd::{MeasuredGafData, MeasuredNdfData},
+    params::NdfMeasurementMode,
+};
 use vgn_core::{
     math::sph_to_cart,
     units::Radians,
@@ -17,6 +21,29 @@ use vgn_core::{
     },
     ErrorMetric, Symmetry, Weighting,
 };
+
+macro_rules! impl_least_squares_problem_common_methods {
+    (@aniso => $self:ident, $params_ty:ty) => {
+        fn set_params(&mut $self, params: &$params_ty) {
+            $self.model.set_params(params.as_ref());
+        }
+
+        fn params(&$self) -> $params_ty {
+            let [x, y] = $self.model.params();
+            <$params_ty>::new(x, y)
+        }
+    };
+    (@iso2 => $self:ident, $params_ty:ty) => {
+        fn set_params(&mut $self, params: &$params_ty) {
+            $self.model.set_params(&[params[0], params[0]]);
+        }
+
+        fn params(&$self) -> $params_ty {
+            let [x, _] = $self.model.params();
+            <$params_ty>::new(x)
+        }
+    };
+}
 
 /// Enum representing the measured microfacet distribution related data on which
 /// the fitting procedure is based.

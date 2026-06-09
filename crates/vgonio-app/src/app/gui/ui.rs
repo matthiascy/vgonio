@@ -14,13 +14,12 @@ use crate::app::gui::{
     DebuggingInspector,
 };
 #[cfg(feature = "fitting")]
-use crate::{
-    fitting::{MfdFittingData, MicrofacetDistributionFittingProblem},
-    measure::{
-        bsdf::BsdfMeasurement,
-        mfd::{MeasuredGafData, MeasuredNdfData},
-    },
+use crate::measure::{
+    bsdf::BsdfMeasurement,
+    mfd::{MeasuredGafData, MeasuredNdfData},
 };
+#[cfg(feature = "fitting")]
+use vgn_fitting::mfd::{MfdFittingData, MicrofacetDistributionFittingProblem};
 use egui_file_dialog::{DialogMode, FileDialog};
 use std::{
     path::PathBuf,

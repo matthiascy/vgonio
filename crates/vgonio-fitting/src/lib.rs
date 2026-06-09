@@ -2,6 +2,8 @@
 //! `register_handlers` for the executor registry. Heavy fitting algorithms
 //! live in `vgn_bxdf::fitting`; this crate owns the orchestration that
 //! drives them per `JobEnvelope`.
+#![feature(adt_const_params)]
+#![feature(generic_const_exprs)]
 
 use bytes::Bytes;
 use std::sync::Arc;

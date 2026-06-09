@@ -384,3 +384,14 @@ impl ComputeCache {
         }
     }
 }
+
+impl ComputeCache {
+    /// Closure-scoped shared access, mirroring the `Cache` facade's
+    /// `read`/`write` shape. `ComputeCache` carries no interior lock, so these
+    /// just hand out `self`; orchestration code can then share one call shape
+    /// across the facade and the raw compute cache.
+    pub fn read<R>(&self, reader: impl FnOnce(&Self) -> R) -> R { reader(self) }
+
+    /// Closure-scoped mutable access; see [`Self::read`].
+    pub fn write<R>(&mut self, writer: impl FnOnce(&mut Self) -> R) -> R { writer(self) }
+}

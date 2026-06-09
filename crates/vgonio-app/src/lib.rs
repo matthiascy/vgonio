@@ -28,7 +28,8 @@ mod io;
 #[cfg(any(test, feature = "test-support"))]
 pub mod io;
 pub mod measure;
-mod orchestration;
+#[cfg(feature = "fitting")]
+mod fitting;
 pub(crate) mod pyplot;
 
 #[cfg(feature = "fitting")]
