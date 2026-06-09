@@ -605,7 +605,8 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::{create_resources, QueryContext, SoARayStreams};
+    use super::{create_resources, simulate_bsdf_measurement, QueryContext, SoARayStreams};
+    use crate::measure::{bsdf::emitter::Emitter, params::BsdfMeasurementParams};
     use embree::{Config, Device, IntersectContext, Ray, RayHit, RayHitNp, RayNp, SceneFlags};
     use vgn_core::{optics::Ior, units::LengthUnit, TriangulationPattern};
     use vgn_io::{HeightOffset, MicroSurface};
@@ -729,5 +730,62 @@ mod tests {
                 hit.factor
             );
         }
+    }
+
+    /// Runs the live embree BSDF simulation on a flat micro-surface (a perfect
+    /// mirror) through the real emitter -> multi-bounce trace path. A flat
+    /// surface reflects every incident ray exactly once and the ray then
+    /// escapes, so this verifies the bounce loop terminates correctly (the
+    /// filter's self-intersection nudging) and that rays actually hit. This is
+    /// the highest-level embree path still runnable: the `measure_bsdf_rt`
+    /// orchestration above it is currently commented out (mid-refactor).
+    #[test]
+    fn simulate_bsdf_on_flat_surface_reflects_once() {
+        let iors_i = [Ior::new_dielectric(1.0)];
+        let iors_t = [Ior::new_conductor(0.2, 3.0)];
+
+        let surf = MicroSurface::new(11, 11, 1.0, 1.0, 0.0, LengthUnit::UM);
+        let mesh = surf.as_micro_surface_mesh(
+            HeightOffset::None,
+            TriangulationPattern::BottomLeftToTopRight,
+            None,
+        );
+
+        // Real emitter; just fewer rays/bounces to keep the test quick.
+        let mut params = BsdfMeasurementParams::default();
+        params.emitter.num_rays = 128;
+        params.emitter.max_bounces = 4;
+
+        let emitter = Emitter::new(&params.emitter);
+        let sector = emitter.circular_sectors().next().unwrap();
+        let results: Vec<_> =
+            simulate_bsdf_measurement(&params, sector, &mesh, &iors_i, &iors_t).collect();
+
+        assert!(!results.is_empty(), "emitter should yield measurement points");
+
+        let mut total_rays = 0usize;
+        let mut total_hits = 0usize;
+        let mut max_bounces = 0u32;
+        for r in &results {
+            for &b in r.bounces.iter() {
+                total_rays += 1;
+                if b >= 1 {
+                    total_hits += 1;
+                }
+                max_bounces = max_bounces.max(b);
+                // A flat mirror reflects each ray once and the ray then escapes;
+                // a higher count means self-intersection handling regressed.
+                assert!(b <= 1, "flat surface should reflect at most once, got {b} bounces");
+            }
+        }
+        assert!(total_hits > 0, "some emitted rays should hit the flat surface");
+
+        println!(
+            "[measure] flat surface: {} incident directions, {}/{} rays hit, max bounces = {}",
+            results.len(),
+            total_hits,
+            total_rays,
+            max_bounces
+        );
     }
 }
