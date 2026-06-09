@@ -3,8 +3,8 @@
 // TODO: verification
 
 #[cfg(feature = "vdbg")]
-use crate::measure::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
-use crate::measure::{
+use crate::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
+use crate::{
     bsdf::{
         emitter::EmitterCircularSector,
         rtc,
@@ -54,11 +54,11 @@ pub fn measure_bsdf(
         log::debug!("mesh extent: {:?}", mesh.bounds);
         log::debug!(
             "emitter orbit radius: {}",
-            crate::measure::estimate_orbit_radius(mesh)
+            crate::measurement::estimate_orbit_radius(mesh)
         );
         log::debug!(
             "emitter disc radius: {:?}",
-            crate::measure::estimate_disc_radius(mesh)
+            crate::measurement::estimate_disc_radius(mesh)
         );
     }
 
@@ -1218,7 +1218,7 @@ impl<'ms> MultilevelGrid<'ms> {
 
 #[cfg(test)]
 mod tests {
-    use crate::measure::bsdf::rtc::{grid::MultilevelGrid, Hit, Ray};
+    use crate::bsdf::rtc::{grid::MultilevelGrid, Hit, Ray};
     use vgn_core::{
         math::{ulp_eq, IVec2, UVec2, Vec3, Vec3Swizzles},
         units::LengthUnit,

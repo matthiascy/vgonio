@@ -1,15 +1,13 @@
 //! Sensor of the virtual gonio-reflectometer.
 #[cfg(feature = "vdbg")]
-use crate::measure::bsdf::rtc::RayTrajectory;
+use crate::bsdf::rtc::RayTrajectory;
 #[cfg(feature = "vdbg")]
 use vgn_core::math::{Vec3, Vec3A};
 
 use crate::{
-    app::cache::ComputeCache,
-    measure::{
-        bsdf::{SingleBsdfMeasurementStats, SingleSimResult},
-        params::BsdfMeasurementParams,
-    },
+    bsdf::{SingleBsdfMeasurementStats, SingleSimResult},
+    cache::ComputeCache,
+    params::BsdfMeasurementParams,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::{atomic, atomic::AtomicU64};

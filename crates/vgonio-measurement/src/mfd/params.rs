@@ -1,4 +1,3 @@
-use crate::error::RuntimeError;
 use serde::{Deserialize, Deserializer, Serialize};
 use vgn_core::{
     error::VgonioError,
@@ -156,21 +155,21 @@ impl NdfMeasurementParams {
                     return Err(VgonioError::new(
                         "Microfacet distribution measurement: azimuth angle must be in the range \
                          [0°, 360°]",
-                        Some(Box::new(RuntimeError::InvalidParameters)),
+                        None,
                     ));
                 }
                 if !(zenith.start >= Radians::ZERO && zenith.start <= Radians::HALF_PI) {
                     return Err(VgonioError::new(
                         "Microfacet distribution measurement: zenith angle must be in the range \
                          [0°, 90°]",
-                        Some(Box::new(RuntimeError::InvalidParameters)),
+                        None,
                     ));
                 }
                 if !(azimuth.step_size > rad!(0.0) && zenith.step_size > rad!(0.0)) {
                     return Err(VgonioError::new(
                         "Microfacet distribution measurement: azimuth and zenith step sizes must \
                          be positive!",
-                        Some(Box::new(RuntimeError::InvalidParameters)),
+                        None,
                     ));
                 }
             },
@@ -178,7 +177,7 @@ impl NdfMeasurementParams {
                 if precision <= rad!(0.0) {
                     return Err(VgonioError::new(
                         "Microfacet distribution measurement: theta precision must be positive!",
-                        Some(Box::new(RuntimeError::InvalidParameters)),
+                        None,
                     ));
                 }
             },
@@ -243,7 +242,7 @@ impl GafMeasurementParams {
             return Err(VgonioError::new(
                 "Microfacet shadowing-masking measurement: azimuth angle must be in the range \
                  [0°, 360°]",
-                Some(Box::new(RuntimeError::InvalidParameters)),
+                None,
             ));
         }
         if !(self.zenith.start >= Radians::ZERO
@@ -253,14 +252,14 @@ impl GafMeasurementParams {
             return Err(VgonioError::new(
                 "Microfacet shadowing-masking measurement: zenith angle must be in the range [0°, \
                  90°]",
-                Some(Box::new(RuntimeError::InvalidParameters)),
+                None,
             ));
         }
         if !(self.azimuth.step_size > rad!(0.0) && self.zenith.step_size > rad!(0.0)) {
             return Err(VgonioError::new(
                 "Microfacet shadowing-masking measurement: azimuth and zenith step sizes must be \
                  positive!",
-                Some(Box::new(RuntimeError::InvalidParameters)),
+                None,
             ));
         }
 
@@ -334,7 +333,7 @@ impl SdfMeasurementParams {
         if self.max_slope <= 0.0 {
             return Err(VgonioError::new(
                 "Microfacet slope distribution measurement: max_slope must be positive!",
-                Some(Box::new(RuntimeError::InvalidParameters)),
+                None,
             ));
         }
         Ok(self)

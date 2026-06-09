@@ -1,7 +1,6 @@
 //! Measurement parameters.
-pub use crate::measure::{bsdf::params::*, mfd::params::*};
+pub use crate::{bsdf::params::*, mfd::params::*};
 
-use crate::error::RuntimeError;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
@@ -268,7 +267,7 @@ impl MeasurementDescription {
                     .map_err(|err| {
                         VgonioError::new(
                             "Failed to deserialize measurement description",
-                            Some(Box::new(RuntimeError::from(err))),
+                            Some(Box::new(err)),
                         )
                     })
                     .and_then(|measurement| measurement.validate())

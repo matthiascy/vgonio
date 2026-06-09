@@ -19,8 +19,6 @@ extern crate core;
 
 mod app;
 mod error;
-#[cfg(feature = "fitting")]
-pub mod fitting;
 #[cfg(not(any(test, feature = "test-support")))]
 mod io;
 

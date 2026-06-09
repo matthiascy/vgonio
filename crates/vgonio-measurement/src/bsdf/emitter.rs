@@ -1,6 +1,6 @@
 //! Light source of the measurement system.
 
-use crate::measure::{bsdf::rtc::Ray, SphericalTransform};
+use crate::{bsdf::rtc::Ray, measurement::SphericalTransform};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
@@ -17,8 +17,8 @@ use vgn_io::MicroSurfaceMesh;
 /// The light source is represented by a disk tangent to the hemisphere around
 /// which the emitter is rotating. The orbit radius of the emitter and the disk
 /// radius are estimated according to the size of the surface to be measured.
-/// See [`crate::measure::estimate_orbit_radius`] and
-/// [`crate::measure::estimate_shape_radius`].
+/// See [`crate::measurement::estimate_orbit_radius`] and
+/// [`crate::measurement::estimate_shape_radius`].
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EmitterParams {
     /// Number of emitted rays.
@@ -94,7 +94,7 @@ impl EmitterParams {
             tstop.prettified()
         );
         let mut samples = vec![Vec3::ZERO; num_rays].into_boxed_slice();
-        crate::measure::uniform_sampling_on_unit_disk(&mut samples, tstart, tstop);
+        crate::measurement::uniform_sampling_on_unit_disk(&mut samples, tstart, tstop);
         EmitterSamples(samples)
     }
 
@@ -256,15 +256,15 @@ impl<'a> EmitterCircularSector<'a> {
     /// Transforms the samples from the sampling space to the emitter's local
     /// coordinate system.
     pub fn samples_at(&self, pos: Sph2, mesh: &MicroSurfaceMesh) -> Vec<Vec3> {
-        let disk_radius = crate::measure::estimate_disc_radius(mesh);
-        let orbit_radius = crate::measure::estimate_orbit_radius(mesh);
+        let disk_radius = crate::measurement::estimate_disc_radius(mesh);
+        let orbit_radius = crate::measurement::estimate_orbit_radius(mesh);
         EmitterParams::transform_samples(&self.samples, pos, orbit_radius, disk_radius)
     }
 
     /// Emits rays from the emitter at `pos` covering the whole surface.
     pub fn emit_rays(&self, pos: Sph2, mesh: &MicroSurfaceMesh) -> Vec<Ray> {
-        let disk_radius = crate::measure::estimate_disc_radius(mesh);
-        let orbit_radius = crate::measure::estimate_orbit_radius(mesh);
+        let disk_radius = crate::measurement::estimate_disc_radius(mesh);
+        let orbit_radius = crate::measurement::estimate_orbit_radius(mesh);
         log::trace!(
             "[Emitter] emitting rays from {} with orbit radius = {}, disk radius = {:?}",
             pos,

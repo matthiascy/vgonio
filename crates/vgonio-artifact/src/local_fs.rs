@@ -6,13 +6,13 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 use vgn_job_api::{
     artifact::{ArtifactKind, ArtifactOrigin, ArtifactRef, Checksum},
     context::{ArtifactHandle, ArtifactStore},
     error::{JobError, JobErrorCode},
     ids::ArtifactId,
 };
-use uuid::Uuid;
 
 #[derive(Debug)]
 pub struct LocalFsStore {
@@ -64,7 +64,7 @@ impl ArtifactStore for LocalFsStore {
             // Atomic publish via temp file + rename. If the target already exists, we can skip this
             // step since the content is identical.
             // Append uuid to avoid two publishers both write to the same tmp name.
-            let uuid  = Uuid::new_v4();
+            let uuid = Uuid::new_v4();
             let tmp = target.with_extension(format!("tmp.{}", uuid));
             {
                 let mut f = fs::File::create(&tmp).map_err(io_to_job_error)?;

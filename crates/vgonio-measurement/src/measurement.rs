@@ -1,19 +1,13 @@
 //! Acquisition related.
 
-pub mod bsdf;
-pub mod mfd;
-pub mod params;
-
 use crate::{
     io::{
         vgmo::{vgmo_header_ext_from_data, VgmoHeaderExt},
         OutputFileFormatOption,
     },
-    measure::{
-        bsdf::BsdfMeasurement,
-        mfd::{MeasuredNdfData, MeasuredSdfData},
-        params::NdfMeasurementMode,
-    },
+    bsdf::BsdfMeasurement,
+    mfd::{MeasuredNdfData, MeasuredSdfData},
+    params::NdfMeasurementMode,
 };
 use chrono::{DateTime, Local};
 use rand::{
@@ -31,10 +25,8 @@ use std::{
     io::{BufReader, BufWriter, Write},
     path::{Path, PathBuf},
 };
-use vgn_bxdf::{
-    brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan18Brdf},
-    AnyMeasured,
-};
+use vgn_bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan18Brdf};
+pub use vgn_bxdf::AnyMeasured;
 use vgn_core::{
     asset,
     error::VgonioError,
@@ -1034,7 +1026,7 @@ impl<'a> DataCarriedOnHemisphereSampler<'a, MeasuredNdfData> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::measure::{
+    use crate::measurement::{
         mfd::MeasuredNdfData,
         params::{NdfMeasurementMode, NdfMeasurementParams},
     };

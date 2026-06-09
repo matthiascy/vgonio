@@ -1,6 +1,7 @@
 use crate::{
-    app::cache::ComputeCache,
-    measure::{params::GafMeasurementParams, AnyMeasured, Measurement, MeasurementSource},
+    cache::ComputeCache,
+    measurement::{AnyMeasured, Measurement, MeasurementSource},
+    params::GafMeasurementParams,
 };
 use bytemuck::{Pod, Zeroable};
 use std::path::Path;

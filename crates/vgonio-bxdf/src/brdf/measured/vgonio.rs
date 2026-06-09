@@ -20,7 +20,7 @@ use crate::fitting::proxy::{BrdfProxy, OutgoingDirs, ProxySource};
 use crate::IorReg;
 #[cfg(feature = "io")]
 use chrono::{DateTime, Local};
-#[cfg(feature = "fitting")]
+#[cfg(any(feature = "io", feature = "fitting"))]
 use std::borrow::Cow;
 #[cfg(feature = "io")]
 use std::path::Path;

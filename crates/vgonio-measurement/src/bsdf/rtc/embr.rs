@@ -1,14 +1,14 @@
 //! Embree ray tracing.
 
 #[cfg(feature = "vdbg")]
-use crate::measure::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
-use crate::measure::bsdf::{
+use crate::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
+use crate::bsdf::{
     emitter::EmitterCircularSector,
     rtc::{compute_num_of_streams, HitInfo, MAX_RAY_STREAM_SIZE},
     SingleSimResult,
 };
 #[cfg(not(feature = "vdbg"))]
-use crate::measure::params::BsdfMeasurementParams;
+use crate::params::BsdfMeasurementParams;
 use embree::{
     BufferUsage, Config, Device, Geometry, HitN, IntersectContext, IntersectContextExt,
     IntersectContextFlags, RayHitNp, RayN, RayNp, Scene, SceneFlags, SoAHit, SoARay, ValidMask,
@@ -612,7 +612,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
 #[cfg(test)]
 mod tests {
     use super::{create_resources, simulate_bsdf_measurement, QueryContext, SoARayStreams};
-    use crate::measure::{bsdf::emitter::Emitter, params::BsdfMeasurementParams};
+    use crate::measurement::{bsdf::emitter::Emitter, params::BsdfMeasurementParams};
     use embree::{Config, Device, IntersectContext, Ray, RayHit, RayHitNp, RayNp, SceneFlags};
     use vgn_core::{optics::Ior, units::LengthUnit, TriangulationPattern};
     use vgn_io::{HeightOffset, MicroSurface};

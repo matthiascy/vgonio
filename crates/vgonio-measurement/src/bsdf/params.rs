@@ -1,6 +1,5 @@
 use crate::{
-    error::RuntimeError,
-    measure::bsdf::{emitter::EmitterParams, receiver::ReceiverParams, rtc::RtcMethod, BsdfKind},
+    bsdf::{emitter::EmitterParams, receiver::ReceiverParams, rtc::RtcMethod, BsdfKind},
 };
 use serde::{Deserialize, Serialize};
 use vgn_core::{
@@ -158,35 +157,35 @@ impl BsdfMeasurementParams {
         if emitter.num_rays < 1 {
             return Err(VgonioError::new(
                 "Number of rays must be at least 1",
-                Some(Box::new(RuntimeError::InvalidEmitter)),
+                None,
             ));
         }
 
         if emitter.max_bounces < 1 {
             return Err(VgonioError::new(
                 "Number of bounces must be at least 1",
-                Some(Box::new(RuntimeError::InvalidEmitter)),
+                None,
             ));
         }
 
         if !(emitter.zenith.step_size > rad!(0.0) && emitter.azimuth.step_size > rad!(0.0)) {
             return Err(VgonioError::new(
                 "Emitter's orbit radius, zenith and azimuth must be positive",
-                Some(Box::new(RuntimeError::InvalidEmitter)),
+                None,
             ));
         }
 
         if emitter.spectrum.start < nm!(0.0) || emitter.spectrum.stop < nm!(0.0) {
             return Err(VgonioError::new(
                 "Emitter's spectrum must be positive",
-                Some(Box::new(RuntimeError::InvalidEmitter)),
+                None,
             ));
         }
 
         if emitter.spectrum.start > emitter.spectrum.stop {
             return Err(VgonioError::new(
                 "Emitter's spectrum start must be less than its stop",
-                Some(Box::new(RuntimeError::InvalidEmitter)),
+                None,
             ));
         }
 
@@ -194,7 +193,7 @@ impl BsdfMeasurementParams {
             if !collector.precision.is_positive() {
                 return Err(VgonioError::new(
                     "Detector's precision must be positive",
-                    Some(Box::new(RuntimeError::InvalidDetector)),
+                    None,
                 ));
             }
         }

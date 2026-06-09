@@ -1,6 +1,7 @@
 use crate::{
-    app::cache::ComputeCache,
-    measure::{params::SdfMeasurementParams, AnyMeasured, Measurement, MeasurementSource},
+    cache::ComputeCache,
+    measurement::{AnyMeasured, Measurement, MeasurementSource},
+    params::SdfMeasurementParams,
 };
 use std::{borrow::Cow, path::Path};
 use vgn_bxdf::impl_any_measured_trait;

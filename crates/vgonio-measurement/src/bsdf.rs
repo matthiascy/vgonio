@@ -1,22 +1,20 @@
 //! Measurement of the BSDF (Bidirectional Scattering Distribution Function) of
 //! micro-surfaces.
 
-use super::{params::BsdfMeasurementParams, DataCarriedOnHemisphereSampler};
+use crate::{measurement::DataCarriedOnHemisphereSampler, params::BsdfMeasurementParams};
 #[cfg(feature = "embree")]
-use crate::measure::bsdf::rtc::embr;
+use crate::bsdf::rtc::embr;
 #[cfg(feature = "vdbg")]
-use crate::measure::bsdf::rtc::RayTrajectory;
+use crate::bsdf::rtc::RayTrajectory;
 use crate::{
-    app::cache::ComputeCache,
-    measure::{
-        bsdf::{
-            emitter::Emitter,
-            receiver::{BounceAndEnergy, Receiver},
-            rtc::RtcMethod,
-        },
-        params::SimulationKind,
-        AnyMeasured, Measurement, MeasurementSource,
+    bsdf::{
+        emitter::Emitter,
+        receiver::{BounceAndEnergy, Receiver},
+        rtc::RtcMethod,
     },
+    cache::ComputeCache,
+    measurement::{AnyMeasured, Measurement, MeasurementSource},
+    params::SimulationKind,
 };
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
@@ -1337,7 +1335,7 @@ impl<'a> ExactSizeIterator for SingleSimResultRayChunk<'a> {
 //             }
 //         };
 //
-//         let orbit_radius = crate::measure::estimate_orbit_radius(mesh);
+//         let orbit_radius = crate::measurement::estimate_orbit_radius(mesh);
 //         log::trace!("Estimated orbit radius: {}", orbit_radius);
 //
 //         let incoming = DyArr::<Sph2>::from_slice([n_wi], &emitter.measpts);
@@ -1480,7 +1478,7 @@ pub fn measure_bsdf_rt(
             surf.path.as_ref().unwrap().display()
         );
 
-        let orbit_radius = crate::measure::estimate_orbit_radius(mesh);
+        let orbit_radius = crate::measurement::estimate_orbit_radius(mesh);
         log::trace!("Estimated orbit radius: {}", orbit_radius);
 
         // Receiver with its records & stats
@@ -1685,7 +1683,7 @@ fn rtc_simulation_grid<'a>(
     //         surf.path.as_ref().unwrap().display()
     //     );
     //     // let t = std::time::Instant::now();
-    //     // crate::measure::bsdf::rtc::grid::measure_bsdf(
+    //     // crate::bsdf::rtc::grid::measure_bsdf(
     //     //     &params, surf, mesh, &emitter, cache,
     //     // );
     //     // println!(

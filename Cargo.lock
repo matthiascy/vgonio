@@ -4275,6 +4275,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "vgonio-measurement"
+version = "0.3.2"
+dependencies = [
+ "approx",
+ "bytemuck",
+ "bytes",
+ "chrono",
+ "embree3",
+ "exr",
+ "futures-intrusive",
+ "image",
+ "log",
+ "nalgebra",
+ "pollster",
+ "rand",
+ "rand_chacha",
+ "rayon",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "static_assertions",
+ "tempfile",
+ "vgonio-bxdf",
+ "vgonio-core",
+ "vgonio-executor",
+ "vgonio-io",
+ "vgonio-jabr",
+ "vgonio-job-api",
+ "vgonio-uxgx",
+ "wgpu",
+]
+
+[[package]]
 name = "vgonio-powitacq"
 version = "0.0.1"
 dependencies = [

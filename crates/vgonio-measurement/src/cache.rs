@@ -1,8 +1,7 @@
 //! Compute-side cache: micro-surface profiles, meshes, records, measured data
-//! and the refractive-index database. Holds no GPU/UI state and must never
-//! import `vgn_uxgx` (see DIST Plan Task 0.2).
+//! and the refractive-index database.
 
-use crate::measure::{params::SurfacePath, Measurement};
+use crate::{measurement::Measurement, params::SurfacePath};
 use std::{
     collections::HashMap,
     hash::{Hash, Hasher},

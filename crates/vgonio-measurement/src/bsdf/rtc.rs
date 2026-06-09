@@ -377,7 +377,7 @@ pub fn ray_aabb_intersection(ray: &Ray, bbox: &Aabb) -> Option<RayAabbIsect> {
 
 #[cfg(test)]
 mod tests {
-    use crate::measure::bsdf::rtc::{ray_aabb_intersection, ray_aabb_intersects, Ray};
+    use crate::bsdf::rtc::{ray_aabb_intersection, ray_aabb_intersects, Ray};
     use vgn_core::math::{Aabb, Vec3};
 
     #[test]
