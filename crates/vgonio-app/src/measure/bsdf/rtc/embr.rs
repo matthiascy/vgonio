@@ -585,7 +585,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
 
     #[cfg(not(feature = "vdbg"))]
     {
-        use vgn_core::math::{Vec3, Vec3A};
+        use vgn_core::math::Vec3;
         use vgn_jabr::array::DyArr;
         // Unpack the stream data into a single result.
         let dirs = stream_data
@@ -605,8 +605,9 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
 
 #[cfg(test)]
 mod tests {
-    use embree::{Config, Device, IntersectContext, Ray, RayHit, SceneFlags};
-    use vgn_core::{units::LengthUnit, TriangulationPattern};
+    use super::{create_resources, QueryContext, SoARayStreams};
+    use embree::{Config, Device, IntersectContext, Ray, RayHit, RayHitNp, RayNp, SceneFlags};
+    use vgn_core::{optics::Ior, units::LengthUnit, TriangulationPattern};
     use vgn_io::{HeightOffset, MicroSurface};
 
     /// A ray fired straight down at a flat micro-surface must hit it at the
@@ -639,8 +640,12 @@ mod tests {
         // Fire a ray from 10 units above, slightly off-center so it lands
         // inside a triangle rather than exactly on a vertex/edge.
         let mut ctx = IntersectContext::coherent();
-        let mut rayhit =
-            RayHit::from_ray(Ray::segment([0.25, 0.25, 10.0], [0.0, 0.0, -1.0], 0.0, f32::INFINITY));
+        let mut rayhit = RayHit::from_ray(Ray::segment(
+            [0.25, 0.25, 10.0],
+            [0.0, 0.0, -1.0],
+            0.0,
+            f32::INFINITY,
+        ));
         scene.intersect(&mut ctx, &mut rayhit);
 
         assert!(rayhit.hit.is_valid(), "ray should hit the surface");
@@ -658,5 +663,71 @@ mod tests {
         // Geometric normal of a z = 0 plane points along +/- z.
         let n = rayhit.hit.unit_normal();
         assert!(n[2].abs() > 0.99, "expected normal along z, got {:?}", n);
+    }
+
+    /// Drives the ported intersect filter end to end. `create_resources`
+    /// builds a *filtered* scene, and the stream query carries an
+    /// `IntersectContextExt<SoARayStreamMut>` that the filter recovers via the
+    /// `unsafe` `ext_mut`. Asserts the filter actually wrote the per-ray hit
+    /// state for a front-face hit, which a compile/link check cannot verify.
+    #[test]
+    fn intersect_filter_records_hits_through_context_ext() {
+        // The filter does not read IORs (energy/Fresnel is applied later), so
+        // any single-wavelength pair sizes the stream buffers correctly.
+        // Declared first so they outlive `stream_data`, whose lifetime is tied
+        // to the geometry (and thus to `mesh`) through `SoARayStreams`.
+        let iors_i = [Ior::new_dielectric(1.0)];
+        let iors_t = [Ior::new_dielectric(1.5)];
+
+        let surf = MicroSurface::new(5, 5, 1.0, 1.0, 0.0, LengthUnit::UM);
+        let mesh = surf.as_micro_surface_mesh(
+            HeightOffset::None,
+            TriangulationPattern::BottomLeftToTopRight,
+            None,
+        );
+        // create_resources registers the ported filter on the geometry.
+        let (_device, scene, geometry) = create_resources(&mesh);
+
+        let n_ray = 4;
+        let mut stream_data = SoARayStreams::new(geometry.clone(), n_ray, &iors_i, &iors_t);
+
+        // Rays from above heading straight down at distinct, off-vertex points
+        // (the surface spans x,y in [-2, 2] and lies in the z = 0 plane).
+        let mut ray_hit_n = RayHitNp::new(RayNp::new(n_ray));
+        for (i, mut ray) in ray_hit_n.ray.iter_mut().enumerate() {
+            let x = -0.5 + i as f32 * 0.3;
+            ray.set_org([x, 0.25, 10.0].into());
+            ray.set_dir([0.0f32, 0.0, -1.0].into());
+            ray.set_id(i as u32);
+            ray.set_tnear(0.0);
+            ray.set_tfar(f32::INFINITY);
+        }
+
+        // Scope the mutable borrow of `stream_data` taken by the stream.
+        {
+            let stream = stream_data.streams_mut().next().unwrap();
+            let mut ctx = QueryContext {
+                ctx: IntersectContext::coherent(),
+                ext: stream,
+            };
+            scene.intersect_stream_soa(&mut ctx, &mut ray_hit_n);
+        }
+
+        // The filter recovered each ray's ext via `ext_mut` and recorded a
+        // front-face hit: geometry id set, reflected direction back up the
+        // +z axis, and a positive incidence factor at normal incidence.
+        for (i, hit) in stream_data.last_hit.iter().enumerate() {
+            assert_ne!(hit.last_geom_id, u32::MAX, "ray {i} should record a hit");
+            assert!(
+                hit.next_dir.z > 0.99,
+                "ray {i} should reflect back up, got {:?}",
+                hit.next_dir
+            );
+            assert!(
+                hit.factor > 0.0,
+                "ray {i} factor should be positive, got {}",
+                hit.factor
+            );
+        }
     }
 }
