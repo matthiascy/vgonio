@@ -1,0 +1,31 @@
+[package]
+name = "vgonio-fitting"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+
+[features]
+default = []
+cuda = ["vgn_bxdf/cuda"]
+
+[dependencies]
+bytes.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+rayon.workspace = true
+chrono.workspace = true
+nalgebra.workspace = true
+levenberg-marquardt.workspace = true
+vgn_core = { workspace = true, features = ["io", "config"] }
+vgn_bxdf = { workspace = true, features = ["fitting", "io"] }
+vgn_jabr.workspace = true
+# Path deps use the kebab package name (matches vgonio-app convention).
+vgonio-job-api = { path = "../vgonio-job-api" }
+vgonio-executor = { path = "../vgonio-executor" }
+
+[lints]
+workspace = true

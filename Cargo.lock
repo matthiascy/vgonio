@@ -4207,6 +4207,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "vgonio-fitting"
+version = "0.3.2"
+dependencies = [
+ "bytes",
+ "chrono",
+ "clap",
+ "levenberg-marquardt",
+ "log",
+ "nalgebra",
+ "rayon",
+ "serde",
+ "serde_json",
+ "vgonio-bxdf",
+ "vgonio-core",
+ "vgonio-executor",
+ "vgonio-jabr",
+ "vgonio-job-api",
+]
+
+[[package]]
 name = "vgonio-io"
 version = "0.3.2"
 dependencies = [
