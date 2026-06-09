@@ -27,7 +27,7 @@ path = "tests/vgbsdf_multi_level.rs"
 required-features = ["test-support"]
 
 [features]
-default = ["dep:embree", "dep:vgn_bxdf", "vgn_bxdf/io"]
+default = ["embree", "dep:vgn_bxdf", "vgn_bxdf/io"]
 embree = ["dep:embree", "vgn_io/embree"]
 optix = []
 bench = ["vgn_io/bench"]
