@@ -52,31 +52,18 @@ impl SimulationKind {
 
     /// Verifies whether the selected simulation method is available in the
     /// current build.
-    pub fn check_supported_for_measurement(&self) -> Result<(), String> {
+    pub fn check_supported_for_measurement(
+        &self,
+        backend: &dyn crate::backend::BsdfRtBackend,
+    ) -> Result<(), String> {
+        // Backend selection is runtime now (registration-time, app-side); the
+        // RtcMethod no longer drives dispatch. Geom-optics with a non-null
+        // backend is supported; wave-optics has no backend.
         match self {
-            Self::GeomOptics(RtcMethod::Embree) => {
-                if cfg!(feature = "embree") {
-                    Ok(())
-                } else {
-                    Err(
-                        "SimulationKind is Embree, but this build does not enable `embree`."
-                            .to_string(),
-                    )
-                }
-            },
-            Self::GeomOptics(RtcMethod::Optix) => {
-                if cfg!(feature = "optix") {
-                    Err("Optix simulation is not implemented.".to_string())
-                } else {
-                    Err(
-                        "SimulationKind is Optix, but this build does not enable `optix`."
-                            .to_string(),
-                    )
-                }
-            },
-            Self::GeomOptics(RtcMethod::Grid) => {
-                Err("Grid simulation is temporarily deactivated.".to_string())
-            },
+            Self::GeomOptics(_) if backend.is_null() => Err(
+                "no BSDF backend compiled in; rebuild vgonio-app --features embree".to_string(),
+            ),
+            Self::GeomOptics(_) => Ok(()),
             Self::WaveOptics => Err("Wave optics simulation is not yet implemented.".to_string()),
         }
     }
@@ -210,8 +197,11 @@ impl BsdfMeasurementParams {
 
     /// Verifies whether the selected simulation method is available in the
     /// current build.
-    pub fn check_supported_for_measurement(&self) -> Result<(), String> {
-        self.sim_kind.check_supported_for_measurement()
+    pub fn check_supported_for_measurement(
+        &self,
+        backend: &dyn crate::backend::BsdfRtBackend,
+    ) -> Result<(), String> {
+        self.sim_kind.check_supported_for_measurement(backend)
     }
 
     /// Checks if the incident and transmitted media are air.
@@ -383,20 +373,57 @@ mod tests {
     }
 
     #[test]
-    fn simulation_kind_support_check_matches_enabled_backends() {
+    fn simulation_kind_support_check_uses_runtime_backend() {
+        use crate::backend::{
+            BsdfRtBackend, DeviceHandle, GeometryHandle, NullBsdfBackend, SceneHandle,
+            SingleSimResult,
+        };
+        use crate::bsdf::emitter::EmitterCircularSector;
+        #[cfg(not(feature = "vdbg"))]
+        use vgn_core::optics::Ior;
+        use vgn_core::math::Sph2;
+        use vgn_io::MicroSurfaceMesh;
+
+        // Non-null stub backend; trait methods are unreachable in this test
+        // (only `is_null()` — the default `false` — is consulted).
+        struct StubBackend;
+        impl BsdfRtBackend for StubBackend {
+            fn create_resources(
+                &self,
+                _: &MicroSurfaceMesh,
+            ) -> (DeviceHandle, SceneHandle, GeometryHandle) {
+                unreachable!()
+            }
+            #[allow(clippy::too_many_arguments)]
+            fn simulate_single_point(
+                &self,
+                _: Sph2,
+                _: &EmitterCircularSector<'_>,
+                _: &MicroSurfaceMesh,
+                _: &GeometryHandle,
+                _: &SceneHandle,
+                #[cfg(not(feature = "vdbg"))] _: bool,
+                #[cfg(not(feature = "vdbg"))] _: &[Ior],
+                #[cfg(not(feature = "vdbg"))] _: &[Ior],
+            ) -> SingleSimResult {
+                unreachable!()
+            }
+        }
+
         let grid = SimulationKind::GeomOptics(RtcMethod::Grid);
         let embree = SimulationKind::GeomOptics(RtcMethod::Embree);
-        let optix = SimulationKind::GeomOptics(RtcMethod::Optix);
         let wave = SimulationKind::WaveOptics;
+        let null = NullBsdfBackend;
+        let stub = StubBackend;
 
-        assert!(grid.check_supported_for_measurement().is_err());
-        assert!(wave.check_supported_for_measurement().is_err());
+        // Null backend: every geom-optics kind is unsupported; wave always is.
+        assert!(grid.check_supported_for_measurement(&null).is_err());
+        assert!(embree.check_supported_for_measurement(&null).is_err());
+        assert!(wave.check_supported_for_measurement(&null).is_err());
 
-        #[cfg(feature = "embree")]
-        assert!(embree.check_supported_for_measurement().is_ok());
-        #[cfg(not(feature = "embree"))]
-        assert!(embree.check_supported_for_measurement().is_err());
-
-        assert!(optix.check_supported_for_measurement().is_err());
+        // A real (non-null) backend supports geom-optics; wave is unimplemented.
+        assert!(grid.check_supported_for_measurement(&stub).is_ok());
+        assert!(embree.check_supported_for_measurement(&stub).is_ok());
+        assert!(wave.check_supported_for_measurement(&stub).is_err());
     }
 }

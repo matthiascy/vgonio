@@ -14,10 +14,8 @@ use std::{
 };
 
 #[cfg(feature = "embree")]
-pub mod embr;
 
 #[cfg(feature = "optix")]
-pub mod optix;
 
 pub mod grid;
 
@@ -155,7 +153,7 @@ impl RayTriIsect {
 
 /// Hit information used for avoiding self-intersections.
 #[derive(Debug, Clone, Copy)]
-struct HitInfo {
+pub struct HitInfo {
     /// Geometry ID of the last-hit primitive.
     pub last_geom_id: u32,
     /// Primitive ID of the last-hit primitive.
@@ -224,7 +222,7 @@ impl Debug for RayTrajectoryNode {
 /// The trajectory always starts with the ray that is spawned.
 #[cfg(feature = "vdbg")]
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct RayTrajectory(pub(crate) Vec<RayTrajectoryNode>);
+pub struct RayTrajectory(pub Vec<RayTrajectoryNode>);
 
 #[cfg(feature = "vdbg")]
 impl Deref for RayTrajectory {
@@ -266,7 +264,7 @@ impl RayTrajectory {
 }
 
 /// Maximum number of rays that can be traced in a single stream.
-const MAX_RAY_STREAM_SIZE: usize = 1024;
+pub const MAX_RAY_STREAM_SIZE: usize = 1024;
 
 /// Intersection result of a ray and an AABB.
 ///

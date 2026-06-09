@@ -34,17 +34,11 @@ tempfile.workspace = true
 futures-intrusive.workspace = true
 static_assertions.workspace = true
 vgn_core = { workspace = true, features = ["io", "config", "cli"] }
-vgn_io = { workspace = true, features = ["embree"] }
+vgn_io.workspace = true
 vgn_jabr.workspace = true
 vgn_bxdf = { workspace = true, features = ["io"] }
 vgonio-job-api = { path = "../vgonio-job-api" }
 vgonio-executor = { path = "../vgonio-executor" }
-embree.workspace = true
-wgpu.workspace = true
-bytemuck.workspace = true
-image.workspace = true
-vgn_uxgx = { workspace = true, features = ["gfx"] }
-pollster.workspace = true
 
 [dev-dependencies]
 zip.workspace = true                                                # vgsdf archive smoke tests

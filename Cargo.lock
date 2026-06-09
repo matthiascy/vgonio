@@ -4077,7 +4077,6 @@ dependencies = [
  "egui_dock",
  "egui_extras",
  "egui_plot",
- "embree3",
  "env_logger",
  "exr",
  "flate2",
@@ -4110,6 +4109,8 @@ dependencies = [
  "vgonio-jabr",
  "vgonio-job-api",
  "vgonio-measurement",
+ "vgonio-measurement-embree",
+ "vgonio-measurement-wgpu",
  "vgonio-uxgx",
  "wgpu",
  "winit",
@@ -4282,18 +4283,14 @@ name = "vgonio-measurement"
 version = "0.3.2"
 dependencies = [
  "approx",
- "bytemuck",
  "bytes",
  "chrono",
- "embree3",
  "exr",
  "flate2",
  "futures-intrusive",
- "image",
  "log",
  "lz4_flex",
  "nalgebra",
- "pollster",
  "rand",
  "rand_chacha",
  "rayon",
@@ -4308,8 +4305,6 @@ dependencies = [
  "vgonio-io",
  "vgonio-jabr",
  "vgonio-job-api",
- "vgonio-uxgx",
- "wgpu",
  "zip",
 ]
 
@@ -4339,8 +4334,12 @@ name = "vgonio-measurement-wgpu"
 version = "0.3.2"
 dependencies = [
  "bytemuck",
+ "chrono",
+ "futures-intrusive",
+ "image",
  "log",
  "pollster",
+ "rayon",
  "vgonio-core",
  "vgonio-io",
  "vgonio-jabr",

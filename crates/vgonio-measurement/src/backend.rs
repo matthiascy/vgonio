@@ -68,6 +68,10 @@ pub trait BsdfRtBackend: Send + Sync {
         #[cfg(not(feature = "vdbg"))] iors_i: &[Ior],
         #[cfg(not(feature = "vdbg"))] iors_t: &[Ior],
     ) -> SingleSimResult;
+
+    /// True for the null fallback backend; lets callers (e.g. the GUI) disable
+    /// actions instead of calling and panicking. Default `false`.
+    fn is_null(&self) -> bool { false }
 }
 
 /// GAF (masking-shadowing) backend (wgpu today).
@@ -80,6 +84,9 @@ pub trait GafBackend: Send + Sync {
         handles: &[Handle],
         cache: &ComputeCache,
     ) -> Box<[Measurement]>;
+
+    /// True for the null fallback backend. Default `false`.
+    fn is_null(&self) -> bool { false }
 }
 
 // ---- Null fallbacks: registered when the backend feature is off. They panic
@@ -109,6 +116,8 @@ impl BsdfRtBackend for NullBsdfBackend {
     ) -> SingleSimResult {
         panic!("no BSDF backend compiled in; rebuild vgonio-app --features embree")
     }
+
+    fn is_null(&self) -> bool { true }
 }
 /// Constructs the null BSDF backend.
 pub fn null_bsdf_backend() -> Arc<dyn BsdfRtBackend> { Arc::new(NullBsdfBackend) }
@@ -124,6 +133,8 @@ impl GafBackend for NullGafBackend {
     ) -> Box<[Measurement]> {
         panic!("no GAF backend compiled in; rebuild vgonio-app --features wgpu")
     }
+
+    fn is_null(&self) -> bool { true }
 }
 /// Constructs the null GAF backend.
 pub fn null_gaf_backend() -> Arc<dyn GafBackend> { Arc::new(NullGafBackend) }

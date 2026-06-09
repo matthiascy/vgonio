@@ -27,18 +27,24 @@ path = "tests/vgbsdf_multi_level.rs"
 required-features = ["test-support"]
 
 [features]
-default = ["embree", "dep:vgn_bxdf", "vgn_bxdf/io"]
-embree = ["dep:embree", "vgn_io/embree"]
-optix = []
-bench = ["vgn_io/bench"]
-fitting = ["dep:vgonio-fitting", "dep:vgn_bxdf", "vgn_bxdf/fitting"]
+default = []
+# Backends are pulled via the sub-crates (DIST Task 2.8/2.9); the app selects
+# real-vs-null at `build_local_executor` time per these flags.
+embree = ["dep:vgonio-measurement-embree"]
+wgpu = ["dep:vgonio-measurement-wgpu"]
+# `cuda` is a fitting/plot build-mode flag in Phase 2 (no measurement backend);
+# it lights vgn_bxdf's CUDA paths directly (cmd_plot.rs gates on the app's own
+# `cuda`), and forwards into vgonio-fitting when that capability is enabled.
+cuda = ["vgn_bxdf/cuda", "vgonio-fitting?/cuda"]
+fitting = ["dep:vgonio-fitting", "vgn_bxdf/fitting"]
+# Propagate build-mode flags into every enabled backend sub-crate (weak `?/`).
+vdbg = ["vgonio-measurement/vdbg", "vgonio-measurement-embree?/vdbg", "vgonio-measurement-wgpu?/vdbg"]
+vvdbg = ["vgonio-measurement/vvdbg", "vgonio-measurement-embree?/vvdbg", "vgonio-measurement-wgpu?/vvdbg"]
+bench = ["vgn_io/bench", "vgonio-measurement/bench", "vgonio-measurement-embree?/bench"]
 surf-obj = ["vgn_io/surf-obj"]
 surf-gen = ["vgn_io/surf-gen"]
-vdbg = []
-vvdbg = []
-cuda = ["vgn_core/cuda", "vgn_bxdf/cuda"]
-# Exposes test-only constructors and makes the `io` codec module public so integration tests can drive it.
-test-support = []
+# Exposes test-only constructors + the `io` codec module for integration tests.
+test-support = ["vgonio-measurement/test-support"]
 
 [dependencies]
 bytes.workspace = true
@@ -53,7 +59,6 @@ egui-winit.workspace = true
 egui-gizmo.workspace = true
 egui_plot.workspace = true
 egui-toast.workspace = true
-embree = { workspace = true, optional = true }
 env_logger.workspace = true
 exr.workspace = true
 flate2.workspace = true
@@ -86,11 +91,13 @@ vgn_io.workspace = true
 vgn_jabr.workspace = true
 vgn_uxgx = { workspace = true, features = ["gfx", "gui"] }
 vgn_core = { workspace = true, features = ["cli", "winit", "io", "config"] }
-vgn_bxdf = { workspace = true, optional = true, features = ["fitting", "io"] }
+vgn_bxdf = { workspace = true, features = ["fitting", "io"] }
 vgonio-fitting = { path = "../vgonio-fitting", optional = true }
 vgonio-job-api = { path = "../vgonio-job-api" }
 vgonio-executor = { path = "../vgonio-executor" }
 vgonio-measurement = { path = "../vgonio-measurement" }
+vgonio-measurement-embree = { path = "../vgonio-measurement-embree", optional = true }
+vgonio-measurement-wgpu = { path = "../vgonio-measurement-wgpu", optional = true }
 
 [dev-dependencies]
 proptest.workspace = true

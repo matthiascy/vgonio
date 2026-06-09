@@ -1,14 +1,14 @@
 //! Embree ray tracing.
 
 #[cfg(feature = "vdbg")]
-use crate::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
-use crate::bsdf::{
+use vgn_measurement::bsdf::rtc::{RayTrajectory, RayTrajectoryNode};
+use vgn_measurement::bsdf::{
     emitter::EmitterCircularSector,
     rtc::{compute_num_of_streams, HitInfo, MAX_RAY_STREAM_SIZE},
     SingleSimResult,
 };
 #[cfg(not(feature = "vdbg"))]
-use crate::params::BsdfMeasurementParams;
+use vgn_measurement::params::BsdfMeasurementParams;
 use embree::{
     BufferUsage, Config, Device, Geometry, HitN, IntersectContext, IntersectContextExt,
     IntersectContextFlags, RayHitNp, RayN, RayNp, Scene, SceneFlags, SoAHit, SoARay, ValidMask,
@@ -41,7 +41,7 @@ struct SoARayStreams<'g> {
     /// or greater than `n_ray`.
     pub total_stream_size: usize,
     /// The micro-surface geometry.
-    pub msurf: Arc<Geometry<'g>>,
+    pub msurf: Arc<Geometry<'static>>,
     /// The last hit for each ray.
     pub last_hit: Box<[HitInfo]>,
     #[cfg(feature = "vdbg")]
@@ -50,6 +50,10 @@ struct SoARayStreams<'g> {
     /// bounce. The cosine of the incident angle at each bounce is
     /// also recorded.
     pub trajectory: Box<[RayTrajectory]>,
+    #[cfg(feature = "vdbg")]
+    /// Keeps `'g` used under `vdbg` (the iors fields that carry it are cfg'd
+    /// out in that mode).
+    _marker: std::marker::PhantomData<&'g ()>,
     #[cfg(not(feature = "vdbg"))]
     /// The refractive indices of the incident medium.
     pub iors_i: &'g [Ior],
@@ -75,7 +79,7 @@ impl<'g> SoARayStreams<'g> {
 
     /// Create a new instance of the ray stream data.
     pub fn new(
-        msurf: Arc<Geometry<'g>>,
+        msurf: Arc<Geometry<'static>>,
         n_ray: usize,
         #[cfg(feature = "vdbg")] max_bounces: u32,
         #[cfg(not(feature = "vdbg"))] iors_i: &'g [Ior],
@@ -101,6 +105,8 @@ impl<'g> SoARayStreams<'g> {
             #[cfg(feature = "vdbg")]
             trajectory: vec![RayTrajectory(Vec::with_capacity(max_bounces as usize / 2)); n_ray]
                 .into_boxed_slice(),
+            #[cfg(feature = "vdbg")]
+            _marker: std::marker::PhantomData,
             #[cfg(not(feature = "vdbg"))]
             iors_i,
             #[cfg(not(feature = "vdbg"))]
@@ -132,7 +138,7 @@ struct SoARayStreamMut<'a> {
     idx: usize,
     #[allow(unused)]
     size: usize,
-    msurf: Arc<Geometry<'a>>,
+    msurf: Arc<Geometry<'static>>,
     last_hit: &'a mut [HitInfo],
     #[cfg(feature = "vdbg")]
     trajectory: &'a mut [RayTrajectory],
@@ -318,7 +324,7 @@ fn intersect_filter_stream<'a>(
 }
 
 /// Creates the Embree resources for the tracing.
-pub fn create_resources(mesh: &MicroSurfaceMesh) -> (Device, Scene, Arc<Geometry>) {
+pub fn create_resources(mesh: &MicroSurfaceMesh) -> (Device, Scene<'static>, Arc<Geometry<'static>>) {
     let device = Device::with_config(Config::default()).unwrap();
     let mut scene = device.create_scene().unwrap();
     scene.set_flags(SceneFlags::ROBUST);
@@ -393,11 +399,11 @@ pub fn simulate_bsdf_measurement<'a, 'b: 'a>(
 }
 
 /// Simulates the BSDF measurement for a single incident direction (point).
-pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
+pub fn simulate_bsdf_measurement_single_point<'b>(
     w_i: Sph2,
     sector: &EmitterCircularSector,
     mesh: &MicroSurfaceMesh,
-    geometry: Arc<Geometry<'a>>,
+    geometry: Arc<Geometry<'static>>,
     scene: &Scene,
     #[cfg(not(feature = "vdbg"))] fresnel: bool,
     #[cfg(not(feature = "vdbg"))] iors_i: &'b [Ior],
@@ -612,7 +618,7 @@ pub fn simulate_bsdf_measurement_single_point<'a, 'b: 'a>(
 #[cfg(test)]
 mod tests {
     use super::{create_resources, simulate_bsdf_measurement, QueryContext, SoARayStreams};
-    use crate::measurement::{bsdf::emitter::Emitter, params::BsdfMeasurementParams};
+    use vgn_measurement::{bsdf::emitter::Emitter, params::BsdfMeasurementParams};
     use embree::{Config, Device, IntersectContext, Ray, RayHit, RayHitNp, RayNp, SceneFlags};
     use vgn_core::{optics::Ior, units::LengthUnit, TriangulationPattern};
     use vgn_io::{HeightOffset, MicroSurface};

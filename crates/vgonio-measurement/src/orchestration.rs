@@ -31,6 +31,7 @@
 //! [`Activity::Warning`]: vgn_job_api::progress::Activity::Warning
 
 use crate::{
+    backend::{BsdfRtBackend, GafBackend},
     bsdf,
     cache::ComputeCache,
     io::{write_measured_data_to_file, OutputFileFormatOption, OutputOptions},
@@ -45,7 +46,13 @@ use vgn_job_api::{
     progress::{Activity, PhaseKind, PhaseOutcome},
 };
 
-pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<(), VgonioError> {
+pub fn run(
+    req: MeasureRequest,
+    config: Arc<Config>,
+    ctx: JobContext,
+    bsdf_backend: &dyn BsdfRtBackend,
+    gaf_backend: &dyn GafBackend,
+) -> Result<(), VgonioError> {
     let root_phase = ctx.next_phase_id();
     let root_started = std::time::Instant::now();
     ctx.progress.emit_activity(Activity::PhaseBegin {
@@ -207,7 +214,7 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
         let meas_started = Instant::now();
         let measured = match desc.params {
             MeasurementParams::Bsdf(params) => {
-                if let Err(reason) = params.check_supported_for_measurement() {
+                if let Err(reason) = params.check_supported_for_measurement(bsdf_backend) {
                     return Err(VgonioError::new(
                         &format!(
                             "Unsupported simulation method for this build: {}. Rebuild with the \
@@ -258,7 +265,7 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
                         ),
                     });
                 }
-                bsdf::measure_bsdf_rt(params, &surfaces, &cache, &ctx.cancel)
+                bsdf::measure_bsdf_rt(params, &surfaces, &cache, &ctx.cancel, bsdf_backend)
             },
             MeasurementParams::Ndf(measurement) => {
                 let label = match &measurement.mode {
@@ -312,7 +319,7 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
                 log::warn!(
                     "Debug mode is enabled. Measuring MMSF in debug mode is not recommended."
                 );
-                mfd::measure_masking_shadowing_function(measurement, &surfaces, &cache)
+                mfd::measure_masking_shadowing_function(measurement, &surfaces, &cache, gaf_backend)
             },
             MeasurementParams::Sdf(params) => {
                 ctx.progress.emit_activity(Activity::PhaseBegin {

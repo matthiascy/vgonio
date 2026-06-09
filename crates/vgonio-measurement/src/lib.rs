@@ -43,7 +43,12 @@ pub const MEASURE_BATCH_CAPABILITY: &str = "measure";
 /// deserializes a [`request::MeasureRequest`], installs a rayon pool sized to
 /// the envelope's `cpu_cores` hint, and runs [`orchestration::run`], mapping a
 /// cooperative cancel to [`JobErrorCode::Cancelled`].
-pub fn register_handlers(reg: &mut CapabilityRegistry, config: Arc<Config>) {
+pub fn register_handlers(
+    reg: &mut CapabilityRegistry,
+    config: Arc<Config>,
+    bsdf_backend: Arc<dyn backend::BsdfRtBackend>,
+    gaf_backend: Arc<dyn backend::GafBackend>,
+) {
     let config_for_measure = Arc::clone(&config);
     reg.register(
         CapabilityId(MEASURE_BATCH_CAPABILITY.into()),
@@ -56,9 +61,11 @@ pub fn register_handlers(reg: &mut CapabilityRegistry, config: Arc<Config>) {
                     details: None,
                 })?;
             let config_clone = Arc::clone(&config_for_measure);
+            let bsdf_backend = Arc::clone(&bsdf_backend);
+            let gaf_backend = Arc::clone(&gaf_backend);
             let cancel = ctx.cancel.clone();
             let run = move || {
-                orchestration::run(req, config_clone, ctx)
+                orchestration::run(req, config_clone, ctx, &*bsdf_backend, &*gaf_backend)
                     .map(|_| Bytes::new())
                     .map_err(|e| {
                         if cancel.is_cancelled() {

@@ -2,8 +2,6 @@
 //! micro-surfaces.
 
 use crate::{measurement::DataCarriedOnHemisphereSampler, params::BsdfMeasurementParams};
-#[cfg(feature = "embree")]
-use crate::bsdf::rtc::embr;
 #[cfg(feature = "vdbg")]
 use crate::bsdf::rtc::RayTrajectory;
 use crate::{
@@ -1430,6 +1428,7 @@ pub fn measure_bsdf_rt(
     handles: &[Handle],
     cache: &ComputeCache,
     cancel: &CancellationToken,
+    backend: &dyn crate::backend::BsdfRtBackend,
 ) -> Box<[Measurement]> {
     let meshes = cache.get_micro_surface_meshes_by_surfaces(handles);
     let surfaces = cache.get_micro_surfaces(handles);
@@ -1498,9 +1497,8 @@ pub fn measure_bsdf_rt(
             .collect::<Box<_>>();
 
         match &params.sim_kind {
-            SimulationKind::GeomOptics(method) => {
-                #[cfg(feature = "embree")]
-                let (_, scene, geometry) = embr::create_resources(mesh);
+            SimulationKind::GeomOptics(_) => {
+                let (_device, scene, geometry) = backend.create_resources(mesh);
                 for sector in emitter.circular_sectors() {
                     for (i, wi) in sector.measpts.iter().enumerate() {
                         // Per-incident-direction is the finest cancellation
@@ -1516,23 +1514,19 @@ pub fn measure_bsdf_rt(
                         }
                         #[cfg(feature = "bench")]
                         let t = std::time::Instant::now();
-                        let single_result = match method {
-                            #[cfg(feature = "embree")]
-                            RtcMethod::Embree => embr::simulate_bsdf_measurement_single_point(
-                                *wi,
-                                &sector,
-                                mesh,
-                                geometry.clone(),
-                                &scene,
-                                #[cfg(not(feature = "vdbg"))]
-                                params.fresnel,
-                                #[cfg(not(feature = "vdbg"))]
-                                &iors_i,
-                                #[cfg(not(feature = "vdbg"))]
-                                &iors_t,
-                            ),
-                            _ => unimplemented!("Temporarily deactivated"),
-                        };
+                        let single_result = backend.simulate_single_point(
+                            *wi,
+                            &sector,
+                            mesh,
+                            &geometry,
+                            &scene,
+                            #[cfg(not(feature = "vdbg"))]
+                            params.fresnel,
+                            #[cfg(not(feature = "vdbg"))]
+                            &iors_i,
+                            #[cfg(not(feature = "vdbg"))]
+                            &iors_t,
+                        );
                         #[cfg(feature = "bench")]
                         {
                             let elapsed = t.elapsed();

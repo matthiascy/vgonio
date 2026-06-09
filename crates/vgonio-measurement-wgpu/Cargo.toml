@@ -14,6 +14,10 @@ vvdbg = ["vgonio-measurement/vvdbg"]
 
 [dependencies]
 bytemuck.workspace = true
+chrono.workspace = true
+futures-intrusive.workspace = true
+image.workspace = true
+rayon.workspace = true
 log.workspace = true
 pollster.workspace = true
 wgpu.workspace = true

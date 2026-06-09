@@ -19,7 +19,7 @@ mod ui;
 mod visual_grid;
 
 // TODO: MSAA
-use embree::sys;
+use vgn_measurement::backend::GafBackend;
 use std::{
     default::Default,
     sync::{Arc, RwLock},
@@ -154,6 +154,10 @@ pub struct VgonioGuiApp {
     dbg_drawing_state: DebugDrawingState,
     /// Event loop proxy for sending events to the app.
     event_loop_proxy: EventLoopProxy,
+    /// BSDF ray-tracing backend (real impl per build features, else null).
+    bsdf_backend: Arc<dyn vgn_measurement::backend::BsdfRtBackend>,
+    /// GAF backend (real impl per build features, else null).
+    gaf_backend: Arc<dyn vgn_measurement::backend::GafBackend>,
 }
 
 impl VgonioGuiApp {
@@ -223,6 +227,29 @@ impl VgonioGuiApp {
 
         let surface_viewer_states = SurfaceViewerStates::new(&gpu_ctx, canvas.format());
 
+        // Backend selection mirrors `app::executor::build_local_executor`: real
+        // impl per build features, null fallback otherwise (DIST §3.7).
+        let bsdf_backend: Arc<dyn vgn_measurement::backend::BsdfRtBackend> = {
+            #[cfg(feature = "embree")]
+            {
+                vgn_measurement_embree::provide()
+            }
+            #[cfg(not(feature = "embree"))]
+            {
+                vgn_measurement::backend::null_bsdf_backend()
+            }
+        };
+        let gaf_backend: Arc<dyn vgn_measurement::backend::GafBackend> = {
+            #[cfg(feature = "wgpu")]
+            {
+                vgn_measurement_wgpu::provide()
+            }
+            #[cfg(not(feature = "wgpu"))]
+            {
+                vgn_measurement::backend::null_gaf_backend()
+            }
+        };
+
         Ok(Self {
             start_time: Instant::now(),
             gpu_ctx,
@@ -238,6 +265,8 @@ impl VgonioGuiApp {
             theme: (ThemeKind::Light, true),
             event_loop_proxy,
             window,
+            bsdf_backend,
+            gaf_backend,
         })
     }
 
@@ -606,11 +635,24 @@ impl VgonioGuiApp {
                             MeasurementParams::Ndf(params) => self.cache.read(|cache| {
                                 measure::mfd::measure_area_distribution(params, &surfaces, cache)
                             }),
-                            MeasurementParams::Gaf(params) => self.cache.read(|cache| {
-                                measure::mfd::measure_masking_shadowing_function(
-                                    params, &surfaces, cache,
-                                )
-                            }),
+                            MeasurementParams::Gaf(params) => {
+                                if self.gaf_backend.is_null() {
+                                    log::error!("No GAF backend compiled in");
+                                    self.event_loop_proxy.send_event(Notify {
+                                        kind: NotifyKind::Error,
+                                        text: "No GAF backend compiled in; rebuild with                                                `--features wgpu`."
+                                            .to_string(),
+                                        time: 2.0,
+                                    });
+                                    return;
+                                }
+                                let gaf_backend = &*self.gaf_backend;
+                                self.cache.read(|cache| {
+                                    measure::mfd::measure_masking_shadowing_function(
+                                        params, &surfaces, cache, gaf_backend,
+                                    )
+                                })
+                            },
                             MeasurementParams::Bsdf(params) => {
                                 if params.is_both_air_medium() {
                                     log::error!("Cannot measure BSDF for both air medium");
@@ -621,7 +663,7 @@ impl VgonioGuiApp {
                                     });
                                     return;
                                 }
-                                if let Err(reason) = params.check_supported_for_measurement() {
+                                if let Err(reason) = params.check_supported_for_measurement(&*self.bsdf_backend) {
                                     log::error!(
                                         "Cannot measure BSDF with unsupported simulation method: \
                                          {}",
@@ -641,6 +683,7 @@ impl VgonioGuiApp {
                                 #[cfg(feature = "vdbg")]
                                 {
                                     use vgn_measurement::bsdf::BsdfMeasurement;
+                                    let bsdf_backend = &*self.bsdf_backend;
                                     let measured = self.cache.read(|cache| {
                                         // GUI does not yet route through the
                                         // executor; fresh, never-cancelled
@@ -649,7 +692,7 @@ impl VgonioGuiApp {
                                         let cancel =
                                             vgn_job_api::context::CancellationToken::new();
                                         measure::bsdf::measure_bsdf_rt(
-                                            params, &surfaces, cache, &cancel,
+                                            params, &surfaces, cache, &cancel, bsdf_backend,
                                         )
                                     });
                                     let bsdf = measured[0]
@@ -666,14 +709,20 @@ impl VgonioGuiApp {
                                 }
 
                                 #[cfg(not(feature = "vdbg"))]
-                                self.cache.read(|cache| {
-                                    // GUI does not yet route through the
-                                    // executor; pass a fresh, never-cancelled
-                                    // token so the measurement runs to
-                                    // completion as it did pre-Phase-1.
-                                    let cancel = vgn_job_api::context::CancellationToken::new();
-                                    measure::bsdf::measure_bsdf_rt(params, &surfaces, cache, &cancel)
-                                })
+                                {
+                                    let bsdf_backend = &*self.bsdf_backend;
+                                    self.cache.read(|cache| {
+                                        // GUI does not yet route through the
+                                        // executor; pass a fresh, never-cancelled
+                                        // token so the measurement runs to
+                                        // completion as it did pre-Phase-1.
+                                        let cancel =
+                                            vgn_job_api::context::CancellationToken::new();
+                                        measure::bsdf::measure_bsdf_rt(
+                                            params, &surfaces, cache, &cancel, bsdf_backend,
+                                        )
+                                    })
+                                }
                             },
                             MeasurementParams::Sdf(params) => self.cache.read(|cache| {
                                 measure::mfd::measure_slope_distribution(&surfaces, params, cache)

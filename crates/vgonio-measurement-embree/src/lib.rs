@@ -1,10 +1,10 @@
 //! Embree BSDF ray-tracing backend.
-//!
-//! Stub scaffold: the `todo!()` bodies are replaced with calls
-//! into the moved `embr::*` kernels in later commits.
+
+mod embr;
 
 use std::sync::Arc;
 
+use embree::{Geometry, Scene};
 use vgn_core::{math::Sph2, optics::Ior};
 use vgn_io::MicroSurfaceMesh;
 use vgn_measurement::{
@@ -18,24 +18,45 @@ pub struct EmbreeBackend;
 impl BsdfRtBackend for EmbreeBackend {
     fn create_resources(
         &self,
-        _mesh: &MicroSurfaceMesh,
+        mesh: &MicroSurfaceMesh,
     ) -> (DeviceHandle, SceneHandle, GeometryHandle) {
-        todo!("embree backend impl lands in Task 2.8")
+        let (device, scene, geometry) = embr::create_resources(mesh);
+        (
+            DeviceHandle::new(device),
+            SceneHandle::new(scene),
+            GeometryHandle::new(geometry),
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
     fn simulate_single_point(
         &self,
-        _wi: Sph2,
-        _sector: &EmitterCircularSector<'_>,
-        _mesh: &MicroSurfaceMesh,
-        _geometry: &GeometryHandle,
-        _scene: &SceneHandle,
-        #[cfg(not(feature = "vdbg"))] _fresnel: bool,
-        #[cfg(not(feature = "vdbg"))] _iors_i: &[Ior],
-        #[cfg(not(feature = "vdbg"))] _iors_t: &[Ior],
+        wi: Sph2,
+        sector: &EmitterCircularSector<'_>,
+        mesh: &MicroSurfaceMesh,
+        geometry: &GeometryHandle,
+        scene: &SceneHandle,
+        #[cfg(not(feature = "vdbg"))] fresnel: bool,
+        #[cfg(not(feature = "vdbg"))] iors_i: &[Ior],
+        #[cfg(not(feature = "vdbg"))] iors_t: &[Ior],
     ) -> SingleSimResult {
-        todo!("embree backend impl lands in Task 2.8")
+        let geometry: &Arc<Geometry<'static>> = geometry
+            .downcast_ref()
+            .expect("geometry handle is Arc<embree::Geometry>");
+        let scene: &Scene<'static> = scene.downcast_ref().expect("scene handle is embree::Scene");
+        embr::simulate_bsdf_measurement_single_point(
+            wi,
+            sector,
+            mesh,
+            Arc::clone(geometry),
+            scene,
+            #[cfg(not(feature = "vdbg"))]
+            fresnel,
+            #[cfg(not(feature = "vdbg"))]
+            iors_i,
+            #[cfg(not(feature = "vdbg"))]
+            iors_t,
+        )
     }
 }
 
