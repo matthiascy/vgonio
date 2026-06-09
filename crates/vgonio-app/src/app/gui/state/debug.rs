@@ -1,5 +1,5 @@
 #[cfg(feature = "vdbg")]
-use crate::measure::bsdf::rtc::RayTrajectory;
+use vgn_measurement::bsdf::rtc::RayTrajectory;
 use crate::{
     app::{
         cache::Cache,

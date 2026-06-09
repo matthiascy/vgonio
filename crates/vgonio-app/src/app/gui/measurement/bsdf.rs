@@ -20,9 +20,15 @@ use vgn_core::{math::Sph2, units::Rads};
 #[cfg(feature = "vdbg")]
 use vgn_uxgx::gui::widgets::ToggleSwitch;
 
-impl BsdfKind {
+use super::ReceiverParamsUiExt;
+
+pub trait BsdfKindUiExt {
+    fn selectable_ui(&mut self, id_source: impl Hash, ui: &mut egui::Ui);
+}
+
+impl BsdfKindUiExt for BsdfKind {
     /// Creates the UI for selecting the BSDF kind.
-    pub fn selectable_ui(&mut self, id_source: impl Hash, ui: &mut egui::Ui) {
+    fn selectable_ui(&mut self, id_source: impl Hash, ui: &mut egui::Ui) {
         egui::ComboBox::from_id_salt(id_source)
             .selected_text(format!("{}", self))
             .show_ui(ui, |ui| {
@@ -57,9 +63,17 @@ pub fn medium_selectable_ui(medium: &mut MediumId, id_source: impl Hash, ui: &mu
         });
 }
 
-impl EmitterParams {
+pub trait EmitterParamsUiExt {
+    fn ui<R>(
+        &mut self,
+        ui: &mut egui::Ui,
+        add_contents: impl FnOnce(&mut EmitterParams, &mut egui::Ui) -> R,
+    );
+}
+
+impl EmitterParamsUiExt for EmitterParams {
     /// Creates the UI for parameterizing the emitter.
-    pub fn ui<R>(
+    fn ui<R>(
         &mut self,
         ui: &mut egui::Ui,
         add_contents: impl FnOnce(&mut EmitterParams, &mut egui::Ui) -> R,

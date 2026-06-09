@@ -1,27 +1,24 @@
 use std::sync::Arc;
 
-use bytes::Bytes;
 use vgn_core::config::Config;
 use vgn_executor::{CapabilityRegistry, LocalExecutor};
+
+#[cfg(feature = "fitting")]
+use bytes::Bytes;
+#[cfg(feature = "fitting")]
+use crate::orchestration::fitting::FitRequest;
+#[cfg(feature = "fitting")]
 use vgn_job_api::{
     error::{JobError, JobErrorCode},
     ids::CapabilityId,
 };
 
-#[cfg(feature = "fitting")]
-use crate::orchestration::fitting::FitRequest;
-use crate::orchestration::measure::MeasureRequest;
-
-/// Wire ID for the Phase 1 `vgonio measure` batch wrapper. The per-kind
-/// `measure-{bsdf,ndf,msf,sdf}` IDs declared in [`CapabilityId`] are the
-/// long-term protocol; Phase 1's CLI submits one batched envelope that
-/// internally iterates over per-description dispatch. Phase 2 will split
-/// per-kind and retire this string.
-pub(crate) const MEASURE_BATCH_CAPABILITY: &str = "measure";
+/// Wire ID for the `vgonio measure` batch capability. Defined in
+/// `vgn_measurement` (alongside the handler) and re-exported here so the CLI
+/// adapter (`cmd_measure`) can address the envelope via `executor::`.
+pub(crate) use vgn_measurement::MEASURE_BATCH_CAPABILITY;
 
 pub fn build_local_executor(config: Arc<Config>) -> LocalExecutor {
-    // Extract before any handler closure consumes `config`; the closures use
-    // `move` and would otherwise leave nothing for the registry-tail call.
     let cache_dir = config.cache_dir().to_path_buf();
 
     #[allow(unused_mut)]
@@ -43,9 +40,9 @@ pub fn build_local_executor(config: Arc<Config>) -> LocalExecutor {
                 crate::orchestration::fitting::run(req, Arc::clone(&config_for_fit), ctx)
                     .map(|_| Bytes::new())
                     .map_err(|e| JobError {
-                        // The CLI adapter adds its own "Fit job failed:"
-                        // context (via `e.message`); the handler stores the
-                        // raw cause so the final message is single-wrapped.
+                        // The CLI adapter adds its own "Fit job failed:" context
+                        // (via `e.message`); store the raw cause so the final
+                        // message is single-wrapped.
                         code: JobErrorCode::HandlerError,
                         message: e.to_string(),
                         retriable: false,
@@ -55,77 +52,9 @@ pub fn build_local_executor(config: Arc<Config>) -> LocalExecutor {
         );
     }
 
-    {
-        let config_for_measure = Arc::clone(&config);
-        reg.register(
-            CapabilityId(MEASURE_BATCH_CAPABILITY.into()),
-            Arc::new(move |envelope, ctx| {
-                let req: MeasureRequest =
-                    serde_json::from_slice(&envelope.payload).map_err(|e| JobError {
-                        code: JobErrorCode::HandlerError,
-                        message: format!("Failed to deserialize MeasureRequest: {e}"),
-                        retriable: false,
-                        details: None,
-                    })?;
-                // `LocalExecutor` runs each handler on a fresh OS thread that
-                // has no rayon-pool affinity, so any `par_iter` inside the
-                // orchestration falls back to the rayon global pool by
-                // default. Honor the submitter's `cpu_cores` hint by
-                // installing a pool here, around the orchestration call;
-                // a missing hint keeps the global-pool default.
-                let config_clone = Arc::clone(&config_for_measure);
-                // Snapshot the cancel handle: the orchestration owns `ctx`
-                // by move, so after `run` returns we can no longer reach
-                // `ctx.cancel`. The cloned token shares the same atomic
-                // flag, so the post-call check sees the same state the
-                // orchestration acted on.
-                let cancel = ctx.cancel.clone();
-                let run = move || {
-                    crate::orchestration::measure::run(req, config_clone, ctx)
-                        .map(|_| Bytes::new())
-                        .map_err(|e| {
-                            // If the cancel flag is set, the orchestration's
-                            // early-return path is the cause; surface that as
-                            // a structured Cancelled so the bridge renders
-                            // `! cancelled` rather than a generic error line.
-                            if cancel.is_cancelled() {
-                                JobError {
-                                    code: JobErrorCode::Cancelled,
-                                    message: "measurement cancelled".into(),
-                                    retriable: false,
-                                    details: None,
-                                }
-                            } else {
-                                JobError {
-                                    code: JobErrorCode::HandlerError,
-                                    message: e.to_string(),
-                                    retriable: false,
-                                    details: None,
-                                }
-                            }
-                        })
-                };
-                match envelope.resources.cpu_cores {
-                    Some(cores) => {
-                        let pool = rayon::ThreadPoolBuilder::new()
-                            .num_threads(cores as usize)
-                            .build()
-                            .map_err(|e| JobError {
-                                code: JobErrorCode::HandlerError,
-                                message: format!(
-                                    "Failed to create measurement thread pool with {} threads: {}",
-                                    cores, e
-                                ),
-                                retriable: false,
-                                details: None,
-                            })?;
-                        pool.install(run)
-                    },
-                    None => run(),
-                }
-            }),
-        );
-    }
+    // The measure handler + `MEASURE_BATCH_CAPABILITY` live in `vgn_measurement`
+    // (DIST Task 2.6); the app just installs them on the registry.
+    vgn_measurement::register_handlers(&mut reg, Arc::clone(&config));
 
     LocalExecutor::from_cache_dir(reg, cache_dir).expect("Failed to create LocalExecutor")
 }

@@ -45,7 +45,6 @@
 //!    unchanged.
 //! 3. `unload_micro_surface` lives on `UiCache`, delegating to compute.
 
-pub mod compute;
 pub mod ui;
 
 use std::{
@@ -53,8 +52,8 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-pub use compute::ComputeCache;
 pub use ui::UiCache;
+pub use vgn_measurement::cache::ComputeCache;
 /// A thread-safe cache. Wraps a [`UiCache`] (which embeds [`ComputeCache`])
 /// behind a single `RwLock`. The closure-based `read`/`write` API is
 /// preserved; closures receive `&UiCache` / `&mut UiCache`, and `UiCache`

@@ -1,10 +1,8 @@
 //! CLI shape for the `measure` subcommand: clap parsing + thread-pool wrapper.
-//! Orchestration lives in [`crate::orchestration::measure`].
+//! Orchestration lives in [`vgn_measurement::orchestration`].
 
-use crate::{
-    app::{args::OutputFormat, executor},
-    orchestration::measure::MeasureRequest,
-};
+use crate::app::{args::OutputFormat, executor};
+use vgn_measurement::request::MeasureRequest;
 use std::{path::PathBuf, sync::Arc};
 use vgn_core::{
     cli::{cli_step, Indent},
@@ -18,6 +16,19 @@ use vgn_job_api::{
     ids::{CapabilityId, IdempotencyKey, JobId},
     resources::ResourceHints,
 };
+
+impl From<&MeasureOptions> for MeasureRequest {
+    fn from(opts: &MeasureOptions) -> Self {
+        Self {
+            inputs: opts.inputs.clone(),
+            output: opts.output.clone(),
+            output_format: opts.output_format,
+            resolution: opts.resolution,
+            encoding: opts.encoding,
+            compression: opts.compression,
+        }
+    }
+}
 
 /// Measure different metrics of the micro-surface.
 pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> {

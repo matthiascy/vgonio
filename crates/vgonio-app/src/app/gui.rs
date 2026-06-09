@@ -640,7 +640,7 @@ impl VgonioGuiApp {
 
                                 #[cfg(feature = "vdbg")]
                                 {
-                                    use crate::measure::bsdf::BsdfMeasurement;
+                                    use vgn_measurement::bsdf::BsdfMeasurement;
                                     let measured = self.cache.read(|cache| {
                                         // GUI does not yet route through the
                                         // executor; fresh, never-cancelled
@@ -680,12 +680,12 @@ impl VgonioGuiApp {
                             }),
                         };
                         if let Some(opts @ OutputOptions { .. }) = output_opts {
-                            crate::io::write_measured_data_to_file(
-                                &data,
-                                &self.cache,
-                                &self.config,
-                                opts,
-                            )
+                            self.cache
+                                .read(|cache| {
+                                    crate::io::write_measured_data_to_file(
+                                        &data, cache, &self.config, opts,
+                                    )
+                                })
                             .map_err(|err| {
                                 log::error!("Failed to write measured data to file: {}", err);
                             })

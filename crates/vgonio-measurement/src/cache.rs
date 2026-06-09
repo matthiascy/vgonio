@@ -62,7 +62,7 @@ pub struct ComputeCache {
     msurfs: HashMap<Handle, MicroSurface>,
 
     /// Micro-surface triangle mesh cache, indexed by micro-surface mesh uuid.
-    pub(crate) meshes: HashMap<Handle, MicroSurfaceMesh>,
+    pub meshes: HashMap<Handle, MicroSurfaceMesh>,
 
     /// Cache for measured data.
     measurements: HashMap<Handle, Measurement>,

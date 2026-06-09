@@ -1,6 +1,6 @@
 //! Microfacet Slope Distribution Function (MSDF) measurement implementation.
 
-use crate::measure::params::SdfMeasurementParams;
+use vgn_measurement::params::SdfMeasurementParams;
 
 #[derive(Debug)]
 pub struct SdfMeasurementTab {

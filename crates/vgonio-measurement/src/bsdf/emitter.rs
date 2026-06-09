@@ -111,7 +111,7 @@ impl EmitterParams {
 
     /// Transforms the samples from the sampling space to the desired position
     /// in the world coordinate system.
-    pub(crate) fn transform_samples(
+    pub fn transform_samples(
         samples: &[Vec3],
         dest: Sph2,
         orbit_radius: f32,
@@ -127,7 +127,7 @@ impl EmitterParams {
     }
 
     /// Emits rays from the samples
-    pub(crate) fn emit_rays(
+    pub fn emit_rays(
         samples: &EmitterSamples,
         dest: Sph2,
         orbit_radius: f32,

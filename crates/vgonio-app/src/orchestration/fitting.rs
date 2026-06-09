@@ -15,7 +15,7 @@
 //! This module is reporter-clean: it emits [`vgn_job_api::progress::Activity`]
 //! events through `ctx.progress` rather than calling `vgn_core::cli`, so it can
 //! move into a capability crate where `vgn_core::cli` is unreachable. There is
-//! no top-level ADAPTER banner here (unlike [`crate::orchestration::measure`];
+//! no top-level ADAPTER banner here (unlike [`vgn_measurement::orchestration`];
 //! `fit` never printed an `Indent::ROOT` "Executing 'vgonio fit'…" line).
 //!
 //! Phase headings ("Fitting to distribution @...", "Fitting to model

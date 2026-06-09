@@ -29,9 +29,17 @@ use vgn_core::{
 };
 use vgn_uxgx::gui::widgets::{SurfaceSelector, ToggleSwitch};
 
-impl ReceiverParams {
+pub trait ReceiverParamsUiExt {
+    fn ui<R>(
+        &mut self,
+        ui: &mut egui::Ui,
+        add_contents: impl FnOnce(&mut ReceiverParams, &mut egui::Ui) -> R,
+    );
+}
+
+impl ReceiverParamsUiExt for ReceiverParams {
     /// UI for detector parameters.
-    pub fn ui<R>(
+    fn ui<R>(
         &mut self,
         ui: &mut egui::Ui,
         add_contents: impl FnOnce(&mut ReceiverParams, &mut egui::Ui) -> R,

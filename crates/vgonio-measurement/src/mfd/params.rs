@@ -373,3 +373,54 @@ fn serialisation_deserialisation() {
         );
     }
 }
+
+impl std::fmt::Display for NdfMeasurementParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.mode {
+            NdfMeasurementMode::ByPoints { azimuth, zenith } => {
+                write!(
+                    f,
+                    "MicrofacetDistributionMeasurement\n    - by-points\n    - azimuthal angle: \
+                     {} ~ {} per {}, {} bins\n    - polar angle    : {} ~ {} per {}, {} bins\n",
+                    azimuth.start.prettified(),
+                    azimuth.stop.prettified(),
+                    azimuth.step_size.prettified(),
+                    azimuth.step_count_wrapped(),
+                    zenith.start.prettified(),
+                    zenith.stop.prettified(),
+                    zenith.step_size.prettified(),
+                    zenith.step_count_wrapped(),
+                )
+            },
+            NdfMeasurementMode::ByPartition { precision } => {
+                write!(
+                    f,
+                    "MicrofacetDistributionMeasurement\n    - by-partition\n    - scheme: \
+                     Beckers\n    - precision: {}",
+                    precision.prettified()
+                )
+            },
+        }
+    }
+}
+
+impl std::fmt::Display for GafMeasurementParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "MicrofacetShadowingMaskingMeasurement\n    - azimuthal angle: {} ~ {} per {}, {} \
+             bins\n    - polar angle    : {} ~ {} per {}, {} bins\n    - resolution     : {} x {}",
+            self.azimuth.start.prettified(),
+            self.azimuth.stop.prettified(),
+            self.azimuth.step_size.prettified(),
+            self.azimuth.step_count_wrapped(),
+            self.zenith.start.prettified(),
+            self.zenith.stop.prettified(),
+            self.zenith.step_size.prettified(),
+            self.zenith.step_count_wrapped(),
+            self.resolution,
+            self.resolution
+        )
+    }
+}
+
