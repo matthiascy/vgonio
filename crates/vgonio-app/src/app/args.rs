@@ -165,44 +165,9 @@ pub enum FastMeasurementKind {
     MaskingShadowingFunction,
 }
 
-#[derive(Debug, Copy, Clone, Default, PartialEq, Serialize, Deserialize, ValueEnum)]
-#[serde(rename_all = "lowercase")]
-pub enum OutputFormat {
-    /// Vgonio internal file format.
-    #[default]
-    Vgmo,
-    // /// Portable float map.
-    // Pfm,
-    // /// Portable network graphics.
-    // Png,
-    /// OpenEXR image format with resolution.
-    Exr,
-    /// Vgonio interal file format together with a EXR file.
-    VgmoExr,
-    /// VGONIO archival container — `.vgbsdf` / `.vgndf` / `.vgsdf`. The actual
-    /// extension is chosen per measurement kind; the umbrella name follows the
-    /// canonical BSDF case.
-    Vgbsdf,
-}
-
-impl Display for OutputFormat {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Vgmo => write!(f, "vgmo"),
-            Self::Exr => write!(f, "exr"),
-            Self::VgmoExr => write!(f, "vgmo+exr"),
-            Self::Vgbsdf => write!(f, "vgbsdf"),
-        }
-    }
-}
-
-impl OutputFormat {
-    pub fn is_vgmo(&self) -> bool { matches!(self, Self::Vgmo | Self::VgmoExr) }
-
-    pub fn is_exr(&self) -> bool { matches!(self, Self::Exr | Self::VgmoExr) }
-
-    pub fn is_vgbsdf(&self) -> bool { matches!(self, Self::Vgbsdf) }
-}
+// `OutputFormat` moved to `vgn_core::io`. Re-exported here
+// so existing `crate::app::args::OutputFormat` call sites keep resolving.
+pub use vgn_core::io::OutputFormat;
 
 /// Status color policy exposed on CLI.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]

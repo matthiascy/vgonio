@@ -89,6 +89,7 @@ vgn_core = { workspace = true, features = ["cli", "winit", "io", "config"] }
 vgn_bxdf = { workspace = true, optional = true, features = ["fitting", "io"] }
 vgonio-job-api = { path = "../vgonio-job-api" }
 vgonio-executor = { path = "../vgonio-executor" }
+vgonio-measurement = { path = "../vgonio-measurement" }
 
 [dev-dependencies]
 proptest.workspace = true

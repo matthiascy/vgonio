@@ -27,6 +27,8 @@ nalgebra.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 exr.workspace = true                                                # NDF/SDF/BSDF EXR writers
+flate2.workspace = true                                             # VGMO codec (Zlib/Gzip)
+lz4_flex.workspace = true                                           # VGMO codec (Lz4)
 approx.workspace = true                                             # measurement test asserts
 tempfile.workspace = true
 futures-intrusive.workspace = true
@@ -43,6 +45,9 @@ bytemuck.workspace = true
 image.workspace = true
 vgn_uxgx = { workspace = true, features = ["gfx"] }
 pollster.workspace = true
+
+[dev-dependencies]
+zip.workspace = true                                                # vgsdf archive smoke tests
 
 [lints]
 workspace = true

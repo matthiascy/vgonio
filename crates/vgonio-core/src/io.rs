@@ -693,6 +693,48 @@ where
     Ok(())
 }
 
+/// Selects which file format(s) the measurement writer emits.
+///
+/// Moved here from `vgonio-app::app::args`: it's a generic
+/// output-format selector, not an app-specific concept. The `clap::ValueEnum`
+/// derive is gated behind the `cli` feature so crates that pull `vgn_core`
+/// without `cli` can still name the enum.
+#[derive(Debug, Copy, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
+#[serde(rename_all = "lowercase")]
+pub enum OutputFormat {
+    /// Vgonio internal file format.
+    #[default]
+    Vgmo,
+    /// OpenEXR image format with resolution.
+    Exr,
+    /// Vgonio interal file format together with a EXR file.
+    VgmoExr,
+    /// VGONIO archival container — `.vgbsdf` / `.vgndf` / `.vgsdf`. The actual
+    /// extension is chosen per measurement kind; the umbrella name follows the
+    /// canonical BSDF case.
+    Vgbsdf,
+}
+
+impl fmt::Display for OutputFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Vgmo => write!(f, "vgmo"),
+            Self::Exr => write!(f, "exr"),
+            Self::VgmoExr => write!(f, "vgmo+exr"),
+            Self::Vgbsdf => write!(f, "vgbsdf"),
+        }
+    }
+}
+
+impl OutputFormat {
+    pub fn is_vgmo(&self) -> bool { matches!(self, Self::Vgmo | Self::VgmoExr) }
+
+    pub fn is_exr(&self) -> bool { matches!(self, Self::Exr | Self::VgmoExr) }
+
+    pub fn is_vgbsdf(&self) -> bool { matches!(self, Self::Vgbsdf) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

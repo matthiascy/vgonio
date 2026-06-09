@@ -31,62 +31,19 @@
 //! [`Activity::Warning`]: vgn_job_api::progress::Activity::Warning
 
 use crate::{
-    app::{args::OutputFormat, cache::Cache, cli::MeasureOptions},
-    io::{OutputFileFormatOption, OutputOptions},
-    measure,
-    measure::params::{MeasurementDescription, MeasurementParams, NdfMeasurementMode},
+    bsdf,
+    cache::ComputeCache,
+    io::{write_measured_data_to_file, OutputFileFormatOption, OutputOptions},
+    mfd,
+    params::{MeasurementDescription, MeasurementParams, NdfMeasurementMode},
+    request::MeasureRequest,
 };
-use serde::{Deserialize, Serialize};
-use std::{path::PathBuf, sync::Arc, time::Instant};
-use vgn_core::{
-    config::Config,
-    error::VgonioError,
-    io::{CompressionScheme, FileEncoding},
-};
+use std::{sync::Arc, time::Instant};
+use vgn_core::{config::Config, error::VgonioError, io::OutputFormat};
 use vgn_job_api::{
     context::JobContext,
     progress::{Activity, PhaseKind, PhaseOutcome},
 };
-/// Top-level capability request for `vgonio measure`. Mirrors the runtime
-/// fields of [`MeasureOptions`] in a serde-friendly form.
-///
-/// Phase 1 treats the whole CLI invocation as one batched capability call:
-/// the orchestration loads every description from `inputs`, resolves their
-/// surfaces, dispatches per-kind internally, and writes outputs. Phase 2
-/// will split per-measurement-kind (BSDF / NDF / MSF / SDF), at which point
-/// `cmd_measure` will emit one envelope per description instead.
-///
-/// CLI-shell concerns (`nthreads`, `print_stats`) do not belong on the
-/// request: rayon pool sizing is set up at the adapter before submission
-/// and `print_stats` is presently unused.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MeasureRequest {
-    /// Measurement description files (or directories containing them).
-    pub inputs: Vec<PathBuf>,
-    /// Output directory. `None` defers to the configuration's default.
-    pub output: Option<PathBuf>,
-    /// Selects which file format(s) the writer emits.
-    pub output_format: OutputFormat,
-    /// Resolution for image-shaped outputs (EXR; the Vgbsdf disc grid).
-    pub resolution: u32,
-    /// On-disk encoding for the Vgmo container.
-    pub encoding: FileEncoding,
-    /// On-disk compression for the Vgmo container.
-    pub compression: CompressionScheme,
-}
-
-impl From<&MeasureOptions> for MeasureRequest {
-    fn from(opts: &MeasureOptions) -> Self {
-        Self {
-            inputs: opts.inputs.clone(),
-            output: opts.output.clone(),
-            output_format: opts.output_format,
-            resolution: opts.resolution,
-            encoding: opts.encoding,
-            compression: opts.compression,
-        }
-    }
-}
 
 pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<(), VgonioError> {
     let root_phase = ctx.next_phase_id();
@@ -136,9 +93,9 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
         measurements
     };
 
-    let cache = Cache::new(config.cache_dir());
+    let mut cache = ComputeCache::new(config.cache_dir());
 
-    let (tasks, num_surfs) = cache.write(|cache| {
+    let (tasks, num_surfs) = {
         // Load data files: refractive indices, spd etc. if needed.
         if measurements.iter().any(|meas| meas.params.is_bsdf()) {
             let phase = ctx.next_phase_id();
@@ -208,7 +165,7 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
             });
 
         (tasks, cache.num_micro_surfaces())
-    });
+    };
 
     if num_surfs == 0 {
         ctx.progress.emit_activity(Activity::Warning {
@@ -301,9 +258,7 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
                         ),
                     });
                 }
-                cache.read(|cache| {
-                    measure::bsdf::measure_bsdf_rt(params, &surfaces, cache, &ctx.cancel)
-                })
+                bsdf::measure_bsdf_rt(params, &surfaces, &cache, &ctx.cancel)
             },
             MeasurementParams::Ndf(measurement) => {
                 let label = match &measurement.mode {
@@ -332,9 +287,7 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
                     label,
                     at: chrono::Utc::now(),
                 });
-                cache.read(|cache| {
-                    measure::mfd::measure_area_distribution(measurement, &surfaces, cache)
-                })
+                mfd::measure_area_distribution(measurement, &surfaces, &cache)
             },
             MeasurementParams::Gaf(measurement) => {
                 ctx.progress.emit_activity(Activity::PhaseBegin {
@@ -359,9 +312,7 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
                 log::warn!(
                     "Debug mode is enabled. Measuring MMSF in debug mode is not recommended."
                 );
-                cache.read(|cache| {
-                    measure::mfd::measure_masking_shadowing_function(measurement, &surfaces, cache)
-                })
+                mfd::measure_masking_shadowing_function(measurement, &surfaces, &cache)
             },
             MeasurementParams::Sdf(params) => {
                 ctx.progress.emit_activity(Activity::PhaseBegin {
@@ -371,9 +322,7 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
                     label: "Measuring slope distribution function...".into(),
                     at: chrono::Utc::now(),
                 });
-                cache.read(|cache| {
-                    measure::mfd::measure_slope_distribution(&surfaces, params, cache)
-                })
+                mfd::measure_slope_distribution(&surfaces, params, &cache)
             },
         };
 
@@ -431,7 +380,7 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
             label: "Writing measurement output...".into(),
             at: chrono::Utc::now(),
         });
-        crate::io::write_measured_data_to_file(
+        write_measured_data_to_file(
             &measured,
             &cache,
             &config,
@@ -453,7 +402,10 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
         instance: root_phase,
         outcome: PhaseOutcome::Ok,
         duration_micros: Some(root_started.elapsed().as_micros() as u64),
-        summary: Some(format!("Finished in {:.2} s", start_time.elapsed().as_secs_f32())),
+        summary: Some(format!(
+            "Finished in {:.2} s",
+            start_time.elapsed().as_secs_f32()
+        )),
         at: chrono::Utc::now(),
     });
 
@@ -463,25 +415,14 @@ pub fn run(req: MeasureRequest, config: Arc<Config>, ctx: JobContext) -> Result<
 #[cfg(test)]
 mod tests {
     use super::MeasureRequest;
-    use crate::app::{args::OutputFormat, cli::MeasureOptions};
     use std::path::PathBuf;
-    use vgn_core::io::{CompressionScheme, FileEncoding};
+    use vgn_core::io::{CompressionScheme, FileEncoding, OutputFormat};
 
-    /// Returns a `MeasureOptions` with a non-default value for every runtime
-    /// field. CLI-shell fields (`nthreads`, `print_stats`) are also set so
-    /// the test can assert they do NOT leak onto the request.
-    fn fully_populated_options() -> MeasureOptions {
-        MeasureOptions {
-            inputs: vec![PathBuf::from("a.yaml"), PathBuf::from("b.yaml")],
-            output: Some(PathBuf::from("/out/dir")),
-            output_format: OutputFormat::VgmoExr,
-            resolution: 1024,
-            encoding: FileEncoding::Ascii,
-            compression: CompressionScheme::Zlib,
-            nthreads: Some(8),
-            print_stats: true,
-        }
-    }
+    // NOTE: the `From<&MeasureOptions> for MeasureRequest`
+    // conversion and its `measure_request_from_options_mirrors_runtime_fields`
+    // test moved app-side with `MeasureOptions` (clap-shaped). The conversion
+    // lives in `vgonio-app::app::cli::cmd_measure`; its mirroring test belongs
+    // in `vgonio-app`.
 
     fn fully_populated_request() -> MeasureRequest {
         MeasureRequest {
@@ -492,26 +433,6 @@ mod tests {
             encoding: FileEncoding::Ascii,
             compression: CompressionScheme::Zlib,
         }
-    }
-
-    // ------------------------------------------------------------------
-    // From<&MeasureOptions> for MeasureRequest: every runtime field on
-    // the options struct must be mirrored onto the request, and the
-    // CLI-shell-only fields must NOT leak onto the request. When a new
-    // field is added to `MeasureOptions`, update both `fully_populated_*`
-    // helpers and the assertions below.
-    // ------------------------------------------------------------------
-
-    #[test]
-    fn measure_request_from_options_mirrors_runtime_fields() {
-        let opts = fully_populated_options();
-        let req = MeasureRequest::from(&opts);
-        assert_eq!(req.inputs, opts.inputs);
-        assert_eq!(req.output, opts.output);
-        assert_eq!(req.output_format, opts.output_format);
-        assert_eq!(req.resolution, opts.resolution);
-        assert_eq!(req.encoding, opts.encoding);
-        assert_eq!(req.compression, opts.compression);
     }
 
     // ------------------------------------------------------------------
@@ -669,6 +590,10 @@ surfaces:
             .unwrap()
             .filter_map(Result::ok)
             .any(|e| e.path().extension().is_some_and(|ext| ext == "vgmo"));
-        assert!(wrote_vgmo, "expected a .vgmo output in {}", out_dir.display());
+        assert!(
+            wrote_vgmo,
+            "expected a .vgmo output in {}",
+            out_dir.display()
+        );
     }
 }

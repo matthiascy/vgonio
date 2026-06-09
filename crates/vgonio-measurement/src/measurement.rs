@@ -1026,7 +1026,7 @@ impl<'a> DataCarriedOnHemisphereSampler<'a, MeasuredNdfData> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::measurement::{
+    use crate::{
         mfd::MeasuredNdfData,
         params::{NdfMeasurementMode, NdfMeasurementParams},
     };

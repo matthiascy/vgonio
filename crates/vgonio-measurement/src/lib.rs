@@ -17,6 +17,7 @@ use vgn_executor::CapabilityRegistry;
 
 pub mod backend;
 pub mod cache;
+pub mod io;
 pub mod measurement;
 pub mod orchestration;
 pub mod request;
