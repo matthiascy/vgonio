@@ -1,10 +1,7 @@
 /target
-.idea
 /tmp
 /venv
-/.venv
 /pyenv
-/.pyenv
 reflectance_*.csv
 debug_*/
 /**.png
@@ -14,10 +11,8 @@ debug_*/
 **.exr
 rustc-ice-**.txt
 **dist/
-.vscode/
-rvbrdf/*
+rvbrdf/
 interim/
-.zed/
 .*
 !.gitignore
 !.python-version
