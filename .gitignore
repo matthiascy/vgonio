@@ -20,3 +20,4 @@ interim/
 .zed/
 .*
 !.gitignore
+!.python-version

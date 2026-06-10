@@ -33,12 +33,17 @@ use vgn_measurement::{bsdf::BsdfMeasurement, cache::ComputeCache, mfd::MeasuredN
 
 use crate::{
     mfd::{MfdFittingData, MicrofacetDistributionFittingProblem},
+    plot::{ErrorVsAlpha, FitPlotData, PerWavelengthErr},
     request::{
         BrdfFitRequest, BrdfSource, ClausenResample, FitRequest, FittingMethod, NdfFitRequest,
         Roughness,
     },
 };
-pub fn run(req: FitRequest, config: Arc<Config>, ctx: JobContext) -> Result<(), VgonioError> {
+pub fn run(
+    req: FitRequest,
+    config: Arc<Config>,
+    ctx: JobContext,
+) -> Result<Vec<FitPlotData>, VgonioError> {
     // Re-validate structural invariants here: the request may have arrived
     // via JSON/envelope rather than `TryFrom<&FitOptions>`, and validating
     // at the run boundary is what makes the contract enforceable end-to-end.
@@ -49,7 +54,11 @@ pub fn run(req: FitRequest, config: Arc<Config>, ctx: JobContext) -> Result<(), 
     }
 }
 
-fn run_ndf(req: NdfFitRequest, config: &Config, ctx: JobContext) -> Result<(), VgonioError> {
+fn run_ndf(
+    req: NdfFitRequest,
+    config: &Config,
+    ctx: JobContext,
+) -> Result<Vec<FitPlotData>, VgonioError> {
     let mut cache = ComputeCache::new(config.cache_dir());
     let phase = ctx.next_phase_id();
     let started = std::time::Instant::now();
@@ -94,10 +103,15 @@ fn run_ndf(req: NdfFitRequest, config: &Config, ctx: JobContext) -> Result<(), V
         summary: None,
         at: chrono::Utc::now(),
     });
-    Ok(())
+    // NDF fitting never produces brute-force plot data.
+    Ok(vec![])
 }
 
-fn run_brdf(req: BrdfFitRequest, config: &Config, ctx: JobContext) -> Result<(), VgonioError> {
+fn run_brdf(
+    req: BrdfFitRequest,
+    config: &Config,
+    ctx: JobContext,
+) -> Result<Vec<FitPlotData>, VgonioError> {
     let mut cache = ComputeCache::new(config.cache_dir());
     // The `fit.brdf` phase is opened only for sources that actually fit:
     // `validate()` deliberately allows `Utia` / `Unknown` to omit `distro`
@@ -153,7 +167,7 @@ fn run_brdf(req: BrdfFitRequest, config: &Config, ctx: JobContext) -> Result<(),
             BrdfSource::Yan2018 => {
                 load_and_fit::<Yan18Brdf>(&req, cache, &config, &ctx, brdf_phase)
             },
-            BrdfSource::Utia => Ok(()),
+            BrdfSource::Utia => Ok(vec![]),
             BrdfSource::Unknown => {
                 // `source_invokes_fit()` is false for `Unknown`, so no
                 // `fit.brdf` phase was opened above. Open one here so the
@@ -180,7 +194,7 @@ fn run_brdf(req: BrdfFitRequest, config: &Config, ctx: JobContext) -> Result<(),
                     summary: None,
                     at: chrono::Utc::now(),
                 });
-                Ok(())
+                Ok(vec![])
             },
         }
     });
@@ -202,7 +216,8 @@ fn load_and_fit<F: AnyMeasured + AnyMeasuredBrdf + 'static>(
     config: &Config,
     ctx: &JobContext,
     parent: PhaseInstanceId,
-) -> Result<(), VgonioError> {
+) -> Result<Vec<FitPlotData>, VgonioError> {
+    let mut plots = Vec::new();
     for input in &req.inputs {
         let measurement = cache.load_micro_surface_measurement(config, input).unwrap();
         if let Some(brdf) = cache
@@ -213,10 +228,12 @@ fn load_and_fit<F: AnyMeasured + AnyMeasuredBrdf + 'static>(
         {
             #[cfg(debug_assertions)]
             log::debug!("BRDF incident medium {:?}", brdf.incident_medium());
-            measured_brdf_fitting(req, brdf, &cache.iors, ctx, parent)?;
+            if let Some(plot) = measured_brdf_fitting(req, brdf, &cache.iors, ctx, parent)? {
+                plots.push(plot);
+            }
         }
     }
-    Ok(())
+    Ok(plots)
 }
 
 fn fit_vgonio_clausen_pairs(
@@ -227,7 +244,8 @@ fn fit_vgonio_clausen_pairs(
     config: &Config,
     ctx: &JobContext,
     parent: PhaseInstanceId,
-) -> Result<(), VgonioError> {
+) -> Result<Vec<FitPlotData>, VgonioError> {
+    let mut plots = Vec::new();
     let phase = ctx.next_phase_id();
     let started = std::time::Instant::now();
     ctx.progress.emit_activity(Activity::PhaseBegin {
@@ -285,7 +303,9 @@ fn fit_vgonio_clausen_pairs(
             simulated_brdf.resample(&clausen_brdf.params, level, resample.dense, Rads::ZERO)
         };
         log::debug!("BRDF extraction done, starting fitting.");
-        measured_brdf_fitting(req, &brdf, &cache.iors, ctx, phase)?;
+        if let Some(plot) = measured_brdf_fitting(req, &brdf, &cache.iors, ctx, phase)? {
+            plots.push(plot);
+        }
     }
     ctx.progress.emit_activity(Activity::PhaseEnd {
         instance: phase,
@@ -294,7 +314,7 @@ fn fit_vgonio_clausen_pairs(
         summary: None,
         at: chrono::Utc::now(),
     });
-    Ok(())
+    Ok(plots)
 }
 
 fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
@@ -303,7 +323,7 @@ fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
     iors: &IorReg,
     ctx: &JobContext,
     parent: PhaseInstanceId,
-) -> Result<(), VgonioError> {
+) -> Result<Option<FitPlotData>, VgonioError> {
     let limit = req.theta_limit.unwrap_or(Radians::HALF_PI);
     let phase = ctx.next_phase_id();
     let started = std::time::Instant::now();
@@ -352,8 +372,9 @@ fn measured_brdf_fitting<F: AnyMeasuredBrdf>(
     let result = match req.method {
         FittingMethod::Brute => brdf_fitting_brute_force(brdf, req, iors, out.as_mut(), ctx, phase),
         FittingMethod::Nllsq => {
+            // Nllsq has no brute-force error-landscape to plot.
             brdf_fitting_nllsq(brdf, req, iors, out.as_mut(), ctx, phase);
-            Ok(())
+            Ok(None)
         },
     };
     if result.is_ok() {
@@ -422,7 +443,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
     writer: Option<&mut BufWriter<File>>,
     ctx: &JobContext,
     parent: PhaseInstanceId,
-) -> Result<(), VgonioError> {
+) -> Result<Option<FitPlotData>, VgonioError> {
     // TODO [cli-report worthy]: brute force searches a roughness grid
     // (START:END:STEP, possibly thousands of points) after this single banner
     // with no further feedback until the report. The fitter should emit
@@ -585,10 +606,13 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
         &reports,
     );
 
-    if req.plot {
-        // Per wavelength fitting
-        if req.per_wavelength && req.symmetry.is_isotropic() {
-            let wls = brdf
+    // Collect the data the CLI needs to render plots client-side (the
+    // capability is headless and cannot drive matplotlib itself). Returned in
+    // the job payload; `cmd_fit` renders it via the app's `pyplot`.
+    let plot_data = if req.plot {
+        // Per-wavelength best-α / error summary (isotropic per-wavelength only).
+        let per_wavelength = if req.per_wavelength && req.symmetry.is_isotropic() {
+            let wavelengths = brdf
                 .spectrum()
                 .iter()
                 .map(|w| w.as_f32())
@@ -601,27 +625,38 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
                     (best.params()[0], best_report.1.objective_fn)
                 })
                 .unzip();
-            {
-                let _ = (&wls, &alphas, &errors);
-                // TODO(DIST 2.x): plotting stays app-side; route via ctx.artifacts.
-                log::warn!("per-wavelength error plotting is a Phase 2.x follow-up; not plotted.");
-            }
-        }
+            Some(PerWavelengthErr {
+                wavelengths,
+                alphas,
+                errors,
+            })
+        } else {
+            None
+        };
 
-        for (_, report) in reports.iter() {
-            let mut alpha_error_pairs = report
-                .reports
-                .iter()
-                .map(|(m, r)| (m.params()[0], r.objective_fn))
-                .collect::<Vec<_>>();
-            alpha_error_pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-            let (alpha, error): (Vec<_>, Vec<_>) = alpha_error_pairs.into_iter().unzip();
+        // One error-vs-α sweep per report, α-sorted ascending.
+        let error_vs_alpha = reports
+            .iter()
+            .map(|(_, report)| {
+                let mut pairs = report
+                    .reports
+                    .iter()
+                    .map(|(m, r)| (m.params()[0], r.objective_fn))
+                    .collect::<Vec<_>>();
+                pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+                let (alpha, error): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
+                ErrorVsAlpha { alpha, error }
+            })
+            .collect::<Vec<_>>();
 
-            let _ = (&error, &alpha);
-            // TODO(DIST 2.x): plotting stays app-side; route via ctx.artifacts.
-            log::warn!("error plotting is a Phase 2.x follow-up; not plotted.");
-        }
-    }
+        Some(FitPlotData {
+            n_digits: req.brute_precision,
+            error_vs_alpha,
+            per_wavelength,
+        })
+    } else {
+        None
+    };
 
     fn brdf_fitting_brute_force_inner(
         proxy: &BrdfProxy,
@@ -656,7 +691,7 @@ fn brdf_fitting_brute_force<F: AnyMeasuredBrdf>(
         report
     }
 
-    Ok(())
+    Ok(plot_data)
 }
 
 fn format_range(r: StepRangeIncl<f64>) -> String {

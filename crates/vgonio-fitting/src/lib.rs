@@ -3,7 +3,6 @@
 //! live in `vgn_bxdf::fitting`; this crate owns the orchestration that
 //! drives them per `JobEnvelope`.
 #![feature(adt_const_params)]
-#![feature(generic_const_exprs)]
 
 use bytes::Bytes;
 use std::sync::Arc;
@@ -16,6 +15,7 @@ use vgn_job_api::{
 
 pub mod mfd;
 pub mod orchestration;
+pub mod plot;
 pub mod request;
 
 /// Registers the `fit` capability with the executor's registry.
@@ -34,12 +34,23 @@ pub fn register_handlers(reg: &mut CapabilityRegistry, config: Arc<Config>) {
                 })?;
             let cancel = ctx.cancel.clone();
             orchestration::run(req, Arc::clone(&config_for_fit), ctx)
-                // Fit publishes no artifacts today; the executor surfaces the
-                // (empty) vec verbatim. Plotting hand-off is a Phase 2.x
-                // follow-up (route through ctx.artifacts).
-                .map(|_| JobOutcome {
-                    payload: Bytes::new(),
-                    artifacts: vec![],
+                // Fit publishes no artifacts; when `--plot` was requested the
+                // orchestration returns the plot data, which we serialize into
+                // the result payload for the CLI to render client-side (the
+                // capability is headless). Empty vec -> empty payload.
+                .map(|plots| {
+                    let payload = if plots.is_empty() {
+                        Bytes::new()
+                    } else {
+                        serde_json::to_vec(&plots).map(Bytes::from).unwrap_or_else(|e| {
+                            log::error!("Failed to serialize fit plot data: {e}");
+                            Bytes::new()
+                        })
+                    };
+                    JobOutcome {
+                        payload,
+                        artifacts: vec![],
+                    }
                 })
                 .map_err(|e| {
                     if cancel.is_cancelled() {

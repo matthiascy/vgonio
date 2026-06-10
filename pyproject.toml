@@ -1,0 +1,30 @@
+# Python environment for vgonio (managed by uv).
+#
+# This is NOT a Python package — it only declares the runtime/build Python
+# dependencies vgonio needs, so `uv sync` provisions a reproducible `.venv`:
+#   - matplotlib / numpy / seaborn: the pyo3-embedded plotting in
+#     `crates/vgonio-app` (`pyplot`, driven by `fit --plot`). The Rust build
+#     links this venv's interpreter via `PYO3_PYTHON=$PWD/.venv/bin/python`.
+#   - maturin: builds the `vgonio-io` cdylib as a Python extension module.
+#   - scipy / pillow / OpenEXR: used by the helper plotting/IO scripts.
+#
+# Supersedes the legacy `interim/requirements.txt` (kept for reference).
+[project]
+name = "vgonio-pytools"
+version = "0.0.0"
+description = "Python runtime + build dependencies for vgonio (pyo3 plotting, maturin bindings, helper scripts)."
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "pillow~=11.0",
+    "numpy~=2.2.0",
+    "scipy~=1.15.1",
+    "matplotlib~=3.10.0",
+    "seaborn~=0.13.2",
+    "openexr~=3.3.2",
+    "maturin~=1.8.2",
+]
+
+[tool.uv]
+# Deps-only (virtual) project: `uv sync` installs the dependencies into the
+# venv but does not try to build/install this project itself.
+package = false

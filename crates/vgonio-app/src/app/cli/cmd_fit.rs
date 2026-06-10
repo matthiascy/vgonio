@@ -49,21 +49,56 @@ pub fn fit(opts: FitOptions, config: Config) -> Result<(), VgonioError> {
     let result_rx = handle.result;
     let events_rx = handle.events;
     let bridge_handle = std::thread::spawn(move || bridge.run(events_rx));
-    let outcome = result_rx
+    let result = result_rx
         .recv()
-        .map_err(|e| VgonioError::new(format!("Failed to receive fit result: {e}"), None))?
-        .map(|_| ())
-        // Use `e.message` (not `{e}`): `JobError`'s Display is
-        // `"{code:?}: {message}"`, which would compound with the handler's
-        // own context and surface as "Fit job failed: HandlerError: ...".
-        .map_err(|e| VgonioError::new(format!("Fit job failed: {}", e.message), None));
+        .map_err(|e| VgonioError::new(format!("Failed to receive fit result: {e}"), None))?;
     // Join the bridge so the terminal event (e.g. Completed) is rendered
     // before we return. `result_rx.recv()` can resolve before the bridge has
     // drained the event channel, and the bridge renders the final line at
     // default verbosity; dropping the handle would risk a missing/flaky
     // trailing line.
     let _ = bridge_handle.join();
-    outcome
+    // Use `e.message` (not `{e}`): `JobError`'s Display is
+    // `"{code:?}: {message}"`, which would compound with the handler's own
+    // context and surface as "Fit job failed: HandlerError: ...".
+    let outcome =
+        result.map_err(|e| VgonioError::new(format!("Fit job failed: {}", e.message), None))?;
+
+    // When `--plot` was requested the headless capability returns the plot
+    // data in the payload; render it here (pyo3 + matplotlib live app-side).
+    if !outcome.payload.is_empty() {
+        render_fit_plots(&outcome.payload);
+    }
+    Ok(())
+}
+
+/// Renders the fit plot data the capability returned (see
+/// [`vgn_fitting::plot::FitPlotData`]). Best-effort: a malformed payload or a
+/// failed matplotlib call is logged, not fatal.
+fn render_fit_plots(payload: &[u8]) {
+    use vgn_fitting::plot::FitPlotData;
+    let plots: Vec<FitPlotData> = match serde_json::from_slice(payload) {
+        Ok(p) => p,
+        Err(e) => {
+            log::error!("Failed to deserialize fit plot data: {e}");
+            return;
+        },
+    };
+    for plot in &plots {
+        if let Some(pw) = &plot.per_wavelength {
+            crate::pyplot::plot_per_wavelength_err(
+                &pw.wavelengths,
+                &pw.alphas,
+                &pw.errors,
+                plot.n_digits,
+            );
+        }
+        for curve in &plot.error_vs_alpha {
+            if let Err(e) = crate::pyplot::plot_err(&curve.error, &curve.alpha, plot.n_digits) {
+                log::error!("Failed to render error-vs-alpha plot: {e:?}");
+            }
+        }
+    }
 }
 
 // TODO: separate the NDF fitting & the BRDF fitting
