@@ -11,8 +11,8 @@
 #![feature(let_chains)]
 #![feature(stmt_expr_attributes)]
 
-use std::sync::Arc;
 use bytes::Bytes;
+use std::sync::Arc;
 use vgn_core::config::Config;
 use vgn_executor::CapabilityRegistry;
 use vgn_job_api::{
@@ -66,7 +66,10 @@ pub fn register_handlers(
             let cancel = ctx.cancel.clone();
             let run = move || {
                 orchestration::run(req, config_clone, ctx, &*bsdf_backend, &*gaf_backend)
-                    .map(|_| Bytes::new())
+                    .map(|artifacts| vgn_executor::JobOutcome {
+                        payload: Bytes::new(),
+                        artifacts,
+                    })
                     .map_err(|e| {
                         if cancel.is_cancelled() {
                             JobError {
@@ -93,7 +96,8 @@ pub fn register_handlers(
                         .map_err(|e| JobError {
                             code: JobErrorCode::HandlerError,
                             message: format!(
-                                "Failed to create measurement thread pool with {cores} threads: {e}"
+                                "Failed to create measurement thread pool with {cores} threads: \
+                                 {e}"
                             ),
                             retriable: false,
                             details: None,

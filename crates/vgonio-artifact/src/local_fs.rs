@@ -80,6 +80,9 @@ impl ArtifactStore for LocalFsStore {
             origin: ArtifactOrigin::LocalPath(target),
             checksum: Checksum::sha256_hex(hex_hash),
             size_bytes: bytes.len() as u64,
+            // The store routes by id and has no naming context; producers set
+            // a display_name hint on the returned ref if they want one.
+            display_name: None,
         })
     }
 }

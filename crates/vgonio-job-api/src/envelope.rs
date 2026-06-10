@@ -165,6 +165,7 @@ mod tests {
                 origin: ArtifactOrigin::LocalPath("/tmp/surface.vgms".into()),
                 checksum: Checksum::sha256_hex("cafebabe"),
                 size_bytes: 42,
+                display_name: None,
             }],
             IdempotencyKey::from_hash(b"seed"),
             TraceContext::default(),

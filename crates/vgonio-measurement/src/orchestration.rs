@@ -34,7 +34,7 @@ use crate::{
     backend::{BsdfRtBackend, GafBackend},
     bsdf,
     cache::ComputeCache,
-    io::{write_measured_data_to_file, OutputFileFormatOption, OutputOptions},
+    io::OutputFileFormatOption,
     mfd,
     params::{MeasurementDescription, MeasurementParams, NdfMeasurementMode},
     request::MeasureRequest,
@@ -42,17 +42,23 @@ use crate::{
 use std::{sync::Arc, time::Instant};
 use vgn_core::{config::Config, error::VgonioError, io::OutputFormat};
 use vgn_job_api::{
+    artifact::ArtifactRef,
     context::JobContext,
     progress::{Activity, PhaseKind, PhaseOutcome},
 };
 
+/// Runs the measurement(s) described by `req` and publishes each output
+/// `(measurement, format)` pair through [`JobContext::artifacts`], returning
+/// the resulting [`ArtifactRef`]s (one per published blob). The CLI / caller
+/// owns final on-disk placement (`--output`); this orchestration no longer
+/// writes to a user-chosen path. See DIST Task 2.10.
 pub fn run(
     req: MeasureRequest,
     config: Arc<Config>,
     ctx: JobContext,
     bsdf_backend: &dyn BsdfRtBackend,
     gaf_backend: &dyn GafBackend,
-) -> Result<(), VgonioError> {
+) -> Result<Vec<ArtifactRef>, VgonioError> {
     let root_phase = ctx.next_phase_id();
     let root_started = std::time::Instant::now();
     ctx.progress.emit_activity(Activity::PhaseBegin {
@@ -188,9 +194,12 @@ pub fn run(
             summary: None,
             at: chrono::Utc::now(),
         });
-        return Ok(());
+        return Ok(vec![]);
     }
 
+    // Each successful `(measurement, format)` pair publishes one artifact;
+    // refs accumulate here and ride out through `JobOutcome.artifacts`.
+    let mut published_refs: Vec<ArtifactRef> = Vec::new();
     let start_time = Instant::now();
     for (desc, surfaces) in tasks {
         // Catch cancellation between measurements: if the user Ctrl-C'd while
@@ -384,18 +393,53 @@ pub fn run(
             instance: write_phase,
             parent: Some(root_phase),
             kind: PhaseKind::measure_write_output(),
-            label: "Writing measurement output...".into(),
+            label: "Publishing measurement output...".into(),
             at: chrono::Utc::now(),
         });
-        write_measured_data_to_file(
-            &measured,
-            &cache,
-            &config,
-            OutputOptions {
-                dir: req.output.clone(),
-                formats,
-            },
-        )?;
+        // Publish one artifact per (measurement, format) through the artifact
+        // store rather than writing to a CLI-chosen path. Later we swap the
+        // local-fs store for an HTTP-backed one with no change here. The CLI
+        // adapter resolves these refs and lays them out under `--output`.
+        for (i, measurement) in measured.iter().enumerate() {
+            // Producer-suggested base name (no extension): `{kind}_{surf}_{ts}`,
+            // matching the legacy on-disk naming so re-runs keep the surface
+            // stem. The CLI/UI appends the per-kind extension; the store
+            // ignores this hint (it routes by id).
+            let surf_stem = measurement
+                .source
+                .micro_surface()
+                .and_then(|h| cache.get_micro_surface_filepath(h))
+                .and_then(|p| {
+                    p.file_stem()
+                        .map(|s| s.to_ascii_lowercase().to_string_lossy().into_owned())
+                })
+                .unwrap_or_else(|| "surface".to_string());
+            let base_name = format!(
+                "{}_{}_{}",
+                measurement.kind().ascii_str(),
+                surf_stem,
+                vgn_core::utils::iso_timestamp_short(
+                    measurement.timestamp + chrono::Duration::seconds(i as i64)
+                ),
+            );
+            for format in formats.iter() {
+                let (kind, bytes) = measurement.write_artifact_bytes(format)?;
+                let size = bytes.len();
+                let mut r = ctx.artifacts.publish(kind, bytes).map_err(|e| {
+                    VgonioError::new(format!("Failed to publish artifact: {}", e.message), None)
+                })?;
+                r.display_name = Some(base_name.clone());
+                ctx.progress.emit_activity(Activity::Message {
+                    phase: write_phase,
+                    level: 0,
+                    text: format!(
+                        "Published {:?} artifact ({} bytes) as {}",
+                        r.kind, size, r.id.0
+                    ),
+                });
+                published_refs.push(r);
+            }
+        }
         ctx.progress.emit_activity(Activity::PhaseEnd {
             instance: write_phase,
             outcome: PhaseOutcome::Ok,
@@ -416,7 +460,7 @@ pub fn run(
         at: chrono::Utc::now(),
     });
 
-    Ok(())
+    Ok(published_refs)
 }
 
 #[cfg(test)]

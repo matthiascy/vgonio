@@ -3,7 +3,11 @@ use crate::{
     measurement::{Measurement, MeasurementSource},
     params::{NdfMeasurementMode, NdfMeasurementParams},
 };
-use std::path::Path;
+use std::{
+    fs::File,
+    io::{BufWriter, Seek, Write},
+    path::Path,
+};
 use vgn_bxdf::impl_any_measured_trait;
 use vgn_core::{
     error::VgonioError,
@@ -94,6 +98,24 @@ impl MeasuredNdfData {
         timestamp: &chrono::DateTime<chrono::Local>,
         resolution: u32,
     ) -> Result<(), VgonioError> {
+        let mut writer = BufWriter::new(
+            File::create(filepath)
+                .map_err(|e| VgonioError::from_io_error(e, "Failed to create NDF EXR file."))?,
+        );
+        self.write_as_exr_to(&mut writer, timestamp, resolution)?;
+        writer
+            .flush()
+            .map_err(|e| VgonioError::from_io_error(e, "Failed to flush NDF EXR file."))
+    }
+
+    /// Writes the NDF as a single-encoding EXR into `writer` (anything
+    /// `Write + Seek`). The path-taking [`Self::write_as_exr`] wraps this.
+    pub fn write_as_exr_to<W: Write + Seek>(
+        &self,
+        writer: &mut W,
+        timestamp: &chrono::DateTime<chrono::Local>,
+        resolution: u32,
+    ) -> Result<(), VgonioError> {
         use exr::prelude::*;
         let partition = SphericalPartition::new(
             self.params.mode.partition_scheme_for_data_collection(),
@@ -132,9 +154,9 @@ impl MeasuredNdfData {
             },
         }
 
-        DataCarriedOnHemisphereImageWriter::new(&partition, resolution).write_as_exr(
+        DataCarriedOnHemisphereImageWriter::new(&partition, resolution).write_as_exr_to(
             &samples_per_patch,
-            filepath,
+            writer,
             timestamp,
             |_| Some(Text::from("NDF")),
             |_| Text::from("NDF"),
@@ -174,6 +196,21 @@ impl MeasuredNdfData {
         timestamp: &chrono::DateTime<chrono::Local>,
         disc_res: u32,
     ) -> Result<(), VgonioError> {
+        let file = File::create(filepath)
+            .map_err(|e| VgonioError::from_io_error(e, "Failed to create .vgndf archive."))?;
+        self.write_as_vgndf_to(BufWriter::new(file), timestamp, disc_res)
+            .map(|_| ())
+    }
+
+    /// Writes the NDF as a `.vgndf` archive into `writer` (anything
+    /// `Write + Seek`), returning the writer (so in-memory callers can recover
+    /// the bytes). The path-taking [`Self::write_as_vgndf`] wraps this.
+    pub fn write_as_vgndf_to<W: Write + Seek>(
+        &self,
+        writer: W,
+        timestamp: &chrono::DateTime<chrono::Local>,
+        disc_res: u32,
+    ) -> Result<W, VgonioError> {
         use vgn_io::vgbsdf::{manifest::*, spectrum::SpectrumToml, OutputKind, VgbsdfWriter};
 
         let partition = SphericalPartition::new(
@@ -227,8 +264,8 @@ impl MeasuredNdfData {
             .unwrap_or(1);
         let n_theta = partition.rings.len() as u32;
 
-        let mut writer = VgbsdfWriter::create(filepath)?;
-        writer.write_metadata(
+        let mut vgb = VgbsdfWriter::new(writer);
+        vgb.write_metadata(
             &Manifest {
                 vgonio: VgonioBlock {
                     version: env!("CARGO_PKG_VERSION").into(),
@@ -247,7 +284,7 @@ impl MeasuredNdfData {
             None,
             &SpectrumToml::scalar(), // NDF carries one scalar "value" channel
         )?;
-        writer.write_level(
+        vgb.write_level(
             "l0",
             &partition,
             std::slice::from_ref(&layer),
@@ -256,7 +293,10 @@ impl MeasuredNdfData {
             disc_res,
             (n_phi, n_theta),
         )?;
-        writer.finish()
+        let mut w = vgb.finish()?;
+        w.flush()
+            .map_err(|e| VgonioError::from_io_error(e, "Failed to flush .vgndf archive."))?;
+        Ok(w)
     }
 }
 

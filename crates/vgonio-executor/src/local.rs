@@ -103,6 +103,8 @@ impl LocalExecutor {
         let artifact_store = LocalFsStore::new(cache_dir.into().join("artifacts"))?;
         Ok(Self::new(registry, artifact_store))
     }
+
+    pub fn artifact_store(&self) -> &Arc<dyn ArtifactStore> { &self.artifact_store }
 }
 
 impl Executor for LocalExecutor {
@@ -165,11 +167,10 @@ impl Executor for LocalExecutor {
                     at: chrono::Utc::now(),
                 });
 
-                // A panic inside the handler (e.g. a null backend's
-                // "no backend compiled in") must become a structured error,
-                // not a process abort. `AssertUnwindSafe` is required because
-                // the handler closure isn't `UnwindSafe`; safe here because the
-                // captured state is never reused after a panic (one call/job).
+                // A panic inside the handler (e.g. a null backend's "no backend compiled in") must
+                // become a structured error, not a process abort. `AssertUnwindSafe` is required
+                // because the handler closure isn't `UnwindSafe`; safe here because the captured
+                // state is never reused after a panic (one call/job).
                 let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     handler(&envelope_owned, ctx)
                 }))
@@ -187,17 +188,11 @@ impl Executor for LocalExecutor {
                     })
                 });
                 let outcome = match out {
-                    Ok(payload) => {
+                    Ok(job_outcome) => {
                         progress.emit_lifecycle(Lifecycle::Completed {
                             at: chrono::Utc::now(),
                         });
-                        // `artifacts` is always empty in Phase 1; capability
-                        // handlers embed published refs inside their payload.
-                        // See JobOutcome::artifacts docs.
-                        Ok(JobOutcome {
-                            payload,
-                            artifacts: vec![],
-                        })
+                        Ok(job_outcome)
                     },
                     Err(err) => {
                         // The progress stream is the *canonical* error record;
@@ -304,7 +299,12 @@ mod tests {
         let mut reg = CapabilityRegistry::new();
         reg.register(
             CapabilityId("echo".into()),
-            Arc::new(|env, _ctx| Ok(env.payload.clone())),
+            Arc::new(|env, _ctx| {
+                Ok(JobOutcome {
+                    payload: env.payload.clone(),
+                    artifacts: vec![],
+                })
+            }),
         );
         let exec = LocalExecutor::from_cache_dir(reg, dir.path()).unwrap();
 
@@ -323,7 +323,12 @@ mod tests {
         let mut reg = CapabilityRegistry::new();
         reg.register(
             CapabilityId("noop".into()),
-            Arc::new(|_env, _ctx| Ok(Bytes::new())),
+            Arc::new(|_env, _ctx| {
+                Ok(JobOutcome {
+                    payload: Bytes::new(),
+                    artifacts: vec![],
+                })
+            }),
         );
         let exec = LocalExecutor::from_cache_dir(reg, dir.path()).unwrap();
         let env = smoke_envelope("noop");
@@ -334,20 +339,35 @@ mod tests {
     }
 
     #[test]
-    fn outcome_artifacts_is_empty_in_phase_1() {
-        // Locks in the Phase 1 contract: handlers publish via
-        // ctx.artifacts.publish and embed refs in the payload; the
-        // out-of-band `artifacts` vec stays empty until Phase 4.
+    fn outcome_artifacts_pass_through_from_handler() {
+        use vgn_job_api::{
+            artifact::{ArtifactKind, ArtifactOrigin, ArtifactRef, Checksum},
+            ids::ArtifactId,
+        };
+        let published = ArtifactRef {
+            id: ArtifactId::new(),
+            kind: ArtifactKind::Vgmo,
+            origin: ArtifactOrigin::Inline,
+            checksum: Checksum::sha256_hex("ab"),
+            size_bytes: 3,
+            display_name: Some("noop_output".into()),
+        };
+        let expected = published.clone();
         let dir = tempdir().unwrap();
         let mut reg = CapabilityRegistry::new();
         reg.register(
-            CapabilityId("noop".into()),
-            Arc::new(|_env, _ctx| Ok(Bytes::new())),
+            CapabilityId("pub".into()),
+            Arc::new(move |_env, _ctx| {
+                Ok(JobOutcome {
+                    payload: Bytes::new(),
+                    artifacts: vec![published.clone()],
+                })
+            }),
         );
         let exec = LocalExecutor::from_cache_dir(reg, dir.path()).unwrap();
-        let handle = exec.submit(smoke_envelope("noop")).unwrap();
+        let handle = exec.submit(smoke_envelope("pub")).unwrap();
         let outcome = handle.result.recv().unwrap().unwrap();
-        assert!(outcome.artifacts.is_empty());
+        assert_eq!(outcome.artifacts, vec![expected]);
     }
 
     // ----- submit: failure modes -----
@@ -437,7 +457,12 @@ mod tests {
         let mut reg = CapabilityRegistry::new();
         reg.register(
             CapabilityId("ok".into()),
-            Arc::new(|_env, _ctx| Ok(Bytes::new())),
+            Arc::new(|_env, _ctx| {
+                Ok(JobOutcome {
+                    payload: Bytes::new(),
+                    artifacts: vec![],
+                })
+            }),
         );
         let exec = LocalExecutor::from_cache_dir(reg, dir.path()).unwrap();
         let handle = exec.submit(smoke_envelope("ok")).unwrap();
@@ -504,7 +529,10 @@ mod tests {
                     units: ProgressUnits::Ratio,
                     label: Some("halfway".into()),
                 });
-                Ok(Bytes::new())
+                Ok(JobOutcome {
+                    payload: Bytes::new(),
+                    artifacts: vec![],
+                })
             }),
         );
         let exec = LocalExecutor::from_cache_dir(reg, dir.path()).unwrap();
@@ -540,7 +568,10 @@ mod tests {
                         text: "spam".into(),
                     });
                 }
-                Ok(Bytes::from_static(b"done"))
+                Ok(JobOutcome {
+                    payload: Bytes::from_static(b"done"),
+                    artifacts: vec![],
+                })
             }),
         );
         let exec = LocalExecutor::from_cache_dir(reg, dir.path()).unwrap();
@@ -568,7 +599,10 @@ mod tests {
                     ctx.cancel.check()?;
                     thread::sleep(Duration::from_millis(1));
                 }
-                Ok(Bytes::new())
+                Ok(JobOutcome {
+                    payload: Bytes::new(),
+                    artifacts: vec![],
+                })
             }),
         );
         let exec = LocalExecutor::from_cache_dir(reg, dir.path()).unwrap();
@@ -599,7 +633,10 @@ mod tests {
                     ctx.cancel.check()?;
                     thread::sleep(Duration::from_millis(1));
                 }
-                Ok(Bytes::new())
+                Ok(JobOutcome {
+                    payload: Bytes::new(),
+                    artifacts: vec![],
+                })
             }),
         );
         let exec = LocalExecutor::from_cache_dir(reg, dir.path()).unwrap();
@@ -625,7 +662,10 @@ mod tests {
             CapabilityId("sleepy".into()),
             Arc::new(|_env, _ctx| {
                 thread::sleep(Duration::from_millis(100));
-                Ok(Bytes::new())
+                Ok(JobOutcome {
+                    payload: Bytes::new(),
+                    artifacts: vec![],
+                })
             }),
         );
         let exec = LocalExecutor::from_cache_dir(reg, dir.path()).unwrap();
@@ -655,7 +695,12 @@ mod tests {
         let mut reg = CapabilityRegistry::new();
         reg.register(
             CapabilityId("done".into()),
-            Arc::new(|_env, _ctx| Ok(Bytes::new())),
+            Arc::new(|_env, _ctx| {
+                Ok(JobOutcome {
+                    payload: Bytes::new(),
+                    artifacts: vec![],
+                })
+            }),
         );
         let exec = LocalExecutor::from_cache_dir(reg, dir.path()).unwrap();
         let handle = exec.submit(smoke_envelope("done")).unwrap();

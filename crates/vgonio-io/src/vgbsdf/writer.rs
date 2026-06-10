@@ -2,13 +2,13 @@
 
 use std::{
     fs::File,
-    io::{BufWriter, Write},
+    io::{BufWriter, Cursor, Seek, Write},
     path::Path,
 };
 use vgn_core::{
     error::VgonioError,
     utils::partition::{
-        write_hemisphere_exr, HemisphereEncoding, HemisphereLayer, SphericalPartition,
+        write_hemisphere_exr_to, HemisphereEncoding, HemisphereLayer, SphericalPartition,
     },
 };
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
@@ -21,12 +21,16 @@ use crate::vgbsdf::{
     spectrum::SpectrumToml,
     INCIDENT_GRID_FILENAME, MANIFEST_FILENAME, PARTITION_FILENAME, SPECTRUM_FILENAME,
 };
-/// Writer that produces a `.vgbsdf` zip archive on disk.
-pub struct VgbsdfWriter {
-    zip: ZipWriter<BufWriter<File>>,
+/// Writer that produces a `.vgbsdf` zip archive over any `Write + Seek` sink.
+///
+/// Use [`VgbsdfWriter::create`] for the common on-disk case, or
+/// [`VgbsdfWriter::new`] to build into an in-memory `Cursor<Vec<u8>>` (the
+/// artifact-publish path) or any other seekable writer.
+pub struct VgbsdfWriter<W: Write + Seek> {
+    zip: ZipWriter<W>,
 }
 
-impl VgbsdfWriter {
+impl VgbsdfWriter<BufWriter<File>> {
     /// Creates a new archive at `path`, overwriting any existing file.
     ///
     /// # Errors
@@ -42,9 +46,17 @@ impl VgbsdfWriter {
                 Some(Box::new(e)),
             )
         })?;
-        let buf_writer = BufWriter::new(file);
-        let zip = ZipWriter::new(buf_writer);
-        Ok(VgbsdfWriter { zip })
+        Ok(Self::new(BufWriter::new(file)))
+    }
+}
+
+impl<W: Write + Seek> VgbsdfWriter<W> {
+    /// Wraps `writer` (anything `Write + Seek`) in a fresh archive. Use
+    /// `Cursor::new(Vec::new())` for in-memory output.
+    pub fn new(writer: W) -> Self {
+        VgbsdfWriter {
+            zip: ZipWriter::new(writer),
+        }
     }
 
     fn write_member(&mut self, name: &str, bytes: &[u8]) -> Result<(), VgonioError> {
@@ -158,17 +170,13 @@ impl VgbsdfWriter {
                 },
             }
 
-            // Stage EXR to a temp file, then store its bytes inside the zip.
-            // Reason: write_hemisphere_exr is path-based (exr crate API). Using a
-            // tempfile is a clean workaround that avoids re-plumbing exr's writer
-            // API for in-memory output.
-            let tmp = tempfile::Builder::new()
-                .suffix(".exr")
-                .tempfile()
-                .map_err(|e| VgonioError::new("tempfile", Some(Box::new(e))))?;
-            write_hemisphere_exr(partition, hemi_enc, layers, tmp.path(), timestamp, &attrs)?;
-            let bytes = std::fs::read(tmp.path())
-                .map_err(|e| VgonioError::new("read tempfile", Some(Box::new(e))))?;
+            // Stage each EXR encoding into an in-memory buffer, then store its
+            // bytes inside the zip. `write_hemisphere_exr_to` writes through any
+            // `Write + Seek` sink, so a `Cursor<Vec<u8>>` avoids a tempfile
+            // round-trip entirely.
+            let mut cursor = Cursor::new(Vec::<u8>::new());
+            write_hemisphere_exr_to(partition, hemi_enc, layers, &mut cursor, timestamp, &attrs)?;
+            let bytes = cursor.into_inner();
 
             let name = format!("{level_dir}/{}.exr", enc.as_str());
             self.write_member(&name, &bytes)?;
@@ -177,15 +185,18 @@ impl VgbsdfWriter {
         Ok(())
     }
 
-    /// Finalises the zip central directory and closes the archive.
+    /// Finalises the zip central directory and returns the underlying writer.
+    ///
+    /// On-disk callers ([`Self::create`]) can ignore the returned
+    /// `BufWriter<File>`; in-memory callers recover the `Cursor<Vec<u8>>` to
+    /// extract the archive bytes via [`Cursor::into_inner`].
     ///
     /// # Errors
     ///
     /// Returns an error if writing the zip footer fails.
-    pub fn finish(self) -> Result<(), VgonioError> {
+    pub fn finish(self) -> Result<W, VgonioError> {
         self.zip
             .finish()
-            .map_err(|e| VgonioError::new(format!("zip finish: {e}"), Some(Box::new(e))))?;
-        Ok(())
+            .map_err(|e| VgonioError::new(format!("zip finish: {e}"), Some(Box::new(e))))
     }
 }

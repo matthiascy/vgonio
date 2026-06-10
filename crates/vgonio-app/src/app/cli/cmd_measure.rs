@@ -2,7 +2,6 @@
 //! Orchestration lives in [`vgn_measurement::orchestration`].
 
 use crate::app::{args::OutputFormat, executor};
-use vgn_measurement::request::MeasureRequest;
 use std::{path::PathBuf, sync::Arc};
 use vgn_core::{
     cli::{cli_step, Indent},
@@ -10,12 +9,15 @@ use vgn_core::{
     error::VgonioError,
     io::{CompressionScheme, FileEncoding},
 };
-use vgn_executor::{Executor, LocalStatusBridge};
+use vgn_executor::{Executor, LocalExecutor, LocalStatusBridge};
 use vgn_job_api::{
+    artifact::ArtifactRef,
+    context::ArtifactHandle,
     envelope::{JobEnvelope, PayloadEncoding, TraceContext},
     ids::{CapabilityId, IdempotencyKey, JobId},
     resources::ResourceHints,
 };
+use vgn_measurement::request::MeasureRequest;
 
 impl From<&MeasureOptions> for MeasureRequest {
     fn from(opts: &MeasureOptions) -> Self {
@@ -44,9 +46,7 @@ pub fn measure(opts: MeasureOptions, config: Config) -> Result<(), VgonioError> 
     // count would not reach the actual `par_iter` calls. `u32 -> u16`
     // saturates because `cpu_cores` is `u16` and any realistic count
     // fits well within that range.
-    let cpu_cores = opts
-        .nthreads
-        .map(|n| n.min(u16::MAX as u32) as u16);
+    let cpu_cores = opts.nthreads.map(|n| n.min(u16::MAX as u32) as u16);
     // Banner reflects the eventual pool size: the requested count when
     // `--nthreads` is set, otherwise rayon's global default (typically all
     // available CPUs).
@@ -107,15 +107,117 @@ fn submit(
     let result_rx = handle.result;
     let events_rx = handle.events;
     let bridge_handle = std::thread::spawn(move || bridge.run(events_rx));
-    let outcome = result_rx
+    let result = result_rx
         .recv()
-        .map_err(|e| VgonioError::new(format!("Failed to receive measure result: {e}"), None))?
-        .map(|_| ())
-        // Use `e.message`: `JobError`'s Display is `"{code:?}: {message}"`,
-        // which would compound with the handler's own context.
-        .map_err(|e| VgonioError::new(format!("Measure job failed: {}", e.message), None));
+        .map_err(|e| VgonioError::new(format!("Failed to receive measure result: {e}"), None))?;
     let _ = bridge_handle.join();
-    outcome
+    // Use `e.message`: `JobError`'s Display is `"{code:?}: {message}"`,
+    // which would compound with the handler's own context.
+    let outcome =
+        result.map_err(|e| VgonioError::new(format!("Measure job failed: {}", e.message), None))?;
+
+    // The orchestration publishes outputs through the artifact
+    // store rather than writing to `--output` itself. The CLI now owns
+    // placement: copy each published blob into `--output` (or report its
+    // store path when no `--output` was given).
+    lay_out_artifacts(&executor, request.output.as_deref(), &outcome.artifacts)
+}
+
+/// Resolves published artifacts and either copies them into `output_dir`
+/// (CLI-generated filenames from the artifact kind + a short timestamp) or
+/// reports their on-disk store paths when no `--output` was requested.
+fn lay_out_artifacts(
+    executor: &LocalExecutor,
+    output_dir: Option<&std::path::Path>,
+    artifacts: &[ArtifactRef],
+) -> Result<(), VgonioError> {
+    if artifacts.is_empty() {
+        return Ok(());
+    }
+    let store = executor.artifact_store();
+    if let Some(dir) = output_dir {
+        std::fs::create_dir_all(dir).map_err(|e| {
+            VgonioError::from_io_error(e, format!("Failed to create output dir {}", dir.display()))
+        })?;
+    }
+    let stamp = vgn_core::utils::iso_timestamp_short(chrono::Local::now());
+    for (i, aref) in artifacts.iter().enumerate() {
+        let handle = store.resolve(aref).map_err(|e| {
+            VgonioError::new(format!("Failed to resolve artifact: {}", e.message), None)
+        })?;
+        match output_dir {
+            Some(dir) => {
+                // Prefer the producer's display_name hint (e.g.
+                // "ndf_aluminiummirror_<ts>"); fall back to a generated name.
+                let ext = artifact_extension(&aref.kind);
+                let filename = match &aref.display_name {
+                    Some(name) => format!("{name}.{ext}"),
+                    None => format!("measurement_{stamp}_{i:03}.{ext}"),
+                };
+                let dst = dir.join(&filename);
+                match handle {
+                    ArtifactHandle::Path(src) => {
+                        std::fs::copy(&src, &dst).map_err(|e| {
+                            VgonioError::from_io_error(
+                                e,
+                                format!("Failed to copy artifact to {}", dst.display()),
+                            )
+                        })?;
+                    },
+                    ArtifactHandle::Bytes(bytes) => {
+                        std::fs::write(&dst, &bytes).map_err(|e| {
+                            VgonioError::from_io_error(
+                                e,
+                                format!("Failed to write artifact to {}", dst.display()),
+                            )
+                        })?;
+                    },
+                }
+                cli_step!(
+                    Indent::DETAIL,
+                    "Saved {:?} to \"{}\"",
+                    aref.kind,
+                    dst.display()
+                );
+            },
+            None => match handle {
+                ArtifactHandle::Path(src) => {
+                    cli_step!(
+                        Indent::DETAIL,
+                        "Published {:?} at \"{}\"",
+                        aref.kind,
+                        src.display()
+                    );
+                },
+                ArtifactHandle::Bytes(_) => {
+                    cli_step!(
+                        Indent::DETAIL,
+                        "Published {:?} (in-memory artifact {})",
+                        aref.kind,
+                        aref.id.0
+                    );
+                },
+            },
+        }
+    }
+    Ok(())
+}
+
+/// Filename extension for a published artifact kind. Used by the CLI to name
+/// files copied into `--output` (the orchestration no longer chooses names).
+fn artifact_extension(kind: &vgn_job_api::artifact::ArtifactKind) -> &'static str {
+    use vgn_job_api::artifact::ArtifactKind::*;
+    match kind {
+        Vgbsdf => "vgbsdf",
+        Vgndf => "vgndf",
+        Vgmsf => "vgmsf",
+        Vgsdf => "vgsdf",
+        Vgms => "vgms",
+        Vgmo => "vgmo",
+        IorRon => "ior.ron",
+        Exr => "exr",
+        _ => "bin",
+    }
 }
 
 /// Options for the `measure` command.

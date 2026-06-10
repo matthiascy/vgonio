@@ -3,7 +3,12 @@ use crate::{
     measurement::{AnyMeasured, Measurement, MeasurementSource},
     params::SdfMeasurementParams,
 };
-use std::{borrow::Cow, path::Path};
+use std::{
+    borrow::Cow,
+    fs::File,
+    io::{BufWriter, Seek, Write},
+    path::Path,
+};
 use vgn_bxdf::impl_any_measured_trait;
 use vgn_core::{
     error::VgonioError,
@@ -64,6 +69,25 @@ impl MeasuredSdfData {
     pub fn write_histogram_as_exr(
         &self,
         filepath: &Path,
+        timestamp: &chrono::DateTime<chrono::Local>,
+        resolution: u32,
+    ) -> Result<(), VgonioError> {
+        let mut writer = BufWriter::new(
+            File::create(filepath)
+                .map_err(|e| VgonioError::from_io_error(e, "Failed to create SDF EXR file."))?,
+        );
+        self.write_histogram_as_exr_to(&mut writer, timestamp, resolution)?;
+        writer
+            .flush()
+            .map_err(|e| VgonioError::from_io_error(e, "Failed to flush SDF EXR file."))
+    }
+
+    /// Writes the slope-distribution histogram as a multi-layer EXR into
+    /// `writer` (anything `Write + Seek`). The path-taking
+    /// [`Self::write_histogram_as_exr`] wraps this.
+    pub fn write_histogram_as_exr_to<W: Write + Seek>(
+        &self,
+        writer: &mut W,
         timestamp: &chrono::DateTime<chrono::Local>,
         resolution: u32,
     ) -> Result<(), VgonioError> {
@@ -198,7 +222,7 @@ impl MeasuredSdfData {
                 (resolution as usize, resolution as usize),
             ));
             let image = Image::from_layers(img_attrib, layers);
-            image.write().to_file(filepath).map_err(|err| {
+            image.write().to_buffered(writer).map_err(|err| {
                 VgonioError::new("Failed to write SDF EXR file.", Some(Box::new(err)))
             })?;
         }
@@ -221,6 +245,21 @@ impl MeasuredSdfData {
         timestamp: &chrono::DateTime<chrono::Local>,
         precision: Sph2,
     ) -> Result<(), VgonioError> {
+        let file = File::create(filepath)
+            .map_err(|e| VgonioError::from_io_error(e, "Failed to create .vgsdf archive."))?;
+        self.write_as_vgsdf_to(BufWriter::new(file), timestamp, precision)
+            .map(|_| ())
+    }
+
+    /// Writes the SDF as a `.vgsdf` archive into `writer` (anything
+    /// `Write + Seek`), returning the writer. The path-taking
+    /// [`Self::write_as_vgsdf`] wraps this.
+    pub fn write_as_vgsdf_to<W: Write + Seek>(
+        &self,
+        writer: W,
+        timestamp: &chrono::DateTime<chrono::Local>,
+        precision: Sph2,
+    ) -> Result<W, VgonioError> {
         use vgn_io::vgbsdf::{
             manifest::{ArchiveBlock, Manifest, VgonioBlock},
             spectrum::SpectrumToml,
@@ -263,8 +302,8 @@ impl MeasuredSdfData {
             .unwrap_or(1);
         let n_theta = partition.rings.len() as u32;
 
-        let mut writer = VgbsdfWriter::create(filepath)?;
-        writer.write_metadata(
+        let mut vgb = VgbsdfWriter::new(writer);
+        vgb.write_metadata(
             &Manifest {
                 vgonio: VgonioBlock {
                     version: env!("CARGO_PKG_VERSION").into(),
@@ -283,7 +322,7 @@ impl MeasuredSdfData {
             None,
             &SpectrumToml::scalar(),
         )?;
-        writer.write_level(
+        vgb.write_level(
             "l0",
             &partition,
             std::slice::from_ref(&layer),
@@ -293,7 +332,10 @@ impl MeasuredSdfData {
             0,
             (n_phi, n_theta),
         )?;
-        writer.finish()
+        let mut w = vgb.finish()?;
+        w.flush()
+            .map_err(|e| VgonioError::from_io_error(e, "Failed to flush .vgsdf archive."))?;
+        Ok(w)
     }
 
     /// Computes the histogram of the slope (PMF of the slope distribution)

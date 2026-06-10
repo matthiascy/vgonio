@@ -14,7 +14,8 @@ use exr::prelude::Text;
 #[cfg(feature = "io")]
 use std::{
     borrow::Cow,
-    io::{BufReader, Read, Seek},
+    fs::File,
+    io::{BufReader, BufWriter, Read, Seek, Write},
     path::Path,
 };
 
@@ -769,6 +770,29 @@ impl<'a> DataCarriedOnHemisphereImageWriter<'a> {
         L: FnOnce(usize) -> Option<Text>,
         C: FnOnce(usize) -> Text,
     {
+        let file = File::create(filepath).map_err(|e| {
+            VgonioError::from_io_error(e, "Failed to create EXR file.")
+        })?;
+        let mut writer = BufWriter::new(file);
+        self.write_as_exr_to(data, &mut writer, timestamp, layer_name, channel_name)
+    }
+
+    /// Writes the patch-indexed `data` as a single-layer EXR into `writer`
+    /// (anything `Write + Seek`, e.g. an in-memory `Cursor<Vec<u8>>`). The
+    /// path-taking [`Self::write_as_exr`] is a thin wrapper over this.
+    pub fn write_as_exr_to<W, L, C>(
+        &self,
+        data: &'a [f32],
+        writer: &mut W,
+        timestamp: &chrono::DateTime<chrono::Local>,
+        layer_name: L,
+        channel_name: C,
+    ) -> Result<(), VgonioError>
+    where
+        W: Write + Seek,
+        L: FnOnce(usize) -> Option<Text>,
+        C: FnOnce(usize) -> Text,
+    {
         if data.len() != self.partition.n_patches() {
             return Err(VgonioError::new(
                 "Data carried on hemisphere length mismatches the partition",
@@ -808,7 +832,7 @@ impl<'a> DataCarriedOnHemisphereImageWriter<'a> {
         let image = Image::from_layer(layer);
         image
             .write()
-            .to_file(filepath)
+            .to_buffered(writer)
             .map_err(|err| VgonioError::new("Failed to write EXR file.", Some(Box::new(err))))
     }
 }
@@ -866,6 +890,33 @@ pub fn write_hemisphere_exr(
     encoding: HemisphereEncoding,
     layers: &[HemisphereLayer<'_>],
     filepath: &Path,
+    timestamp: &chrono::DateTime<chrono::Local>,
+    extra_attrs: &[(String, String)],
+) -> Result<(), VgonioError> {
+    let file = File::create(filepath)
+        .map_err(|e| VgonioError::from_io_error(e, "Failed to create hemisphere EXR file."))?;
+    let mut writer = BufWriter::new(file);
+    write_hemisphere_exr_to(
+        partition,
+        encoding,
+        layers,
+        &mut writer,
+        timestamp,
+        extra_attrs,
+    )
+}
+
+/// Writes hemisphere-carried data as an EXR into `writer` (anything
+/// `Write + Seek`, e.g. an in-memory `Cursor<Vec<u8>>`). The path-taking
+/// [`write_hemisphere_exr`] is a thin wrapper over this; in-memory callers
+/// (e.g. the `.vgbsdf` zip builder staging members) use this directly to
+/// avoid a tempfile round-trip.
+#[cfg(feature = "io")]
+pub fn write_hemisphere_exr_to<W: Write + Seek>(
+    partition: &SphericalPartition,
+    encoding: HemisphereEncoding,
+    layers: &[HemisphereLayer<'_>],
+    writer: &mut W,
     timestamp: &chrono::DateTime<chrono::Local>,
     extra_attrs: &[(String, String)],
 ) -> Result<(), VgonioError> {
@@ -960,7 +1011,7 @@ pub fn write_hemisphere_exr(
     }
 
     let image = Image::from_layers(img_attrs, exr_layers);
-    image.write().to_file(filepath).map_err(|e| {
+    image.write().to_buffered(writer).map_err(|e| {
         VgonioError::new(
             format!("write hemisphere EXR failed: {e}"),
             Some(Box::new(e)),

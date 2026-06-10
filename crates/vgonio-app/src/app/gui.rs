@@ -19,7 +19,6 @@ mod ui;
 mod visual_grid;
 
 // TODO: MSAA
-use vgn_measurement::backend::GafBackend;
 use std::{
     default::Default,
     sync::{Arc, RwLock},
@@ -483,6 +482,85 @@ impl VgonioGuiApp {
         Ok(())
     }
 
+    /// Runs a GUI-triggered measurement, returning the measured data or a
+    /// human-readable validation error (`Err`). Null-backend and
+    /// unsupported-simulation cases are rejected up front as `Err`. Backend
+    /// panics are intentionally NOT caught here; the caller wraps this in
+    /// `catch_unwind` so a panic becomes an error toast rather than a process
+    /// abort.
+    fn run_measurement(
+        &mut self,
+        params: MeasurementParams,
+        surfaces: Vec<vgn_core::res::Handle>,
+    ) -> Result<Box<[vgn_measurement::measurement::Measurement]>, String> {
+        Ok(match params {
+            MeasurementParams::Ndf(params) => self
+                .cache
+                .read(|cache| measure::mfd::measure_area_distribution(params, &surfaces, cache)),
+            MeasurementParams::Gaf(params) => {
+                if self.gaf_backend.is_null() {
+                    return Err(
+                        "No GAF backend compiled in; rebuild with `--features wgpu`.".to_string(),
+                    );
+                }
+                let gaf_backend = &*self.gaf_backend;
+                self.cache.read(|cache| {
+                    measure::mfd::measure_masking_shadowing_function(
+                        params, &surfaces, cache, gaf_backend,
+                    )
+                })
+            },
+            MeasurementParams::Bsdf(params) => {
+                if params.is_both_air_medium() {
+                    return Err("Cannot measure BSDF for both air medium".to_string());
+                }
+                if let Err(reason) = params.check_supported_for_measurement(&*self.bsdf_backend) {
+                    return Err(format!(
+                        "Unsupported simulation method for this build: {}",
+                        reason
+                    ));
+                }
+
+                #[cfg(feature = "vdbg")]
+                {
+                    use vgn_measurement::bsdf::BsdfMeasurement;
+                    let bsdf_backend = &*self.bsdf_backend;
+                    let measured = self.cache.read(|cache| {
+                        // GUI does not yet route through the executor; a fresh,
+                        // never-cancelled token preserves pre-Phase-1 behaviour.
+                        let cancel = vgn_job_api::context::CancellationToken::new();
+                        measure::bsdf::measure_bsdf_rt(
+                            params, &surfaces, cache, &cancel, bsdf_backend,
+                        )
+                    });
+                    let bsdf = measured[0]
+                        .measured
+                        .downcast_ref::<BsdfMeasurement>()
+                        .unwrap();
+                    self.dbg_drawing_state
+                        .update_ray_trajectories(&self.gpu_ctx, &bsdf.raw.trajectories);
+                    self.dbg_drawing_state
+                        .update_ray_hit_points(&self.gpu_ctx, &bsdf.raw.hit_points);
+                    measured
+                }
+
+                #[cfg(not(feature = "vdbg"))]
+                {
+                    let bsdf_backend = &*self.bsdf_backend;
+                    self.cache.read(|cache| {
+                        let cancel = vgn_job_api::context::CancellationToken::new();
+                        measure::bsdf::measure_bsdf_rt(
+                            params, &surfaces, cache, &cancel, bsdf_backend,
+                        )
+                    })
+                }
+            },
+            MeasurementParams::Sdf(params) => self
+                .cache
+                .read(|cache| measure::mfd::measure_slope_distribution(&surfaces, params, cache)),
+        })
+    }
+
     pub fn on_user_event(&mut self, event: VgonioEvent, event_loop: &ActiveEventLoop) {
         use VgonioEvent::*;
 
@@ -631,102 +709,41 @@ impl VgonioGuiApp {
                         surfaces,
                         output_opts,
                     } => {
-                        let data = match params {
-                            MeasurementParams::Ndf(params) => self.cache.read(|cache| {
-                                measure::mfd::measure_area_distribution(params, &surfaces, cache)
-                            }),
-                            MeasurementParams::Gaf(params) => {
-                                if self.gaf_backend.is_null() {
-                                    log::error!("No GAF backend compiled in");
-                                    self.event_loop_proxy.send_event(Notify {
-                                        kind: NotifyKind::Error,
-                                        text: "No GAF backend compiled in; rebuild with                                                `--features wgpu`."
-                                            .to_string(),
-                                        time: 2.0,
-                                    });
-                                    return;
-                                }
-                                let gaf_backend = &*self.gaf_backend;
-                                self.cache.read(|cache| {
-                                    measure::mfd::measure_masking_shadowing_function(
-                                        params, &surfaces, cache, gaf_backend,
-                                    )
-                                })
+                        // Run the measurement under `catch_unwind` so an
+                        // unexpected backend panic surfaces as an error toast
+                        // instead of aborting the GUI process. The `&mut *self`
+                        // reborrow is moved into the closure so `self` stays
+                        // usable afterwards. Validation failures (null backend,
+                        // unsupported simulation kind, bad params) come back as
+                        // `Err(message)`.
+                        let outcome = {
+                            let this = &mut *self;
+                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+                                this.run_measurement(params, surfaces)
+                            }))
+                        };
+                        let data = match outcome {
+                            Ok(Ok(data)) => data,
+                            Ok(Err(text)) => {
+                                log::error!("{text}");
+                                self.event_loop_proxy.send_event(Notify {
+                                    kind: NotifyKind::Error,
+                                    text,
+                                    time: 3.0,
+                                });
+                                return;
                             },
-                            MeasurementParams::Bsdf(params) => {
-                                if params.is_both_air_medium() {
-                                    log::error!("Cannot measure BSDF for both air medium");
-                                    self.event_loop_proxy.send_event(Notify {
-                                        kind: NotifyKind::Error,
-                                        text: "Cannot measure BSDF for both air medium".to_string(),
-                                        time: 2.0,
-                                    });
-                                    return;
-                                }
-                                if let Err(reason) = params.check_supported_for_measurement(&*self.bsdf_backend) {
-                                    log::error!(
-                                        "Cannot measure BSDF with unsupported simulation method: \
-                                         {}",
-                                        reason
-                                    );
-                                    self.event_loop_proxy.send_event(Notify {
-                                        kind: NotifyKind::Error,
-                                        text: format!(
-                                            "Unsupported simulation method for this build: {}",
-                                            reason
-                                        ),
-                                        time: 2.0,
-                                    });
-                                    return;
-                                }
-
-                                #[cfg(feature = "vdbg")]
-                                {
-                                    use vgn_measurement::bsdf::BsdfMeasurement;
-                                    let bsdf_backend = &*self.bsdf_backend;
-                                    let measured = self.cache.read(|cache| {
-                                        // GUI does not yet route through the
-                                        // executor; fresh, never-cancelled
-                                        // token preserves pre-Phase-1
-                                        // behaviour.
-                                        let cancel =
-                                            vgn_job_api::context::CancellationToken::new();
-                                        measure::bsdf::measure_bsdf_rt(
-                                            params, &surfaces, cache, &cancel, bsdf_backend,
-                                        )
-                                    });
-                                    let bsdf = measured[0]
-                                        .measured
-                                        .downcast_ref::<BsdfMeasurement>()
-                                        .unwrap();
-                                    self.dbg_drawing_state.update_ray_trajectories(
-                                        &self.gpu_ctx,
-                                        &bsdf.raw.trajectories,
-                                    );
-                                    self.dbg_drawing_state
-                                        .update_ray_hit_points(&self.gpu_ctx, &bsdf.raw.hit_points);
-                                    measured
-                                }
-
-                                #[cfg(not(feature = "vdbg"))]
-                                {
-                                    let bsdf_backend = &*self.bsdf_backend;
-                                    self.cache.read(|cache| {
-                                        // GUI does not yet route through the
-                                        // executor; pass a fresh, never-cancelled
-                                        // token so the measurement runs to
-                                        // completion as it did pre-Phase-1.
-                                        let cancel =
-                                            vgn_job_api::context::CancellationToken::new();
-                                        measure::bsdf::measure_bsdf_rt(
-                                            params, &surfaces, cache, &cancel, bsdf_backend,
-                                        )
-                                    })
-                                }
+                            Err(_) => {
+                                log::error!("Measurement panicked unexpectedly.");
+                                self.event_loop_proxy.send_event(Notify {
+                                    kind: NotifyKind::Error,
+                                    text: "Measurement failed unexpectedly (backend panic); see \
+                                           the log for details."
+                                        .to_string(),
+                                    time: 3.0,
+                                });
+                                return;
                             },
-                            MeasurementParams::Sdf(params) => self.cache.read(|cache| {
-                                measure::mfd::measure_slope_distribution(&surfaces, params, cache)
-                            }),
                         };
                         if let Some(opts @ OutputOptions { .. }) = output_opts {
                             self.cache

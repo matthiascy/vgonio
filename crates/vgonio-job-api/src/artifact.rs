@@ -19,6 +19,14 @@ pub struct ArtifactRef {
     pub origin: ArtifactOrigin,
     pub checksum: Checksum,
     pub size_bytes: u64,
+    /// Optional human-facing base name (no path, no extension) the producer
+    /// suggests for this artifact, e.g. `"ndf_aluminiummirror_2026-06-10T…"`.
+    /// A CLI/UI consumer uses it to name the file it writes under `--output`;
+    /// when `None`, the consumer falls back to a generated name. Purely a
+    /// hint: the store ignores it and routes by [`ArtifactId`]. Defaults to
+    /// `None` and is omitted from the wire when unset (backward-compatible).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
 }
 
 /// The concrete on-disk format of the artifact's bytes.
@@ -30,9 +38,18 @@ pub struct ArtifactRef {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum ArtifactKind {
-    /// `.vgbsdf` archival container (BSDF / NDF / MSF / SDF, governed by
-    /// VGONIO EXR Conventions v1).
+    /// `.vgbsdf` archival container (BSDF, governed by VGONIO EXR
+    /// Conventions v1).
     Vgbsdf,
+    /// `.vgndf` archival container (NDF, governed by VGONIO EXR Conventions
+    /// v1).
+    Vgndf,
+    /// `.vgmsf` archival container (GAF/MSF, governed by VGONIO EXR
+    /// Conventions v1).
+    Vgmsf,
+    /// `.vgsdf` archival container (SDF, governed by VGONIO EXR Conventions
+    /// v1).
+    Vgsdf,
     /// `.vgms` bespoke local cache file (heightfields). Workers exchange these uncompressed across
     /// the artifact boundary even when stored LZ4'd locally.
     Vgms,
@@ -101,6 +118,9 @@ mod tests {
             origin: ArtifactOrigin::LocalPath("/tmp/sample.vgbsdf".into()),
             checksum: Checksum::sha256_hex("deadbeef"),
             size_bytes: 123456,
+            // Non-None so `artifact_ref_roundtrips_json` also covers the
+            // optional display_name field on the wire.
+            display_name: Some("bsdf_sample".into()),
         }
     }
 
@@ -118,6 +138,20 @@ mod tests {
         assert_eq!(json, "\"vgbsdf\"");
         let json = serde_json::to_string(&ArtifactKind::IorRon).unwrap();
         assert_eq!(json, "\"ior_ron\"");
+    }
+
+    #[test]
+    fn artifact_kind_per_format_variants_roundtrip() {
+        for (kind, wire) in [
+            (ArtifactKind::Vgndf, "\"vgndf\""),
+            (ArtifactKind::Vgmsf, "\"vgmsf\""),
+            (ArtifactKind::Vgsdf, "\"vgsdf\""),
+        ] {
+            let json = serde_json::to_string(&kind).unwrap();
+            assert_eq!(json, wire, "wire repr for {kind:?}");
+            let back: ArtifactKind = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, kind);
+        }
     }
 
     #[test]

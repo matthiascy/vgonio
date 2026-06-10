@@ -1,14 +1,15 @@
 //! Acquisition related.
 
 use crate::{
+    bsdf::BsdfMeasurement,
     io::{
         vgmo::{vgmo_header_ext_from_data, VgmoHeaderExt},
         OutputFileFormatOption,
     },
-    bsdf::BsdfMeasurement,
     mfd::{MeasuredNdfData, MeasuredSdfData},
     params::NdfMeasurementMode,
 };
+use bytes::Bytes;
 use chrono::{DateTime, Local};
 use rand::{
     distributions::{Distribution, Uniform},
@@ -22,7 +23,7 @@ use rayon::{
 use std::{
     ffi::OsStr,
     fs::File,
-    io::{BufReader, BufWriter, Write},
+    io::{BufReader, BufWriter, Cursor, Write},
     path::{Path, PathBuf},
 };
 use vgn_bxdf::brdf::measured::{rgl::RglBrdf, ClausenBrdf, MerlBrdf, VgonioBrdf, Yan18Brdf};
@@ -43,6 +44,7 @@ use vgn_core::{
     MeasurementKind, Version,
 };
 use vgn_io::MicroSurfaceMesh;
+use vgn_job_api::artifact::ArtifactKind;
 
 /// Where the measurement data is loaded from.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -207,6 +209,152 @@ impl Measurement {
             },
         }
         Ok(())
+    }
+
+    /// Serialises this measurement in `format` to an in-memory byte buffer
+    /// suitable for `ctx.artifacts.publish`, returning the [`ArtifactKind`]
+    /// that matches the produced bytes.
+    ///
+    /// This is the artifact-API counterpart of [`Self::write_to_file`]: it
+    /// reuses the same per-(kind, format) writers but lands the bytes in
+    /// memory instead of at a CLI-chosen path (the CLI now owns `--output`
+    /// placement). VGMO goes straight to a `Cursor<Vec<u8>>` (the codec is
+    /// `Write + Seek`); the archival (`.vgbsdf` family) and single-file EXR
+    /// writers are path-based (they stage EXR layers through the `exr` crate's
+    /// path API), so they round-trip through a `NamedTempFile`, mirroring what
+    /// `VgbsdfWriter` already does internally for its EXR members.
+    ///
+    /// Unsupported combinations are rejected with a clear error rather than a
+    /// panic, preserving today's [`Self::write_to_file`] behaviour: BSDF + EXR
+    /// is multi-file (use `--output-format vgbsdf`); GAF + EXR and GAF +
+    /// Vgbsdf are not implemented.
+    pub fn write_artifact_bytes(
+        &self,
+        format: &OutputFileFormatOption,
+    ) -> Result<(ArtifactKind, Bytes), VgonioError> {
+        match format {
+            OutputFileFormatOption::Vgmo {
+                encoding,
+                compression,
+            } => {
+                let timestamp = {
+                    let mut timestamp = [0_u8; 32];
+                    timestamp.copy_from_slice(
+                        vgn_core::utils::iso_timestamp_from_datetime(&self.timestamp).as_bytes(),
+                    );
+                    timestamp
+                };
+                let header = Header {
+                    meta: HeaderMeta {
+                        version: Version::new(0, 1, 0),
+                        timestamp,
+                        length: 0,
+                        sample_size: 4,
+                        encoding: *encoding,
+                        compression: *compression,
+                    },
+                    extra: vgmo_header_ext_from_data(&*self.measured),
+                };
+                let mut writer = BufWriter::new(std::io::Cursor::new(Vec::<u8>::new()));
+                crate::io::vgmo::write(&mut writer, header, &*self.measured).map_err(|err| {
+                    VgonioError::from_write_file_error(
+                        WriteFileError {
+                            path: PathBuf::from("<vgmo artifact>").into_boxed_path(),
+                            kind: err,
+                        },
+                        "Failed to write VGMO artifact.",
+                    )
+                })?;
+                let cursor = writer.into_inner().map_err(|e| {
+                    VgonioError::new(format!("Failed to flush VGMO artifact: {e}"), None)
+                })?;
+                Ok((ArtifactKind::Vgmo, Bytes::from(cursor.into_inner())))
+            },
+            OutputFileFormatOption::Exr { resolution } => {
+                match self.measured.kind() {
+                    MeasurementKind::Bsdf => {
+                        return Err(VgonioError::new(
+                            "BSDF + EXR output is not supported via the artifact path; use \
+                             `--output-format vgbsdf` instead (it packages all per-level EXRs).",
+                            None,
+                        ))
+                    },
+                    MeasurementKind::Gaf => {
+                        return Err(VgonioError::new(
+                            "GAF/MSF EXR output is not implemented yet (deferred ARCH Task 15 MSF \
+                             half).",
+                            None,
+                        ))
+                    },
+                    _ => {},
+                }
+                let mut cursor = Cursor::new(Vec::<u8>::new());
+                match self.measured.kind() {
+                    MeasurementKind::Ndf => {
+                        let ndf = self.measured.downcast_ref::<MeasuredNdfData>().unwrap();
+                        ndf.write_as_exr_to(&mut cursor, &self.timestamp, *resolution)?;
+                    },
+                    MeasurementKind::Sdf => {
+                        let sdf = self.measured.downcast_ref::<MeasuredSdfData>().unwrap();
+                        sdf.write_histogram_as_exr_to(&mut cursor, &self.timestamp, *resolution)?;
+                    },
+                    _ => unreachable!("BSDF/GAF rejected above"),
+                }
+                Ok((ArtifactKind::Exr, Bytes::from(cursor.into_inner())))
+            },
+            OutputFileFormatOption::Vgbsdf { disc_res } => {
+                let kind = match self.measured.kind() {
+                    MeasurementKind::Bsdf => ArtifactKind::Vgbsdf,
+                    MeasurementKind::Ndf => ArtifactKind::Vgndf,
+                    MeasurementKind::Sdf => ArtifactKind::Vgsdf,
+                    MeasurementKind::Gaf => {
+                        return Err(VgonioError::new(
+                            "Vgbsdf output for masking-shadowing (GAF/MSF) is not implemented yet \
+                             — its 2D (view × incident) shape needs a multi-layer encoding \
+                             (deferred ARCH Task 15 MSF half).",
+                            None,
+                        ))
+                    },
+                    _ => {
+                        return Err(VgonioError::new(
+                            "Unsupported measurement kind for vgbsdf output.",
+                            None,
+                        ))
+                    },
+                };
+                let cursor = match self.measured.kind() {
+                    MeasurementKind::Bsdf => {
+                        let bsdf = self.measured.downcast_ref::<BsdfMeasurement>().unwrap();
+                        bsdf.write_as_vgbsdf_to(
+                            Cursor::new(Vec::<u8>::new()),
+                            &self.timestamp,
+                            *disc_res,
+                        )?
+                    },
+                    MeasurementKind::Ndf => {
+                        let ndf = self.measured.downcast_ref::<MeasuredNdfData>().unwrap();
+                        ndf.write_as_vgndf_to(
+                            Cursor::new(Vec::<u8>::new()),
+                            &self.timestamp,
+                            *disc_res,
+                        )?
+                    },
+                    MeasurementKind::Sdf => {
+                        let sdf = self.measured.downcast_ref::<MeasuredSdfData>().unwrap();
+                        // Default SDF binning: ~2° zenith × ~5° azimuth, matching
+                        // `write_to_file`'s vgsdf arm.
+                        let precision = Sph2::new(rad!(0.0349), rad!(0.0873));
+                        sdf.write_as_vgsdf_to(
+                            Cursor::new(Vec::<u8>::new()),
+                            &self.timestamp,
+                            precision,
+                        )?
+                    },
+                    _ => unreachable!("rejected above"),
+                };
+                Ok((kind, Bytes::from(cursor.into_inner())))
+            },
+        }
     }
 
     /// Loads the measurement data from a file.

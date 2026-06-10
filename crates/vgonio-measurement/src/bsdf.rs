@@ -397,6 +397,21 @@ impl BsdfMeasurement {
         timestamp: &chrono::DateTime<chrono::Local>,
         disc_res: u32,
     ) -> Result<(), VgonioError> {
+        let file = std::fs::File::create(filepath)
+            .map_err(|e| VgonioError::from_io_error(e, "Failed to create .vgbsdf archive."))?;
+        self.write_as_vgbsdf_to(std::io::BufWriter::new(file), timestamp, disc_res)
+            .map(|_| ())
+    }
+
+    /// Writes the BSDF as a `.vgbsdf` archive into `writer` (anything
+    /// `Write + Seek`), returning the writer. The path-taking
+    /// [`Self::write_as_vgbsdf`] wraps this.
+    pub fn write_as_vgbsdf_to<W: std::io::Write + std::io::Seek>(
+        &self,
+        writer: W,
+        timestamp: &chrono::DateTime<chrono::Local>,
+        disc_res: u32,
+    ) -> Result<W, VgonioError> {
         use vgn_core::utils::partition::HemisphereLayer;
         use vgn_io::vgbsdf::{
             manifest::{ArchiveBlock, BsdfBlock, Manifest, MaterialBlock, VgonioBlock},
@@ -453,8 +468,8 @@ impl BsdfMeasurement {
             provenance: None,
         };
 
-        let mut writer = VgbsdfWriter::create(filepath)?;
-        writer.write_metadata(&manifest, &partition, Some(&incident_grid), &spectrum)?;
+        let mut vgb = VgbsdfWriter::new(writer);
+        vgb.write_metadata(&manifest, &partition, Some(&incident_grid), &spectrum)?;
 
         for (level_dir, bsdf) in &level_dirs {
             let buffers = bsdf.vgbsdf_layer_buffers();
@@ -472,7 +487,7 @@ impl BsdfMeasurement {
                 })
                 .collect();
 
-            writer.write_level(
+            vgb.write_level(
                 level_dir,
                 &partition,
                 &layers,
@@ -483,7 +498,10 @@ impl BsdfMeasurement {
             )?;
         }
 
-        writer.finish()
+        let mut w = vgb.finish()?;
+        std::io::Write::flush(&mut w)
+            .map_err(|e| VgonioError::from_io_error(e, "Failed to flush .vgbsdf archive."))?;
+        Ok(w)
     }
 
     /// Resamples the BSDF data to match the `ClausenBrdfParametrisation`.

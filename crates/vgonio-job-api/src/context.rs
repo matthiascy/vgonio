@@ -509,6 +509,7 @@ mod tests {
                 origin: ArtifactOrigin::Inline,
                 checksum: Checksum::sha256_hex("00"),
                 size_bytes: bytes.len() as u64,
+                display_name: None,
             })
         }
     }

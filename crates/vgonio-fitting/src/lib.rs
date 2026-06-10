@@ -8,7 +8,7 @@
 use bytes::Bytes;
 use std::sync::Arc;
 use vgn_core::config::Config;
-use vgn_executor::CapabilityRegistry;
+use vgn_executor::{CapabilityRegistry, JobOutcome};
 use vgn_job_api::{
     error::{JobError, JobErrorCode},
     ids::CapabilityId,
@@ -34,7 +34,13 @@ pub fn register_handlers(reg: &mut CapabilityRegistry, config: Arc<Config>) {
                 })?;
             let cancel = ctx.cancel.clone();
             orchestration::run(req, Arc::clone(&config_for_fit), ctx)
-                .map(|_| Bytes::new())
+                // Fit publishes no artifacts today; the executor surfaces the
+                // (empty) vec verbatim. Plotting hand-off is a Phase 2.x
+                // follow-up (route through ctx.artifacts).
+                .map(|_| JobOutcome {
+                    payload: Bytes::new(),
+                    artifacts: vec![],
+                })
                 .map_err(|e| {
                     if cancel.is_cancelled() {
                         JobError {

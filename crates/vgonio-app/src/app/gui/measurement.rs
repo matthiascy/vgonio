@@ -399,11 +399,26 @@ impl MeasurementDialog {
                 }
 
                 ui.horizontal_wrapped(|ui| {
-                    if ui
-                        .button("Simulate")
-                        .on_hover_text("Starts the measurement")
-                        .clicked()
-                    {
+                    // Gate the trigger on backend availability. In the app
+                    // crate the `embree` / `wgpu` features are exactly what
+                    // decide whether a real backend (vs the null fallback) is
+                    // wired in (see `gui.rs` backend construction), so a
+                    // compile-time `cfg!` is the faithful availability check.
+                    // NDF / SDF need no ray-tracing backend.
+                    let backend_ready = match self.kind {
+                        MeasurementKind::Bsdf => cfg!(feature = "embree"),
+                        MeasurementKind::Gaf => cfg!(feature = "wgpu"),
+                        _ => true,
+                    };
+                    let simulate = ui
+                        .add_enabled(backend_ready, egui::Button::new("Simulate"))
+                        .on_hover_text(if backend_ready {
+                            "Starts the measurement"
+                        } else {
+                            "No measurement backend compiled in for this kind; rebuild with \
+                             `--features embree` (BSDF) or `--features wgpu` (MSF)."
+                        });
+                    if simulate.clicked() {
                         if !self.selector.any_selected() {
                             self.event_loop.send_event(VgonioEvent::Notify {
                                 kind: NotifyKind::Error,

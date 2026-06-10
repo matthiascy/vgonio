@@ -13,8 +13,9 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use bytes::Bytes;
 use vgn_job_api::{context::JobContext, envelope::JobEnvelope, error::JobError, ids::CapabilityId};
+
+use crate::JobOutcome;
 
 /// An in-process capability handler: a closure that runs one job.
 ///
@@ -33,7 +34,8 @@ use vgn_job_api::{context::JobContext, envelope::JobEnvelope, error::JobError, i
 /// closure is the simplest thing that lets handler implementations carry
 /// state via captures, and trait objects can be re-introduced later without a
 /// wire-format change.
-pub type Handler = Arc<dyn Fn(&JobEnvelope, JobContext) -> Result<Bytes, JobError> + Send + Sync>;
+pub type Handler =
+    Arc<dyn Fn(&JobEnvelope, JobContext) -> Result<JobOutcome, JobError> + Send + Sync>;
 
 /// Maps [`CapabilityId`] to its in-process [`Handler`].
 ///
@@ -71,12 +73,21 @@ impl CapabilityRegistry {
 
 #[cfg(test)]
 mod tests {
+    use bytes::Bytes;
+
     use super::*;
 
     /// A handler that does nothing (returns empty bytes). We never invoke
     /// the closure in these tests (registry tests check the registry's
     /// own contract, not handler behaviour), so the body doesn't matter.
-    fn dummy_handler() -> Handler { Arc::new(|_env, _ctx| Ok(Bytes::new())) }
+    fn dummy_handler() -> Handler {
+        Arc::new(|_env, _ctx| {
+            Ok(JobOutcome {
+                payload: Bytes::new(),
+                artifacts: vec![],
+            })
+        })
+    }
 
     #[test]
     fn new_starts_empty() {

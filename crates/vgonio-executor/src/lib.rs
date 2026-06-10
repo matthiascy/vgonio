@@ -52,18 +52,21 @@
 //! use std::sync::Arc;
 //!
 //! use bytes::Bytes;
-//! use vgn_executor::{CapabilityRegistry, Executor, LocalExecutor};
+//! use vgn_executor::{CapabilityRegistry, Executor, JobOutcome, LocalExecutor};
 //! use vgn_job_api::{
 //!     envelope::{JobEnvelope, PayloadEncoding, TraceContext},
 //!     ids::{CapabilityId, IdempotencyKey},
 //!     resources::ResourceHints,
 //! };
 //!
-//! // 1. Register an in-process handler for the "echo" capability.
+//! // 1. Register an in-process handler for the "echo" capability. Handlers
+//! //    return a `JobOutcome` (payload + any published artifact refs).
 //! let mut registry = CapabilityRegistry::new();
 //! registry.register(
 //!     CapabilityId("echo".into()),
-//!     Arc::new(|envelope, _ctx| Ok(envelope.payload.clone())),
+//!     Arc::new(|envelope, _ctx| {
+//!         Ok(JobOutcome { payload: envelope.payload.clone(), artifacts: vec![] })
+//!     }),
 //! );
 //!
 //! // 2. Build a LocalExecutor backed by an on-disk artifact store.
