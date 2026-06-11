@@ -13,6 +13,9 @@ rustc-ice-**.txt
 **dist/
 rvbrdf/
 interim/
+test_data/
+tmp-images/
+to-del/
 .*
 !.gitignore
 !.python-version
