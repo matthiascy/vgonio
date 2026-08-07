@@ -18,13 +18,11 @@ pub struct DArr<T, S, const L: MemLayout = { MemLayout::RowMajor }>(
     pub(crate) ArrCore<DynSized<T>, S, L>,
 )
 where
-    S: ConstShape<Underlying = [usize; S::N_DIMS]>,
-    [(); S::N_ELEMS]:;
+    S: ConstShape<Underlying = [usize; S::N_DIMS]>;
 
 impl<T, S, const L: MemLayout> DArr<T, S, L>
 where
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
-    [(); S::N_ELEMS]:,
 {
     forward_array_core_common_methods!();
 
@@ -32,6 +30,7 @@ where
     pub fn new(data: [T; S::N_ELEMS]) -> Self
     where
         T: Clone,
+        [(); S::N_ELEMS]:,
     {
         Self(ArrCore::new(S::SHAPE, DynSized::from_slice(&data)))
     }
@@ -84,7 +83,6 @@ where
 impl<T, S, const L: MemLayout, const N: usize> Index<[usize; N]> for DArr<T, S, L>
 where
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
-    [(); S::N_ELEMS]:,
 {
     type Output = T;
 
@@ -95,7 +93,6 @@ where
 impl<T, S, const L: MemLayout, const N: usize> IndexMut<[usize; N]> for DArr<T, S, L>
 where
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
-    [(); S::N_ELEMS]:,
 {
     #[inline]
     fn index_mut(&mut self, index: [usize; N]) -> &mut Self::Output { &mut self.0[index] }
@@ -105,7 +102,6 @@ impl<T, S, const L: MemLayout> Clone for DArr<T, S, L>
 where
     T: Clone,
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
-    [(); S::N_ELEMS]:,
 {
     fn clone(&self) -> Self { Self(self.0.clone()) }
 }
@@ -114,7 +110,6 @@ impl<T, S, const L: MemLayout> Debug for DArr<T, S, L>
 where
     T: Debug,
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
-    [(); S::N_ELEMS]:,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("DArr({:?})", &self.0.data))
@@ -125,7 +120,6 @@ impl<T, S, const L: MemLayout> PartialEq for DArr<T, S, L>
 where
     T: PartialEq,
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
-    [(); S::N_ELEMS]:,
 {
     fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
@@ -134,14 +128,12 @@ impl<T, S, const L: MemLayout> Eq for DArr<T, S, L>
 where
     T: Eq,
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
-    [(); S::N_ELEMS]:,
 {
 }
 
 impl<T, S, const L: MemLayout> AsRef<[T]> for DArr<T, S, L>
 where
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
-    [(); S::N_ELEMS]:,
 {
     fn as_ref(&self) -> &[T] { self.0.data.as_slice() }
 }
@@ -149,7 +141,6 @@ where
 impl<T, S, const L: MemLayout> AsMut<[T]> for DArr<T, S, L>
 where
     S: ConstShape<Underlying = [usize; S::N_DIMS]>,
-    [(); S::N_ELEMS]:,
 {
     fn as_mut(&mut self) -> &mut [T] { self.0.data.as_mut_slice() }
 }

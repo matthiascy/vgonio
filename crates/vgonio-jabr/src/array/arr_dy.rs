@@ -292,14 +292,14 @@ impl<T, const N: usize, const L: MemLayout> IndexMut<RangeInclusive<usize>> for 
 //     }
 // }
 
-macro_rules! tuple_len {
-    () => { 0 };
-    ($x:tt $($xs:tt)*) => { 1 + tuple_len!($($xs)*) };
-}
-
+// NOTE: the dimension count is passed in as a literal rather than computed by a
+// `tuple_len!`-style macro on purpose. Expanding to `DyArr<T, {1 + 1 + 0}, L>`
+// puts an anonymous const in the impl's self type, which under
+// `generic_const_exprs` makes the trait solver cycle while normalizing the
+// impl's predicates (E0391), and the failure only surfaces in downstream crates.
 macro_rules! impl_tuple_indexing_inner {
-    ($($idx:tt, $idx_ty:ty),+) => {
-        impl<T, const L: MemLayout> Index<($($idx_ty,)*)> for DyArr<T, {tuple_len!($($idx_ty)*)}, L> {
+    ($n:literal; $($idx:tt, $idx_ty:ty),+) => {
+        impl<T, const L: MemLayout> Index<($($idx_ty,)*)> for DyArr<T, $n, L> {
             type Output = T;
 
             #[inline]
@@ -308,7 +308,7 @@ macro_rules! impl_tuple_indexing_inner {
             }
         }
 
-        impl<T, const L: MemLayout> IndexMut<($($idx_ty,)*)> for DyArr<T, {tuple_len!($($idx_ty)*)}, L> {
+        impl<T, const L: MemLayout> IndexMut<($($idx_ty,)*)> for DyArr<T, $n, L> {
             #[inline]
             fn index_mut(&mut self, index: ($($idx_ty,)*)) -> &mut Self::Output {
                 &mut self.0[[$(index.$idx),*]]
@@ -318,27 +318,27 @@ macro_rules! impl_tuple_indexing_inner {
 }
 
 macro_rules! impl_tuple_indexing {
-    ($($idx:tt),+) => {
-        impl_tuple_indexing_inner!($($idx, usize),+);
+    ($n:literal; $($idx:tt),+) => {
+        impl_tuple_indexing_inner!($n; $($idx, usize),+);
     };
 }
 
-impl_tuple_indexing!(0);
-impl_tuple_indexing!(0, 1);
-impl_tuple_indexing!(0, 1, 2);
-impl_tuple_indexing!(0, 1, 2, 3);
-impl_tuple_indexing!(0, 1, 2, 3, 4);
-impl_tuple_indexing!(0, 1, 2, 3, 4, 5);
-impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6);
-impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7);
-impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8);
-impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
-impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
-impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
-impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
-impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
-impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
-impl_tuple_indexing!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+impl_tuple_indexing!(1; 0);
+impl_tuple_indexing!(2; 0, 1);
+impl_tuple_indexing!(3; 0, 1, 2);
+impl_tuple_indexing!(4; 0, 1, 2, 3);
+impl_tuple_indexing!(5; 0, 1, 2, 3, 4);
+impl_tuple_indexing!(6; 0, 1, 2, 3, 4, 5);
+impl_tuple_indexing!(7; 0, 1, 2, 3, 4, 5, 6);
+impl_tuple_indexing!(8; 0, 1, 2, 3, 4, 5, 6, 7);
+impl_tuple_indexing!(9; 0, 1, 2, 3, 4, 5, 6, 7, 8);
+impl_tuple_indexing!(10; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+impl_tuple_indexing!(11; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+impl_tuple_indexing!(12; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+impl_tuple_indexing!(13; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+impl_tuple_indexing!(14; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
+impl_tuple_indexing!(15; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+impl_tuple_indexing!(16; 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
 
 impl<T, const N: usize, const L: MemLayout> Index<usize> for DyArr<T, N, L> {
     type Output = T;
