@@ -63,6 +63,12 @@ pub struct Args {
         help = "Subcommand and arguments to pass to cargo"
     )]
     pub cargo_args: Vec<String>,
+
+    #[arg(
+        long = "--interactive",
+        help = "Run vgonio related cargo commands in interactive mode"
+    )]
+    pub interactive: bool,
 }
 
 /// Runs the xtask with the provided arguments.

@@ -89,6 +89,7 @@ proptest = "1.0"
 puffin = "~0.19"
 pyo3 = { version = "0.28.3", features = ["auto-initialize"] }
 rand = "0.8"
+ratatui = "~0.30"
 rayon = "1.9"
 rand_distr = "0.4"
 rand_chacha = "0.3"
