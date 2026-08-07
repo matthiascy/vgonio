@@ -1,9 +1,6 @@
 use crate::array::{dim::DimSeq, mem::MemLayout};
 
-// TODO: #[const_trait], blocked by effects feature and new const traits
-// implementation See: https://github.com/rust-lang/rust/issues/110395
-/// Common trait for types that can be used to represent the shape of an array.
-pub trait Shape {
+pub const trait Shape {
     /// The underlying type used to storage the shape.
     type Underlying: DimSeq;
     type Metadata: ShapeMetadata;
@@ -112,7 +109,7 @@ where
 }
 
 /// Shape for fixed-size dimension sequences.
-impl<const N: usize> Shape for [usize; N] {
+const impl<const N: usize> Shape for [usize; N] {
     type Underlying = [usize; N];
     type Metadata = DynShapeMetadata<[usize; N]>;
 
@@ -142,8 +139,7 @@ impl Shape for Vec<usize> {
 ///
 /// This trait is a helper to construct a concrete array shape from
 /// type-level constants.
-#[const_trait]
-pub trait ConstShape: Sized + Clone + Copy + PartialEq {
+pub const trait ConstShape: Sized + Clone + Copy + PartialEq {
     /// Underlying storage type for the shape.
     type Underlying: DimSeq;
     /// The number of dimensions of the array.
@@ -160,7 +156,7 @@ pub trait ConstShape: Sized + Clone + Copy + PartialEq {
     const COL_MAJOR_STRIDES: Self::Underlying;
 }
 
-impl<T, const N: usize> Shape for T
+const impl<T, const N: usize> Shape for T
 where
     T: ConstShape<Underlying = [usize; N]>,
 {
@@ -178,7 +174,7 @@ mod const_shape {
         shape::{compute_strides, ConstShape},
     };
 
-    impl ConstShape for () {
+    const impl ConstShape for () {
         type Underlying = [usize; 0];
         const N_DIMS: usize = 0;
         const N_ELEMS: usize = 0;
@@ -240,7 +236,7 @@ mod const_shape {
 
     /// Macro generating the implementation of `ConstShape` for a given shape.
     macro impl_const_shape($($n:ident),+) {
-        impl<$(const $n: usize),+> const ConstShape for generate_const_shape!($($n),+) {
+        const impl<$(const $n: usize),+> ConstShape for generate_const_shape!($($n),+) {
             type Underlying = [usize; count!($($n),+)];
             const N_DIMS: usize = count!($($n),+);
             const N_ELEMS: usize = product!($($n),+);
